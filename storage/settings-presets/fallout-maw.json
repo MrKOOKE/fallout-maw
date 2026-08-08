@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "f32042748eaf82315eba3e1457f2714b69a0a6bb3a7e6708ec939cf632e85718",
-  "updatedAt": "2026-08-08T09:09:41.885Z",
+  "revision": "4413c0bdf1fb25961b9806628c595baf7fe8f9db51e5bbe2adf41b72fd3336e8",
+  "updatedAt": "2026-08-08T12:54:11.472Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -52140,7 +52140,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -52210,7 +52210,7 @@
                             "maxRangeMeters": "1",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -55077,7 +55077,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 14,
-                              "attackConeDegrees": 140,
+                              "attackConeDegrees": 40,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -55101,7 +55101,7 @@
                             },
                             "attackAnimationDelayMs": 200,
                             "attackAnimationKey": "fallout-maw.generic.creature.fist.creature_attack_fist_001_003_red",
-                            "attackConeDegrees": 140,
+                            "attackConeDegrees": 40,
                             "attackSoundPath": "systems/fallout-maw/audio/Creature_Attacks/fo3/behemoth/npc_supermutantbehemoth_foot_02.ogg",
                             "attackSoundVolume": 1,
                             "availableActions": {
@@ -55147,7 +55147,7 @@
                             "maxRangeMeters": "1",
                             "meleeAttack": {
                               "actionPointCost": 13,
-                              "attackConeDegrees": 140,
+                              "attackConeDegrees": 40,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -55192,7 +55192,8 @@
                             },
                             "specialProperties": [],
                             "volley": {
-                              "actionPointCost": 5,
+                              "actionPointCost": 13,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "damageRadius": "0",
                               "explosionAnimationKey": "",
@@ -55304,7 +55305,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -55374,7 +55375,7 @@
                             "maxRangeMeters": "12",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -62611,7 +62612,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "40",
+                            "damage": "60",
                             "damageMode": "manual",
                             "damageTypeKey": "piercing",
                             "damageTypes": [
@@ -67911,7 +67912,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -67981,7 +67982,7 @@
                             "maxRangeMeters": "5",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -68419,7 +68420,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "35",
+                            "damage": "45",
                             "damageMode": "manual",
                             "damageTypeKey": "piercing",
                             "damageTypes": [
@@ -74349,7 +74350,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "4",
+                            "damage": "18",
                             "damageMode": "manual",
                             "damageTypeKey": "poison",
                             "damageTypes": [
@@ -74766,7 +74767,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -74813,7 +74814,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "13",
+                            "damage": "33",
                             "damageMode": "manual",
                             "damageTypeKey": "poison",
                             "damageTypes": [
@@ -74840,7 +74841,7 @@
                             "maxRangeMeters": "5",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -77218,7 +77219,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -77288,7 +77289,7 @@
                             "maxRangeMeters": "5",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -78056,7 +78057,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -78103,7 +78104,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "10",
+                            "damage": "18",
                             "damageMode": "manual",
                             "damageTypeKey": "poison",
                             "damageTypes": [
@@ -78126,7 +78127,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -78330,7 +78331,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "8",
+                            "damage": "45",
                             "damageMode": "manual",
                             "damageTypeKey": "piercing",
                             "damageTypes": [
@@ -78521,7 +78522,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -78568,7 +78569,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "14",
+                            "damage": "18",
                             "damageMode": "manual",
                             "damageTypeKey": "poison",
                             "damageTypes": [
@@ -78591,7 +78592,7 @@
                             "maxRangeMeters": "10",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -78795,7 +78796,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "19",
+                            "damage": "45",
                             "damageMode": "manual",
                             "damageTypeKey": "piercing",
                             "damageTypes": [
@@ -83035,7 +83036,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -83109,7 +83110,7 @@
                             "maxRangeMeters": "7",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -98374,7 +98375,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -98444,7 +98445,7 @@
                             "maxRangeMeters": "6",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -99900,7 +99901,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -99970,7 +99971,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -100361,7 +100362,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -100431,7 +100432,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -101049,7 +101050,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -101119,7 +101120,7 @@
                             "maxRangeMeters": "10",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -101747,7 +101748,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -101821,7 +101822,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -103043,7 +103044,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -103113,7 +103114,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -105534,7 +105535,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -105604,7 +105605,7 @@
                             "maxRangeMeters": "10",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -105995,7 +105996,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -106042,7 +106043,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "20",
+                            "damage": "60",
                             "damageMode": "manual",
                             "damageTypeKey": "acid",
                             "damageTypes": [
@@ -106069,7 +106070,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -107014,7 +107015,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -107088,7 +107089,7 @@
                             "maxRangeMeters": "5",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -108093,7 +108094,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -108163,7 +108164,7 @@
                             "maxRangeMeters": "8",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -108554,7 +108555,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -108628,7 +108629,7 @@
                             "maxRangeMeters": "6",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -109794,7 +109795,7 @@
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
                               "actionPointCost": 5,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -109841,7 +109842,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "15",
+                            "damage": "23",
                             "damageMode": "manual",
                             "damageTypeKey": "poison",
                             "damageTypes": [
@@ -109868,7 +109869,7 @@
                             "maxRangeMeters": "5",
                             "meleeAttack": {
                               "actionPointCost": 4,
-                              "attackConeDegrees": 120,
+                              "attackConeDegrees": 3,
                               "criticalFailureConsequences": [],
                               "name": "",
                               "swing": {
@@ -109922,7 +109923,7 @@
                               "name": "Облако",
                               "regionDamageEntries": [
                                 {
-                                  "amount": "3",
+                                  "amount": "5",
                                   "damageTypeKey": "poison"
                                 }
                               ],
@@ -110373,3463 +110374,6 @@
             },
             "typeId": "36d48d4b1f41e3f1",
             "weaponSets": []
-          },
-          {
-            "baseParameters": {
-              "characteristicDistributionPoints": 33,
-              "loadFormula": "50 + 20*str",
-              "loadLimitPercent": 150,
-              "proficiencyPoints": 500,
-              "signatureSkillPoints": 3,
-              "traitPoints": 2
-            },
-            "bleedingResistanceFormula": "0",
-            "characteristics": {
-              "charisma": 0,
-              "dexterity": 4,
-              "endurance": 4,
-              "intelligence": 4,
-              "luck": 0,
-              "perception": 4,
-              "strength": 4
-            },
-            "damageResistances": {
-              "acid": "res/10",
-              "bleeding": "0",
-              "bludgeoning": "res/10",
-              "cryo": "res/10",
-              "electric": "res/10",
-              "energy": "res/10",
-              "fire": "res/10",
-              "firearm": "res/10",
-              "piercing": "res/10",
-              "poison": "50+res/10",
-              "radiation": "100+res/10",
-              "slashing": "res/10"
-            },
-            "equipmentSlots": [
-              {
-                "key": "back",
-                "label": "Спина"
-              }
-            ],
-            "id": "89d93a9301b7e836",
-            "inventorySize": {
-              "columns": 10,
-              "rows": 7
-            },
-            "limbSilhouette": null,
-            "limbs": [
-              {
-                "aimedDifficultyPercent": 35,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "head",
-                "label": "Головной узел",
-                "lossEffects": [],
-                "stateMax": "65 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 65,
-                "critical": false,
-                "damageMultiplier": 1.4,
-                "implantLimit": 0,
-                "key": "eyes",
-                "label": "Органы чувств",
-                "lossEffects": [
-                  {
-                    "key": "status.blind",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "35 + con * 2"
-              },
-              {
-                "aimedDifficultyPercent": 0,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "torso",
-                "label": "Верхняя часть тела",
-                "lossEffects": [],
-                "stateMax": "120 + con * 6"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "groin",
-                "label": "Нижняя часть тела",
-                "lossEffects": [],
-                "stateMax": "250 + con * 13"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "leftArm",
-                "label": "Левые отростки",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.strength",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  }
-                ],
-                "stateMax": "70 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "rightArm",
-                "label": "Правые отростки",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.strength",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  }
-                ],
-                "stateMax": "70 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "leftLeg",
-                "label": "Левые опорные конечности",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.costs.movement",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "75 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "rightLeg",
-                "label": "Правые опорные конечности",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.costs.movement",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "75 + con * 4"
-              }
-            ],
-            "name": "Мерзость",
-            "naturalItemSets": [
-              {
-                "id": "2f04d74979013816",
-                "label": "Обычная",
-                "naturalFeatures": [],
-                "naturalWeapons": [
-                  {
-                    "id": "4acf69684e356b67",
-                    "item": {
-                      "_stats": {
-                        "compendiumSource": null,
-                        "coreVersion": "14.361",
-                        "createdTime": null,
-                        "duplicateSource": null,
-                        "exportSource": null,
-                        "lastModifiedBy": null,
-                        "modifiedTime": null,
-                        "systemId": "fallout-maw",
-                        "systemVersion": "0.2.0"
-                      },
-                      "effects": [],
-                      "flags": {},
-                      "folder": null,
-                      "img": "icons/svg/combat.svg",
-                      "name": "Удар",
-                      "ownership": {
-                        "default": 0
-                      },
-                      "sort": 0,
-                      "system": {
-                        "container": {
-                          "columns": 1,
-                          "maxLoad": 0,
-                          "parentId": "",
-                          "rows": 1
-                        },
-                        "craft": {
-                          "disassembly": {
-                            "links": [],
-                            "nodes": [],
-                            "viewport": {
-                              "x": 0,
-                              "y": 0,
-                              "zoom": 1
-                            }
-                          },
-                          "links": [],
-                          "mode": "craft",
-                          "nodes": [],
-                          "recipes": [],
-                          "viewport": {
-                            "x": 0,
-                            "y": 0,
-                            "zoom": 1
-                          }
-                        },
-                        "description": "",
-                        "equipped": false,
-                        "functions": {
-                          "condition": {
-                            "enabled": false
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "weapon": {
-                            "accuracyBonus": "0",
-                            "aimedMeleeAttack": {
-                              "actionPointCost": 6,
-                              "attackConeDegrees": 120,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "aimedShot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "attackAnimationDelayMs": 200,
-                            "attackAnimationKey": "fallout-maw.generic.creature.fist.creature_attack_fist_001_003_red",
-                            "attackConeDegrees": 120,
-                            "attackSoundPath": "systems/fallout-maw/audio/Creature_Attacks/fo3/abomination/npc_dlc05abomination_attack_02.ogg",
-                            "attackSoundVolume": 1,
-                            "availableActions": {
-                              "aimedMeleeAttack": true,
-                              "aimedShot": false,
-                              "burst": false,
-                              "meleeAttack": true,
-                              "push": false,
-                              "reload": false,
-                              "snapshot": false,
-                              "volley": false
-                            },
-                            "burst": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "count": 3,
-                              "criticalFailureConsequences": [],
-                              "difficultyPerShot": 10,
-                              "name": ""
-                            },
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "150",
-                            "damage": "70",
-                            "damageMode": "manual",
-                            "damageTypeKey": "bludgeoning",
-                            "damageTypes": [
-                              {
-                                "key": "bludgeoning",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "1",
-                              "value": "0"
-                            },
-                            "enabled": true,
-                            "magazine": {
-                              "max": 0,
-                              "sourceItemUuid": "",
-                              "sourceItemUuids": [],
-                              "value": 0
-                            },
-                            "maxRangeMeters": "1",
-                            "meleeAttack": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 120,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "moduleSlots": [],
-                            "noiseLevel": 1,
-                            "pellets": "1",
-                            "penetration": "12",
-                            "proficiencyKey": "natural",
-                            "push": {
-                              "accuracyModifier": 0,
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "maxRangeMeters": 1,
-                              "name": "",
-                              "pushDifficultyModifier": 0
-                            },
-                            "reload": {
-                              "actionPointCost": 2,
-                              "name": ""
-                            },
-                            "requirements": [],
-                            "resourceCosts": [],
-                            "skillKey": "meleeCombat",
-                            "snapshot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "specialProperties": [],
-                            "volley": {
-                              "actionPointCost": 5,
-                              "criticalFailureConsequences": [],
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "name": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          }
-                        },
-                        "itemCategory": "",
-                        "itemFunction": "",
-                        "locked": false,
-                        "maxStack": 1,
-                        "occupiedSlotMode": "all",
-                        "occupiedSlots": {},
-                        "placement": {
-                          "constructPartOrder": 0,
-                          "equipmentSlot": "",
-                          "height": 1,
-                          "limbKey": "",
-                          "mode": "weapon",
-                          "rotated": false,
-                          "weaponSet": "naturalRaceWeapons",
-                          "weaponSlot": "4acf69684e356b67",
-                          "width": 1,
-                          "x": 1,
-                          "y": 1
-                        },
-                        "price": 0,
-                        "priceCurrency": "caps",
-                        "quantity": 1,
-                        "stackParts": [],
-                        "weaponSlotRequirement": {
-                          "mode": "oneOf",
-                          "slots": {}
-                        },
-                        "weight": 0
-                      },
-                      "type": "gear"
-                    }
-                  },
-                  {
-                    "id": "4e1de7fee2090ef7",
-                    "item": {
-                      "_stats": {
-                        "compendiumSource": null,
-                        "coreVersion": "14.361",
-                        "createdTime": null,
-                        "duplicateSource": null,
-                        "exportSource": null,
-                        "lastModifiedBy": null,
-                        "modifiedTime": null,
-                        "systemId": "fallout-maw",
-                        "systemVersion": "0.2.0"
-                      },
-                      "effects": [],
-                      "flags": {},
-                      "folder": null,
-                      "img": "icons/svg/combat.svg",
-                      "name": "Щупальца",
-                      "ownership": {
-                        "default": 0
-                      },
-                      "sort": 0,
-                      "system": {
-                        "container": {
-                          "columns": 1,
-                          "maxLoad": 0,
-                          "parentId": "",
-                          "rows": 1
-                        },
-                        "craft": {
-                          "disassembly": {
-                            "links": [],
-                            "nodes": [],
-                            "viewport": {
-                              "x": 0,
-                              "y": 0,
-                              "zoom": 1
-                            }
-                          },
-                          "links": [],
-                          "mode": "craft",
-                          "nodes": [],
-                          "recipes": [],
-                          "viewport": {
-                            "x": 0,
-                            "y": 0,
-                            "zoom": 1
-                          }
-                        },
-                        "description": "",
-                        "equipped": false,
-                        "functions": {
-                          "condition": {
-                            "enabled": false
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "weapon": {
-                            "accuracyBonus": "0",
-                            "aimedMeleeAttack": {
-                              "actionPointCost": 6,
-                              "attackConeDegrees": 140,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "aimedShot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "attackAnimationDelayMs": 200,
-                            "attackAnimationKey": "fallout-maw.generic.creature.claw.creature_attack_claw_001_001_green",
-                            "attackConeDegrees": 140,
-                            "attackSoundPath": "systems/fallout-maw/audio/Creature_Attacks/fo3/abomination/npc_dlc05abomination_attack_01.ogg",
-                            "attackSoundVolume": 1,
-                            "availableActions": {
-                              "aimedMeleeAttack": true,
-                              "aimedShot": false,
-                              "burst": false,
-                              "meleeAttack": true,
-                              "push": false,
-                              "reload": false,
-                              "snapshot": false,
-                              "volley": false
-                            },
-                            "burst": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "count": 3,
-                              "criticalFailureConsequences": [],
-                              "difficultyPerShot": 10,
-                              "name": ""
-                            },
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "150",
-                            "damage": "55",
-                            "damageMode": "manual",
-                            "damageTypeKey": "bludgeoning",
-                            "damageTypes": [
-                              {
-                                "key": "bludgeoning",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "1",
-                              "value": "0"
-                            },
-                            "enabled": true,
-                            "magazine": {
-                              "max": 0,
-                              "sourceItemUuid": "",
-                              "sourceItemUuids": [],
-                              "value": 0
-                            },
-                            "maxRangeMeters": "1",
-                            "meleeAttack": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 140,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "moduleSlots": [],
-                            "noiseLevel": 1,
-                            "pellets": "1",
-                            "penetration": "5",
-                            "proficiencyKey": "natural",
-                            "push": {
-                              "accuracyModifier": 0,
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "maxRangeMeters": 1,
-                              "name": "",
-                              "pushDifficultyModifier": 0
-                            },
-                            "reload": {
-                              "actionPointCost": 2,
-                              "name": ""
-                            },
-                            "requirements": [],
-                            "resourceCosts": [],
-                            "skillKey": "meleeCombat",
-                            "snapshot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "specialProperties": [],
-                            "volley": {
-                              "actionPointCost": 5,
-                              "criticalFailureConsequences": [],
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "name": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          }
-                        },
-                        "itemCategory": "",
-                        "itemFunction": "",
-                        "locked": false,
-                        "maxStack": 1,
-                        "occupiedSlotMode": "all",
-                        "occupiedSlots": {},
-                        "placement": {
-                          "constructPartOrder": 0,
-                          "equipmentSlot": "",
-                          "height": 1,
-                          "limbKey": "",
-                          "mode": "weapon",
-                          "rotated": false,
-                          "weaponSet": "naturalRaceWeapons",
-                          "weaponSlot": "4e1de7fee2090ef7",
-                          "width": 1,
-                          "x": 1,
-                          "y": 1
-                        },
-                        "price": 0,
-                        "priceCurrency": "caps",
-                        "quantity": 1,
-                        "stackParts": [],
-                        "weaponSlotRequirement": {
-                          "mode": "oneOf",
-                          "slots": {}
-                        },
-                        "weight": 0
-                      },
-                      "type": "gear"
-                    }
-                  }
-                ]
-              }
-            ],
-            "needSettings": [
-              {
-                "abbr": "hun",
-                "color": "#000000",
-                "formula": "1000",
-                "key": "hunger",
-                "label": "Голод",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "thi",
-                "color": "#000000",
-                "formula": "1000",
-                "key": "thirst",
-                "label": "Жажда",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "sle",
-                "color": "#000000",
-                "formula": "1000",
-                "key": "sleepiness",
-                "label": "Сонливость",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "rad",
-                "color": "#000000",
-                "formula": "1000",
-                "key": "radcont",
-                "label": "Рад. Заражение",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 0
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 1,
-                      "effects": [],
-                      "id": "at-25",
-                      "percent": 25
-                    }
-                  ]
-                }
-              }
-            ],
-            "organismDevelopment": {
-              "limit": 50,
-              "threshold": 1
-            },
-            "progression": {
-              "proficiencyPointsPerLevel": "50",
-              "researchPointsPerLevel": "1000",
-              "skillPointsPerLevel": "10 + int"
-            },
-            "regeneration": {
-              "energyFormula": "20 + energy / 10",
-              "formula": "20 + con * 10"
-            },
-            "typeId": "776d7e8f7bdad3e6",
-            "weaponSets": []
-          },
-          {
-            "baseParameters": {
-              "characteristicDistributionPoints": 33,
-              "loadFormula": "20 + 10*str",
-              "loadLimitPercent": 150,
-              "proficiencyPoints": 500,
-              "signatureSkillPoints": 3,
-              "traitPoints": 2
-            },
-            "bleedingResistanceFormula": "0",
-            "characteristics": {
-              "charisma": 1,
-              "dexterity": 1,
-              "endurance": 1,
-              "intelligence": 1,
-              "luck": 1,
-              "perception": 1,
-              "strength": 1
-            },
-            "damageResistances": {
-              "acid": "res/10",
-              "bleeding": "0",
-              "bludgeoning": "res/10",
-              "cryo": "res/10",
-              "electric": "res/10",
-              "energy": "res/10",
-              "fire": "res/10",
-              "firearm": "res/10",
-              "piercing": "res/10",
-              "poison": "res/10",
-              "radiation": "res/10",
-              "slashing": "res/10"
-            },
-            "equipmentSlots": [
-              {
-                "key": "back",
-                "label": "Спина"
-              }
-            ],
-            "id": "5177491250212141",
-            "inventorySize": {
-              "columns": 10,
-              "rows": 2
-            },
-            "limbSilhouette": null,
-            "limbs": [
-              {
-                "aimedDifficultyPercent": 40,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "head",
-                "label": "Голова",
-                "lossEffects": [],
-                "stateMax": "30 + con * 2"
-              },
-              {
-                "aimedDifficultyPercent": 70,
-                "critical": false,
-                "damageMultiplier": 1.4,
-                "implantLimit": 0,
-                "key": "eyes",
-                "label": "Глаза",
-                "lossEffects": [
-                  {
-                    "key": "status.blind",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "30 + con"
-              },
-              {
-                "aimedDifficultyPercent": 0,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "torso",
-                "label": "Туловище",
-                "lossEffects": [],
-                "stateMax": "60 + con * 3"
-              },
-              {
-                "aimedDifficultyPercent": 30,
-                "critical": false,
-                "damageMultiplier": 1.25,
-                "implantLimit": 0,
-                "key": "groin",
-                "label": "Брюхо",
-                "lossEffects": [],
-                "stateMax": "35 + con"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "leftArm",
-                "label": "Левая передняя лапа",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.strength",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  }
-                ],
-                "stateMax": "40 + con * 2"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "rightArm",
-                "label": "Правая передняя лапа",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.strength",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  }
-                ],
-                "stateMax": "40 + con * 2"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "leftLeg",
-                "label": "Левая задняя лапа",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.costs.movement",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "40 + con * 2"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "rightLeg",
-                "label": "Правая задняя лапа",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.costs.movement",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "40 + con * 2"
-              }
-            ],
-            "name": "Паразит",
-            "naturalItemSets": [
-              {
-                "id": "b16dff08b55bcbe4",
-                "label": "Обычный",
-                "naturalFeatures": [],
-                "naturalWeapons": [
-                  {
-                    "id": "9f62914124f6f264",
-                    "item": {
-                      "_stats": {
-                        "compendiumSource": null,
-                        "coreVersion": "14.361",
-                        "createdTime": null,
-                        "duplicateSource": null,
-                        "exportSource": null,
-                        "lastModifiedBy": null,
-                        "modifiedTime": null,
-                        "systemId": "fallout-maw",
-                        "systemVersion": "0.2.0"
-                      },
-                      "effects": [],
-                      "flags": {},
-                      "folder": null,
-                      "img": "icons/svg/combat.svg",
-                      "name": "Укус",
-                      "ownership": {
-                        "default": 0
-                      },
-                      "sort": 0,
-                      "system": {
-                        "container": {
-                          "columns": 1,
-                          "maxLoad": 0,
-                          "parentId": "",
-                          "rows": 1
-                        },
-                        "craft": {
-                          "disassembly": {
-                            "links": [],
-                            "nodes": [],
-                            "viewport": {
-                              "x": 0,
-                              "y": 0,
-                              "zoom": 1
-                            }
-                          },
-                          "links": [],
-                          "mode": "craft",
-                          "nodes": [],
-                          "recipes": [],
-                          "viewport": {
-                            "x": 0,
-                            "y": 0,
-                            "zoom": 1
-                          }
-                        },
-                        "description": "",
-                        "equipped": false,
-                        "functions": {
-                          "condition": {
-                            "enabled": false
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "weapon": {
-                            "accuracyBonus": "0",
-                            "aimedMeleeAttack": {
-                              "actionPointCost": 3,
-                              "attackConeDegrees": 40,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "aimedShot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "attackAnimationDelayMs": 200,
-                            "attackAnimationKey": "fallout-maw.generic.creature.bite_01_regular_green",
-                            "attackConeDegrees": 40,
-                            "attackSoundPath": "systems/fallout-maw/audio/Creature_Attacks/fnv/mole_rat/npc_molerat_bite_03.ogg",
-                            "attackSoundVolume": 1,
-                            "availableActions": {
-                              "aimedMeleeAttack": true,
-                              "aimedShot": false,
-                              "burst": false,
-                              "meleeAttack": true,
-                              "push": false,
-                              "reload": false,
-                              "snapshot": false,
-                              "volley": false
-                            },
-                            "burst": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "count": 3,
-                              "criticalFailureConsequences": [],
-                              "difficultyPerShot": 10,
-                              "name": ""
-                            },
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "150",
-                            "damage": "9",
-                            "damageMode": "manual",
-                            "damageTypeKey": "piercing",
-                            "damageTypes": [
-                              {
-                                "key": "piercing",
-                                "percent": 65
-                              },
-                              {
-                                "key": "poison",
-                                "percent": 35
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "1",
-                              "value": "0"
-                            },
-                            "enabled": true,
-                            "magazine": {
-                              "max": 0,
-                              "sourceItemUuid": "",
-                              "sourceItemUuids": [],
-                              "value": 0
-                            },
-                            "maxRangeMeters": "1",
-                            "meleeAttack": {
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 40,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "moduleSlots": [],
-                            "noiseLevel": 1,
-                            "pellets": "1",
-                            "penetration": "1",
-                            "proficiencyKey": "natural",
-                            "push": {
-                              "accuracyModifier": 0,
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "maxRangeMeters": 1,
-                              "name": "",
-                              "pushDifficultyModifier": 0
-                            },
-                            "reload": {
-                              "actionPointCost": 2,
-                              "name": ""
-                            },
-                            "requirements": [],
-                            "resourceCosts": [],
-                            "skillKey": "meleeCombat",
-                            "snapshot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "specialProperties": [],
-                            "volley": {
-                              "actionPointCost": 5,
-                              "criticalFailureConsequences": [],
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "name": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          }
-                        },
-                        "itemCategory": "",
-                        "itemFunction": "",
-                        "locked": false,
-                        "maxStack": 1,
-                        "occupiedSlotMode": "all",
-                        "occupiedSlots": {},
-                        "placement": {
-                          "constructPartOrder": 0,
-                          "equipmentSlot": "",
-                          "height": 1,
-                          "limbKey": "",
-                          "mode": "weapon",
-                          "rotated": false,
-                          "weaponSet": "naturalRaceWeapons",
-                          "weaponSlot": "9f62914124f6f264",
-                          "width": 1,
-                          "x": 1,
-                          "y": 1
-                        },
-                        "price": 0,
-                        "priceCurrency": "caps",
-                        "quantity": 1,
-                        "stackParts": [],
-                        "weaponSlotRequirement": {
-                          "mode": "oneOf",
-                          "slots": {}
-                        },
-                        "weight": 0
-                      },
-                      "type": "gear"
-                    }
-                  },
-                  {
-                    "id": "5e08601274aaf92a",
-                    "item": {
-                      "_stats": {
-                        "compendiumSource": null,
-                        "coreVersion": "14.361",
-                        "createdTime": null,
-                        "duplicateSource": null,
-                        "exportSource": null,
-                        "lastModifiedBy": null,
-                        "modifiedTime": null,
-                        "systemId": "fallout-maw",
-                        "systemVersion": "0.2.0"
-                      },
-                      "effects": [],
-                      "flags": {},
-                      "folder": null,
-                      "img": "icons/svg/combat.svg",
-                      "name": "Хватка",
-                      "ownership": {
-                        "default": 0
-                      },
-                      "sort": 0,
-                      "system": {
-                        "container": {
-                          "columns": 1,
-                          "maxLoad": 0,
-                          "parentId": "",
-                          "rows": 1
-                        },
-                        "craft": {
-                          "disassembly": {
-                            "links": [],
-                            "nodes": [],
-                            "viewport": {
-                              "x": 0,
-                              "y": 0,
-                              "zoom": 1
-                            }
-                          },
-                          "links": [],
-                          "mode": "craft",
-                          "nodes": [],
-                          "recipes": [],
-                          "viewport": {
-                            "x": 0,
-                            "y": 0,
-                            "zoom": 1
-                          }
-                        },
-                        "description": "",
-                        "equipped": false,
-                        "functions": {
-                          "condition": {
-                            "enabled": false
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "weapon": {
-                            "accuracyBonus": "0",
-                            "aimedMeleeAttack": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 90,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "aimedShot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "attackAnimationDelayMs": 200,
-                            "attackAnimationKey": "fallout-maw.generic.creature.claw.creature_attack_claw_001_001_red",
-                            "attackConeDegrees": 90,
-                            "attackSoundPath": "systems/fallout-maw/audio/Creature_Attacks/fnv/mole_rat/npc_molerat_bite_02.ogg",
-                            "attackSoundVolume": 1,
-                            "availableActions": {
-                              "aimedMeleeAttack": true,
-                              "aimedShot": false,
-                              "burst": false,
-                              "meleeAttack": true,
-                              "push": false,
-                              "reload": false,
-                              "snapshot": false,
-                              "volley": false
-                            },
-                            "burst": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "count": 3,
-                              "criticalFailureConsequences": [],
-                              "difficultyPerShot": 10,
-                              "name": ""
-                            },
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "150",
-                            "damage": "7",
-                            "damageMode": "manual",
-                            "damageTypeKey": "slashing",
-                            "damageTypes": [
-                              {
-                                "key": "slashing",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "1",
-                              "value": "0"
-                            },
-                            "enabled": true,
-                            "magazine": {
-                              "max": 0,
-                              "sourceItemUuid": "",
-                              "sourceItemUuids": [],
-                              "value": 0
-                            },
-                            "maxRangeMeters": "1",
-                            "meleeAttack": {
-                              "actionPointCost": 4,
-                              "attackConeDegrees": 90,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "moduleSlots": [],
-                            "noiseLevel": 1,
-                            "pellets": "1",
-                            "penetration": "0",
-                            "proficiencyKey": "natural",
-                            "push": {
-                              "accuracyModifier": 0,
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "maxRangeMeters": 1,
-                              "name": "",
-                              "pushDifficultyModifier": 0
-                            },
-                            "reload": {
-                              "actionPointCost": 2,
-                              "name": ""
-                            },
-                            "requirements": [],
-                            "resourceCosts": [],
-                            "skillKey": "meleeCombat",
-                            "snapshot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "specialProperties": [],
-                            "volley": {
-                              "actionPointCost": 5,
-                              "criticalFailureConsequences": [],
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "name": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          }
-                        },
-                        "itemCategory": "",
-                        "itemFunction": "",
-                        "locked": false,
-                        "maxStack": 1,
-                        "occupiedSlotMode": "all",
-                        "occupiedSlots": {},
-                        "placement": {
-                          "constructPartOrder": 0,
-                          "equipmentSlot": "",
-                          "height": 1,
-                          "limbKey": "",
-                          "mode": "weapon",
-                          "rotated": false,
-                          "weaponSet": "naturalRaceWeapons",
-                          "weaponSlot": "5e08601274aaf92a",
-                          "width": 1,
-                          "x": 1,
-                          "y": 1
-                        },
-                        "price": 0,
-                        "priceCurrency": "caps",
-                        "quantity": 1,
-                        "stackParts": [],
-                        "weaponSlotRequirement": {
-                          "mode": "oneOf",
-                          "slots": {}
-                        },
-                        "weight": 0
-                      },
-                      "type": "gear"
-                    }
-                  }
-                ]
-              }
-            ],
-            "needSettings": [
-              {
-                "abbr": "hun",
-                "color": "#c9a24a",
-                "formula": "1000",
-                "key": "hunger",
-                "label": "Голод",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "thi",
-                "color": "#58a6d6",
-                "formula": "1000",
-                "key": "thirst",
-                "label": "Жажда",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "sle",
-                "color": "#8f63c9",
-                "formula": "1000",
-                "key": "sleepiness",
-                "label": "Сонливость",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "rad",
-                "color": "#b620a7",
-                "formula": "1000",
-                "key": "radcont",
-                "label": "Рад. Заражение",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 0
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 1,
-                      "effects": [],
-                      "id": "at-25",
-                      "percent": 25
-                    }
-                  ]
-                }
-              }
-            ],
-            "organismDevelopment": {
-              "limit": 50,
-              "threshold": 1
-            },
-            "progression": {
-              "proficiencyPointsPerLevel": "50",
-              "researchPointsPerLevel": "1000",
-              "skillPointsPerLevel": "10+int"
-            },
-            "regeneration": {
-              "energyFormula": "20 + energy / 10",
-              "formula": "10 + con * 5"
-            },
-            "typeId": "776d7e8f7bdad3e6",
-            "weaponSets": []
-          },
-          {
-            "baseParameters": {
-              "characteristicDistributionPoints": 33,
-              "loadFormula": "20 + 10*str",
-              "loadLimitPercent": 150,
-              "proficiencyPoints": 500,
-              "signatureSkillPoints": 2,
-              "traitPoints": 2
-            },
-            "bleedingResistanceFormula": "0",
-            "characteristics": {
-              "charisma": 1,
-              "dexterity": 1,
-              "endurance": 1,
-              "intelligence": 1,
-              "luck": 1,
-              "perception": 1,
-              "strength": 1
-            },
-            "damageResistances": {
-              "acid": "res/10",
-              "bleeding": "0",
-              "bludgeoning": "res/10",
-              "cryo": "res/10",
-              "electric": "res/10",
-              "energy": "res/10",
-              "fire": "res/10",
-              "firearm": "res/10",
-              "piercing": "res/10",
-              "poison": "0",
-              "radiation": "0",
-              "slashing": "res/10"
-            },
-            "equipmentSlots": [
-              {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
-              }
-            ],
-            "id": "6f68912d07c4c2b1",
-            "inventorySize": {
-              "columns": 10,
-              "rows": 3
-            },
-            "limbSilhouette": null,
-            "limbs": [
-              {
-                "aimedDifficultyPercent": 30,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "head",
-                "label": "Голова",
-                "lossEffects": [],
-                "stateMax": "45 + con * 3"
-              },
-              {
-                "aimedDifficultyPercent": 50,
-                "critical": false,
-                "damageMultiplier": 1.4,
-                "implantLimit": 0,
-                "key": "eyes",
-                "label": "Глаза",
-                "lossEffects": [
-                  {
-                    "key": "status.blind",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "35 + con * 2"
-              },
-              {
-                "aimedDifficultyPercent": 0,
-                "critical": true,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "torso",
-                "label": "Туловище",
-                "lossEffects": [],
-                "stateMax": "90 + con * 5"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1.2,
-                "implantLimit": 0,
-                "key": "groin",
-                "label": "Пах",
-                "lossEffects": [],
-                "stateMax": "35 + con * 3"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "leftArm",
-                "label": "Левая рука",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.strength",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  }
-                ],
-                "stateMax": "45 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "rightArm",
-                "label": "Правая рука",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.strength",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  }
-                ],
-                "stateMax": "45 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "leftLeg",
-                "label": "Левая нога",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.costs.movement",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "50 + con * 4"
-              },
-              {
-                "aimedDifficultyPercent": 20,
-                "critical": false,
-                "damageMultiplier": 1,
-                "implantLimit": 0,
-                "key": "rightLeg",
-                "label": "Правая нога",
-                "lossEffects": [
-                  {
-                    "key": "system.characteristics.dexterity",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "multiply",
-                    "value": "0.8"
-                  },
-                  {
-                    "key": "system.costs.movement",
-                    "phase": "initial",
-                    "priority": null,
-                    "type": "add",
-                    "value": "1"
-                  }
-                ],
-                "stateMax": "50 + con * 4"
-              }
-            ],
-            "name": "Дзетан",
-            "naturalItemSets": [
-              {
-                "id": "b29a4d17f3a58e94",
-                "label": "Разведчик",
-                "naturalFeatures": [],
-                "naturalWeapons": [
-                  {
-                    "id": "5381b7d98248a3ac",
-                    "item": {
-                      "_stats": {
-                        "compendiumSource": null,
-                        "coreVersion": "14.361",
-                        "createdTime": null,
-                        "duplicateSource": null,
-                        "exportSource": null,
-                        "lastModifiedBy": null,
-                        "modifiedTime": null,
-                        "systemId": "fallout-maw",
-                        "systemVersion": "0.2.0"
-                      },
-                      "effects": [],
-                      "flags": {},
-                      "folder": null,
-                      "img": "icons/svg/combat.svg",
-                      "name": "Удар",
-                      "ownership": {
-                        "default": 0
-                      },
-                      "sort": 0,
-                      "system": {
-                        "container": {
-                          "columns": 1,
-                          "maxLoad": 0,
-                          "parentId": "",
-                          "rows": 1
-                        },
-                        "craft": {
-                          "disassembly": {
-                            "links": [],
-                            "nodes": [],
-                            "viewport": {
-                              "x": 0,
-                              "y": 0,
-                              "zoom": 1
-                            }
-                          },
-                          "links": [],
-                          "mode": "craft",
-                          "nodes": [],
-                          "recipes": [],
-                          "viewport": {
-                            "x": 0,
-                            "y": 0,
-                            "zoom": 1
-                          }
-                        },
-                        "description": "",
-                        "equipped": false,
-                        "functions": {
-                          "condition": {
-                            "enabled": false
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "weapon": {
-                            "accuracyBonus": "0",
-                            "aimedMeleeAttack": {
-                              "actionPointCost": 6,
-                              "attackConeDegrees": 120,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "aimedShot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "attackAnimationDelayMs": 200,
-                            "attackAnimationKey": "fallout-maw.generic.creature.fist.creature_attack_fist_001_003_red",
-                            "attackConeDegrees": 120,
-                            "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Kulaki/wpn_hand_swing_01.mp3",
-                            "attackSoundVolume": 1,
-                            "availableActions": {
-                              "aimedMeleeAttack": true,
-                              "aimedShot": false,
-                              "burst": false,
-                              "meleeAttack": true,
-                              "push": false,
-                              "reload": false,
-                              "snapshot": false,
-                              "volley": false
-                            },
-                            "burst": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "count": 3,
-                              "criticalFailureConsequences": [],
-                              "difficultyPerShot": 10,
-                              "name": ""
-                            },
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "150",
-                            "damage": "60",
-                            "damageMode": "manual",
-                            "damageTypeKey": "bludgeoning",
-                            "damageTypes": [
-                              {
-                                "key": "bludgeoning",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "1",
-                              "value": "0"
-                            },
-                            "enabled": true,
-                            "magazine": {
-                              "max": 0,
-                              "sourceItemUuid": "",
-                              "sourceItemUuids": [],
-                              "value": 0
-                            },
-                            "maxRangeMeters": "1",
-                            "meleeAttack": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 120,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "moduleSlots": [],
-                            "noiseLevel": 1,
-                            "pellets": "1",
-                            "penetration": "1",
-                            "proficiencyKey": "natural",
-                            "push": {
-                              "accuracyModifier": 0,
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "maxRangeMeters": 1,
-                              "name": "",
-                              "pushDifficultyModifier": 0
-                            },
-                            "reload": {
-                              "actionPointCost": 2,
-                              "name": ""
-                            },
-                            "requirements": [],
-                            "resourceCosts": [],
-                            "skillKey": "meleeCombat",
-                            "snapshot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "specialProperties": [],
-                            "volley": {
-                              "actionPointCost": 5,
-                              "criticalFailureConsequences": [],
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "name": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          }
-                        },
-                        "itemCategory": "",
-                        "itemFunction": "",
-                        "locked": false,
-                        "maxStack": 1,
-                        "occupiedSlotMode": "all",
-                        "occupiedSlots": {},
-                        "placement": {
-                          "constructPartOrder": 0,
-                          "equipmentSlot": "",
-                          "height": 1,
-                          "limbKey": "",
-                          "mode": "weapon",
-                          "rotated": false,
-                          "weaponSet": "naturalRaceWeapons",
-                          "weaponSlot": "5381b7d98248a3ac",
-                          "width": 1,
-                          "x": 1,
-                          "y": 1
-                        },
-                        "price": 0,
-                        "priceCurrency": "caps",
-                        "quantity": 1,
-                        "stackParts": [],
-                        "weaponSlotRequirement": {
-                          "mode": "oneOf",
-                          "slots": {}
-                        },
-                        "weight": 0
-                      },
-                      "type": "gear"
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "06d9bc0ad6b600e9",
-                "label": "Воин",
-                "naturalFeatures": [],
-                "naturalWeapons": [
-                  {
-                    "id": "f5f7781f6b2cfecf",
-                    "item": {
-                      "_stats": {
-                        "compendiumSource": null,
-                        "coreVersion": "14.361",
-                        "createdTime": null,
-                        "duplicateSource": null,
-                        "exportSource": null,
-                        "lastModifiedBy": null,
-                        "modifiedTime": null,
-                        "systemId": "fallout-maw",
-                        "systemVersion": "0.2.0"
-                      },
-                      "effects": [],
-                      "flags": {},
-                      "folder": null,
-                      "img": "icons/svg/combat.svg",
-                      "name": "Удар",
-                      "ownership": {
-                        "default": 0
-                      },
-                      "sort": 0,
-                      "system": {
-                        "container": {
-                          "columns": 1,
-                          "maxLoad": 0,
-                          "parentId": "",
-                          "rows": 1
-                        },
-                        "craft": {
-                          "disassembly": {
-                            "links": [],
-                            "nodes": [],
-                            "viewport": {
-                              "x": 0,
-                              "y": 0,
-                              "zoom": 1
-                            }
-                          },
-                          "links": [],
-                          "mode": "craft",
-                          "nodes": [],
-                          "recipes": [],
-                          "viewport": {
-                            "x": 0,
-                            "y": 0,
-                            "zoom": 1
-                          }
-                        },
-                        "description": "",
-                        "equipped": false,
-                        "functions": {
-                          "condition": {
-                            "enabled": false
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "weapon": {
-                            "accuracyBonus": "0",
-                            "aimedMeleeAttack": {
-                              "actionPointCost": 8,
-                              "attackConeDegrees": 120,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "aimedShot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "attackAnimationDelayMs": 200,
-                            "attackAnimationKey": "fallout-maw.generic.creature.fist.creature_attack_fist_001_003_red",
-                            "attackConeDegrees": 120,
-                            "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Kulaki/wpn_hand_swing_01.mp3",
-                            "attackSoundVolume": 1,
-                            "availableActions": {
-                              "aimedMeleeAttack": true,
-                              "aimedShot": false,
-                              "burst": false,
-                              "meleeAttack": true,
-                              "push": false,
-                              "reload": false,
-                              "snapshot": false,
-                              "volley": false
-                            },
-                            "burst": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "count": 3,
-                              "criticalFailureConsequences": [],
-                              "difficultyPerShot": 10,
-                              "name": ""
-                            },
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "150",
-                            "damage": "105",
-                            "damageMode": "manual",
-                            "damageTypeKey": "bludgeoning",
-                            "damageTypes": [
-                              {
-                                "key": "bludgeoning",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "1",
-                              "value": "0"
-                            },
-                            "enabled": true,
-                            "magazine": {
-                              "max": 0,
-                              "sourceItemUuid": "",
-                              "sourceItemUuids": [],
-                              "value": 0
-                            },
-                            "maxRangeMeters": "1",
-                            "meleeAttack": {
-                              "actionPointCost": 7,
-                              "attackConeDegrees": 120,
-                              "criticalFailureConsequences": [],
-                              "name": "",
-                              "swing": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              },
-                              "thrust": {
-                                "accuracyModifier": 0,
-                                "criticalChanceModifier": 0,
-                                "damagePercentModifier": 0,
-                                "enabled": true
-                              }
-                            },
-                            "moduleSlots": [],
-                            "noiseLevel": 1,
-                            "pellets": "2",
-                            "penetration": "3",
-                            "proficiencyKey": "natural",
-                            "push": {
-                              "accuracyModifier": 0,
-                              "actionPointCost": 2,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "maxRangeMeters": 1,
-                              "name": "",
-                              "pushDifficultyModifier": 0
-                            },
-                            "reload": {
-                              "actionPointCost": 2,
-                              "name": ""
-                            },
-                            "requirements": [],
-                            "resourceCosts": [],
-                            "skillKey": "meleeCombat",
-                            "snapshot": {
-                              "actionPointCost": 5,
-                              "attackConeDegrees": 3,
-                              "criticalFailureConsequences": [],
-                              "name": ""
-                            },
-                            "specialProperties": [],
-                            "volley": {
-                              "actionPointCost": 5,
-                              "criticalFailureConsequences": [],
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "name": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          }
-                        },
-                        "itemCategory": "",
-                        "itemFunction": "",
-                        "locked": false,
-                        "maxStack": 1,
-                        "occupiedSlotMode": "all",
-                        "occupiedSlots": {},
-                        "placement": {
-                          "constructPartOrder": 0,
-                          "equipmentSlot": "",
-                          "height": 1,
-                          "limbKey": "",
-                          "mode": "weapon",
-                          "rotated": false,
-                          "weaponSet": "naturalRaceWeapons",
-                          "weaponSlot": "f5f7781f6b2cfecf",
-                          "width": 1,
-                          "x": 1,
-                          "y": 1
-                        },
-                        "price": 0,
-                        "priceCurrency": "caps",
-                        "quantity": 1,
-                        "stackParts": [],
-                        "weaponSlotRequirement": {
-                          "mode": "oneOf",
-                          "slots": {}
-                        },
-                        "weight": 0
-                      },
-                      "type": "gear"
-                    }
-                  }
-                ]
-              }
-            ],
-            "needSettings": [
-              {
-                "abbr": "hun",
-                "color": "#c9a24a",
-                "formula": "1000",
-                "key": "hunger",
-                "label": "Голод",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "thi",
-                "color": "#58a6d6",
-                "formula": "1000",
-                "key": "thirst",
-                "label": "Жажда",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-4"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "sle",
-                "color": "#8f63c9",
-                "formula": "1000",
-                "key": "sleepiness",
-                "label": "Сонливость",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "id": "at-50",
-                      "percent": 50
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-75",
-                      "percent": 75
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-3"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "rad",
-                "color": "#b620a7",
-                "formula": "1000",
-                "key": "radcont",
-                "label": "Рад. Заражение",
-                "settings": {
-                  "accumulation": {
-                    "perHour": 0
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 1,
-                      "effects": [],
-                      "id": "at-25",
-                      "percent": 25
-                    }
-                  ]
-                }
-              },
-              {
-                "abbr": "add",
-                "color": "#8f8456",
-                "formula": "1000",
-                "key": "addiction",
-                "label": "Зависимость",
-                "settings": {
-                  "accumulation": {
-                    "perHour": -10
-                  },
-                  "diseases": [],
-                  "thresholds": [
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.firstAid.incomingEffectivenessPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-30"
-                        }
-                      ],
-                      "id": "at-40",
-                      "percent": 40
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.firstAid.incomingEffectivenessPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-40"
-                        },
-                        {
-                          "key": "system.firstAid.durationPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-25"
-                        }
-                      ],
-                      "id": "at-60",
-                      "percent": 60
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.firstAid.incomingEffectivenessPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-70"
-                        },
-                        {
-                          "key": "system.firstAid.durationPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-50"
-                        },
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "id": "at-80",
-                      "percent": 80
-                    },
-                    {
-                      "diseaseLevel": 0,
-                      "effects": [
-                        {
-                          "key": "system.firstAid.incomingEffectivenessPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-100"
-                        },
-                        {
-                          "key": "system.firstAid.durationPercent",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-100"
-                        },
-                        {
-                          "key": "system.characteristics.strength",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.dexterity",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.endurance",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.intelligence",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        },
-                        {
-                          "key": "system.characteristics.luck",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-2"
-                        }
-                      ],
-                      "id": "at-100",
-                      "percent": 100
-                    }
-                  ]
-                }
-              }
-            ],
-            "organismDevelopment": {
-              "limit": 50,
-              "threshold": 10
-            },
-            "progression": {
-              "proficiencyPointsPerLevel": "50",
-              "researchPointsPerLevel": "500",
-              "skillPointsPerLevel": "5"
-            },
-            "regeneration": {
-              "energyFormula": "20 + energy / 10",
-              "formula": "10 + con * 5"
-            },
-            "typeId": "776d7e8f7bdad3e6",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
           }
         ],
         "types": [
@@ -113852,10 +110396,6 @@
           {
             "id": "36d48d4b1f41e3f1",
             "name": "Флора"
-          },
-          {
-            "id": "776d7e8f7bdad3e6",
-            "name": "Чужие и аномалии"
           }
         ]
       }
