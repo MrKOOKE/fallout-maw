@@ -73,6 +73,7 @@ import {
 import { applyAttackActionPointMovementLoss } from "./attack-action-point-movement-loss.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { normalizeRegionSpecialProperties, resolveRegionSpecialProperties } from "../utils/region-special-properties.mjs";
+import { getSphericalRegionElevation, getSphericalRegionFlags } from "../utils/region-elevation.mjs";
 import {
   applySkillBonusPercent,
   getSkillValueBeforePercent
@@ -9189,6 +9190,7 @@ async function createVolleyDamageRegionNow(regionData = {}) {
   const delaySeconds = Math.max(0, toInteger(regionData.delaySeconds));
   if (durationSeconds <= 0) return null;
   const levelId = getRegionRestrictionLevelId(scene);
+  const centerElevation = Number.isFinite(Number(center.elevation)) ? Number(center.elevation) : 0;
 
   const created = await scene.createEmbeddedDocuments("Region", [{
     name: String(regionData.name ?? "").trim() || game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
@@ -9200,12 +9202,13 @@ async function createVolleyDamageRegionNow(regionData = {}) {
       radius: radiusPixels,
       gridBased: false
     }],
-    elevation: { bottom: null, top: null },
+    elevation: getSphericalRegionElevation(centerElevation, radiusPixels, scene),
     levels: levelId ? [levelId] : [],
     restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
     visibility: CONST.REGION_VISIBILITY.ALWAYS,
     highlightMode: "shapes",
     displayMeasurements: false,
+    flags: getSphericalRegionFlags(centerElevation),
     behaviors: [{
       name: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Name"),
       type: PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE,

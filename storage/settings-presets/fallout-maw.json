@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "58aae7161f00f9e69c9c96c2d8f66bb60e119fdc4ee883d1cde5fe6d19fe48b2",
-  "updatedAt": "2026-08-08T14:15:49.601Z",
+  "revision": "06f51bbce39e83d52bf46b9e0263d90dd807a26cc035943dd96cc29461849a88",
+  "updatedAt": "2026-08-08T18:16:18.725Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -5458,7 +5458,8 @@
                           "regionDelaySeconds": "0",
                           "regionDurationSeconds": "0",
                           "regionRadius": "0",
-                          "regionRadiusDeltaMeters": "0"
+                          "regionRadiusDeltaMeters": "0",
+                          "regionSpecialProperties": []
                         },
                         "attackAnimationDelayMs": 0,
                         "attackAnimationKey": "",

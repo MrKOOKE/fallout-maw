@@ -44,6 +44,7 @@ import {
 } from "./target-selection-lifecycle.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
+import { getSphericalRegionElevation, getSphericalRegionFlags } from "../utils/region-elevation.mjs";
 
 const TRAP_SOCKET = `system.${SYSTEM_ID}`;
 const TRAP_SOCKET_SCOPE = "fallout-maw.traps";
@@ -2761,6 +2762,7 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
   if (!radiusPixels || durationSeconds <= 0) return null;
 
   const levelId = getRegionRestrictionLevelId(scene);
+  const centerElevation = Number.isFinite(Number(center?.elevation)) ? Number(center.elevation) : 0;
   const created = await scene.createEmbeddedDocuments("Region", [{
     name: `${tile.name}: область`,
     color: damageEntries.length ? "#dd8431" : "#8a8a8a",
@@ -2771,12 +2773,13 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
       radius: radiusPixels,
       gridBased: false
     }],
-    elevation: { bottom: null, top: null },
+    elevation: getSphericalRegionElevation(centerElevation, radiusPixels, scene),
     levels: levelId ? [levelId] : [],
     restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
     visibility: CONST.REGION_VISIBILITY.ALWAYS,
     highlightMode: "shapes",
     displayMeasurements: false,
+    flags: getSphericalRegionFlags(centerElevation),
     behaviors: [{
       name: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Name"),
       type: PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE,
@@ -3586,7 +3589,8 @@ function getTileCenter(tile) {
   const dimensions = getTileEffectiveDimensions(tile);
   return {
     x: topLeft.x + (dimensions.width / 2),
-    y: topLeft.y + (dimensions.height / 2)
+    y: topLeft.y + (dimensions.height / 2),
+    elevation: Number(tile?.document?.elevation ?? tile?.elevation) || 0
   };
 }
 

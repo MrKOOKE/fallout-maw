@@ -65,6 +65,11 @@ import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-fo
 import { toInteger, toOptionalFiniteNumber } from "../utils/numbers.mjs";
 import { getSmokeSpecialProperty } from "../utils/region-special-properties.mjs";
 import {
+  getMaximumCircleRadiusPixels,
+  getSphericalRegionCenterElevation,
+  getSphericalRegionElevation
+} from "../utils/region-elevation.mjs";
+import {
   getActorInventoryGridDimensions
 } from "../utils/actor-display-data.mjs";
 import {
@@ -5435,7 +5440,16 @@ async function updateRegionPeriodicDamageRadius(region, system = {}, dueTicks = 
       radius: Math.max(0, (Number(data.radius) || 0) + deltaPixels)
     };
   });
-  await region.update({ shapes });
+  const update = { shapes };
+  const centerElevation = getSphericalRegionCenterElevation(region);
+  if (centerElevation !== null) {
+    update.elevation = getSphericalRegionElevation(
+      centerElevation,
+      getMaximumCircleRadiusPixels(shapes),
+      region.parent
+    );
+  }
+  await region.update(update);
 }
 
 async function expireRegionPeriodicDamage(region, behavior, system = {}) {

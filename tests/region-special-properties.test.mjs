@@ -13,6 +13,30 @@ import {
   registerSmokeVisionHooks,
   syncSmokeDarknessMeshes
 } from "../src/canvas/smoke-vision.mjs";
+import {
+  getMaximumCircleRadiusPixels,
+  getSphericalRegionCenterElevation,
+  getSphericalRegionElevation,
+  getSphericalRegionFlags
+} from "../src/utils/region-elevation.mjs";
+
+test("automatic blast Regions use radius-sized vertical elevation bounds", () => {
+  const scene = { grid: { distance: 1, size: 100 } };
+  assert.deepEqual(getSphericalRegionElevation(12, 400, scene), {
+    bottom: 8,
+    top: 16
+  });
+  const flags = getSphericalRegionFlags(12);
+  const region = {
+    getFlag: (scope, key) => flags[scope]?.[key]
+  };
+  assert.equal(getSphericalRegionCenterElevation(region), 12);
+  assert.equal(getMaximumCircleRadiusPixels([
+    { type: "rectangle", width: 900 },
+    { type: "circle", radius: 250 },
+    { type: "circle", radius: 400 }
+  ]), 400);
+});
 
 test("area special properties keep one selectable row and do not duplicate smoke", () => {
   assert.deepEqual(normalizeRegionSpecialProperties([
