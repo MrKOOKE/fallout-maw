@@ -69,6 +69,7 @@ import {
   getActorApplicableEffects,
   markActorEmbeddedEffectsPrepared
 } from "./actor-effect-preparation-index.mjs";
+import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
 export class FalloutMaWActor extends Actor {
@@ -168,6 +169,33 @@ export class FalloutMaWActor extends Actor {
     if (isActorItemCollection(this, parent, collection)) {
       invalidateActorLoadPreparation(this);
     }
+  }
+
+  _onUpdateDescendantDocuments(parent, collection, documents, changes, options, userId) {
+    const renderParts = isActorItemCollection(this, parent, collection)
+      ? normalizeInventoryRenderParts(options?.[INVENTORY_RENDER_PARTS_OPTION])
+      : [];
+    if (!renderParts.length) {
+      return super._onUpdateDescendantDocuments(parent, collection, documents, changes, options, userId);
+    }
+
+    // Preserve all upstream descendant-update behavior while replacing only
+    // the broad Actor render with a system-declared partial render.
+    super._onUpdateDescendantDocuments(
+      parent,
+      collection,
+      documents,
+      changes,
+      { ...options, render: false },
+      userId
+    );
+    if (options?.render === false) return undefined;
+    this.render(false, {
+      renderContext: `update${collection}`,
+      renderData: changes,
+      [INVENTORY_RENDER_PARTS_OPTION]: renderParts
+    });
+    return undefined;
   }
 
   _onUpdate(changes, options, userId) {
@@ -615,6 +643,11 @@ function getActorLoadPreparationSignature(race, characteristics = {}, skills = {
 
 function isActorItemCollection(actor, parent, collection) {
   return parent === actor && collection === "items";
+}
+
+function normalizeInventoryRenderParts(parts = []) {
+  if (!Array.isArray(parts)) return [];
+  return Array.from(new Set(parts.map(String).filter(Boolean)));
 }
 
 function clearCreatureSelection(actor) {

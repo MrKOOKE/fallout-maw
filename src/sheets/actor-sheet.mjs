@@ -131,6 +131,8 @@ import { openConstructStructure } from "../apps/construct-structure.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { moveOwnedInventoryItemInInventoryFast } from "../inventory/movement.mjs";
+import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
 import { repairActorInventory } from "../inventory/migration.mjs";
 import { canStackInventoryItems } from "../inventory/stacking.mjs";
 import { openActorFactionConfig } from "../apps/faction-settings-config.mjs";
@@ -449,6 +451,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
   };
 
+  _configureRenderOptions(options) {
+    const requestedParts = options?.[INVENTORY_RENDER_PARTS_OPTION];
+    if (!options.parts && Array.isArray(requestedParts) && requestedParts.length) {
+      options.parts = Array.from(new Set(requestedParts.map(String).filter(part => part in this.constructor.PARTS)));
+    }
+    super._configureRenderOptions(options);
+  }
+
   get actor() {
     return this.document;
   }
@@ -534,8 +544,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const actor = this.actor;
     const isConstruct = actor.type === "construct";
     const creatureOptions = getCreatureOptions();
+    const typeId = actor.system?.creature?.typeId;
+    const raceId = actor.system?.creature?.raceId;
+    const subtypeId = actor.system?.creature?.subtypeId;
+    const race = creatureOptions.races.find(entry => entry.id === raceId);
+    const subtype = (race?.naturalItemSets ?? []).find(entry => entry.id === subtypeId) ?? null;
+    const sourceSystem = actor.system?._source ?? actor.system;
+    const inventoryContext = await prepareActorSheetInventoryRenderContext(actor, race, sourceSystem);
+    if (options.parts?.length === 1 && options.parts[0] === "inventory") {
+      return foundry.utils.mergeObject(context, {
+        actor,
+        system: actor.system,
+        sourceSystem,
+        config: FALLOUT_MAW,
+        owner: actor.isOwner,
+        isConstruct,
+        editable: this.isEditable,
+        freeEdit: this.#freeEdit,
+        editLockAttribute: this.#freeEdit ? "" : "disabled",
+        ...inventoryContext
+      }, { inplace: false });
+    }
+
     const characteristicSettings = getCharacteristicSettings();
-    const currencySettings = getCurrencySettings();
     const damageTypeSettings = getDamageTypeSettings();
     const diseaseSettings = getDiseaseSettings();
     const resourceSettings = getResourceSettings();
@@ -543,13 +574,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
     const levelSettings = getLevelSettings();
-    const typeId = actor.system?.creature?.typeId;
-    const raceId = actor.system?.creature?.raceId;
-    const subtypeId = actor.system?.creature?.subtypeId;
-    const race = creatureOptions.races.find(entry => entry.id === raceId);
-    const subtype = (race?.naturalItemSets ?? []).find(entry => entry.id === subtypeId) ?? null;
     const needSettings = getActorNeedSettings(actor);
-    const sourceSystem = actor.system?._source ?? actor.system;
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
       ? this.#activeLimbKey
@@ -571,17 +596,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     this.#activeLimbKey = activeLimbKey;
 
-    const inventory = prepareDisplayInventoryContext(actor, race);
-    markActiveHudWeaponSet(actor, inventory);
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
     const canManageSheetDocuments = Boolean(game.user?.isGM);
-    const loadValue = Math.max(0, Number(actor.system.load?.value) || 0);
-    const loadMax = Math.max(0, Number(actor.system.load?.max) || 0);
-    const infiniteLoad = Boolean(actor.system?.trade?.infiniteInventory);
-    const loadRatio = !infiniteLoad && loadMax > 0 ? (loadValue / loadMax) : 0;
-    const loadPercent = Math.max(0, Math.min(100, loadRatio * 100));
     const currentThreshold = level <= 1
       ? 0
       : getLevelThreshold(levelSettings, Math.max(0, level - 1));
@@ -601,21 +619,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       editable: this.isEditable,
       freeEdit: this.#freeEdit,
       editLockAttribute: this.#freeEdit ? "" : "disabled",
+      ...inventoryContext,
       canManageResearchControls: canManageSheetDocuments,
       canManageEffectControls: canManageSheetDocuments,
       actorName: this.#actorNameDraft ?? actor.name,
-      load: {
-        value: formatWeight(loadValue),
-        max: infiniteLoad ? "∞" : formatWeight(loadMax),
-        percent: Number(loadPercent.toFixed(2)),
-        trend: "negative",
-        state: loadRatio >= 1 ? "critical" : loadRatio >= 0.75 ? "warning" : "normal"
-      },
-      currencies: currencySettings.map(currency => ({
-        ...currency,
-        amount: toInteger(sourceSystem.currencies?.[currency.key] ?? actor.system.currencies?.[currency.key]),
-        hasImage: Boolean(currency.img)
-      })),
       creatureTypeName: creatureOptions.types.find(type => type.id === typeId)?.name || "",
       creatureRaceName: race?.name || "",
       creatureSubtypeName: subtype?.label || game.i18n.localize("FALLOUTMAW.Actor.NoSubtype"),
@@ -709,8 +716,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         damageTypeSettings,
         limbs
       }),
-      travelGroup: await prepareTravelGroupSheetContext(actor),
-      inventory,
       effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor), actor)
     }, { inplace: false });
     return _mergedContext;
@@ -2459,6 +2464,24 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(placement.rotated));
       if (usesVirtualInventoryStacks(item)) {
         foundry.utils.setProperty(itemData, "system.quantity", getItemStackPartQuantity(item, sourceStackIndex));
+      }
+      const sameInventoryContext = (
+        item.system?.placement?.mode === this.#getInventoryPlacementModeForParent(parentId)
+        && getItemContainerParentId(item) === this.#getStoredInventoryParentId(parentId)
+        && item.system?.equipped !== true
+      );
+      const fastMoved = await moveOwnedInventoryItemInInventoryFast(this.actor, item, placement, {
+        parentId,
+        quantity: getItemQuantity(itemData),
+        targetItem,
+        sourceStackIndex,
+        rotatedItemData: itemData,
+        render: true,
+        renderParts: sameInventoryContext ? ["inventory"] : []
+      });
+      if (fastMoved) {
+        if (detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
+        return fastMoved;
       }
       const moved = await this.#insertItemIntoInventory(itemData, placement, { sourceItem: item, targetItem, parentId, sourceStackIndex });
       if (moved && detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
@@ -4499,6 +4522,33 @@ function isActorContainerUsableItem(itemOrData = null) {
 
 function isTravelGroupCarrierActor(actor = null) {
   return Boolean(actor?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId);
+}
+
+async function prepareActorSheetInventoryRenderContext(actor, race, sourceSystem = actor?.system) {
+  const inventory = prepareDisplayInventoryContext(actor, race);
+  markActiveHudWeaponSet(actor, inventory);
+
+  const loadValue = Math.max(0, Number(actor?.system?.load?.value) || 0);
+  const loadMax = Math.max(0, Number(actor?.system?.load?.max) || 0);
+  const infiniteLoad = Boolean(actor?.system?.trade?.infiniteInventory);
+  const loadRatio = !infiniteLoad && loadMax > 0 ? (loadValue / loadMax) : 0;
+  const loadPercent = Math.max(0, Math.min(100, loadRatio * 100));
+  return {
+    inventory,
+    travelGroup: await prepareTravelGroupSheetContext(actor),
+    load: {
+      value: formatWeight(loadValue),
+      max: infiniteLoad ? "\u221E" : formatWeight(loadMax),
+      percent: Number(loadPercent.toFixed(2)),
+      trend: "negative",
+      state: loadRatio >= 1 ? "critical" : loadRatio >= 0.75 ? "warning" : "normal"
+    },
+    currencies: getCurrencySettings().map(currency => ({
+      ...currency,
+      amount: toInteger(sourceSystem?.currencies?.[currency.key] ?? actor?.system?.currencies?.[currency.key]),
+      hasImage: Boolean(currency.img)
+    }))
+  };
 }
 
 async function prepareTravelGroupSheetContext(actor = null) {

@@ -26,7 +26,8 @@ const {
 } = await import("../src/inventory/mutation.mjs");
 const {
   INVENTORY_ATOMIC_OPTION,
-  INVENTORY_EXPECTED_IDS_OPTION
+  INVENTORY_EXPECTED_IDS_OPTION,
+  INVENTORY_RENDER_PARTS_OPTION
 } = await import("../src/inventory/constants.mjs");
 
 test("create-tree ids are allocated up front and descendant parent ids are remapped", () => {
@@ -101,6 +102,7 @@ test("a successful mutation commits update, delete and create in one Foundry bat
     reason: "mutation-test",
     documentOptions: {
       falloutMawSystemEventChainRef: "test-chain",
+      [INVENTORY_RENDER_PARTS_OPTION]: ["inventory"],
       action: "must-not-override",
       diff: true,
       render: false,
@@ -118,6 +120,7 @@ test("a successful mutation commits update, delete and create in one Foundry bat
     assert.equal(operation[INVENTORY_ATOMIC_OPTION], true);
     assert.equal(operation.falloutMawInventoryReason, "mutation-test");
     assert.equal(operation.falloutMawSystemEventChainRef, "test-chain");
+    assert.deepEqual(operation[INVENTORY_RENDER_PARTS_OPTION], ["inventory"]);
   }
   assert.deepEqual(
     calls[0].map(operation => operation[INVENTORY_EXPECTED_IDS_OPTION]),

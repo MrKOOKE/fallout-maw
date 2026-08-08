@@ -133,6 +133,7 @@ import {
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
 import { requestActorHacking } from "./hacking-dialog.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { moveOwnedInventoryItemInInventoryFast } from "../inventory/movement.mjs";
 import {
   canMaybeStackInventoryItems,
   canStackInventoryItems
@@ -7837,12 +7838,19 @@ export async function transferItemBetweenActors({
         });
       }
     } else if (sourceActor.uuid === targetActor.uuid) {
+      const sameInventoryContext = (
+        sourceItem.system?.placement?.mode === getInventoryPlacementModeForParent(targetParentId)
+        && getItemContainerParentId(sourceItem) === getStoredInventoryParentId(targetParentId)
+        && sourceItem.system?.equipped !== true
+      );
       result = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
         parentId: targetParentId,
         quantity: transferQuantity,
         targetItem,
         sourceStackIndex,
-        rotatedItemData: itemData
+        rotatedItemData: itemData,
+        render: true,
+        renderParts: sameInventoryContext ? ["inventory"] : []
       });
       if (!result) {
         result = await insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
@@ -8137,62 +8145,6 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
     ...mutationPlans
   ], { reason: "transfer-stack" });
   return target ? actor.items.get(target.id) ?? null : null;
-}
-
-async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requestedPlacement, {
-  parentId = ROOT_CONTAINER_ID,
-  quantity = 0,
-  targetItem = null,
-  sourceStackIndex = 0,
-  rotatedItemData = null
-} = {}) {
-  if (!actor || !sourceItem || targetItem) return null;
-  if (!isInventoryContextPlacementMode(requestedPlacement?.mode)) return null;
-  if (isItemInButcheringStorage(sourceItem)) return null;
-
-  const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
-  if (usesVirtualInventoryStacks(sourceItem)) {
-    const storedParentId = getStoredInventoryParentId(parentId);
-    const placementMode = getInventoryPlacementModeForParent(parentId);
-    if (
-      getItemContainerParentId(sourceItem) !== storedParentId
-      || sourceItem.system?.placement?.mode !== placementMode
-    ) return null;
-    const placement = createContextInventoryPlacement(
-      normalizeInventoryPlacement(requestedPlacement, rotatedItemData ?? sourceItem, actor.items),
-      parentId
-    );
-    const updateData = createItemStackPartPlacementUpdate(sourceItem, sourceStackIndex, placement);
-    if (!updateData) return null;
-    if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
-    await executeInventoryMutation({
-      actor,
-      updates: [updateData]
-    }, { reason: "move", render: false });
-    return actor.items.get(sourceItem.id) ?? sourceItem;
-  }
-
-  if (Math.max(1, toInteger(quantity) || sourceQuantity) !== sourceQuantity) return null;
-
-  const itemData = rotatedItemData ?? sourceItem.toObject();
-  if (isContainerItem(sourceItem)) {
-    if (String(parentId ?? ROOT_CONTAINER_ID) === sourceItem.id) return null;
-    if (getAllContainedItems(sourceItem.id, actor.items).some(item => item.id === String(parentId ?? ROOT_CONTAINER_ID))) return null;
-  }
-
-  const placement = createContextInventoryPlacement(
-    normalizeInventoryPlacement(requestedPlacement, itemData, actor.items),
-    parentId
-  );
-  if (!isActorInventoryPlacementAvailable(actor, parentId, placement, [sourceItem.id], [], { allowLockedDisplacement: false })) return null;
-  if (!canFitItemWeightInActorParent(actor, sourceItem, parentId, [], [sourceItem.id])) return null;
-
-  const updateData = createInventoryItemUpdate(sourceItem.id, sourceQuantity, parentId, placement, sourceItem);
-  await executeInventoryMutation({
-    actor,
-    updates: [updateData]
-  }, { reason: "move", render: false });
-  return actor.items.get(sourceItem.id) ?? sourceItem;
 }
 
 async function insertExternalItemIntoActorInventory(actor, itemData, requestedPlacement, {
