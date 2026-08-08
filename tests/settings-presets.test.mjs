@@ -120,6 +120,10 @@ test("bundled main and migration seed preserve the managed settings contract", (
     number: 4,
     boolean: 10
   };
+  const expectedMedicineModes = new Map([
+    ["fallout-maw", "skillThreshold"],
+    ["fallout-maw-migration-seed", "skillChecks"]
+  ]);
   const documentIdSets = [];
 
   for (const document of documents) {
@@ -147,7 +151,7 @@ test("bundled main and migration seed preserve the managed settings contract", (
     const craftingSettings = document.settings.find(entry => (
       entry.id === "fallout-maw.craftingSettings"
     ))?.value;
-    assert.equal(craftingSettings?.medicine?.mode, "skillChecks");
+    assert.equal(craftingSettings?.medicine?.mode, expectedMedicineModes.get(document.id));
   }
 
   assert.deepEqual(documentIdSets[0], documentIdSets[1]);

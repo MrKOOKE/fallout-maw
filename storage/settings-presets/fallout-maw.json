@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "97a34f2e6ceef55ee4eff5c4163b6a5b29be9637394c058cffc4bbfe57faee02",
-  "updatedAt": "2026-08-02T17:04:36.313Z",
+  "revision": "e1ffb7a83ecef5837853bc463575d77606e91d47fbd6c059f587ede869d4f1d9",
+  "updatedAt": "2026-08-07T20:56:30.931Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -5016,9 +5016,64 @@
           {
             "abilities": [
               {
+                "description": "<ul><li><p>Объем энергии: +30</p></li></ul>",
+                "id": "YD1SlzMTzrkN0C1Q",
+                "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
+                "name": "Аккумулятор",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "energy"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "6NN0DMgh871726De",
+                      "skillKey": "energy",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Контроль энергии",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "T0gruafPp76im4lM",
+                          "key": "system.resources.power.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "30"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "ubba98sYfhqyehFn",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Стоимость активации: 80 энергии.<br>Перегрузка: 20 энергии на 30 минут.</p><p>После активации все Враги в радиусе [[5+energy/10]]м пройдут проверку Стойкости со Сл [[50+energy]] и в случае:</p><ul><li><p>Провала: 60% оглушение на 12 секуннд.</p></li><li><p>Успеха: 30% оглушение на 6 секунд.</p></li></ul>",
                 "id": "Kps3fGukwsCHGqIc",
-                "img": "icons/svg/aura.svg",
+                "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
                 "name": "Импульс",
                 "system": {
                   "acquisition": {
@@ -5257,7 +5312,7 @@
                 "visible": true
               },
               {
-                "description": "<p>После активации, в открывшемся окне вы можете изменить ваши характеристики. <br>Общий объем изменений равен [[2+energy/40]].<br><br>Каждое уменьшение характеристики увеличивает максимальный объем энергии на 20.<br>Каждое увеличение характеристики уменьшает максимальный объем энергии на 20.</p><p>После подтверждения создается эффект длительностью в 24 часа. По его источению ваше перераспределение сбрасывается и вы можете вновь активировать способность.</p>",
+                "description": "<p>После активации, в открывшемся окне вы можете изменить ваши характеристики. <br>Общий объем изменений равен [[4+energy/40]].</p><ul><li><p>Каждое уменьшение характеристики: Объем энергии: +20.</p></li><li><p>Каждое увеличение характеристики: Дбъем энергии: -20.</p></li></ul><p>После подтверждения создается эффект длительностью в 24 часа. По его источению ваше перераспределение сбрасывается и вы можете вновь активировать способность.</p>",
                 "id": "nyUgh2jqjwMVLJgK",
                 "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
                 "name": "Полный контроль",
@@ -5288,7 +5343,7 @@
                       "conditions": [],
                       "fixedKey": "fullControl",
                       "fixedSettings": {
-                        "baseChangeLimit": 2,
+                        "baseChangeLimit": 4,
                         "durationSeconds": 86400,
                         "energyPerCharacteristicPoint": 20,
                         "limitSkillKey": "energy",
@@ -5309,9 +5364,9 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 60 энергии.<br>Перегрузка: 40 энергии на час.</p><p>После активации вы можете выбрать до [[1+energy/50]] целей в радиусе [[10+energy/10]]м и те пройдут проверку стокойсти со Сл [[50+energy]] и в случае:</p><p>Провала:</p><ul><li><p>Получат [[50+energy/3]] Огненного урона в ключевую часть тела</p></li></ul><p>Успеха:</p><ul><li><p>Получат [[25+energy/10]] Огненного урона</p></li></ul>",
+                "description": "<p>Стоимость активации: 60 энергии.<br>Перегрузка: 40 энергии на час.</p><p>После активации вы можете выбрать до [[1+energy/50]] целей в радиусе [[10+energy/10]]м и те пройдут проверку стокойсти со Сл [[50+energy]] и в случае:</p><ul><li><p>Провала: Получат [[25+energy/2]] Огненного урона в ключевую часть тела</p></li><li><p>Успеха: Получат [[10+energy/5]] Огненного урона</p></li></ul>",
                 "id": "BFvrKZ5N5hOpOGk7",
-                "img": "icons/svg/aura.svg",
+                "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
                 "name": "Самовозгорание",
                 "system": {
                   "acquisition": {
@@ -5412,7 +5467,7 @@
                         "criticalChanceModifier": "0",
                         "criticalDamagePercent": "150",
                         "criticalFailureConsequences": [],
-                        "damage": "50+ene/3",
+                        "damage": "25+ene/2",
                         "damageTypeKey": "fire",
                         "damageTypes": [
                           {
@@ -5555,9 +5610,9 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии.<br>Перегрузка: 60 энергии на пол часа.</p><p>После активации вы можете выбрать себя или соседа и на следующие 30 секунд будет действовать.</p><ul><li><p>+[[20+energy/5]] заживления</p></li></ul>",
+                "description": "<p>Стоимость активации: 30 энергии.<br>Перегрузка: 60 энергии на два часа.</p><p>После активации вы можете выбрать себя или соседа и на следующие 30 секунд будет действовать.</p><ul><li><p>+[[20+energy/5]] заживления</p></li></ul>",
                 "id": "WmPzmYYDRGybdtsq",
-                "img": "icons/svg/aura.svg",
+                "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
                 "name": "Сила земли",
                 "system": {
                   "acquisition": {
@@ -5588,7 +5643,7 @@
                             "formula": "30",
                             "id": "bzpqo2mYQxatia3N",
                             "overloadAmount": 0,
-                            "overloadDurationSeconds": 1800,
+                            "overloadDurationSeconds": 7200,
                             "payer": "source",
                             "resourceKey": "power"
                           }
@@ -6017,6 +6072,62 @@
                 "visible": true
               },
               {
+                "description": "<p>Каждая ед полученного урона накапливает по 1 очку. Накопив 200 очков на протяжение следующих 12 секунд вы получите один из двух бонусов:</p><ul><li><p>+15% урона</p></li><li><p>+20 точности</p></li><li><p>+1 ОД</p></li></ul><p>ИЛИ</p><ul><li><p>+[[10+resilience/10]] ко всем сопротивлениям</p></li><li><p>+30 к уклонению</p></li><li><p>+4 ОП</p></li></ul><p>Повторное накопление очков начинается после окончания бонуса.</p><p>\"НА РЕАЛИЗАЦИИ\"</p>",
+                "id": "8znCekEJNK49lv0s",
+                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "name": "Взрывная стойкость \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "wU28YaUMuP8hXnWP",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Условие активации: Потеря сознания/Смертельный урон и наличие 50 энергии.<br>Перегрузка: 200 энергии на 12 часов.</p><p>После срабатывания на протяжение следующих 24 секунд.</p><ul><li><p>Иммунитет к потере сознания</p></li><li><p>Весь смертельный урон перераспределяется на остальные части тела</p></li><li><p>+[[1+resilience/100]] ко всем характеристикам</p></li><li><p>+[[10+resilience/5]] сопротивления ко всем видам урона</p></li></ul><p>\"Способность можно активировать чтобы убрать из условия срабатывания потерю сознания\"</p>",
+                "id": "Lc52Qeo4C8tc2QBP",
+                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "name": "До последней капли \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "wU28YaUMuP8hXnWP",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Сопротивелние ко всем видам урона: +[[5+resilience/20]]</p>",
                 "id": "Ddvgs7mYk9MxyL9c",
                 "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
@@ -6070,6 +6181,90 @@
                   ]
                 },
                 "visible": true
+              },
+              {
+                "description": "<p>Когда ваше общее ОЗ &lt;=50%</p><ul><li><p>Сопротивление ко всем видам урона: +[[20+resilience/10]]</p></li><li><p>Сопротивление к потере сознания: +50</p></li></ul>",
+                "id": "v40txpPJvNFy01NY",
+                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "name": "Крепкий орешек \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "wU28YaUMuP8hXnWP",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Устойчивость к потере сознания: +50</p></li><li><p>Устойчивость к захвату: +50</p></li><li><p>Устойчивость к опрокидыванию: +50</p></li><li><p>Устойчивость к отталкиванию: +50</p></li></ul>",
+                "id": "zC5SsGZg3BBNE107",
+                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "name": "Скала \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "wU28YaUMuP8hXnWP",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 10 Энергии и 1 ОД/ОР.<br>После активации вы можете выбрать до [[1+resilience/100]] типов урона к которым получаете дополнительное сопротивление.</p><ul><li><p>+[[10+resilience/10]] сопротивления к (Не выбрано).</p></li></ul>",
+                "id": "kRw63cXXi8ZItL5o",
+                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "name": "Текучая стойка \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "wU28YaUMuP8hXnWP",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
               }
             ],
             "id": "skill-resilience",
@@ -6077,75 +6272,288 @@
             "name": "Стойкость"
           },
           {
-            "abilities": [],
-            "id": "skill-throwing",
-            "locked": false,
-            "name": "Метание"
-          },
-          {
             "abilities": [
               {
-                "description": "<p>Когда вы лечите других, эффективность увеличивается на 25%.</p>",
-                "id": "gnt1kmEiLFOcwtMK",
-                "img": "systems/fallout-maw/assets/icons/1-7/inuektor.webp",
-                "name": "Иньектор",
+                "description": "<ul><li><p>Эффективность препаратов: +20%</p></li></ul>",
+                "id": "cAIYshin3uT4JUxT",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Аптекарь \"НА РЕАЛИЗАЦИИ\"",
                 "system": {
                   "acquisition": {
                     "difficulty": 110,
                     "onlyFree": false,
                     "onlyManual": false,
-                    "skillKey": "firstAid"
+                    "skillKey": "doctor"
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "2iXMmSGfnyiJoQBq",
-                      "skillKey": "firstAid",
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
                       "type": "skill",
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Доктор",
                   "constructs": [],
                   "cost": 1000,
                   "formula": "",
-                  "functions": [
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 10 энергии и 1 ОД.</p><p>Активация позволяет выбрать [[1+doctor/60]] из 8 бонусов которые получают те кого вы лечите (Здоровье, Травмы, Болезни). Длительность бонусов: 1 час. Не складываются.</p><ul><li><p>Пользуйтесь мылом: +20 Красноречие</p></li><li><p>Смотрите под ноги: +20 Натуралист</p></li><li><p>Будьте расторопнее: +20 Скрытность</p></li><li><p>Пользуйтесь разогревающей мазью: +20 Атлетика</p></li><li><p>Надевайте варежки: +20 Стойкость</p></li><li><p>Пейте таблетки: +20 Наука</p></li><li><p>Не забывайте про увлажняющий крем: +20 Ремесло</p></li><li><p>Дышите глубже: +20 Контроль энергии</p></li></ul>",
+                "id": "h72kVqM0yGVErUv9",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Дополнительные рекомендации \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
                     {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "qcvQHQz9Ivj64lcA",
-                          "key": "system.healing.outgoingPercent",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "25"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "icTEA8kLc1ScuJUw",
-                      "includeInPureValues": false,
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 60
                     }
-                  ]
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Теперь вы можете лечить Здоровье без каких либо мед. инструментов.</p><ul><li><p>Конвертация Энергии на Здоровье: 1 к 10</p></li><li><p>Если Состояние конечности больше 90% трата Энергии отсутствует.</p></li></ul>",
+                "id": "lSAwsJmJUEuoSA2O",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "И так сойдет \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 10 энергии и 3 ОД.<br>Перегрузка: 100 энергии на 6 часов.</p><p>Активация позволяет выбрать мертвую цель и лучше понять как взаимодействовать с этой расой. Можно применять повторно пока не будут выьбраны все бонусы для этой расы.</p><ul><li><p>Урон: +10%</p></li><li><p>Точность: +20</p></li><li><p>Шанс на крит: +3%</p></li><li><p>Крит урон: +20%</p></li><li><p>Эффективность препаратов: +15%</p></li><li><p>Эффективность лечения Здоровья/Травм/Болезней: +15%</p></li></ul><p>Максимальный объем памяти: [[10+doctor/10]]</p>",
+                "id": "5cOW5DlRra100geO",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Изучение анатомии \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Последний вылеченный вами персонаж получает метку.</p><ul><li><p>Сопротивление ко всем видам урона: +[[5+doctor/10]]</p></li><li><p>Уклонение: +[[5+doctor/10]]</p></li></ul><p>Когда носитель метки в сумме получает 200 урона вам дается +5 ОР на 6 секунд.</p>",
+                "id": "DBFWLT29pPmabSwh",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Опека над пациентом \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активыации: 30 энергии и 2 ОД.<br>Перегрузка: 50 энергии на 6 часов.</p><p>После активации вы сможете выбрать 2 разных препарата и создать новый, получив сумму их эффектов с дополнительным усилением.</p><ul><li><p>+100% эффективности </p></li><li><p>+50% длительности.</p></li></ul><p>\"Препарат испортится через пол часа.\"</p>",
+                "id": "CuA0u3OveTAQHsOx",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Особый намес \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Бесплатное применение препарата раз в 6 секунд</p></li><li><p>ОП: +2</p></li></ul>",
+                "id": "aBb5kxCtZPty7JDf",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Полевой врач \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 40 энергии и 3 ОД.<br>Перегрузка: 100 энергии на 6 часов.</p><p>Активация позволяет выбрать цель и у той:</p><ul><li><p>Понижается класс всех травм на 1 уровень</p></li><li><p>Подавляет до [[1+doctor/50]] травм на 30 секунд</p></li></ul>",
+                "id": "3zLol7zsFrhEBOb8",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Просто царапина \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Переключаемая способность.</p><p>Пока активна вы можете лечить Травмы и Болезни инструментами на 1 уровень ниже положенного.</p><ul><li><p>Стоимость каждого лечения: 10 энергии.</p></li><li><p>С вероятностью в 25% будет потрачено в двое больше запасов инструмента.</p></li><li><p>С вероятностью в 5% пациент потеряет 5% от общего Здоровья</p></li></ul>",
+                "id": "6e9YVaNnaDZGH911",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Эксперементальная хирургия \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Теперь вы можете проводит все мед. операции даже во время боя. Стоимость каждой 3 ОД.</p><p>\"Все что входит в полномочия окна медицины. Лечение Здоровья/Травм/Болезней, Имплантирование и Протезирование\"</p>",
+                "id": "57gqkzmX31fE8Ucv",
+                "img": "systems/fallout-maw/assets/icons/1-7/aptekar.webp",
+                "name": "Экстренные операции \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "doctor"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "I12myCAMQMD5ZggH",
+                      "skillKey": "doctor",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Доктор",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
                 },
                 "visible": true
               }
             ],
-            "id": "skill-firstAid",
-            "locked": false,
-            "name": "Первая помощь"
-          },
-          {
-            "abilities": [],
             "id": "skill-doctor",
             "locked": false,
             "name": "Доктор"
@@ -6262,7 +6670,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Все способности категории Натуралист более не получают перегрузку.</p><p>Время караула все равно считается отдыхом.</p><p>Вас нельзя застигнуть в расплох.</p><p>В радиусе [[1+naturalist/20]]м от вас невозможно скрыться.</p><p>Вы замечаете любую ловушку.</p><p>Ваше уклонение не может опустится ниже 70%</p>",
+                "description": "<ul><li><p>Все способности категории Натуралист более не получают перегрузку.</p></li><li><p>Время караула все равно считается отдыхом.</p></li><li><p>Вас нельзя застигнуть в расплох.</p></li><li><p>В радиусе [[1+naturalist/20]]м от вас невозможно скрыться.</p></li><li><p>Вы замечаете любую ловушку.</p></li><li><p>+50 Абсолютного уклонения</p></li></ul>",
                 "id": "eUBdZyuzh2YpddzW",
                 "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
                 "name": "Вечное бдение",
@@ -6345,7 +6753,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 20 энергии. <br>Перегрузка: 100 энергии на 1 минуту.</p><p>Применяется только в бою. <br>Длительность: до окончания боя.</p><p>Выбранная цель проходит проверку скрытности со сложностью: [[50 + naturalist]]. В случае провала получает метку которая снижает восстановление уклонения на [[naturalist/10]]%.</p><p>Каждый раз, когда цель тратит 5 ОП/ОД/ОР под вашим наблюдением, вы получаете возможность срегировать и атаковать ее, если одно из ваших оружий позволяет.</p><p>Метка пропадает когда цель уходит из вашего поля зрения. Каждый раз когда он вновь появляется, то проходит проверку с той же сложностью и в случае провала опять получает метку, а если преуспеет, то полностью избавляется от вашего надзора.</p>",
+                "description": "<p>Стоимость активации: 20 энергии. <br>Перегрузка: 100 энергии на 1 минуту.</p><p>Выбранная цель проходит проверку скрытности со сложностью: [[50 + naturalist]]. В случае провала получает метку которая: </p><ul><li><p>снижает восстановление уклонения на [[naturalist/10]]%.</p></li><li><p>Каждый раз, когда цель тратит 5 ОП/ОД/ОР под вашим наблюдением, вы получаете возможность срегировать и атаковать ее.</p></li></ul><p>Метка пропадает когда цель уходит из вашего поля зрения. Каждый раз когда он вновь появляется, то проходит проверку с той же сложностью и в случае провала опять получает метку, а если преуспеет, то полностью избавляется от вашего надзора.</p><p>Длительность: до окончания боя.</p>",
                 "id": "mwPv4kmVHFRoI9i0",
                 "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
                 "name": "Надзор",
@@ -6504,28 +6912,395 @@
             "name": "Натуралист"
           },
           {
-            "abilities": [],
+            "abilities": [
+              {
+                "description": "<p>Стоимость актвации: 40 энерги.<br>Перегрузка: 100 энергии на 1 час.<br>Активация доступна только в бою.</p><p>После активации на протяжение 6 секунд:</p><ul><li><p>Скрытность: +100</p></li><li><p>Шанс на крит: +[[5+stealth/10]]%</p></li><li><p>Урон +[[1+stealth/5]]%</p></li></ul>",
+                "id": "VEDCce6huLaqclCD",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Лучший момент",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "40",
+                            "id": "NmzUQVAOHMAJZKj7",
+                            "overloadAmount": 100,
+                            "overloadDurationSeconds": 3600,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "uEplGg8mBIWvG84S",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "100"
+                        },
+                        {
+                          "id": "luNjMqEUxhFRohxc",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+ste/10"
+                        },
+                        {
+                          "id": "Ro2m94zJE0Dg8VFL",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+ste/5"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 6,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "J2NCtaRme4qAYA3v",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "BWjaLMgQIgJZxUt0",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость реакции: 20 энерги.<br>Перегрузка: 40 энергии на 1 час.</p><p>Когда вас обнаруживают вы можете срегировать и повторно пройти проверку скрытности с +1 Преимуществом.</p>",
+                "id": "T45p6MMdy8am3Ggh",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Наверное показалось \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Находясь в бою:</p><ul><li><p>Если вы атаковали из Скрытности, сложность вашего обнаружения: +20</p></li><li><p>Ели вас никто не атаковал до конца хода: +20 к Скрытности на 6 секунд.</p></li></ul>",
+                "id": "nmjfPrvEYKcK6ge9",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Неприметный \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Пассивная/Активная способность.</p><p>Пассивная:</p><ul><li><p>Успешное убийство из скрытности восстанавливает все ОД потраченное на атаку (Не чаще 1 раза за 6 секунд).</p></li><li><p>Успешно вырубив или убив цель из скрытности вы получаете 1 и 3 заряда соответственно</p></li></ul><p>Накоплено зарядов: 0/6</p><p>Активаня<br>Стоимость активации: 20 энергии.</p><p>Потратив все зяряды ваша следующая атака из скрытности получает:</p><ul><li><p>+50% к урону</p></li><li><p>Невозможность обнаружения</p></li></ul>",
+                "id": "5P9gfSAkxDOtNbpt",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Песочный человек \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>+2 Преимущества на все проверки Скрытности в положение лежа.</p>",
+                "id": "KDZ1lZbFZTKPpekT",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Ползучая смерть",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "x9NK3bCWJTjYowgp",
+                          "key": "system.skills.stealth.advantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "mnnuplNqYs2KL9tk",
+                          "postureActions": [
+                            "burrow"
+                          ],
+                          "postureSubject": "self",
+                          "type": "posture"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "mP5Y3DJMNQtwg99q",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Атакуя из скрытности:</p><ul><li><p>Точность: +[[5+stealth/10]]</p></li><li><p>Урон: +[[1+stealth/10]]%</p></li><li><p>Шанс на крит: +[[1+stealth/30]]%</p></li></ul>",
+                "id": "Hl6ZtCYpARSz8BGb",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Скрытая угроза",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "6EwZ4frLpLPN2Gib",
+                          "key": "system.stealth.attackBonuses.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+ste/10"
+                        },
+                        {
+                          "id": "hxJZypjOayLz3JmK",
+                          "key": "system.stealth.attackBonuses.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+ste/10"
+                        },
+                        {
+                          "id": "pDP53IZZKaxl1fmQ",
+                          "key": "system.stealth.attackBonuses.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+ste/30"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "06yQb0eAwdo5T8ol",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энерги.<br>Перегрузка: 40 энергии на 30 минут.<br>Активация доступна только в бою.</p><p>После активации на протяжение 6 секунд:</p><ul><li><p>Штраф на скрытность от степени освящения: -100%</p></li><li><p>ОП: +4</p></li></ul>",
+                "id": "W3fTc4enzRQxoXWS",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Специалист по побегам \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энерги.<br>Перегрузка: 40 энергии на 1 час.</p><p>После активации вы можете выбрать врага и на протяжение 12 секунд</p><ul><li><p>+100 к проверкам Скрытности против этой цели</p></li><li><p>Каждое потраченное целью ОД дает вам столько же ОР.</p></li></ul>",
+                "id": "wZ6JtUCswuKpopiQ",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Тень \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              }
+            ],
             "id": "skill-stealth",
             "locked": false,
             "name": "Скрытность"
-          },
-          {
-            "abilities": [],
-            "id": "skill-lockpicking",
-            "locked": false,
-            "name": "Взлом"
-          },
-          {
-            "abilities": [],
-            "id": "skill-theft",
-            "locked": false,
-            "name": "Кража"
-          },
-          {
-            "abilities": [],
-            "id": "skill-traps",
-            "locked": false,
-            "name": "Ловушки"
           },
           {
             "abilities": [
@@ -6585,7 +7360,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 10 энергии.<br>Перегрузка: 30 энергии на 30 минут.<br></p><p>Активация позволит выбрать один навык и он получит +[[10+science/5]] на следующие 2 проверки, либо до истечения срока длительности.</p><p>Длительность: 1 минута.</p>",
+                "description": "<p>Стоимость активации: 10 энергии.<br>Перегрузка: 30 энергии на 30 минут.<br></p><p>Активация позволит выбрать один навык и он получит +[[10+science/5]] на следующие 2 проверки, либо до истечения срока длительности.</p><p>Длительность: 6 секунд.</p>",
                 "id": "jMsgtUPb7RIABfxl",
                 "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
                 "name": "Надо подумать",
@@ -6755,7 +7530,7 @@
                           "usesSpent": 0
                         },
                         {
-                          "durationSeconds": 60,
+                          "durationSeconds": 6,
                           "equipmentSlotKey": "",
                           "groupId": "",
                           "healthTarget": "general",
@@ -6997,7 +7772,7 @@
                 "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 40 энергии на пол часа.</p><p>Выбранная цель проходит проверку Скрытности со сложностью [[25+science]] и в случае провала получает метку на 24 часа.</p><ul><li><p>Все проверки навыков по отношению к ней: +20</p></li><li><p>Урон -10%</p></li><li><p>Точность: -20</p></li></ul><p></p>",
                 "id": "HoQMcdhxQaoMpBEs",
                 "img": "icons/svg/aura.svg",
-                "name": "Разбор повадок",
+                "name": "Разбор повадок \"НА РЕАЛИЗАЦИИ\"",
                 "system": {
                   "acquisition": {
                     "difficulty": 150,
@@ -7057,7 +7832,7 @@
                 "description": "<p>Стоимость активации: 10 энергии.<br>Перегрузка: 30 энергии на час.</p><p>Активируйте во время торговли и если пройдете проверку Науки сложностью (50 + Красноречие торговца):</p><ul><li><p>Надбавка цен: -50%</p></li></ul>",
                 "id": "4k8tFYML11JZOqNq",
                 "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
-                "name": "Рациональный покупатель",
+                "name": "Рациональный покупатель \"НА РЕАЛИЗАЦИИ\"",
                 "system": {
                   "acquisition": {
                     "difficulty": 110,
@@ -7082,7 +7857,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>+[[10+science/10]] ко всем Навыкам (Чистый бонус)</p></li><li><p>Множитель развития всех Навыков: +0.2</p></li></ul>",
+                "description": "<ul><li><p>+[[10+science/10]] ко всем Навыкам</p></li><li><p>Множитель развития всех Навыков: +0.2</p></li></ul>",
                 "id": "TtuP52o02zXvxKiK",
                 "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
                 "name": "Торжество разума",
@@ -7131,7 +7906,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "Kq0wDwH1aR2ybsf4",
-                      "includeInPureValues": true,
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -7236,7 +8011,148 @@
             "name": "Наука"
           },
           {
-            "abilities": [],
+            "abilities": [
+              {
+                "description": "<ul><li><p>Расход запасов инструментов Ремонта/Механического взлома/Электронного взлома: -15%</p></li></ul>",
+                "id": "Hpx5MLI05rIisHWf",
+                "img": "systems/fallout-maw/assets/icons/1-7/rachitelnyj-hozyain.webp",
+                "name": "Все по полочкам \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "repair"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "XfuBCb44WnsODnUv",
+                      "skillKey": "repair",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Ремесло",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>+20 к навыку при Взломе/Обезвреживание инструментами соответствующего класса</p></li><li><p>+20% эффективности при Ремонте инструментами соответствующего класса</p></li></ul>",
+                "id": "VjXFCjFjmW7dx5Iz",
+                "img": "systems/fallout-maw/assets/icons/1-7/rachitelnyj-hozyain.webp",
+                "name": "Всему свой подход \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "repair"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "XfuBCb44WnsODnUv",
+                      "skillKey": "repair",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Ремесло",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Пассивная/Активная способность.</p><p>Пассивная.</p><ul><li><p>Все Снаряжение/Оружие требует на 50% меньше Атлетики</p></li></ul><p>Активная.<br>Стоимость активации: 10 энергии.<br>Применение доступно только вне боя.</p><p>После активации вы можетие выбрать цель и дать ей такой же пассивный бонус на 12 часов.</p>",
+                "id": "ttpw4UvKb5AIg6US",
+                "img": "systems/fallout-maw/assets/icons/1-7/rachitelnyj-hozyain.webp",
+                "name": "Идеальная подгонка \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "repair"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "XfuBCb44WnsODnUv",
+                      "skillKey": "repair",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Ремесло",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 10 энергии</p><p>Применение доступно только вне боя.</p><p>После активации вы можетие выбрать цель и потратить 50% от максимального запаса инструментов ремонта обеспечив на 12 часов следующие бонусы.</p><p>D класс.</p><ul><li><p>Урон: +5%</p></li><li><p>Точность: +10</p></li><li><p>Эффективность защиты: +5%</p></li></ul><p>C класс.</p><ul><li><p>Урон: +10%</p></li><li><p>Шанс на крит: +3%</p></li><li><p>Точность: +20</p></li><li><p>Эффективность защиты: +10%</p></li></ul><p>B класс.</p><ul><li><p>Урон: +15%</p></li><li><p>Шанс на крит: +5%</p></li><li><p>Крит урон: +20%</p></li><li><p>Точность: +30</p></li><li><p>Эффективность защиты: +15%</p></li><li><p>Бонусы от Снаряжения/Протезов/Имплантов: +15%</p></li></ul>",
+                "id": "ldqGaJAa6gpTCZzR",
+                "img": "systems/fallout-maw/assets/icons/1-7/rachitelnyj-hozyain.webp",
+                "name": "Качественное обслуживание \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "repair"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "XfuBCb44WnsODnUv",
+                      "skillKey": "repair",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Ремесло",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Лимит имплантов на все части тела: +1</p></li></ul>",
+                "id": "ZkSnEToSEuefVXp7",
+                "img": "systems/fallout-maw/assets/icons/1-7/rachitelnyj-hozyain.webp",
+                "name": "Кибернетизация \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "repair"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "XfuBCb44WnsODnUv",
+                      "skillKey": "repair",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Ремесло",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              }
+            ],
             "id": "skill-repair",
             "locked": false,
             "name": "Ремесло"
@@ -7322,7 +8238,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 100 энергии<br>Перегрузка: 300 энергии на 12 часов.</p><p>После активации все союзники в радиусе [[20+speech/10]] метров восстанавливают [[50+speech]] ОЗ и на 18 секунд получают эффект.</p><ul><li><p>Подавление эффектов всех травм.</p></li><li><p>+[[1+speech/100]] ко всем характеристикам.</p></li><li><p>Преимущество на проверки стойкости.</p></li></ul>",
+                "description": "<p>Стоимость активации: 100 энергии<br>Перегрузка: 300 энергии на 12 часов.</p><p>После активации все союзники в радиусе [[20+speech/10]] метров восстанавливают [[50+speech]] ОЗ и на 18 секунд получают эффект.</p><ul><li><p>Подавление эффектов всех травм.</p></li><li><p>+[[1+speech/100]] ко всем характеристикам.</p></li><li><p>+1 Преимущество на проверки Стойкости.</p></li></ul>",
                 "id": "P2XA2WzCoZBAwlo5",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "До конца!!!",
@@ -7383,7 +8299,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>В начале каждого хода врага или нейтрала — половина его Очков действий дается вам в качестве Очков реакции.</p></li><li><p>1 Помеху на все атакующие действия, направленные против неё.</p></li></ul>",
+                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>+[[5+speech/10]] ко всем навыкам.</p></li><li><p>+1 Преимущество на все проверки навыков.</p></li></ul>",
                 "id": "NkiGbyyLv05RZaGK",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Звёздный час",
@@ -7406,7 +8322,86 @@
                   "constructs": [],
                   "cost": 6000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [
+                          {
+                            "formula": "50",
+                            "id": "ZSQ9w605J3AGckn3",
+                            "overloadAmount": 200,
+                            "overloadDurationSeconds": 43200,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": false,
+                        "includeSelf": true,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": true
+                      },
+                      "changes": [
+                        {
+                          "id": "Q2xaGjiyITNGRAtT",
+                          "key": "system.skillCheck.disabledResults.criticalFailure",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "sMXNhXyMAInppWpW",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+spe/10"
+                        },
+                        {
+                          "id": "nyhbgTuqC3e8uBoR",
+                          "key": "system.skills.all.advantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 3600,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "OJQeuqHuuDUJBuTl",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "xb2PSC9h1lqEhHPT",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -8604,12 +9599,6 @@
             "name": "Красноречие"
           },
           {
-            "abilities": [],
-            "id": "skill-barter",
-            "locked": false,
-            "name": "Бартер"
-          },
-          {
             "abilities": [
               {
                 "description": "<p>Каждый раз, когда вы употребляете Алкоголь.<br>Удача: +1<br>Длительность: 1 час</p>",
@@ -9067,27 +10056,6 @@
                 "visible": true
               },
               {
-                "description": "",
-                "id": "sjf2HgnXs0hBdqQA",
-                "img": "icons/svg/aura.svg",
-                "name": "Новая способность",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Азарт",
-                  "constructs": [],
-                  "cost": 0,
-                  "formula": "",
-                  "functions": []
-                },
-                "visible": true
-              },
-              {
                 "description": "<p>Переключаемая способность.<br>В активном состоянии тратит 5 ед энергии когда атакуете вы или атакуют вас.<br><br>С шансом [[30+gambling/5]]% <br>Пораженная вами цель получает порчу, которая накладывает помеху на все ее проверки навыков.<br>Если поразили вас, получаете преимущество на все ваши проверки навыков.</p><p>Длительность изменения 12 секунд.</p>",
                 "id": "m1XOtzWQ8J0q5UGa",
                 "img": "systems/fallout-maw/assets/icons/8-14/klever-chetyryohlistnik.webp",
@@ -9401,6 +10369,10 @@
         "areas": {
           "movementDamageThresholdFormula": "(ОД + ОП) / 5"
         },
+        "attackActionPointMovementLoss": {
+          "mode": "percent",
+          "percent": 100
+        },
         "dodge": {
           "areaDamageMultiplier": 2,
           "attackCostPercent": 20,
@@ -9414,6 +10386,13 @@
         "knockback": {
           "repeatDifficultyStep": 50,
           "repeatDifficultyThreshold": 100
+        },
+        "limbDestruction": {
+          "nonPlayerMode": "standard",
+          "playerOwnedMode": "standard"
+        },
+        "reactions": {
+          "timeoutSeconds": 20
         },
         "turnOrder": {
           "scheme": "block"
@@ -9497,15 +10476,15 @@
         "craft": {
           "criticalFailureRefundPercent": 20,
           "failureRefundPercent": 80,
-          "mode": "skillChecks"
+          "mode": "skillThreshold"
         },
         "medicine": {
-          "mode": "skillChecks"
+          "mode": "skillThreshold"
         },
         "repair": {
           "criticalFailureToolCostIncreasePercent": 0,
           "failureToolCostIncreasePercent": 100,
-          "mode": "skillChecks"
+          "mode": "skillThreshold"
         }
       }
     },
@@ -112981,7 +113960,7 @@
           "Братство": 0,
           "Игроки": 0,
           "Легион": 0,
-          "НКР": -39,
+          "НКР": -40,
           "Неопределено": 0,
           "Рейдеры": -40
         },
@@ -112995,11 +113974,11 @@
         },
         "НКР": {
           "Братство": 0,
-          "Игроки": -39,
+          "Игроки": -40,
           "Легион": 0,
           "НКР": 0,
           "Неопределено": 0,
-          "Рейдеры": 0
+          "Рейдеры": -40
         },
         "Неопределено": {
           "Братство": 0,
@@ -113013,7 +113992,7 @@
           "Братство": 0,
           "Игроки": -40,
           "Легион": 0,
-          "НКР": 0,
+          "НКР": -40,
           "Неопределено": 0,
           "Рейдеры": 0
         }
@@ -113793,7 +114772,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "success",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },
@@ -113960,10 +114939,10 @@
             "speech": {
               "base": 0.7,
               "characteristics": {
-                "charisma": 0.08,
+                "charisma": 0.06,
                 "dexterity": 0,
                 "endurance": 0,
-                "intelligence": 0,
+                "intelligence": 0.02,
                 "luck": 0,
                 "perception": 0,
                 "strength": 0
@@ -113973,11 +114952,11 @@
               "base": 0.7,
               "characteristics": {
                 "charisma": 0,
-                "dexterity": 0.08,
+                "dexterity": 0.06,
                 "endurance": 0,
                 "intelligence": 0,
                 "luck": 0,
-                "perception": 0,
+                "perception": 0.02,
                 "strength": 0
               }
             }
@@ -114037,7 +115016,7 @@
           },
           {
             "abbr": "ste",
-            "formula": "wis*2+ dex*2",
+            "formula": "wis+ dex*3",
             "img": "icons/svg/d20-grey.svg",
             "key": "stealth",
             "label": "Скрытность"
@@ -114077,6 +115056,12 @@
       "id": "fallout-maw.stealthSettings",
       "scope": "world",
       "value": {
+        "attackBonuses": {
+          "accuracyFormula": "luck*2",
+          "criticalChanceFormula": "luck/2",
+          "criticalDamagePercentFormula": "luck*3",
+          "damagePercentFormula": "luck"
+        },
         "attenuationLevels": [
           {
             "penaltyPercent": 90,
@@ -114103,29 +115088,36 @@
           "rangeFormula": "5 + навык / 10",
           "skillKey": "naturalist"
         },
+        "difficulty": {
+          "skillKey": "naturalist"
+        },
         "difficultyLevels": [
           {
             "difficultyBonus": 0,
+            "label": "Темно",
             "threshold": 1
           },
           {
             "difficultyBonus": 20,
+            "label": "Тускло",
             "threshold": 0.75
           },
           {
             "difficultyBonus": 40,
+            "label": "Светло",
             "threshold": 0.5
           },
           {
             "difficultyBonus": 80,
+            "label": "Яркий свет",
             "threshold": 0.2
           },
           {
             "difficultyBonus": 120,
+            "label": "Очень яркий свет",
             "threshold": 0
           }
-        ],
-        "difficultyMode": "perception"
+        ]
       }
     },
     {
@@ -114196,10 +115188,19 @@
           "grapple": "icons/svg/sword.svg",
           "push": "icons/svg/pawprint.svg"
         },
+        "combatEnd": {
+          "finish": "icons/svg/skull.svg",
+          "search": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp"
+        },
         "damageBlockedIcon": "systems/fallout-maw/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png",
         "damageReductionIcon": "systems/fallout-maw/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png",
         "dodgeConversionIcon": "icons/svg/shield.svg",
         "emptyWeaponSlotIcon": "icons/svg/combat.svg",
+        "experienceAward": {
+          "experienceSoundPath": "systems/fallout-maw/audio/Experience/fallout-4-experience-up-made-with-Voicemod.mp3",
+          "levelUpAnimationKey": "fallout-maw.generic.energy.energy_field_bot_02_regular_yellow",
+          "levelUpSoundPath": "systems/fallout-maw/audio/Experience/fallout-level-up-made-with-Voicemod.mp3"
+        },
         "levelUpIcon": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/lvl-up.webp",
         "mainActions": {
           "abilities": "systems/fallout-maw/assets/HUD/Fo4%20Inspirational.webp",
@@ -114219,7 +115220,7 @@
         "skillIcons": {
           "athletics": "systems/fallout-maw/assets/HUD/Fo4%20Action%20Boy.webp",
           "barter": "systems/fallout-maw/assets/HUD/Fo4%20Cap%20Collector.webp",
-          "doctor": "systems/fallout-maw/assets/HUD/Fo4%20Chemist.webp",
+          "doctor": "systems/fallout-maw/assets/HUD/Fo4%20Medic.webp",
           "energy": "systems/fallout-maw/assets/HUD/Fo4%20Adamantium%20Skeleton.webp",
           "firstAid": "systems/fallout-maw/assets/HUD/Fo4%20Medic.webp",
           "gambling": "systems/fallout-maw/assets/HUD/Fo4%20Bloody%20Mess.webp",
