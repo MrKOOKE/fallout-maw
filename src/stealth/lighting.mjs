@@ -78,7 +78,7 @@ export function analyzeLightingPoint(point) {
     baseDarkness,
     effectiveDarkness: clampAlpha(Math.max(baseDarkness, darknessSourcePenalty) - light.intensity),
     lightIntensity: light.intensity,
-    smokeDispersion: light.localIntensity
+    smokeDispersion: light.localDispersion
   };
   setLruEntry(pointLightingCache, cacheKey, analysis, POINT_LIGHTING_CACHE_LIMIT);
   return cloneLightingAnalysis(analysis);
@@ -216,17 +216,20 @@ function cloneLightingAnalysis(analysis) {
 function getPointLightIntensity(point, baseDarkness, activeCanvas) {
   let intensity = getGlobalLightIntensity(point, baseDarkness, activeCanvas);
   let localIntensity = 0;
+  let localDispersion = 0;
   const lightSources = activeCanvas?.effects?.lightSources;
   for (const source of lightSources?.values?.() ?? lightSources ?? []) {
     if (!source?.active || isGlobalLightSource(source)) continue;
     if (!source.testPoint?.(point)) continue;
+    localDispersion = 1;
     const sourceIntensity = getLocalLightIntensity(source, point);
     localIntensity = Math.max(localIntensity, sourceIntensity);
     intensity = Math.max(intensity, sourceIntensity);
   }
   return {
     intensity: clampAlpha(intensity),
-    localIntensity: clampAlpha(localIntensity)
+    localIntensity: clampAlpha(localIntensity),
+    localDispersion
   };
 }
 

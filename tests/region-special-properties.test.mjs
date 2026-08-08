@@ -100,7 +100,8 @@ test("partial smoke constrains global light while restoring observer smoke block
     canvas: globalThis.canvas,
     game: globalThis.game,
     PIXI: globalThis.PIXI,
-    foundry: globalThis.foundry
+    foundry: globalThis.foundry,
+    ClipperLib: globalThis.ClipperLib
   };
   const nativeRange = () => true;
   const basicSight = { _testRange: nativeRange };
@@ -146,6 +147,7 @@ test("partial smoke constrains global light while restoring observer smoke block
         clone.points = [...this.points];
         return clone;
       },
+      toClipperPoints() { return []; },
       getBounds() {
         if (this.points.length <= 6) {
           return { x: origin.x - limit, y: origin.y - limit, width: limit * 2, height: limit * 2 };
@@ -187,6 +189,20 @@ test("partial smoke constrains global light while restoring observer smoke block
   const region = createSmokeRegion("light-perception", 50);
   region.shapes[0] = { type: "circle", x: 0, y: 0, radius: 100 };
   region.object.bounds = { x: -100, y: -100, width: 200, height: 200 };
+  let differenceCalls = 0;
+  const dispersedPolygon = { points: [-100, -100, 0, -100, 0, 100, -100, 100] };
+  const dispersedTree = {
+    polygons: [dispersedPolygon],
+    testPoint: ({ x, y }) => x >= -100 && x <= 0 && y >= -100 && y <= 100
+  };
+  region.polygonTree = {
+    polygons: [{ points: createTestCirclePoints(region.shapes[0]) }],
+    testPoint: ({ x, y }) => Math.hypot(x, y) <= 100,
+    intersectPolygon() {
+      differenceCalls += 1;
+      return dispersedTree;
+    }
+  };
   const scene = createScene([region]);
 
   try {
@@ -204,6 +220,7 @@ test("partial smoke constrains global light while restoring observer smoke block
       }
     };
     globalThis.foundry = {};
+    globalThis.ClipperLib = { ClipType: { ctDifference: 1 } };
     globalThis.Hooks = { on() {} };
     globalThis.game = { time: { worldTime: 0 } };
     globalThis.canvas = {
@@ -256,6 +273,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, outside), false);
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, reachedByForeignLight), true);
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, { document: {} }, outside), true);
+    assert.equal(differenceCalls, 1);
     lightSource._configure({});
     assert.equal(lightSource.nativeConfigured, true);
     assert.equal(lightSource._drawMesh("illumination"), "native-illumination");
@@ -270,6 +288,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     globalThis.game = previous.game;
     globalThis.PIXI = previous.PIXI;
     globalThis.foundry = previous.foundry;
+    globalThis.ClipperLib = previous.ClipperLib;
   }
 });
 
