@@ -58,8 +58,12 @@ const {
   STEALTH_ATTACK_DAMAGE_PERCENT_EFFECT_KEY
 } = await import("../src/stealth/effect-keys.mjs");
 const {
+  buildSmokePerceptionEffectKeyToken,
   buildStealthAttackBonusEffectKeyTokens
 } = await import("../src/utils/effect-key-tokens.mjs");
+const {
+  SMOKE_PERCEPTION_PERCENT_EFFECT_KEY
+} = await import("../src/canvas/smoke-perception.mjs");
 
 const EXPECTED_KEYS = Object.freeze({
   accuracy: "system.stealth.attackBonuses.accuracy",
@@ -112,6 +116,19 @@ test("stealth attack effect labels exist in Russian and English", () => {
     assert.ok(effects.StealthAttackCriticalChance);
     assert.ok(effects.StealthAttackDamagePercent);
     assert.ok(effects.StealthAttackCriticalDamagePercent);
+  }
+});
+
+test("smoke perception modifier is available as a localized actor effect key", () => {
+  const token = buildSmokePerceptionEffectKeyToken();
+  assert.equal(SMOKE_PERCEPTION_PERCENT_EFFECT_KEY, "fallout-maw.smoke.perceptionPercent");
+  assert.equal(token.path, SMOKE_PERCEPTION_PERCENT_EFFECT_KEY);
+  assert.equal(token.code, "smokePerceptionPercent");
+  assert.equal(token.group, russian.FALLOUTMAW.Effects.PerceptionGroup);
+  assert.equal(token.label, russian.FALLOUTMAW.Effects.SmokePerceptionPercent);
+  for (const locale of [russian, english]) {
+    assert.ok(locale.FALLOUTMAW.Effects.PerceptionGroup);
+    assert.ok(locale.FALLOUTMAW.Effects.SmokePerceptionPercent);
   }
 });
 

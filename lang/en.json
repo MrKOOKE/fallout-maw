@@ -1841,6 +1841,8 @@
       "Weight": "Weight"
     },
     "Effects": {
+      "PerceptionGroup": "Perception",
+      "SmokePerceptionPercent": "Smoke perception change, %",
       "AddChange": "Add Effect Change",
       "ChangeAdd": "Modify",
       "Changes": "Changes",

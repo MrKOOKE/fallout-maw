@@ -70,8 +70,16 @@ const {
 } = await import("../src/abilities/active-use-keys.mjs");
 const {
   formulaUsesPreparedActorReferences,
-  getActorFormulaApplicationPhase
+  getActorFormulaApplicationPhase,
+  invalidateActorFormulaData
 } = await import("../src/utils/actor-formulas.mjs");
+const { evaluateEffectChangeNumber } = await import("../src/utils/effect-change-values.mjs");
+const {
+  configureSmokePerceptionFormulaEvaluator,
+  getActorSmokePerceptionPercent,
+  invalidateActorSmokePerception,
+  SMOKE_PERCEPTION_PERCENT_EFFECT_KEY
+} = await import("../src/canvas/smoke-perception.mjs");
 
 test("actor skill schema exposes only derived fields for the percentage layer", () => {
   const source = readFileSync(
@@ -203,6 +211,35 @@ test("characteristic aliases keep evaluator priority over colliding prepared ind
     getActorFormulaApplicationPhase({ ...limbBonusChange, value: "consciousnessValue" }, null, { formulaData }),
     "final"
   );
+});
+
+test("smoke perception changes use actor formula aliases and refresh their cached value", () => {
+  configureSmokePerceptionFormulaEvaluator(evaluateEffectChangeNumber);
+  const actor = {
+    system: {
+      characteristics: {},
+      skills: { naturalist: { value: 40 } }
+    },
+    effects: [{
+      active: true,
+      disabled: false,
+      system: {
+        changes: [{
+          key: SMOKE_PERCEPTION_PERCENT_EFFECT_KEY,
+          type: "add",
+          value: "-50-nat/2"
+        }]
+      }
+    }]
+  };
+
+  assert.equal(getActorSmokePerceptionPercent(actor), -70);
+
+  actor.system.skills.naturalist.value = 80;
+  invalidateActorFormulaData(actor);
+  invalidateActorSmokePerception(actor);
+  assert.equal(getActorSmokePerceptionPercent(actor), -90);
+  configureSmokePerceptionFormulaEvaluator();
 });
 
 test("reverse interaction autocomplete exposes specific and all-skills percentage keys", () => {

@@ -72,6 +72,7 @@ import {
 import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
 import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
+import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
 
 export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
@@ -192,6 +193,7 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     ...buildDodgeResourceEffectKeyTokens(),
     ...buildSuppressionEffectKeyTokens(),
     ...buildCombatEffectKeyTokens(),
+    buildSmokePerceptionEffectKeyToken(),
     ...buildStealthAttackBonusEffectKeyTokens(),
     ...buildReverseInteractionEffectKeyTokens()
   ];
@@ -207,6 +209,16 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildSmokePerceptionEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "smokePerceptionPercent",
+    key: "smokePerceptionPercent",
+    label: game.i18n.localize("FALLOUTMAW.Effects.SmokePerceptionPercent"),
+    path: SMOKE_PERCEPTION_PERCENT_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Effects.PerceptionGroup")
+  });
 }
 
 export function buildCoverBonusPercentEffectKeyTokens() {

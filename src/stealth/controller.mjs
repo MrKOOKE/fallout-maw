@@ -38,6 +38,7 @@ import {
   configureWeaponNoiseDetection
 } from "./weapon-noise.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
+import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
 import {
   canRenderDetectionVisualizationForLocalUser,
   cleanupAllStealthVisualizations,
@@ -925,8 +926,11 @@ function effectAffectsStealth(effect, changes, operation) {
   if (statuses.size) return true;
   const relevantSkill = (effect?.changes ?? []).some(change => String(change?.key ?? "").startsWith("system.skills."));
   if (relevantSkill) return true;
+  const smokePerception = (effect?.system?.changes ?? effect?.changes ?? [])
+    .some(change => String(change?.key ?? "").trim() === SMOKE_PERCEPTION_PERCENT_EFFECT_KEY);
+  if (smokePerception) return true;
   if (operation !== "update") return false;
-  return hasChangedPath(changes, ["statuses", "changes", "disabled", "transfer"]);
+  return hasChangedPath(changes, ["statuses", "changes", "system.changes", "disabled", "transfer"]);
 }
 
 function hasChangedPath(changes, roots = []) {

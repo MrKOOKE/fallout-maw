@@ -1901,6 +1901,8 @@
       "Weight": "Вес"
     },
     "Effects": {
+      "PerceptionGroup": "Восприятие",
+      "SmokePerceptionPercent": "Изменение восприятия дыма, %",
       "AddChange": "Добавить изменение",
       "ChangeAdd": "Изменение",
       "Changes": "Изменения",

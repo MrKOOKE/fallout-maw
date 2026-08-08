@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "06f51bbce39e83d52bf46b9e0263d90dd807a26cc035943dd96cc29461849a88",
-  "updatedAt": "2026-08-08T18:16:18.725Z",
+  "revision": "f73f6c41c17ecd8ae5d224004b4e39873cb6a9c1f8fa3dd0e10c502b71df21ca",
+  "updatedAt": "2026-08-08T19:14:16.665Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -6754,6 +6754,61 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Ограничение зрения от дыма: -[[50+naturalist/2]]%</p></li></ul>",
+                "id": "57iytm6b7jx981OU",
+                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
+                "name": "Дымник",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "QfxvcePKGFLWZfmH",
+                      "skillKey": "naturalist",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Натуралист",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "fsWUJqLbbVU1rGea",
+                          "key": "fallout-maw.smoke.perceptionPercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-50-nat/2"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "47dsWGi7YKcNEZsv",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Стоимость активации: 20 энергии. <br>Перегрузка: 100 энергии на 1 минуту.</p><p>Выбранная цель проходит проверку скрытности со сложностью: [[50 + naturalist]]. В случае провала получает метку которая: </p><ul><li><p>снижает восстановление уклонения на [[naturalist/10]]%.</p></li><li><p>Каждый раз, когда цель тратит 5 ОП/ОД/ОР под вашим наблюдением, вы получаете возможность срегировать и атаковать ее.</p></li></ul><p>Метка пропадает когда цель уходит из вашего поля зрения. Каждый раз когда он вновь появляется, то проходит проверку с той же сложностью и в случае провала опять получает метку, а если преуспеет, то полностью избавляется от вашего надзора.</p><p>Длительность: до окончания боя.</p>",
                 "id": "mwPv4kmVHFRoI9i0",
                 "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
@@ -7100,6 +7155,34 @@
                   "category": "Скрытность",
                   "constructs": [],
                   "cost": 6000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Влияние дыма на зрение: -50%</p></li></ul><p>Пока вы находитесь в задымленной области:</p><ul><li><p>Скрытность: +50</p></li><li><p>Точность атак по вам: -50</p></li><li><p>Урон: +10%</p></li></ul>",
+                "id": "woupPU6m5ASyVF0R",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Под подкровом \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
                   "formula": "",
                   "functions": []
                 },

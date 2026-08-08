@@ -16,6 +16,7 @@ import {
   syncPeriodicDamageRegionEffects
 } from "./canvas/periodic-damage-regions.mjs";
 import { registerSmokeVisionHooks } from "./canvas/smoke-vision.mjs";
+import { configureSmokePerceptionFormulaEvaluator } from "./canvas/smoke-perception.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
@@ -140,6 +141,7 @@ import {
 } from "./utils/inventory-containers.mjs";
 import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
 import { toInteger } from "./utils/numbers.mjs";
+import { evaluateEffectChangeNumber } from "./utils/effect-change-values.mjs";
 import { resolveWorldItemSync } from "./utils/world-items.mjs";
 import { executeInventoryMutation } from "./inventory/mutation.mjs";
 import {
@@ -187,6 +189,7 @@ Hooks.once("init", () => {
   registerMovementInterruptionHooks();
   registerCanvasTargetSelectionLifecycleHooks();
   registerPeriodicDamageRegionHooks();
+  configureSmokePerceptionFormulaEvaluator(evaluateEffectChangeNumber);
   registerSmokeVisionHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();

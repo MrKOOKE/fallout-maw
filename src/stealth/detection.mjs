@@ -6,6 +6,10 @@ import {
 } from "../canvas/smoke-vision.mjs";
 import { analyzeLightingPoint } from "./lighting.mjs";
 import {
+  getActorSmokeDensityAdjustment,
+  getActorSmokePerceptionPercent
+} from "../canvas/smoke-perception.mjs";
+import {
   isStealthObserverIncapacitated,
   isValidStealthObserver
 } from "./observers.mjs";
@@ -462,7 +466,8 @@ function measureDetectionPath(
 
   const smokePath = measureSmokePath(origin, destination, {
     elevation: origin.elevation === destination.elevation ? origin.elevation : null,
-    regionCandidates: smokeRegionCandidates
+    regionCandidates: smokeRegionCandidates,
+    densityAdjustment: getActorSmokeDensityAdjustment(observerToken?.actor)
   });
   const unaidedSightRange = getObserverUnaidedSightRange(observerToken);
   const entirelyUnaided = unaidedSightRange === Infinity || unaidedSightRange >= directDistance;
@@ -713,6 +718,7 @@ function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
     normalizeExactCacheNumber(origin.elevation),
     Math.round(maxRange * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
+    normalizeExactCacheNumber(getActorSmokePerceptionPercent(observerToken?.actor)),
     getSmokeRegionRevision(activeCanvas?.scene),
     getSettingsSignature(settings)
   ].join(":");
@@ -736,6 +742,7 @@ function getDetectionPointCacheKey(observerToken, origin, point, settings, baseR
     Math.round(baseRange * 100),
     Math.round(rangeBonus * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
+    normalizeExactCacheNumber(getActorSmokePerceptionPercent(observerToken?.actor)),
     getSmokeRegionRevision(activeCanvas?.scene),
     getSettingsSignature(settings)
   ].join(":");
