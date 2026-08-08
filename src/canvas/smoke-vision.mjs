@@ -4,20 +4,29 @@ import { toOptionalFiniteNumber } from "../utils/numbers.mjs";
 
 const PERIODIC_DAMAGE_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const PERIODIC_DAMAGE_FLAG = "periodicDamage";
+const SMOKE_EDGE_TYPE = `${SYSTEM_ID}.smoke`;
 const CELL_SIZE = 512;
-const STAR_SAMPLES = 48;
+const MIN_CONSTRAINT_SAMPLES = 48;
+const MAX_CONSTRAINT_SAMPLES = 192;
+const SOURCE_CONSTRAINT_CACHE_LIMIT = 2;
 const EPSILON = 1e-6;
+const ANGLE_EPSILON = 1e-7;
 
 let smokeIndexByScene = new WeakMap();
 let smokeRevisionByScene = new WeakMap();
 let smokeIndexSignatureByScene = new WeakMap();
 let smokeSignatureByScene = new WeakMap();
 let sourceConstraintCache = new WeakMap();
-let detectionModePatched = false;
+let clearSmokeLosCache = new WeakMap();
 const smokeMeshes = new Map();
+const smokeBoundaryEdgeIds = new Set();
+const smokeBoundaryBehaviorUuids = new Set();
+let smokeBoundaryEdgeScene = null;
+let smokeBoundaryEdgeSignature = "";
 
 export function registerSmokeVisionHooks() {
-  patchBasicSightRange();
+  patchSmokeDetectionRanges();
+  registerSmokeSweepBackend();
   registerVisionSourceClass();
   Hooks.on("createRegion", document => refreshForDocument(document));
   Hooks.on("deleteRegion", document => refreshForDocument(document));
@@ -41,7 +50,8 @@ export function registerSmokeVisionHooks() {
     ])) refreshForDocument(document);
   });
   Hooks.on("canvasReady", () => {
-    patchBasicSightRange();
+    patchSmokeDetectionRanges();
+    registerSmokeSweepBackend();
     registerVisionSourceClass();
     invalidateSmokeRegionIndex(canvas?.scene);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
@@ -55,12 +65,14 @@ export function registerSmokeVisionHooks() {
     scheduleSmokeRefresh();
   });
   Hooks.on("canvasTearDown", () => {
+    destroySmokeBoundaryEdges();
     destroySmokeDarknessMeshes();
     smokeIndexByScene = new WeakMap();
     smokeRevisionByScene = new WeakMap();
     smokeIndexSignatureByScene = new WeakMap();
     smokeSignatureByScene = new WeakMap();
     sourceConstraintCache = new WeakMap();
+    clearSmokeLosCache = new WeakMap();
   });
 }
 
@@ -121,7 +133,13 @@ export function getSmokeRegionIndex(scene = canvas?.scene) {
       if (!state) continue;
       if (Number.isFinite(state.nextTransitionAt)) nextTransitionAt = Math.min(nextTransitionAt, state.nextTransitionAt);
       if (!state.active) continue;
-      const entry = { region, behavior, smoke: state.smoke, bounds: getRegionBounds(region) };
+      const entry = {
+        region,
+        behavior,
+        smoke: state.smoke,
+        bounds: getRegionBounds(region),
+        geometry: getSmokeRegionGeometry(region)
+      };
       const index = entries.push(entry) - 1;
       for (const key of getBoundsCells(entry.bounds)) {
         const bucket = buckets.get(key) ?? [];
@@ -142,6 +160,10 @@ export function getSmokeRegionIndex(scene = canvas?.scene) {
     entries,
     buckets,
     hasVisionSmoke: entries.some(entry => entry.smoke.density > EPSILON),
+    hasPartialVisionSmoke: entries.some(entry => (
+      entry.smoke.density > EPSILON && entry.smoke.density < 1 - EPSILON
+    )),
+    hasOpaqueVisionSmoke: entries.some(entry => entry.smoke.density >= 1 - EPSILON),
     nextTransitionAt: Number.isFinite(nextTransitionAt) ? nextTransitionAt : null,
     revision: smokeRevisionByScene.get(scene) ?? 0
   };
@@ -182,7 +204,8 @@ export function measureSmokePath(from, to, {
   scene = canvas?.scene,
   elevation = null,
   budget = Infinity,
-  regionCandidates = null
+  regionCandidates = null,
+  chargeClearDistance = true
 } = {}) {
   const profile = buildSmokePathProfile(from, to, { scene, elevation, regionCandidates });
   let cost = 0;
@@ -191,6 +214,7 @@ export function measureSmokePath(from, to, {
       cost = Infinity;
       break;
     }
+    if (!chargeClearDistance && segment.retained >= 1 - EPSILON) continue;
     cost += segment.length / segment.retained;
   }
   return {
@@ -198,7 +222,7 @@ export function measureSmokePath(from, to, {
     hasSmoke: profile.hasSmoke,
     length: profile.length,
     segments: profile.segments,
-    visibleDistance: calculateProfileVisibleDistance(profile, budget)
+    visibleDistance: calculateProfileVisibleDistance(profile, budget, { chargeClearDistance })
   };
 }
 
@@ -223,7 +247,7 @@ function buildSmokePathProfile(from, to, { scene = canvas?.scene, elevation = nu
   const intervals = new Map();
   const breakpoints = new Set([0, 1]);
   for (const entry of regions) {
-    const segments = getRegionRayIntervals(entry.region, start, end, elevation);
+    const segments = getRegionRayIntervals(entry, start, end, elevation);
     intervals.set(entry, segments);
     for (const [a, b] of segments) {
       breakpoints.add(a);
@@ -254,77 +278,172 @@ function buildSmokePathProfile(from, to, { scene = canvas?.scene, elevation = nu
 
 export function isSmokePathVisible(from, to, maximumDistance, options = {}) {
   const budget = Number(maximumDistance);
-  if (budget === Infinity) return calculateSmokePathCost(from, to, options) !== Infinity;
+  const measurement = measureSmokePath(from, to, options);
+  if (budget === Infinity) return measurement.cost !== Infinity;
   if (!Number.isFinite(budget) || budget < 0) return false;
-  return calculateSmokePathCost(from, to, options) <= budget + EPSILON;
+  return measurement.cost <= budget + EPSILON;
 }
 
 function registerVisionSourceClass() {
   const base = CONFIG.Canvas?.visionSourceClass;
   if (!base || base.__falloutMawSmokeVisionSource) return;
   class SmokeVisionSource extends base {
-    _createRestrictedPolygon() {
-      const basePolygon = super._createRestrictedPolygon();
-      const radius = this.radius || this.data.externalRadius || 0;
-      if (!radius || !canvas?.scene || !getSmokeRegionIndex(canvas.scene)?.hasVisionSmoke) return basePolygon;
-      const budget = getBasicSightRadius(this, radius);
-      if (budget === null) return basePolygon;
-      const star = buildSmokeConstraint(this, radius, budget);
-      return star ? basePolygon.applyConstraint(star, { density: STAR_SAMPLES }) : basePolygon;
+    _getPolygonConfiguration() {
+      const config = super._getPolygonConfiguration();
+      const index = getSmokeRegionIndex(canvas?.scene);
+      if (index?.hasOpaqueVisionSmoke && smokeBoundaryEdgeIds.size) {
+        config._falloutMawIncludeSmokeEdges = true;
+      }
+      return config;
+    }
+
+    _createShapes() {
+      super._createShapes();
+      const index = getSmokeRegionIndex(canvas?.scene);
+      if (!index?.hasVisionSmoke) return;
+      const lightRadius = this.lightRadius || 0;
+      const sightRadius = this.radius || this.data.externalRadius || 0;
+      this.light = applySmokeConstraint(this, this.light, lightRadius, {
+        chargeClearDistance: false
+      });
+      this.shape = applySmokeConstraint(this, this.shape, sightRadius);
     }
   }
   Object.defineProperty(SmokeVisionSource, "__falloutMawSmokeVisionSource", { value: true });
   CONFIG.Canvas.visionSourceClass = SmokeVisionSource;
 }
 
-function buildSmokeConstraint(source, radius, budget = radius) {
+function registerSmokeSweepBackend() {
+  const base = CONFIG.Canvas?.polygonBackends?.sight;
+  if (!base || base.__falloutMawSmokeSweepBackend) return;
+  class SmokeClockwiseSweepPolygon extends base {
+    _testEdgeInclusion(edge, edgeTypes) {
+      if (edge.type === SMOKE_EDGE_TYPE) {
+        return this.config._falloutMawIncludeSmokeEdges === true
+          && isRegionOnElevation(edge._falloutMawSmokeRegion, this.origin.elevation);
+      }
+      return super._testEdgeInclusion(edge, edgeTypes);
+    }
+  }
+  Object.defineProperty(SmokeClockwiseSweepPolygon, "__falloutMawSmokeSweepBackend", { value: true });
+  CONFIG.Canvas.polygonBackends.sight = SmokeClockwiseSweepPolygon;
+}
+
+function applySmokeConstraint(source, basePolygon, radius, { chargeClearDistance = true } = {}) {
+  if (!radius || !canvas?.scene || !getSmokeRegionIndex(canvas.scene)?.hasVisionSmoke) return basePolygon;
+  const budget = getBasicSightRadius(source, radius);
+  if (budget === null) return basePolygon;
+  const star = buildSmokeConstraint(source, radius, budget, { chargeClearDistance });
+  return star ? basePolygon.applyConstraint(star) : basePolygon;
+}
+
+function buildSmokeConstraint(source, radius, budget = radius, { chargeClearDistance = true } = {}) {
   radius = Number.isFinite(radius) ? radius : (canvas.dimensions?.maxR ?? 0);
   if (!radius) return null;
   const { x, y, elevation } = source.data;
   const revision = getSmokeRegionIndex(canvas.scene)?.revision ?? 0;
-  const cached = sourceConstraintCache.get(source);
-  if (cached
-    && cached.revision === revision
-    && cached.x === x
-    && cached.y === y
-    && cached.elevation === elevation
-    && cached.radius === radius
-    && cached.budget === budget) return cached.polygon;
+  const cachedEntries = sourceConstraintCache.get(source) ?? [];
+  const cached = cachedEntries.find(entry => entry.revision === revision
+    && entry.x === x
+    && entry.y === y
+    && entry.elevation === elevation
+    && entry.radius === radius
+    && entry.budget === budget
+    && entry.chargeClearDistance === chargeClearDistance);
+  if (cached) return cached.polygon;
   const regionCandidates = getSmokeRegionsInBounds({
     x: x - radius,
     y: y - radius,
     width: radius * 2,
     height: radius * 2
-  }, { elevation });
+  }, { elevation }).filter(requiresRayAttenuation);
   if (!regionCandidates.length) {
-    sourceConstraintCache.set(source, { revision, x, y, elevation, radius, budget, polygon: null });
+    writeSourceConstraintCache(source, cachedEntries, {
+      revision, x, y, elevation, radius, budget, chargeClearDistance, polygon: null
+    });
     return null;
   }
+  const origin = { x, y, elevation };
+  const angles = getSmokeConstraintAngles(origin, radius, regionCandidates);
   const points = [];
-  for (let i = 0; i < STAR_SAMPLES; i++) {
-    const angle = (i / STAR_SAMPLES) * Math.PI * 2;
+  for (const angle of angles) {
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
     const distance = calculateSmokeVisibleDistance(
-      { x, y, elevation },
+      origin,
       { x: x + (dx * radius), y: y + (dy * radius), elevation },
       budget,
-      { elevation, regionCandidates }
+      { elevation, regionCandidates, chargeClearDistance }
     );
     points.push(x + (dx * distance), y + (dy * distance));
   }
   const polygon = new PIXI.Polygon(points);
-  sourceConstraintCache.set(source, { revision, x, y, elevation, radius, budget, polygon });
+  writeSourceConstraintCache(source, cachedEntries, {
+    revision, x, y, elevation, radius, budget, chargeClearDistance, polygon
+  });
   return polygon;
+}
+
+function getSmokeConstraintAngles(origin, radius, regionCandidates) {
+  const nativeDensity = Number(globalThis.PIXI?.Circle?.approximateVertexDensity?.(radius));
+  const baseDensity = Math.max(
+    MIN_CONSTRAINT_SAMPLES,
+    Math.min(MAX_CONSTRAINT_SAMPLES, Number.isFinite(nativeDensity) ? nativeDensity : MIN_CONSTRAINT_SAMPLES)
+  );
+  const angles = [];
+  const baseStep = (Math.PI * 2) / baseDensity;
+  for (let i = 0; i < baseDensity; i++) angles.push(i * baseStep);
+  for (const entry of regionCandidates) addRegionBoundaryConstraintAngles(angles, origin, entry);
+  angles.sort((left, right) => left - right);
+  const unique = [];
+  for (const angle of angles) {
+    if (!unique.length || angle - unique.at(-1) > ANGLE_EPSILON) unique.push(angle);
+  }
+  return unique;
+}
+
+function addRegionBoundaryConstraintAngles(angles, origin, entry) {
+  const polygons = entry.geometry?.polygons ?? getRegionPolygons(entry.region);
+  let added = false;
+  for (const polygon of polygons ?? []) {
+    const points = polygon?.points ?? [];
+    for (let i = 0; i + 1 < points.length; i += 2) {
+      addBoundaryPointAngle(angles, origin, { x: points[i], y: points[i + 1] });
+      added = true;
+    }
+  }
+  if (added) return;
+  const bounds = entry.bounds ?? getRegionBounds(entry.region);
+  if (!bounds) return;
+  addBoundaryPointAngle(angles, origin, { x: bounds.x, y: bounds.y });
+  addBoundaryPointAngle(angles, origin, { x: bounds.x + bounds.width, y: bounds.y });
+  addBoundaryPointAngle(angles, origin, { x: bounds.x + bounds.width, y: bounds.y + bounds.height });
+  addBoundaryPointAngle(angles, origin, { x: bounds.x, y: bounds.y + bounds.height });
+}
+
+function addBoundaryPointAngle(angles, origin, point) {
+  const dx = Number(point.x) - origin.x;
+  const dy = Number(point.y) - origin.y;
+  if (!dx && !dy) return;
+  angles.push(normalizeAngle(Math.atan2(dy, dx)));
+}
+
+function normalizeAngle(angle) {
+  const full = Math.PI * 2;
+  return ((angle % full) + full) % full;
+}
+
+function writeSourceConstraintCache(source, entries, value) {
+  sourceConstraintCache.set(source, [value, ...entries].slice(0, SOURCE_CONSTRAINT_CACHE_LIMIT));
 }
 
 function calculateSmokeVisibleDistance(from, to, budget, options = {}) {
   const profile = buildSmokePathProfile(from, to, options);
   if (!profile.hasSmoke) return profile.length;
-  return calculateProfileVisibleDistance(profile, budget);
+  return calculateProfileVisibleDistance(profile, budget, options);
 }
 
-function calculateProfileVisibleDistance(profile, budget) {
+function calculateProfileVisibleDistance(profile, budget, { chargeClearDistance = true } = {}) {
   if (budget === Infinity) {
     const opaque = profile.segments.find(segment => segment.retained <= EPSILON);
     return opaque ? opaque.start * profile.length : profile.length;
@@ -332,6 +451,7 @@ function calculateProfileVisibleDistance(profile, budget) {
   let remaining = Math.max(0, Number(budget) || 0);
   for (const segment of profile.segments) {
     if (segment.retained <= EPSILON) return segment.start * profile.length;
+    if (!chargeClearDistance && segment.retained >= 1 - EPSILON) continue;
     const cost = segment.length / segment.retained;
     if (cost > remaining) return (segment.start * profile.length) + (remaining * segment.retained);
     remaining -= cost;
@@ -360,9 +480,13 @@ function getDetectionModeValues(modes) {
   return typeof modes === "object" ? Object.values(modes) : [];
 }
 
-function patchBasicSightRange() {
-  if (detectionModePatched) return;
-  const mode = CONFIG.Canvas?.detectionModes?.basicSight;
+function patchSmokeDetectionRanges() {
+  patchBasicSightRange(CONFIG.Canvas?.detectionModes?.basicSight);
+  patchLightPerceptionRange(CONFIG.Canvas?.detectionModes?.lightPerception);
+  patchSpecialSenseSmokeLos();
+}
+
+function patchBasicSightRange(mode) {
   if (!mode || mode._falloutMawSmokeRangePatched) return;
   const original = mode._testRange;
   if (typeof original !== "function") return;
@@ -371,16 +495,118 @@ function patchBasicSightRange() {
     const maximumDistance = detectionMode.range === Infinity
       ? Infinity
       : visionSource.object.getLightRadius(detectionMode.range);
-    if (!getSmokeRegionIndex(canvas?.scene)?.hasVisionSmoke) return true;
+    const index = getSmokeRegionIndex(canvas?.scene);
+    if (!hasRayAttenuationSmoke(index)) return true;
+    const origin = { x: visionSource.data.x, y: visionSource.data.y, elevation: visionSource.data.elevation };
+    const regionCandidates = getSmokeRegionsAlongRay(origin, test.point, {
+      elevation: origin.elevation
+    }).filter(requiresRayAttenuation);
+    if (!regionCandidates.length) return true;
     return isSmokePathVisible(
-      { x: visionSource.data.x, y: visionSource.data.y, elevation: visionSource.data.elevation },
+      origin,
       test.point,
       maximumDistance,
-      { elevation: visionSource.data.elevation }
+      { elevation: origin.elevation, regionCandidates }
     );
   };
   Object.defineProperty(mode, "_falloutMawSmokeRangePatched", { value: true });
-  detectionModePatched = true;
+}
+
+function patchLightPerceptionRange(mode) {
+  if (!mode || mode._falloutMawSmokeRangePatched) return;
+  const original = mode._testRange;
+  if (typeof original !== "function") return;
+  mode._testRange = function smokeAwareLightPerceptionRange(visionSource, detectionMode, target, test) {
+    if (!original.call(this, visionSource, detectionMode, target, test)) return false;
+    const index = getSmokeRegionIndex(canvas?.scene);
+    if (!isTokenVisibilityTarget(target) || !hasRayAttenuationSmoke(index)) return true;
+    const origin = {
+      x: visionSource.data.x,
+      y: visionSource.data.y,
+      elevation: visionSource.data.elevation
+    };
+    const regionCandidates = getSmokeRegionsAlongRay(origin, test.point, {
+      elevation: origin.elevation
+    }).filter(requiresRayAttenuation);
+    if (!regionCandidates.length) return true;
+    const measurement = measureSmokePath(origin, test.point, {
+      elevation: origin.elevation,
+      chargeClearDistance: false,
+      regionCandidates
+    });
+    if (!measurement.hasSmoke) return true;
+    const fallbackRadius = visionSource.radius || visionSource.data.externalRadius || canvas.dimensions?.maxR || 0;
+    const maximumDistance = getBasicSightRadius(visionSource, fallbackRadius);
+    if (maximumDistance === null) return true;
+    return maximumDistance === Infinity
+      ? measurement.cost !== Infinity
+      : measurement.cost <= maximumDistance + EPSILON;
+  };
+  Object.defineProperty(mode, "_falloutMawSmokeRangePatched", { value: true });
+}
+
+function hasRayAttenuationSmoke(index) {
+  if (!index?.hasVisionSmoke) return false;
+  if (index.hasPartialVisionSmoke) return true;
+  return index.entries.some(requiresRayAttenuation);
+}
+
+function requiresRayAttenuation(entry) {
+  return entry.smoke.density < 1 - EPSILON
+    || !smokeBoundaryBehaviorUuids.has(entry.behavior.uuid);
+}
+
+/**
+ * The rendered LOS contains opaque smoke. Special wall-aware senses which use
+ * Foundry's default LOS method must keep their original wall-only semantics.
+ * A direct native collision test is substantially cheaper than constructing a
+ * second full LOS polygon for every vision source and is cached per test point.
+ */
+function patchSpecialSenseSmokeLos() {
+  const DetectionMode = globalThis.foundry?.canvas?.perception?.DetectionMode;
+  const defaultTestLos = DetectionMode?.prototype?._testLOS;
+  if (typeof defaultTestLos !== "function" || typeof DetectionMode._testCollision !== "function") return;
+  for (const [id, mode] of Object.entries(CONFIG.Canvas?.detectionModes ?? {})) {
+    if (id === "basicSight" || id === "lightPerception" || !mode?.walls) continue;
+    if (mode._falloutMawSmokeLosBypassPatched || mode._testLOS !== defaultTestLos) continue;
+    mode._testLOS = function smokeBypassingSpecialSenseLos(visionSource, detectionMode, target, test) {
+      const index = getSmokeRegionIndex(canvas?.scene);
+      if (!index?.hasOpaqueVisionSmoke || !visionSource?.los?.config) {
+        return defaultTestLos.call(this, visionSource, detectionMode, target, test);
+      }
+      const cached = readClearSmokeLosCache(test, this, visionSource);
+      if (cached !== undefined) return cached;
+      const config = {
+        ...visionSource.los.config,
+        _falloutMawIncludeSmokeEdges: false
+      };
+      if (!this.angle && visionSource.data.angle < 360) config.angle = 360;
+      const hasLos = !DetectionMode._testCollision(visionSource, test, config);
+      writeClearSmokeLosCache(test, this, visionSource, hasLos);
+      return hasLos;
+    };
+    Object.defineProperty(mode, "_falloutMawSmokeLosBypassPatched", { value: true });
+  }
+}
+
+function readClearSmokeLosCache(test, mode, visionSource) {
+  return clearSmokeLosCache.get(test)?.get(mode)?.get(visionSource);
+}
+
+function writeClearSmokeLosCache(test, mode, visionSource, value) {
+  if (!test || typeof test !== "object" || !visionSource || typeof visionSource !== "object") return;
+  let byMode = clearSmokeLosCache.get(test);
+  if (!byMode) clearSmokeLosCache.set(test, byMode = new Map());
+  let bySource = byMode.get(mode);
+  if (!bySource) byMode.set(mode, bySource = new WeakMap());
+  bySource.set(visionSource, value);
+}
+
+function isTokenVisibilityTarget(target) {
+  const document = target?.document;
+  return document?.documentName === "Token"
+    || document?.constructor?.documentName === "Token"
+    || Boolean(document?.actor && target?.actor);
 }
 
 function getSmokeRegionState(behavior, now = Number(globalThis.game?.time?.worldTime) || 0) {
@@ -401,10 +627,13 @@ function getSmokeRegionState(behavior, now = Number(globalThis.game?.time?.world
   return { active, nextTransitionAt, smoke };
 }
 
-function getRegionRayIntervals(region, from, to, elevation) {
-  const shapes = region.shapes ?? region.document?.shapes;
-  if (shapes?.length === 1 && shapes[0]?.type === "circle") {
-    return getCircleRayIntervals(shapes[0], from, to);
+function getRegionRayIntervals(entry, from, to, elevation) {
+  const { region, geometry } = entry;
+  if (from.elevation === to.elevation
+    && isRegionOnElevation(region, from.elevation)
+    && geometry?.polygonTree?.testPoint
+    && geometry.segments.length) {
+    return getPolygonTreeRayIntervals(geometry, from, to);
   }
   if (typeof region.segmentizeMovementPath !== "function") {
     const midpoint = {
@@ -425,22 +654,85 @@ function getRegionRayIntervals(region, from, to, elevation) {
     .filter(([a, b]) => b - a > EPSILON);
 }
 
-function getCircleRayIntervals(circle, from, to) {
+function getPolygonTreeRayIntervals(geometry, from, to) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  const fx = from.x - (Number(circle.x) || 0);
-  const fy = from.y - (Number(circle.y) || 0);
-  const radius = Math.max(0, Number(circle.radius) || 0);
-  const a = (dx * dx) + (dy * dy);
-  if (!a || !radius) return [];
-  const b = 2 * ((fx * dx) + (fy * dy));
-  const c = (fx * fx) + (fy * fy) - (radius * radius);
-  const discriminant = (b * b) - (4 * a * c);
-  if (discriminant <= EPSILON) return [];
-  const root = Math.sqrt(discriminant);
-  const start = Math.max(0, (-b - root) / (2 * a));
-  const end = Math.min(1, (-b + root) / (2 * a));
-  return end - start > EPSILON ? [[start, end]] : [];
+  const minX = Math.min(from.x, to.x);
+  const maxX = Math.max(from.x, to.x);
+  const minY = Math.min(from.y, to.y);
+  const maxY = Math.max(from.y, to.y);
+  const intersections = [0, 1];
+  for (const segment of geometry.segments) {
+    if (segment.maxX < minX || segment.minX > maxX || segment.maxY < minY || segment.minY > maxY) continue;
+    const edgeDx = segment.b.x - segment.a.x;
+    const edgeDy = segment.b.y - segment.a.y;
+    const denominator = (dx * edgeDy) - (dy * edgeDx);
+    if (Math.abs(denominator) <= EPSILON) continue;
+    const offsetX = segment.a.x - from.x;
+    const offsetY = segment.a.y - from.y;
+    const t = ((offsetX * edgeDy) - (offsetY * edgeDx)) / denominator;
+    const u = ((offsetX * dy) - (offsetY * dx)) / denominator;
+    if (t < -EPSILON || t > 1 + EPSILON || u < -EPSILON || u > 1 + EPSILON) continue;
+    intersections.push(Math.max(0, Math.min(1, t)));
+  }
+  intersections.sort((left, right) => left - right);
+  const unique = [];
+  for (const t of intersections) {
+    if (!unique.length || t - unique.at(-1) > EPSILON) unique.push(t);
+  }
+  const intervals = [];
+  for (let i = 1; i < unique.length; i++) {
+    const start = unique[i - 1];
+    const end = unique[i];
+    if (end - start <= EPSILON) continue;
+    const midpoint = (start + end) / 2;
+    if (!geometry.polygonTree.testPoint({
+      x: from.x + (dx * midpoint),
+      y: from.y + (dy * midpoint)
+    })) continue;
+    const previous = intervals.at(-1);
+    if (previous && start - previous[1] <= EPSILON) previous[1] = end;
+    else intervals.push([start, end]);
+  }
+  return intervals;
+}
+
+function getSmokeRegionGeometry(region) {
+  const polygonTree = region.object?.animationState?.polygonTree
+    ?? region.polygonTree
+    ?? region.document?.polygonTree
+    ?? null;
+  const polygons = polygonTree?.polygons ?? getRegionPolygons(region);
+  const segments = [];
+  const signature = [];
+  for (const polygon of polygons ?? []) {
+    const points = polygon?.points ?? [];
+    if (points.length < 6) continue;
+    let a = { x: Number(points.at(-2)) || 0, y: Number(points.at(-1)) || 0 };
+    for (let i = 0; i + 1 < points.length; i += 2) {
+      const b = { x: Number(points[i]) || 0, y: Number(points[i + 1]) || 0 };
+      if (a.x !== b.x || a.y !== b.y) {
+        segments.push({
+          a,
+          b,
+          minX: Math.min(a.x, b.x),
+          maxX: Math.max(a.x, b.x),
+          minY: Math.min(a.y, b.y),
+          maxY: Math.max(a.y, b.y)
+        });
+        signature.push(a.x, a.y, b.x, b.y);
+      }
+      a = b;
+    }
+  }
+  return { polygonTree, polygons, segments, signature: signature.join(",") };
+}
+
+function getRegionPolygons(region) {
+  return region.object?.animationState?.polygons
+    ?? region.polygons
+    ?? region.document?.polygons
+    ?? [];
 }
 
 function projectT(point, from, to) {
@@ -526,12 +818,19 @@ function scheduleSmokeRefresh({ forceRendering = false, forceVision = false } = 
 
 export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = false } = {}) {
   if (!canvas?.ready || !canvas.scene) return;
+  const index = getSmokeRegionIndex(canvas.scene);
+  const boundaryEdgesChanged = syncSmokeBoundaryEdges(index);
   const shaders = foundry.canvas?.rendering?.shaders;
   const darknessCollection = canvas.effects?.illumination?.darknessLevelMeshes;
   const illuminationMeshes = canvas.visibility?.vision?.light?.global?.meshes;
-  if (!shaders?.AdjustDarknessLevelRegionShader || !shaders?.IlluminationDarknessLevelRegionShader || !darknessCollection || !illuminationMeshes) return;
+  if (!shaders?.AdjustDarknessLevelRegionShader
+    || !shaders?.IlluminationDarknessLevelRegionShader
+    || !darknessCollection
+    || !illuminationMeshes) {
+    if (boundaryEdgesChanged) canvas.perception.update({ refreshVision: true });
+    return;
+  }
   const desired = new Map();
-  const index = getSmokeRegionIndex(canvas.scene);
   for (const entry of index?.entries ?? []) desired.set(entry.behavior.uuid, entry);
   const signature = [...desired].map(([uuid, entry]) => `${uuid}:${entry.smoke.thickness}:${entry.smoke.density}`).sort().join("|");
   const smokeStateChanged = smokeSignatureByScene.get(canvas.scene) !== signature;
@@ -569,11 +868,60 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
   if (renderingChanged) {
     canvas.effects.illumination.invalidateDarknessLevelContainer(true);
   }
-  const refreshVision = forceVision || smokeStateChanged
+  const refreshVision = forceVision || boundaryEdgesChanged || smokeStateChanged
     || (renderingChanged && canvas.environment?.globalLightSource?.active);
   if (renderingChanged || refreshVision) {
     canvas.perception.update({ refreshLighting: renderingChanged, refreshVision });
   }
+}
+
+function syncSmokeBoundaryEdges(index) {
+  const scene = canvas?.scene;
+  if (!scene || !canvas?.edges || !index) return false;
+  const opaqueEntries = index.entries.filter(entry => entry.smoke.density >= 1 - EPSILON);
+  const signature = opaqueEntries.map(entry => {
+    const elevation = entry.region.elevation ?? {};
+    return `${entry.behavior.uuid}:${elevation.bottom ?? ""}:${elevation.top ?? ""}`
+      + `:${elevation.topInclusive === true ? 1 : 0}:${entry.geometry?.signature ?? ""}`;
+  }).sort().join("|");
+  if (smokeBoundaryEdgeScene === scene && smokeBoundaryEdgeSignature === signature) {
+    return false;
+  }
+  let changed = destroySmokeBoundaryEdges();
+  smokeBoundaryEdgeScene = scene;
+  smokeBoundaryEdgeSignature = signature;
+  const EdgeClass = foundry.canvas?.geometry?.edges?.Edge;
+  if (!EdgeClass) return changed;
+  for (const entry of opaqueEntries) {
+    let edgeNumber = 0;
+    for (const segment of entry.geometry?.segments ?? []) {
+      const id = `${SMOKE_EDGE_TYPE}.${entry.behavior.uuid}.${edgeNumber++}`;
+      const edge = new EdgeClass(segment.a, segment.b, {
+        id,
+        type: SMOKE_EDGE_TYPE,
+        sight: CONST.EDGE_SENSE_TYPES.NORMAL
+      });
+      edge._falloutMawSmokeRegion = entry.region;
+      canvas.edges.set(id, edge);
+      smokeBoundaryEdgeIds.add(id);
+      changed = true;
+    }
+    if (edgeNumber) smokeBoundaryBehaviorUuids.add(entry.behavior.uuid);
+  }
+  return changed;
+}
+
+function destroySmokeBoundaryEdges() {
+  const edges = globalThis.canvas?.edges;
+  let changed = false;
+  if (edges) {
+    for (const id of smokeBoundaryEdgeIds) changed = edges.delete(id) || changed;
+  }
+  smokeBoundaryEdgeIds.clear();
+  smokeBoundaryBehaviorUuids.clear();
+  smokeBoundaryEdgeScene = null;
+  smokeBoundaryEdgeSignature = "";
+  return changed;
 }
 
 function updateSmokeMeshPair(meshes, thickness) {

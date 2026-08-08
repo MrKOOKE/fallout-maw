@@ -640,12 +640,33 @@ function createSettings(rangeFormula) {
 }
 
 function createSmokeRegion(id, densityPercent, { x, y, radius, bounds }) {
-  return {
+  const region = {
     id,
     hidden: false,
     elevation: { bottom: null, top: null },
     shapes: [{ type: "circle", x, y, radius }],
     object: { bounds },
+    segmentizeMovementPath: ([from, to]) => {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const fx = from.x - x;
+      const fy = from.y - y;
+      const a = (dx * dx) + (dy * dy);
+      const b = 2 * ((fx * dx) + (fy * dy));
+      const c = (fx * fx) + (fy * fy) - (radius * radius);
+      const discriminant = (b * b) - (4 * a * c);
+      if (!a || discriminant <= 0) return [];
+      const root = Math.sqrt(discriminant);
+      const start = Math.max(0, (-b - root) / (2 * a));
+      const end = Math.min(1, (-b + root) / (2 * a));
+      if (end <= start) return [];
+      const pointAt = t => ({
+        x: from.x + (dx * t),
+        y: from.y + (dy * t),
+        elevation: from.elevation ?? 0
+      });
+      return [{ from: pointAt(start), to: pointAt(end) }];
+    },
     behaviors: {
       contents: [{
         uuid: `Behavior.${id}`,
@@ -663,6 +684,7 @@ function createSmokeRegion(id, densityPercent, { x, y, radius, bounds }) {
       }]
     }
   };
+  return region;
 }
 
 function installRectangleMock() {
