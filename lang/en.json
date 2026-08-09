@@ -1842,6 +1842,7 @@
     },
     "Effects": {
       "PerceptionGroup": "Perception",
+      "VisionGroup": "Vision and detection",
       "SmokePerceptionPercent": "Smoke perception change, %",
       "AddChange": "Add Effect Change",
       "ChangeAdd": "Modify",

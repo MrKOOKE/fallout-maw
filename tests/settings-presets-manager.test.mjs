@@ -8,6 +8,7 @@ import {
   createDefaultSettingsPresetState,
   getSettingsPreset,
   importSettingsPreset,
+  initializeSettingsPresets,
   isPresetManagedSetting,
   listSettingsPresets,
   removeSettingsPreset,
@@ -104,7 +105,7 @@ function installFoundryMock({ storedIds = [], values = {}, modifyBatch } = {}) {
       isSubclass: () => false
     }
   };
-  globalThis.Hooks = { callAll: () => undefined };
+  globalThis.Hooks = { callAll: () => undefined, on: () => undefined };
   globalThis.ui = { settings: { render: () => undefined } };
   return { configs, documents, state };
 }
@@ -119,11 +120,13 @@ function installPresetFileMock() {
     }
   };
   const record = (destination, path, file) => {
+    const source = file.parts.join("");
     uploads.push({
       destination,
       path,
       name: file.name,
-      document: JSON.parse(file.parts.join(""))
+      source,
+      document: JSON.parse(source)
     });
     return { path: `${path}/${file.name}` };
   };
@@ -193,6 +196,14 @@ test("managed-setting filtering is opt-in and strictly world-scoped", () => {
   assert.equal(isPresetManagedSetting({ namespace: "fallout-maw", scope: "user", preset: true }), false);
   assert.equal(isPresetManagedSetting({ namespace: "fallout-maw", scope: "world", preset: false }), false);
   assert.equal(isPresetManagedSetting({ namespace: "other", scope: "world", preset: true }), false);
+});
+
+test("managed setting schema is stored as a compact fingerprint", () => {
+  installFoundryMock();
+  const signature = SETTINGS_PRESET_TESTING.getManagedPresetSignature();
+
+  assert.match(signature, /^\d+:[0-9a-f]{16}$/);
+  assert.ok(signature.length < 64);
 });
 
 test("both bundled seeds are valid and initially carry the same portable snapshot", () => {
@@ -420,6 +431,7 @@ test("a named nested save persists with its preset without becoming a separate p
   assert.equal((await listSettingsPresets()).filter(entry => entry.id === personal.id)[0].saveCount, 1);
   assert.equal(uploads.length, 2);
   assert.equal(uploads.every(upload => upload.document.saves?.length === 1), true);
+  assert.equal(uploads.every(upload => !upload.source.includes("\n")), true);
 
   const removed = await removeSettingsPresetVersion(personal.id, save.id);
   assert.deepEqual(removed, { id: save.id, removed: true });
@@ -1041,6 +1053,93 @@ test("a queued retry cannot overwrite a newer revision of the same preset", asyn
   assert.equal(uploads.length, 0);
   assert.equal(state.pendingRevision, current.revision);
   assert.deepEqual(state.pendingDocument, current);
+});
+
+test("ordinary startup fetches only the active preset set and skips matching world backups", async () => {
+  const { state } = installFoundryMock();
+  const main = makePreset("fallout-maw", "Fallout-MaW", [
+    entry("fallout-maw.alpha", false),
+    entry("fallout-maw.beta", { code: "main" })
+  ]);
+  const inactive = makePreset("inactive", "Inactive", [entry("fallout-maw.alpha", true)]);
+  Object.assign(state, {
+    migrationVersion: 1,
+    activePresetId: main.id,
+    appliedRevision: main.revision
+  });
+
+  const systemRoot = "systems/fallout-maw/storage/settings-presets";
+  const worldRoot = "worlds/test-world/settings-presets";
+  const files = new Map([
+    [`${systemRoot}/${main.id}.json`, main],
+    [`${systemRoot}/${inactive.id}.json`, inactive],
+    [`${worldRoot}/${main.id}.json`, main],
+    [`${worldRoot}/${inactive.id}.json`, inactive]
+  ]);
+  const browsed = [];
+  const fetched = [];
+  globalThis.CONFIG = {
+    ux: {
+      FilePicker: {
+        browse: async (_source, path) => {
+          browsed.push(path);
+          return { files: Array.from(files.keys()).filter(file => file.startsWith(`${path}/`)) };
+        }
+      }
+    }
+  };
+  globalThis.fetch = async path => {
+    fetched.push(String(path));
+    return {
+      ok: true,
+      json: async () => structuredClone(files.get(String(path)))
+    };
+  };
+
+  await SETTINGS_PRESET_TESTING.loadPresetSources({ startupOnly: true });
+
+  assert.deepEqual(browsed, [systemRoot]);
+  assert.deepEqual(fetched, [`${systemRoot}/${main.id}.json`]);
+  assert.equal((await getSettingsPreset(main.id)).revision, main.revision);
+
+  const listed = await listSettingsPresets();
+  assert.deepEqual(listed.map(preset => preset.id), [main.id, inactive.id]);
+  assert.deepEqual(browsed, [systemRoot, systemRoot, worldRoot]);
+  assert.equal(fetched.length, 5);
+});
+
+test("ordinary migrated initialization performs zero preset file or Setting writes", async () => {
+  let fileCalls = 0;
+  let batchCalls = 0;
+  const { state } = installFoundryMock({
+    modifyBatch: async () => {
+      batchCalls += 1;
+      return [];
+    }
+  });
+  Object.assign(state, {
+    migrationVersion: 1,
+    activePresetId: "fallout-maw",
+    appliedRevision: "existing"
+  });
+  globalThis.CONFIG = {
+    ux: {
+      FilePicker: {
+        browse: async () => { fileCalls += 1; return { files: [] }; },
+        upload: async () => { fileCalls += 1; return {}; },
+        uploadPersistent: async () => { fileCalls += 1; return {}; }
+      }
+    }
+  };
+  globalThis.fetch = async () => {
+    fileCalls += 1;
+    throw new Error("ordinary startup must not fetch presets");
+  };
+
+  await initializeSettingsPresets();
+
+  assert.equal(fileCalls, 0);
+  assert.equal(batchCalls, 0);
 });
 
 test("a corrupt pending file is ignored and rebuilt from the durable world-state document", async () => {

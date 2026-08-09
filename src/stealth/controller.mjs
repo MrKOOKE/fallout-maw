@@ -39,6 +39,7 @@ import {
 } from "./weapon-noise.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
+import { getDetectionModeIdFromRangeEffectKey } from "../canvas/vision-effect-keys.mjs";
 import {
   canRenderDetectionVisualizationForLocalUser,
   cleanupAllStealthVisualizations,
@@ -930,11 +931,15 @@ function getResponsibleGM() {
 function effectAffectsStealth(effect, changes, operation) {
   const statuses = new Set(effect?.statuses ?? []);
   if (statuses.size) return true;
-  const relevantSkill = (effect?.changes ?? []).some(change => String(change?.key ?? "").startsWith("system.skills."));
-  if (relevantSkill) return true;
-  const smokePerception = (effect?.system?.changes ?? effect?.changes ?? [])
-    .some(change => String(change?.key ?? "").trim() === SMOKE_PERCEPTION_PERCENT_EFFECT_KEY);
-  if (smokePerception) return true;
+  const effectChanges = effect?.system?.changes ?? effect?.changes ?? [];
+  for (const change of effectChanges) {
+    const key = String(change?.key ?? "").trim();
+    if (
+      key.startsWith("system.skills.")
+      || key === SMOKE_PERCEPTION_PERCENT_EFFECT_KEY
+      || getDetectionModeIdFromRangeEffectKey(key)
+    ) return true;
+  }
   if (operation !== "update") return false;
   return hasChangedPath(changes, ["statuses", "changes", "system.changes", "disabled", "transfer"]);
 }

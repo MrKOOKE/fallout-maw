@@ -217,8 +217,8 @@ test("actor smoke perception changes retained vision without changing smoke data
     }
   );
   assert.ok(Math.abs(improvedInside.cost - 95) < 1e-6);
-  assert.equal(blockedBehind.cost, 200);
-  assert.equal(blockedBehind.visibleDistance, 150);
+  assert.ok(Math.abs(blockedBehind.cost - 150) < 1e-6);
+  assert.equal(blockedBehind.visibleDistance, 200);
 
   const fromInsideToOutside = measureSmokePath(
     { x: 100, y: 0, elevation: 0 },
@@ -235,8 +235,8 @@ test("actor smoke perception changes retained vision without changing smoke data
     { x: 200, y: 0, elevation: 0 },
     { scene: transitScene, elevation: 0, budget: 75 }
   );
-  assert.equal(fromInsideToOutside.cost, 100);
-  assert.equal(fromInsideToOutside.visibleDistance, 75);
+  assert.equal(fromInsideToOutside.cost, 75);
+  assert.equal(fromInsideToOutside.visibleDistance, 100);
   assert.ok(unmodifiedFromInside.visibleDistance < 25);
 
   transitRegion.behaviors.contents[0].system.regionSpecialProperties[0].smoke.densityPercent = "100";
@@ -260,7 +260,7 @@ test("actor smoke perception changes retained vision without changing smoke data
     }
   );
   assert.ok(Number.isFinite(opaqueInside.cost));
-  assert.equal(opaqueBehind.cost, 200);
+  assert.ok(Math.abs(opaqueBehind.cost - (100 + (100 / 1.7))) < 1e-6);
 });
 
 test("partial smoke constrains global light while restoring observer smoke blocking", () => {
@@ -284,8 +284,16 @@ test("partial smoke constrains global light while restoring observer smoke block
     _createShapes() {
       const origin = { x: this.data?.x ?? 0, y: this.data?.y ?? 0 };
       this.los = createMask("los", 200, origin);
-      this.light = createMask("native-light", 200, origin);
-      this.shape = createMask("native-sight", 200, origin);
+      this.light = this._createLightPolygon();
+      this.shape = this._createRestrictedPolygon();
+    }
+    _createLightPolygon() {
+      const origin = { x: this.data?.x ?? 0, y: this.data?.y ?? 0 };
+      return createMask("native-light", 200, origin);
+    }
+    _createRestrictedPolygon() {
+      const origin = { x: this.data?.x ?? 0, y: this.data?.y ?? 0 };
+      return createMask("native-sight", 200, origin);
     }
   }
   class MockLightSource {
@@ -433,9 +441,10 @@ test("partial smoke constrains global light while restoring observer smoke block
     visionSource._createShapes();
     assert.deepEqual(constrainedMasks.map(mask => mask.name), [
       "emitted-light",
-      "native-light",
-      "native-sight"
+      "los"
     ]);
+    assert.equal(visionSource.light, visionSource.los);
+    assert.equal(visionSource.shape, visionSource.los);
     assert.ok(lightSource.shape.contains(10, 0));
     assert.equal(lightSource.shape.config.radius, 200);
     assert.equal(getSmokeLightBandAtPoint(lightSource, { x: 10, y: 0 }), "bright");
@@ -538,7 +547,7 @@ test("opaque smoke keeps special senses on a cached native wall-only collision",
     assert.equal(specialSense._testLOS(source, {}, null, visibilityTest), true);
     assert.equal(specialSense._testLOS(source, {}, null, visibilityTest), true);
     assert.equal(collisionCalls, 1);
-    assert.equal(collisionConfig._falloutMawIncludeSmokeEdges, false);
+    assert.equal(collisionConfig._falloutMawIncludeSmokeEdges, undefined);
   } finally {
     globalThis.CONFIG = previous.CONFIG;
     globalThis.Hooks = previous.Hooks;
@@ -548,7 +557,7 @@ test("opaque smoke keeps special senses on a cached native wall-only collision",
   }
 });
 
-test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall documents", () => {
+test("all smoke densities constrain one native LOS without synthetic CanvasEdges", () => {
   const previous = {
     canvas: globalThis.canvas,
     game: globalThis.game,
@@ -582,6 +591,7 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     static create(origin, config) {
       sweepCalls += 1;
       sweepTypes.push(config.type);
+      config.density ??= 16;
       const polygon = new this();
       polygon.origin = origin;
       polygon.config = config;
@@ -590,6 +600,13 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
       return {
         origin,
         config,
+        points: Array.from({ length: config.density }, (_, index) => {
+          const angle = (Math.PI * 2 * index) / config.density;
+          return [
+            origin.x + (Math.cos(angle) * config.radius),
+            origin.y + (Math.sin(angle) * config.radius)
+          ];
+        }).flat(),
         applyConstraint(constraint) {
           appliedConstraints.push(constraint);
           return this;
@@ -605,12 +622,16 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     get radius() { return 100; }
     _getPolygonConfiguration() { return { type: "sight", radius: 100, edgeTypes: { wall: true } }; }
     _createShapes() {
-      this.shape = globalThis.CONFIG.Canvas.polygonBackends.sight.create(
+      this.los = globalThis.CONFIG.Canvas.polygonBackends.sight.create(
         this.data,
         this._getPolygonConfiguration()
       );
-      this.los = this.light = this.shape;
+      this.shape = this.los;
+      this.light = this._createLightPolygon();
+      this.shape = this._createRestrictedPolygon();
     }
+    _createLightPolygon() { return this.los; }
+    _createRestrictedPolygon() { return this.los; }
   }
 
   class MockLightSource {
@@ -687,11 +708,7 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     registerSmokeVisionHooks();
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
 
-    assert.equal(edges.size, 4);
-    assert.equal([...edges.values()].every(edge => edge.type === "fallout-maw.smoke"), true);
-    assert.equal([...edges.values()].every(edge => edge.sight === 20), true);
-    assert.equal([...edges.values()].every(edge => edge.light === 20), true);
-    assert.equal([...edges.values()].every(edge => edge.object === undefined), true);
+    assert.equal(edges.size, 0);
     assert.equal(perceptionUpdates.some(flags => (
       flags.initializeLightSources === true && flags.initializeVision === true
     )), true);
@@ -706,10 +723,9 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     });
     source._createShapes();
     assert.equal(sweepCalls, 1);
-    assert.equal(includedSmokeEdges[0], true);
-    assert.equal(appliedConstraints.length, 2);
+    assert.equal(includedSmokeEdges[0], false);
+    assert.equal(appliedConstraints.length, 1);
     assert.equal(appliedConstraints[0].points.every(value => value === 50), true);
-    assert.equal(appliedConstraints[1].points.every(value => value === 50), true);
 
     const lightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(lightSource, {
@@ -718,9 +734,9 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     lightSource._createShapes();
     assert.equal(sweepCalls, 2);
     assert.deepEqual(sweepTypes, ["sight", "light"]);
-    assert.equal(includedSmokeEdges[1], true);
-    assert.equal(appliedConstraints.length, 3);
-    assert.equal(appliedConstraints[2].points.every(value => value === 50), true);
+    assert.equal(includedSmokeEdges[1], false);
+    assert.equal(appliedConstraints.length, 2);
+    assert.equal(appliedConstraints[1].points.every(value => value === 50), true);
 
     const outsideLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(outsideLightSource, {
@@ -728,7 +744,7 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     });
     outsideLightSource._createShapes();
     assert.equal(sweepCalls, 3);
-    assert.equal(includedSmokeEdges[2], true);
+    assert.equal(includedSmokeEdges[2], false);
     assert.equal(appliedConstraints.length, 3);
 
     const modifiedActor = {
@@ -745,7 +761,7 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     };
     const modifiedVisionSource = new globalThis.CONFIG.Canvas.visionSourceClass();
     Object.assign(modifiedVisionSource, {
-      data: { x: 150, y: 50, elevation: 0, externalRadius: 0 },
+      data: { x: 147, y: 53, elevation: 0, externalRadius: 0 },
       object: {
         actor: modifiedActor,
         document: {
@@ -758,7 +774,25 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     modifiedVisionSource._createShapes();
     assert.equal(sweepCalls, 4);
     assert.equal(includedSmokeEdges[3], false);
-    assert.equal(appliedConstraints.length, 5);
+    assert.equal(appliedConstraints.length, 4);
+    const boundaryAnchoredConstraint = appliedConstraints.at(-1).points;
+    assert.equal(boundaryAnchoredConstraint.some((value, index) => (
+      index % 2 === 0
+      && Math.abs(value - (modifiedVisionSource.data.x + modifiedVisionSource.radius)) < 1e-6
+      && Math.abs(boundaryAnchoredConstraint[index + 1] - modifiedVisionSource.data.y) < 1e-6
+    )), true);
+    for (const [x, y] of [[0, 0], [100, 0], [100, 100], [0, 100]]) {
+      const boundaryDx = x - modifiedVisionSource.data.x;
+      const boundaryDy = y - modifiedVisionSource.data.y;
+      assert.equal(boundaryAnchoredConstraint.some((value, index, points) => {
+        if (index % 2) return false;
+        const rayDx = value - modifiedVisionSource.data.x;
+        const rayDy = points[index + 1] - modifiedVisionSource.data.y;
+        const scale = Math.max(1, Math.hypot(boundaryDx, boundaryDy) * Math.hypot(rayDx, rayDy));
+        return ((boundaryDx * rayDx) + (boundaryDy * rayDy)) > 0
+          && Math.abs((boundaryDx * rayDy) - (boundaryDy * rayDx)) <= scale * 1e-8;
+      }), true);
+    }
 
     globalThis.canvas.scene = createScene([]);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });

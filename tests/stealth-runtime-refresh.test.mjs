@@ -167,6 +167,46 @@ test("runtime perception hooks invalidate immediately only when their logical si
   invalidateLightingAnalysisCache();
 });
 
+test("semantic vision effects refresh stealth only when their document changes", () => {
+  registerStealthHooks();
+  const createActiveEffect = hookCallbacks.get("createActiveEffect")?.at(0);
+  const deleteActiveEffect = hookCallbacks.get("deleteActiveEffect")?.at(0);
+  const canvasTearDown = hookCallbacks.get("canvasTearDown")?.at(0);
+  assert.equal(typeof createActiveEffect, "function");
+  assert.equal(typeof deleteActiveEffect, "function");
+
+  canvasTearDown();
+  scheduledTimers.clear();
+  globalThis.canvas = {
+    ready: true,
+    tokens: { placeables: [], get: () => null }
+  };
+  const actor = { uuid: "Actor.observer", statuses: new Set() };
+  const ordinaryEffect = {
+    parent: actor,
+    statuses: new Set(),
+    system: { changes: [{ key: "system.unrelated" }] }
+  };
+  const visionEffect = {
+    parent: actor,
+    statuses: new Set(),
+    system: {
+      changes: [{ key: "fallout-maw.vision.detectionModes.basicSight.range" }]
+    }
+  };
+
+  createActiveEffect(ordinaryEffect);
+  assert.equal(scheduledTimers.size, 0);
+  createActiveEffect(visionEffect);
+  assert.equal(scheduledTimers.size, 1);
+
+  canvasTearDown();
+  scheduledTimers.clear();
+  deleteActiveEffect(visionEffect);
+  assert.equal(scheduledTimers.size, 1);
+  canvasTearDown();
+});
+
 test("persistent detection visualization follows local permission, visibility, reveal, delete, and teardown", () => {
   registerStealthHooks();
   const canvasReady = hookCallbacks.get("canvasReady")?.at(0);

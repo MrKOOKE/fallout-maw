@@ -36,7 +36,6 @@ import { registerAdvancementMediaSocket } from "./advancement/media.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
 import {
   registerSystemSettings,
-  finalizeSystemSettings,
   initializeSettingsPresets,
   finalizeSettingsPresetStartup
 } from "./settings/index.mjs";
@@ -70,6 +69,7 @@ import {
   startConsciousnessStatusSynchronization
 } from "./combat/damage-hub.mjs";
 import { migrateWorldConsciousnessData } from "./migrations/world.mjs";
+import { removeObsoleteWorldSettings } from "./migrations/obsolete-world-settings.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
@@ -144,10 +144,7 @@ import { toInteger } from "./utils/numbers.mjs";
 import { evaluateEffectChangeNumber } from "./utils/effect-change-values.mjs";
 import { resolveWorldItemSync } from "./utils/world-items.mjs";
 import { executeInventoryMutation } from "./inventory/mutation.mjs";
-import {
-  registerInventoryRepairHooks,
-  repairWorldInventories
-} from "./inventory/migration.mjs";
+import { registerInventoryRepairHooks } from "./inventory/migration.mjs";
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
 
@@ -273,13 +270,13 @@ Hooks.once("ready", () => {
 });
 
 async function initializeFalloutMawReadyState() {
+  const startupStarted = globalThis.performance?.now?.() ?? Date.now();
+  const presetsStarted = globalThis.performance?.now?.() ?? Date.now();
   await initializeSettingsPresets();
-  await finalizeSystemSettings();
-  await finalizeSettingsPresetStartup();
+  const presetsFinished = globalThis.performance?.now?.() ?? Date.now();
   await migrateWorldConsciousnessData();
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorNeedThresholdEffects();
-  await repairWorldInventories();
   refreshSkillCheckControlButton();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
@@ -291,6 +288,18 @@ async function initializeFalloutMawReadyState() {
   await armFoundryVisionTracking();
   await startConsciousnessStatusSynchronization();
   initializeCraftRecipeWorldIndex();
+  await removeObsoleteWorldSettings();
+  // Ignore setting mutations produced by startup maintenance. From this point
+  // onward, a managed setting change is a real runtime/user change and may use
+  // the normal debounced preset autosave path.
+  await finalizeSettingsPresetStartup();
+  const startupFinished = globalThis.performance?.now?.() ?? Date.now();
+  const profile = Object.freeze({
+    settingsPresetsMs: Math.round(presetsFinished - presetsStarted),
+    readyStateMs: Math.round(startupFinished - startupStarted)
+  });
+  if (globalThis.CONFIG?.FalloutMaW) CONFIG.FalloutMaW.startupProfile = profile;
+  console.info(`${FALLOUT_MAW.title} | Startup profile`, profile);
 }
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

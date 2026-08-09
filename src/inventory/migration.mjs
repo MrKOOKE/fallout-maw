@@ -14,8 +14,8 @@ const queuedActors = new Map();
 
 /**
  * Register lightweight guards for documents which may enter the world outside
- * the normal inventory surfaces. Existing world data is repaired separately
- * from the ready hook.
+ * the normal inventory surfaces. The full-world repair remains an explicit
+ * migration tool and is never scanned on every ready hook.
  */
 export function registerInventoryRepairHooks() {
   if (hooksRegistered) return;

@@ -8,8 +8,7 @@ import {
   convertLegacyBaseline,
   createPresetDocument,
   createPresetSave,
-  normalizePresetDocument,
-  reconcilePresetSources
+  normalizePresetDocument
 } from "./schema.mjs";
 
 const PRESET_SOCKET = `system.${SYSTEM_ID}`;
@@ -41,6 +40,8 @@ const runtime = {
   descriptors: new Map(),
   sourceSystem: new Map(),
   sourceWorld: new Map(),
+  fullSourcesLoaded: false,
+  fullSourceLoadPromise: null,
   migrationSeed: null,
   legacyRemovedPresetIds: new Set(),
   lastError: "",
@@ -107,8 +108,14 @@ export async function initializeSettingsPresets() {
       return api;
     }
     await initializePrimaryClientLeadership();
-    await loadPresetSources();
-    if (isPrimaryGM()) await enqueueMutation(initializePrimaryGM);
+    // Once the versioned migration has completed, world Settings are already
+    // authoritative. An ordinary launch must not read, validate, apply, or
+    // rewrite multi-megabyte preset files. Sources are loaded lazily by the
+    // preset UI and by the real post-startup autosave path.
+    if (Number(getPresetState().migrationVersion || 0) < MIGRATION_VERSION) {
+      await loadPresetSources();
+      if (isPrimaryGM()) await enqueueMutation(initializePrimaryGM);
+    }
     runtime.ready = true;
     Hooks.callAll(`${SYSTEM_ID}.settingsPresetsReady`, api);
     return api;
@@ -128,7 +135,7 @@ export async function finalizeSettingsPresetStartup() {
   runtime.autosaveEnabled = true;
   if (hasDeferredApplyEffects) {
     runtime.deferredApplyEffects = false;
-    await enqueuePresetApplyEffects({ skipCoreEffects: true });
+    await enqueuePresetApplyEffects();
   }
   return null;
 }
@@ -173,7 +180,7 @@ export function getManagedPresetSettings() {
 }
 
 function getManagedPresetSignature() {
-  return JSON.stringify(getManagedPresetSettings().map(setting => ({
+  return compactJsonSignature(getManagedPresetSettings().map(setting => ({
     id: setting.id,
     type: settingTypeSignature(setting.type),
     defaultShape: jsonValueShape(setting.default),
@@ -184,6 +191,7 @@ function getManagedPresetSignature() {
 }
 
 export async function listSettingsPresets() {
+  await ensureFullPresetSourcesLoaded();
   return Array.from(runtime.descriptors.values())
     .map(descriptor => describePreset(descriptor.preset))
     .sort((left, right) => {
@@ -194,12 +202,14 @@ export async function listSettingsPresets() {
 
 export async function getSettingsPreset(id) {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   const preset = runtime.presets.get(presetId) ?? runtime.descriptors.get(presetId)?.preset;
   return preset ? cloneValue(sanitizePresetSettings(preset)) : null;
 }
 
 export async function getActiveSettingsPreset() {
   const id = getPresetState().activePresetId;
+  if (id && !runtime.presets.has(id)) await ensureActivePresetSourcesLoaded();
   const preset = runtime.presets.get(id);
   return preset ? describePreset(preset) : null;
 }
@@ -225,6 +235,7 @@ export async function createSettingsPreset(nameOrOptions, options = {}) {
     options = nameOrOptions;
     nameOrOptions = options.name;
   }
+  await ensureFullPresetSourcesLoaded();
   const cleanName = normalizeName(nameOrOptions, game.world?.title || "Preset");
   return runMutation("create", [cleanName, normalizeMutationOptions(options)], async () => {
     await flushActivePresetLocal();
@@ -241,6 +252,7 @@ export async function createSettingsPreset(nameOrOptions, options = {}) {
 }
 
 export async function activateSettingsPreset(id) {
+  if (!runtime.presets.has(String(id ?? ""))) await ensureFullPresetSourcesLoaded();
   return runMutation("activate", [String(id ?? "")], async () => {
     const preset = await activatePresetLocal(String(id ?? ""));
     broadcastPresetChange();
@@ -250,6 +262,7 @@ export async function activateSettingsPreset(id) {
 
 export async function renameSettingsPreset(id, name) {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   const cleanName = normalizeName(name);
   return runMutation("rename", [presetId, cleanName], async () => {
     await flushActivePresetLocal();
@@ -267,6 +280,7 @@ export async function renameSettingsPreset(id, name) {
 
 export async function removeSettingsPreset(id) {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   return runMutation("remove", [presetId], async () => {
     if (presetId === MAIN_PRESET_ID) throw new Error("The Fallout-MaW preset cannot be deleted.");
     await flushActivePresetLocal();
@@ -298,6 +312,7 @@ export async function removeSettingsPreset(id) {
 /** Store the preset's current complete settings as an immutable nested save. */
 export async function saveSettingsPresetVersion(id, name = "") {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   return runMutation("saveVersion", [presetId, String(name ?? "")], async () => {
     await flushActivePresetLocal();
     const current = requirePreset(presetId);
@@ -320,6 +335,7 @@ export async function saveSettingsPresetVersion(id, name = "") {
 /** Replace the preset's current revision with a nested save and activate it. */
 export async function restoreSettingsPresetVersion(id, saveId) {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   const nestedId = String(saveId ?? "");
   return runMutation("restoreVersion", [presetId, nestedId], async () => {
     await flushActivePresetLocal();
@@ -337,6 +353,7 @@ export async function restoreSettingsPresetVersion(id, saveId) {
 /** Delete one nested save without changing the preset's current settings. */
 export async function removeSettingsPresetVersion(id, saveId) {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   const nestedId = String(saveId ?? "");
   return runMutation("removeVersion", [presetId, nestedId], async () => {
     await flushActivePresetLocal();
@@ -387,6 +404,7 @@ export async function migrateSettingsPresetValues(entries = []) {
 }
 
 export async function importSettingsPreset(input, options = {}) {
+  await ensureFullPresetSourcesLoaded();
   let document = input;
   if (isFileLike(input)) {
     const text = await foundry.utils.readTextFromFile(input);
@@ -440,6 +458,7 @@ export async function importSettingsPreset(input, options = {}) {
 
 export async function exportSettingsPreset(id) {
   const presetId = String(id ?? "");
+  if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   if (getPresetState().activePresetId === presetId) await flushSettingsPreset();
   const preset = sanitizePresetSettings(requirePreset(presetId));
   const data = cloneValue(preset);
@@ -494,23 +513,38 @@ async function initializePrimaryGM() {
       throw new Error("A pending settings preset file could not be recovered during startup.");
     }
   }
-  await restoreUniqueWorldPresets();
+  // A normal launch loads only the active startup set. Restoring or backing up
+  // the complete catalog is deliberately reserved for an explicit refresh.
+  if (runtime.fullSourcesLoaded) await restoreUniqueWorldPresets();
   // World imprint is manual (preset save / refresh), not every world launch.
 
   const state = getPresetState();
   if (Number(state.migrationVersion || 0) < MIGRATION_VERSION) await migrateExistingWorld();
-  else await applyActiveRevisionIfNeeded();
 
   const nextState = getPresetState();
   if (nextState.pendingPresetId) await reconcilePendingWrite();
 }
 
-async function loadPresetSources({ bustCache = false } = {}) {
-  const [systemDocuments, worldDocuments] = await Promise.all([
-    readPresetDirectory(SYSTEM_PRESET_DIRECTORY, { required: true, bustCache }),
-    readPresetDirectory(getWorldPresetDirectory(), { required: false, bustCache })
-  ]);
+async function loadPresetSources({ bustCache = false, startupOnly = false } = {}) {
+  runtime.fullSourcesLoaded = false;
+  const state = getPresetState();
+  const startupIds = startupOnly ? getStartupPresetIds(state) : null;
+  const systemDocuments = await readPresetDirectory(SYSTEM_PRESET_DIRECTORY, {
+    required: true,
+    bustCache,
+    includeIds: startupIds
+  });
   const rawSystem = indexPresetDocuments(systemDocuments);
+  const worldIds = startupOnly
+    ? new Set(Array.from(startupIds).filter(id => !rawSystem.has(id) || id === state.pendingPresetId))
+    : null;
+  const worldDocuments = worldIds?.size === 0
+    ? []
+    : await readPresetDirectory(getWorldPresetDirectory(), {
+      required: false,
+      bustCache,
+      includeIds: worldIds
+    });
   const rawWorld = indexPresetDocuments(worldDocuments);
   assertNoPresetSourceCaseCollisions([...rawSystem.keys(), ...rawWorld.keys()]);
   runtime.legacyRemovedPresetIds = new Set(
@@ -533,15 +567,12 @@ async function loadPresetSources({ bustCache = false } = {}) {
     if (worldPending?.revision === pending.pendingRevision) runtime.sourceSystem.delete(pending.pendingPresetId);
   }
 
-  const reconciled = reconcilePresetSources({
-    systemPresets: Array.from(runtime.sourceSystem.values()),
-    worldPresets: Array.from(runtime.sourceWorld.values())
-  });
+  const reconciled = reconcileLoadedPresetSources(runtime.sourceSystem, runtime.sourceWorld);
   runtime.presets.clear();
   runtime.descriptors.clear();
   runtime.migrationSeed = null;
   for (const descriptor of reconciled.presets ?? []) {
-    const preset = normalizePresetDocument(descriptor.preset ?? descriptor);
+    const preset = descriptor.preset ?? descriptor;
     if (preset.id === MIGRATION_SEED_PRESET_ID) {
       if (preset.deleted) throw new Error("The internal settings migration seed cannot be deleted.");
       runtime.migrationSeed = preset;
@@ -556,7 +587,7 @@ async function loadPresetSources({ bustCache = false } = {}) {
     });
     runtime.presets.set(preset.id, preset);
   }
-  runtime.restoreToSystem = (reconciled.restoreToSystem ?? []).map(normalizePresetDocument);
+  runtime.restoreToSystem = reconciled.restoreToSystem ?? [];
   const pendingDocument = pending.pendingDocument;
   if (pending.pendingPresetId
       && pending.pendingRevision
@@ -582,6 +613,50 @@ async function loadPresetSources({ bustCache = false } = {}) {
   if (Number(getPresetState().migrationVersion || 0) < MIGRATION_VERSION && !runtime.migrationSeed) {
     throw new Error("The immutable Fallout-MaW migration seed was not found.");
   }
+  runtime.fullSourcesLoaded = !startupOnly;
+}
+
+function getStartupPresetIds(state = getPresetState()) {
+  const ids = new Set([MAIN_PRESET_ID]);
+  if (state.activePresetId) ids.add(state.activePresetId);
+  if (state.pendingPresetId) ids.add(state.pendingPresetId);
+  return ids;
+}
+
+function reconcileLoadedPresetSources(systemPresets, worldPresets) {
+  const descriptors = [];
+  for (const preset of systemPresets.values()) {
+    descriptors.push({ preset, source: "system", restoreToSystem: false });
+  }
+  const restoreToSystem = [];
+  for (const preset of worldPresets.values()) {
+    if (systemPresets.has(preset.id)) continue;
+    descriptors.push({ preset, source: "world", restoreToSystem: true });
+    restoreToSystem.push(preset);
+  }
+  descriptors.sort((left, right) => left.preset.id.localeCompare(right.preset.id));
+  restoreToSystem.sort((left, right) => left.id.localeCompare(right.id));
+  return { presets: descriptors, restoreToSystem };
+}
+
+async function ensureFullPresetSourcesLoaded() {
+  if (runtime.fullSourcesLoaded) return;
+  if (!runtime.fullSourceLoadPromise) {
+    runtime.fullSourceLoadPromise = loadPresetSources().finally(() => {
+      runtime.fullSourceLoadPromise = null;
+    });
+  }
+  await runtime.fullSourceLoadPromise;
+}
+
+async function ensureActivePresetSourcesLoaded() {
+  const activeId = getPresetState().activePresetId || MAIN_PRESET_ID;
+  if (runtime.presets.has(MAIN_PRESET_ID) && runtime.presets.has(activeId)) return;
+  if (runtime.fullSourceLoadPromise) {
+    await runtime.fullSourceLoadPromise;
+    return;
+  }
+  await loadPresetSources({ startupOnly: true });
 }
 
 async function adoptLegacyLocalRemovals() {
@@ -795,6 +870,7 @@ async function activatePresetLocal(id, { skipFlush = false } = {}) {
 async function flushActivePresetLocal() {
   clearTimeout(runtime.autosaveTimer);
   runtime.autosaveTimer = null;
+  await ensureActivePresetSourcesLoaded();
   if (getPresetState().pendingPresetId) {
     await reconcilePendingWrite();
     if (getPresetState().pendingPresetId) {
@@ -1306,6 +1382,7 @@ async function savePresetCopies(rawPreset, { statePatch = {} } = {}) {
 }
 
 async function persistPresetCopies(preset, { scheduleRetry = true } = {}) {
+  const started = globalThis.performance?.now?.() ?? Date.now();
   let worldSaved = false;
   let systemSaved = false;
   const errors = [];
@@ -1333,6 +1410,13 @@ async function persistPresetCopies(preset, { scheduleRetry = true } = {}) {
     clearTimeout(runtime.retryTimer);
     runtime.retryTimer = null;
   }
+  const finished = globalThis.performance?.now?.() ?? Date.now();
+  console.info(`${SYSTEM_TITLE} | Preset file write`, {
+    presetId: preset.id,
+    durationMs: Math.round(finished - started),
+    systemSaved,
+    worldSaved
+  });
   return { systemSaved, worldSaved };
 }
 
@@ -1382,7 +1466,11 @@ function clearPendingPresetRetry() {
   runtime.retryTimer = null;
 }
 
-async function readPresetDirectory(directory, { required = false, bustCache = false } = {}) {
+async function readPresetDirectory(directory, {
+  required = false,
+  bustCache = false,
+  includeIds = null
+} = {}) {
   let browse;
   try {
     browse = await getFilePicker().browse("data", directory, { extensions: [".json"] });
@@ -1392,6 +1480,7 @@ async function readPresetDirectory(directory, { required = false, bustCache = fa
   }
   const files = Array.from(browse?.files ?? [])
     .filter(path => String(path).toLowerCase().endsWith(".json"))
+    .filter(path => !includeIds || includeIds.has(presetIdFromPath(path)))
     .sort();
   const documents = (await Promise.all(files.map(async path => {
     try {
@@ -1407,6 +1496,11 @@ async function readPresetDirectory(directory, { required = false, bustCache = fa
     }
   }))).filter(Boolean);
   return documents;
+}
+
+function presetIdFromPath(path) {
+  const filename = String(path).replaceAll("\\", "/").split("/").at(-1) ?? "";
+  return filename.toLowerCase().endsWith(".json") ? filename.slice(0, -5) : "";
 }
 
 function indexPresetDocuments(documents) {
@@ -1479,7 +1573,7 @@ async function ensureDirectory(directory) {
 
 function presetFile(preset) {
   return new File(
-    [JSON.stringify(normalizePresetDocument(preset), null, 2)],
+    [JSON.stringify(preset)],
     `${preset.id}.json`,
     { type: "application/json" }
   );
@@ -1870,6 +1964,7 @@ function schedulePrimaryClientLeadershipRetry(locks = globalThis.navigator?.lock
 
 async function promotePrimaryClient() {
   if (!isPrimaryGM()) return;
+  if (Number(getPresetState().migrationVersion || 0) >= MIGRATION_VERSION) return;
   await enqueueMutation(async () => {
     await loadPresetSources();
     await initializePrimaryGM();
@@ -2146,6 +2241,7 @@ export const SETTINGS_PRESET_TESTING = Object.freeze({
     runtime.presets.clear();
     runtime.descriptors.clear();
     for (const preset of presets) setRuntimePreset(preset, "system+world");
+    runtime.fullSourcesLoaded = true;
   },
   installSources({ system = [], world = [] } = {}) {
     runtime.sourceSystem = new Map(system.map(preset => [preset.id, preset]));
@@ -2158,6 +2254,8 @@ export const SETTINGS_PRESET_TESTING = Object.freeze({
     runtime.descriptors.clear();
     runtime.sourceSystem.clear();
     runtime.sourceWorld.clear();
+    runtime.fullSourcesLoaded = false;
+    runtime.fullSourceLoadPromise = null;
     runtime.applyCallbacks.clear();
     runtime.applyBatches.clear();
     runtime.applyEffectFlags.actors = false;

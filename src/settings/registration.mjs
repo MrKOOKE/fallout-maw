@@ -38,7 +38,7 @@ import {
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
 import { SettingsPresetsConfig } from "../apps/settings-presets-config.mjs";
-import { refreshPreparedActors, refreshPreparedActorsAfterConfig, syncSettingsIntoSystemConfig } from "./accessors.mjs";
+import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
   createDefaultSettingsPresetState,
   getMainPresetDefault,
@@ -682,13 +682,10 @@ export function registerSystemSettings() {
   });
 
   registerSettingsPresetTools();
-}
-
-export async function finalizeSystemSettings() {
+  // Foundry initializes world Documents only after the init hook. Synchronize
+  // CONFIG now so Actors are prepared correctly on their first and only pass.
   syncSettingsIntoSystemConfig();
   registerFactionApi();
-  // Startup only needs world actors; token actors re-prepare when used.
-  refreshPreparedActorsAfterConfig({ worldOnly: true });
 }
 
 function onCreatureOptionsChanged() {

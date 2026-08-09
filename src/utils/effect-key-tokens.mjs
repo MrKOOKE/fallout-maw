@@ -73,6 +73,9 @@ import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
 import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
 import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
+import {
+  getDetectionModeRangeEffectKeyDescriptors
+} from "../canvas/vision-effect-keys.mjs";
 
 export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
@@ -193,6 +196,7 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     ...buildDodgeResourceEffectKeyTokens(),
     ...buildSuppressionEffectKeyTokens(),
     ...buildCombatEffectKeyTokens(),
+    ...buildDetectionModeRangeEffectKeyTokens(),
     buildSmokePerceptionEffectKeyToken(),
     ...buildStealthAttackBonusEffectKeyTokens(),
     ...buildReverseInteractionEffectKeyTokens()
@@ -209,6 +213,20 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildDetectionModeRangeEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.VisionGroup");
+  return getDetectionModeRangeEffectKeyDescriptors().map(entry => {
+    const mode = game.i18n.localize(entry.label);
+    return createEffectKeyToken({
+      code: `vision:${entry.id}`,
+      key: `vision.${entry.id}`,
+      label: mode,
+      path: entry.path,
+      group
+    });
+  }).filter(Boolean);
 }
 
 export function buildSmokePerceptionEffectKeyToken() {

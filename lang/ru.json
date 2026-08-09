@@ -1902,6 +1902,7 @@
     },
     "Effects": {
       "PerceptionGroup": "Восприятие",
+      "VisionGroup": "Зрение и обнаружение",
       "SmokePerceptionPercent": "Изменение восприятия дыма, %",
       "AddChange": "Добавить изменение",
       "ChangeAdd": "Изменение",

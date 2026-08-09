@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "f73f6c41c17ecd8ae5d224004b4e39873cb6a9c1f8fa3dd0e10c502b71df21ca",
-  "updatedAt": "2026-08-08T19:14:16.665Z",
+  "revision": "e8f387a26612c38935d6834be811953ef2dc828644f3ab8f9d8a10359a133fb2",
+  "updatedAt": "2026-08-09T03:58:40.449Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -6671,6 +6671,61 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Ночное зрение: +[[2+naturalist/25]]м</p></li></ul>",
+                "id": "57iytm6b7jx981OU",
+                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
+                "name": "Большие фары",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "QfxvcePKGFLWZfmH",
+                      "skillKey": "naturalist",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Натуралист",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "fsWUJqLbbVU1rGea",
+                          "key": "fallout-maw.smoke.perceptionPercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-50-nat/2"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "47dsWGi7YKcNEZsv",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<ul><li><p>Все способности категории Натуралист более не получают перегрузку.</p></li><li><p>Время караула все равно считается отдыхом.</p></li><li><p>Вас нельзя застигнуть в расплох.</p></li><li><p>В радиусе [[1+naturalist/20]]м от вас невозможно скрыться.</p></li><li><p>Вы замечаете любую ловушку.</p></li><li><p>+50 Абсолютного уклонения</p></li></ul>",
                 "id": "eUBdZyuzh2YpddzW",
                 "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
@@ -6740,61 +6795,6 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "sTZ9W6A0laoefuaj",
-                      "includeInPureValues": false,
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<ul><li><p>Ограничение зрения от дыма: -[[50+naturalist/2]]%</p></li></ul>",
-                "id": "57iytm6b7jx981OU",
-                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
-                "name": "Дымник",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "naturalist"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "QfxvcePKGFLWZfmH",
-                      "skillKey": "naturalist",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Натуралист",
-                  "constructs": [],
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "fsWUJqLbbVU1rGea",
-                          "key": "fallout-maw.smoke.perceptionPercent",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-50-nat/2"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "47dsWGi7YKcNEZsv",
                       "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {

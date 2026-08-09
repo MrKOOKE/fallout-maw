@@ -69,6 +69,7 @@ import {
   getActorApplicableEffects,
   markActorEmbeddedEffectsPrepared
 } from "./actor-effect-preparation-index.mjs";
+import { expandDetectionModeRangeEffectChange } from "../canvas/vision-effect-keys.mjs";
 import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
@@ -314,21 +315,22 @@ export class FalloutMaWActor extends Actor {
         if (applicationPhase !== phase) continue;
         const copy = foundry.utils.deepClone(change);
         copy.effect = effect;
-        if (copy.key?.startsWith("token.")) {
-          copy.key = copy.key.slice(6);
-          const tokenValue = copy.value;
-          const usesPreparedReferences = typeof tokenValue === "string"
-            && !Number.isFinite(Number(tokenValue.trim()))
-            && formulaUsesPreparedActorReferences(tokenValue, getFormulaData());
-          if (usesPreparedReferences) {
-            const preparedTokenChange = prepareActorEffectChangeForApplication(this, copy, {
-              stage: formulaStage,
-              formulaData: getFormulaData
+        const visionTokenChanges = expandDetectionModeRangeEffectChange(copy);
+        if (visionTokenChanges) {
+          for (const tokenChange of visionTokenChanges) {
+            const prepared = prepareTokenActiveEffectChange(this, tokenChange, {
+              formulaStage,
+              getFormulaData
             });
-            if (preparedTokenChange) tokenChanges.push(preparedTokenChange);
-          } else {
-            tokenChanges.push(copy);
+            if (prepared) tokenChanges.push(prepared);
           }
+        } else if (copy.key?.startsWith("token.")) {
+          copy.key = copy.key.slice(6);
+          const prepared = prepareTokenActiveEffectChange(this, copy, {
+            formulaStage,
+            getFormulaData
+          });
+          if (prepared) tokenChanges.push(prepared);
         } else {
           changes.push(...expandActorEffectChangeKeys(this, copy));
         }
@@ -628,6 +630,18 @@ function prepareActorLoadData(actor) {
   const load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
   actor.system.load = load;
   setCachedActorLoadPreparation(actor, signature, runtimeSettings, load);
+}
+
+function prepareTokenActiveEffectChange(actor, change, { formulaStage, getFormulaData }) {
+  const value = change?.value;
+  const usesPreparedReferences = typeof value === "string"
+    && !Number.isFinite(Number(value.trim()))
+    && formulaUsesPreparedActorReferences(value, getFormulaData());
+  if (!usesPreparedReferences) return change;
+  return prepareActorEffectChangeForApplication(actor, change, {
+    stage: formulaStage,
+    formulaData: getFormulaData()
+  });
 }
 
 function getActorLoadPreparationSignature(race, characteristics = {}, skills = {}, bonus = 0) {
