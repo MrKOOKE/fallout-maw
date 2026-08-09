@@ -192,6 +192,75 @@ test("actor smoke perception changes retained vision without changing smoke data
   assert.equal(getActorSmokeDensityAdjustment(actor), -1.7);
   assert.ok(Math.abs(enhancedMeasurement.cost - 10) < 1e-6);
   assert.equal(enhancedMeasurement.visibleDistance, 20);
+
+  const transitRegion = createSmokeRegion("perception-transit", 70);
+  transitRegion.shapes[0] = { type: "circle", x: 100, y: 0, radius: 50 };
+  transitRegion.object.bounds = { x: 50, y: -50, width: 100, height: 100 };
+  const transitScene = createScene([transitRegion]);
+  const improvedInside = measureSmokePath(
+    { x: 0, y: 0, elevation: 0 },
+    { x: 140, y: 0, elevation: 0 },
+    {
+      scene: transitScene,
+      elevation: 0,
+      densityAdjustment: getActorSmokeDensityAdjustment(actor)
+    }
+  );
+  const blockedBehind = measureSmokePath(
+    { x: 0, y: 0, elevation: 0 },
+    { x: 200, y: 0, elevation: 0 },
+    {
+      scene: transitScene,
+      elevation: 0,
+      budget: 150,
+      densityAdjustment: getActorSmokeDensityAdjustment(actor)
+    }
+  );
+  assert.ok(Math.abs(improvedInside.cost - 95) < 1e-6);
+  assert.equal(blockedBehind.cost, 200);
+  assert.equal(blockedBehind.visibleDistance, 150);
+
+  const fromInsideToOutside = measureSmokePath(
+    { x: 100, y: 0, elevation: 0 },
+    { x: 200, y: 0, elevation: 0 },
+    {
+      scene: transitScene,
+      elevation: 0,
+      budget: 75,
+      densityAdjustment: getActorSmokeDensityAdjustment(actor)
+    }
+  );
+  const unmodifiedFromInside = measureSmokePath(
+    { x: 100, y: 0, elevation: 0 },
+    { x: 200, y: 0, elevation: 0 },
+    { scene: transitScene, elevation: 0, budget: 75 }
+  );
+  assert.equal(fromInsideToOutside.cost, 100);
+  assert.equal(fromInsideToOutside.visibleDistance, 75);
+  assert.ok(unmodifiedFromInside.visibleDistance < 25);
+
+  transitRegion.behaviors.contents[0].system.regionSpecialProperties[0].smoke.densityPercent = "100";
+  invalidateSmokeRegionIndex(transitScene);
+  const opaqueInside = measureSmokePath(
+    { x: 0, y: 0, elevation: 0 },
+    { x: 140, y: 0, elevation: 0 },
+    {
+      scene: transitScene,
+      elevation: 0,
+      densityAdjustment: getActorSmokeDensityAdjustment(actor)
+    }
+  );
+  const opaqueBehind = measureSmokePath(
+    { x: 0, y: 0, elevation: 0 },
+    { x: 200, y: 0, elevation: 0 },
+    {
+      scene: transitScene,
+      elevation: 0,
+      densityAdjustment: getActorSmokeDensityAdjustment(actor)
+    }
+  );
+  assert.ok(Number.isFinite(opaqueInside.cost));
+  assert.equal(opaqueBehind.cost, 200);
 });
 
 test("partial smoke constrains global light while restoring observer smoke blocking", () => {

@@ -315,7 +315,7 @@ export function measureSmokePath(from, to, {
   useLightDispersion = false,
   lightCandidates = null
 } = {}) {
-  const profile = buildSmokePathProfile(from, to, {
+  const adjustedProfile = buildSmokePathProfile(from, to, {
     scene,
     elevation,
     regionCandidates,
@@ -324,6 +324,12 @@ export function measureSmokePath(from, to, {
     useLightDispersion,
     lightCandidates
   });
+  // Negative perceived density may improve range while the destination is
+  // still inside smoke. Once a ray exits the volume, however, smoke cannot
+  // become cheaper than clear air and carry a range bonus beyond its boundary.
+  const profile = densityAdjustment && !isProfileDestinationInsideSmoke(adjustedProfile)
+    ? createTransitDensityProfile(adjustedProfile)
+    : adjustedProfile;
   let cost = 0;
   for (const segment of profile.segments) {
     if (segment.retained <= EPSILON) {
@@ -805,11 +811,19 @@ function buildSmokeVisionConstraints(source, radius, lightBudget, sightBudget) {
       densityAdjustment
     });
     if (lightBudget !== null) {
-      const distance = calculateProfileVisibleDistance(profile, lightBudget, { chargeClearDistance: false });
+      const distance = calculatePerceptionLimitedVisibleDistance(
+        profile,
+        lightBudget,
+        { chargeClearDistance: false }
+      );
       lightPoints.push(x + (dx * distance), y + (dy * distance));
     }
     if (sightBudget !== null) {
-      const distance = calculateProfileVisibleDistance(profile, sightBudget, { chargeClearDistance: true });
+      const distance = calculatePerceptionLimitedVisibleDistance(
+        profile,
+        sightBudget,
+        { chargeClearDistance: true }
+      );
       sightPoints.push(x + (dx * distance), y + (dy * distance));
     }
   }
@@ -900,6 +914,38 @@ function calculateProfileVisibleDistance(profile, budget, { chargeClearDistance 
     remaining -= cost;
   }
   return profile.length;
+}
+
+function calculatePerceptionLimitedVisibleDistance(profile, budget, options = {}) {
+  const adjustedDistance = calculateProfileVisibleDistance(profile, budget, options);
+  const transitDistance = calculateProfileVisibleDistance(createTransitDensityProfile(profile), budget, options);
+  if (adjustedDistance <= transitDistance + EPSILON) return adjustedDistance;
+  let furthestAdjustedSmokePoint = 0;
+  for (const segment of profile.segments) {
+    if (!segment.hasSmoke) continue;
+    const startDistance = segment.start * profile.length;
+    if (startDistance > adjustedDistance + EPSILON) break;
+    furthestAdjustedSmokePoint = Math.max(
+      furthestAdjustedSmokePoint,
+      Math.min(segment.end * profile.length, adjustedDistance)
+    );
+  }
+  return Math.max(transitDistance, furthestAdjustedSmokePoint);
+}
+
+function createTransitDensityProfile(profile) {
+  return {
+    ...profile,
+    segments: profile.segments.map(segment => ({
+      ...segment,
+      retained: Math.min(1, segment.retained)
+    }))
+  };
+}
+
+function isProfileDestinationInsideSmoke(profile) {
+  const last = profile.segments.at(-1);
+  return Boolean(last?.hasSmoke && last.end >= 1 - EPSILON);
 }
 
 function getBasicSightRadius(source, fallbackRadius) {
