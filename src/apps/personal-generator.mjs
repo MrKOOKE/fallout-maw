@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { DEFAULT_PERSONAL_NAME_BLOCKS } from "../data/personal-name-library.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
 import { actorHasAbility, findCatalogAbility, grantAbilityItemData } from "../abilities/purchase.mjs";
@@ -62,12 +63,7 @@ const DEFAULT_NAME_BLOCK_IDS = Object.freeze({
   nobleSurname: "default-surnames-noble"
 });
 
-const DEFAULT_NAME_BLOCKS = Object.freeze([
-  { id: DEFAULT_NAME_BLOCK_IDS.male, name: "Мужские имена", namesText: "Аарон, Адам, Артур, Виктор, Даниил, Илья, Максим, Роман" },
-  { id: DEFAULT_NAME_BLOCK_IDS.female, name: "Женские имена", namesText: "Анна, Алиса, Виктория, Дарья, Елена, Ирина, Мария, София" },
-  { id: DEFAULT_NAME_BLOCK_IDS.commonSurname, name: "Простые фамилии", namesText: "Смит, Браун, Миллер, Уилсон, Кларк, Уокер, Холл, Янг" },
-  { id: DEFAULT_NAME_BLOCK_IDS.nobleSurname, name: "Знатные фамилии", namesText: "Блэквуд, Фэрфакс, Уиндзор, Кавендиш, Монтгомери, Равенскрофт" }
-]);
+const DEFAULT_NAME_BLOCKS = DEFAULT_PERSONAL_NAME_BLOCKS;
 
 const DEFAULT_NAME_BLOCK_ID_LIST = Object.freeze([
   DEFAULT_NAME_BLOCK_IDS.male,

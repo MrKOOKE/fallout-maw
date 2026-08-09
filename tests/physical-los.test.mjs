@@ -1,11 +1,105 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPhysicalLosTransitionCache } from "../src/canvas/physical-los.mjs";
+import {
+  createPhysicalLosTransitionCache,
+  testObserverVisibilityBatch
+} from "../src/canvas/physical-los.mjs";
 
 function makeToken(uuid, actorUuid = "") {
   return { uuid, document: { uuid }, actor: actorUuid ? { uuid: actorUuid } : null };
 }
+
+test("observer batch uses Foundry's native vision origin and target test points", () => {
+  const previousCanvas = globalThis.canvas;
+  const previousConfig = globalThis.CONFIG;
+  const previousFoundry = globalThis.foundry;
+  const nativePoints = [{ x: 50, y: 60, elevation: 7 }];
+  let initializedData = null;
+  let configuredPoints = null;
+  let destroyed = false;
+
+  class VisionSource {
+    constructor() {
+      this.blinded = {};
+      this.isBlinded = false;
+    }
+
+    initialize(data) {
+      initializedData = data;
+    }
+
+    destroy() {
+      destroyed = true;
+    }
+  }
+
+  globalThis.foundry = {
+    ...(previousFoundry ?? {}),
+    utils: {
+      ...(previousFoundry?.utils ?? {}),
+      randomID: () => "native-vision-test"
+    }
+  };
+  globalThis.CONFIG = {
+    ...(previousConfig ?? {}),
+    Canvas: {
+      ...(previousConfig?.Canvas ?? {}),
+      visionSourceClass: VisionSource,
+      detectionModes: {
+        basicSight: {
+          testVisibility: () => true
+        }
+      }
+    }
+  };
+  globalThis.canvas = {
+    ready: true,
+    visibility: {
+      tokenVision: true,
+      _createVisibilityTestConfig(points) {
+        configuredPoints = points;
+        return { tests: [] };
+      }
+    }
+  };
+
+  const observer = {
+    sourceId: "observer",
+    hasSight: true,
+    center: { x: 999, y: 999 },
+    document: {
+      id: "observer",
+      uuid: "Scene.scene.Token.observer",
+      detectionModes: {
+        basicSight: { enabled: true, range: 30 }
+      }
+    },
+    _getVisionBlindedStates: () => ({}),
+    _getVisionSourceData: () => ({ x: 11, y: 22, elevation: 7, radius: 300 })
+  };
+  const target = {
+    document: {
+      uuid: "Scene.scene.Token.target",
+      getVisibilityTestPoints: () => nativePoints
+    }
+  };
+
+  try {
+    const result = testObserverVisibilityBatch(observer, [target]);
+    assert.equal(result.get(target.document.uuid), true);
+    assert.equal(initializedData.x, 11);
+    assert.equal(initializedData.y, 22);
+    assert.equal(initializedData.elevation, 7);
+    assert.equal(initializedData.disabled, false);
+    assert.equal(configuredPoints, nativePoints);
+    assert.equal(destroyed, true);
+  } finally {
+    globalThis.canvas = previousCanvas;
+    globalThis.CONFIG = previousConfig;
+    globalThis.foundry = previousFoundry;
+  }
+});
 
 async function flushTimers(timers) {
   while (timers.length) {

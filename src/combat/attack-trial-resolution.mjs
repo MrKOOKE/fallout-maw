@@ -50,6 +50,8 @@ export async function resolveAttackTrialResolution({
   operationId = "",
   chainRef = null,
   source = {},
+  sourceCheckData = {},
+  sourceCheckDataByMode = null,
   requester = "abilityAttackTrial",
   animate = false,
   createMessage = true
@@ -130,7 +132,9 @@ export async function resolveAttackTrialResolution({
           data: buildSkillCheckData(entry, {
             sourceActor,
             sourceToken,
-            operationId: baseOperationId
+            operationId: baseOperationId,
+            sourceCheckData,
+            sourceCheckDataByMode
           })
         })),
         animate,
@@ -405,10 +409,27 @@ function selectTrialSkill(trial, actor) {
 function buildSkillCheckData(entry, {
   sourceActor,
   sourceToken,
-  operationId
+  operationId,
+  sourceCheckData,
+  sourceCheckDataByMode
 }) {
   const checksSource = entry.subject === TRIAL_SUBJECT_TARGETS;
+  const modeCheckData = sourceCheckDataByMode
+    && typeof sourceCheckDataByMode === "object"
+    && sourceCheckDataByMode[entry.sourceMode]
+    && typeof sourceCheckDataByMode[entry.sourceMode] === "object"
+    ? sourceCheckDataByMode[entry.sourceMode]
+    : null;
+  const subjectCheckData = entry.subject === TRIAL_SUBJECT_SOURCE
+    ? (modeCheckData ?? (
+      sourceCheckData
+      && typeof sourceCheckData === "object"
+        ? sourceCheckData
+        : {}
+    ))
+    : {};
   return {
+    ...subjectCheckData,
     difficulty: entry.difficulty,
     actorToken: entry.token,
     targetActor: checksSource ? sourceActor : entry.target?.actor ?? null,

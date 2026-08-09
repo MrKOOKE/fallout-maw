@@ -6930,9 +6930,10 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-inventory-tooltip .function-value-token {
   display: block;
-  overflow-wrap: normal;
+  overflow-wrap: break-word;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: normal;
 }
 
 .fallout-maw-inventory-tooltip .tooltip-added-weapon-function-list {

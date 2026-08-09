@@ -1,8 +1,9 @@
 export const DETECTION_MODE_RANGE_EFFECT_KEY_PREFIX = "fallout-maw.vision.detectionModes.";
 export const DETECTION_MODE_RANGE_EFFECT_KEY_SUFFIX = ".range";
+export const DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER = "_falloutMawDetectionModeRange";
+export const BASIC_SIGHT_DETECTION_MODE_ID = "basicSight";
 
 const DETECTION_MODE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-const BASIC_SIGHT_DETECTION_MODE_ID = "basicSight";
 
 /**
  * Build the semantic Actor Active Effect key for one Foundry detection mode.
@@ -58,6 +59,7 @@ export function getDetectionModeRangeEffectKeyDescriptors(
 export function expandDetectionModeRangeEffectChange(change = {}) {
   const modeId = getDetectionModeIdFromRangeEffectKey(change?.key);
   if (!modeId) return null;
+  const rangeKey = `detectionModes.${modeId}.range`;
   const changes = [
     {
       ...change,
@@ -84,9 +86,11 @@ export function expandDetectionModeRangeEffectChange(change = {}) {
       key: "sight.range"
     });
   }
+
   changes.push({
     ...change,
-    key: `detectionModes.${modeId}.range`
+    key: rangeKey,
+    [DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER]: modeId
   });
   return changes;
 }

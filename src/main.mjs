@@ -27,6 +27,7 @@ import { registerReactionHubConfig, registerReactionHubSocket } from "./combat/r
 import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import {
+  FalloutMaWActiveEffect,
   FalloutMaWActor,
   FalloutMaWCombat,
   FalloutMaWCombatant,
@@ -152,6 +153,7 @@ Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
 
   CONFIG.FalloutMaW = syncSystemConfig();
+  CONFIG.ActiveEffect.documentClass = FalloutMaWActiveEffect;
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Combat.documentClass = FalloutMaWCombat;
   CONFIG.Combatant.documentClass = FalloutMaWCombatant;

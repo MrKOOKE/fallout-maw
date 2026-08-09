@@ -280,6 +280,72 @@ test("source-once stopSubject is promoted to stopAll", async () => {
   assert.equal(result.targetOutcomes[0].outcomes.length, 0);
 });
 
+test("source check data applies attacker disadvantage only to source trials", async () => {
+  const source = actor("Actor.source", { skills: { endurance: 50 } });
+  const target = actor("Actor.target", { skills: { endurance: 30 } });
+  const calls = [];
+  const requestSkillCheckBatch = batchResponder(() => "success", calls);
+
+  await resolveAttackTrialResolution({
+    attackSettings: settings(
+      trial({
+        id: "source-check",
+        subject: "source",
+        sourceMode: "perTarget"
+      }),
+      trial({ id: "target-check" })
+    ),
+    sourceActor: source,
+    targets: [{ actor: target, token: { uuid: "Token.target" } }],
+    sourceCheckData: {
+      disadvantage: true,
+      disadvantageCount: 3
+    }
+  }, formulaDependencies({ requestSkillCheckBatch }));
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].entries[0].actor.uuid, source.uuid);
+  assert.equal(calls[0].entries[0].data.disadvantage, true);
+  assert.equal(calls[0].entries[0].data.disadvantageCount, 3);
+  assert.equal(calls[1].entries[0].actor.uuid, target.uuid);
+  assert.equal(calls[1].entries[0].data.disadvantage, undefined);
+  assert.equal(calls[1].entries[0].data.disadvantageCount, undefined);
+});
+
+test("source check data can distinguish source-once from per-target trials", async () => {
+  const source = actor("Actor.source", { skills: { endurance: 50 } });
+  const target = actor("Actor.target", { skills: { endurance: 30 } });
+  const calls = [];
+  const requestSkillCheckBatch = batchResponder(() => "success", calls);
+
+  await resolveAttackTrialResolution({
+    attackSettings: settings(
+      trial({ id: "source-once", subject: "source", sourceMode: "once" }),
+      trial({ id: "source-per-target", subject: "source", sourceMode: "perTarget" }),
+      trial({ id: "target-check" })
+    ),
+    sourceActor: source,
+    targets: [{ actor: target, token: { uuid: "Token.target" } }],
+    sourceCheckData: {
+      disadvantage: true,
+      disadvantageCount: 1
+    },
+    sourceCheckDataByMode: {
+      once: {
+        disadvantage: true,
+        disadvantageCount: 3
+      },
+      perTarget: {}
+    }
+  }, formulaDependencies({ requestSkillCheckBatch }));
+
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].entries[0].data.disadvantageCount, 3);
+  assert.equal(calls[1].entries[0].data.disadvantage, undefined);
+  assert.equal(calls[1].entries[0].data.disadvantageCount, undefined);
+  assert.equal(calls[2].entries[0].data.disadvantageCount, undefined);
+});
+
 test("source per-target flow and session cache are isolated by target laneKey", async () => {
   const source = actor("Actor.source", { skills: { endurance: 50 } });
   const first = actor("Actor.first", { skills: { endurance: 30 } });

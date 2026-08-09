@@ -1,0 +1,3251 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-09T08:11:11.771Z",
+  "mode": "world-direct-write",
+  "status": "written-and-verified",
+  "rules": {
+    "nightVisionKey": "fallout-maw.vision.detectionModes.basicSight.range",
+    "thermalVisionKey": "fallout-maw.vision.detectionModes.seeAll.range",
+    "minimumNightVisionBonus": 6,
+    "minimumThermalClass": "B",
+    "activation": "Только активное условие потребления энергии при установленном совместимом источнике.",
+    "sourceCompatibility": "Устройство принимает элемент питания своего класса или более высокого.",
+    "helmets": "Только слот шлема; защита глаз составляет 40/55/70/85% от головы по лёгкой/средней/тяжёлой/силовой категории."
+  },
+  "summary": {
+    "batteries": 5,
+    "flashlights": 5,
+    "nightVisionDevices": 5,
+    "thermalDevices": 3,
+    "protectiveFacewear": 4,
+    "integratedHelmets": 4,
+    "lightSources360": 8,
+    "lightSourceRecordsChanged": 3,
+    "normalizedHelmets": 203,
+    "helmetRecordsChanged": 0,
+    "helmetSlotsChanged": 0,
+    "helmetEyeProtectionChanged": 0,
+    "validationIssues": 0,
+    "readbackIssues": 0
+  },
+  "batteries": [
+    {
+      "id": "4umVpm4htpJBclCF",
+      "name": "Пальчиковая батарейка",
+      "class": "D",
+      "kind": null,
+      "price": 76,
+      "folderId": "837618688388d309",
+      "condition": 0,
+      "energyReserve": 1000,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 40,
+        "ingredients": [
+          {
+            "name": "Компонент электроники D класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент химиката D класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 73,
+          "componentCost": 73,
+          "toolCost": 0,
+          "difficultyPercent": 4,
+          "final": 76
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "0ef67603b150840e",
+      "name": "Щелочной элемент питания",
+      "class": "C",
+      "kind": null,
+      "price": 417,
+      "folderId": "41d4a8b36b7038e6",
+      "condition": 0,
+      "energyReserve": 3000,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 70,
+        "ingredients": [
+          {
+            "name": "Компонент электроники C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент химиката C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса D класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 383,
+          "componentCost": 383,
+          "toolCost": 0,
+          "difficultyPercent": 9,
+          "final": 417
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "dbcbc46a27759bb9",
+      "name": "Литиевый элемент питания",
+      "class": "B",
+      "kind": null,
+      "price": 2193,
+      "folderId": "a2f3de4a80f29f1d",
+      "condition": 0,
+      "energyReserve": 8000,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 100,
+        "ingredients": [
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент электроники C класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент химиката C класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса C класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 1907,
+          "componentCost": 1907,
+          "toolCost": 0,
+          "difficultyPercent": 15,
+          "final": 2193
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "eb4ce0411d6ce288",
+      "name": "Военный изотопный элемент питания",
+      "class": "A",
+      "kind": null,
+      "price": 6345,
+      "folderId": "d11ac6946bde180b",
+      "condition": 0,
+      "energyReserve": 18000,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент химиката B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 4996,
+          "componentCost": 4996,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 6345
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "37a74acbb092c98d",
+      "name": "Микроядерный элемент питания",
+      "class": "S",
+      "kind": null,
+      "price": 18842,
+      "folderId": "913bf22660d046e9",
+      "condition": 0,
+      "energyReserve": 36000,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент электроники S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          }
+        ],
+        "price": {
+          "rawComponentCost": 13269,
+          "componentCost": 13269,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 18842
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    }
+  ],
+  "flashlights": [
+    {
+      "id": "jbXqkfgbDqBaCTUK",
+      "name": "Карманный фонарь «Светляк»",
+      "class": "D",
+      "kind": null,
+      "price": 120,
+      "folderId": "536b9fa3c11942ab",
+      "condition": 100,
+      "energyReserve": 0,
+      "energyDrainPerHour": 15,
+      "vision": null,
+      "bright": 6,
+      "dim": 12,
+      "angle": 360,
+      "sourceItemUuids": [
+        "Item.4umVpm4htpJBclCF",
+        "Item.0ef67603b150840e",
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 40,
+        "ingredients": [
+          {
+            "name": "Компонент электроники D класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса D класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 115,
+          "componentCost": 115,
+          "toolCost": 0,
+          "difficultyPercent": 4,
+          "final": 120
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": true,
+        "compatibleSources": 5
+      }
+    },
+    {
+      "id": "1cd2265b1f834ebb",
+      "name": "Тактический фонарь «Луч»",
+      "class": "C",
+      "kind": null,
+      "price": 661,
+      "folderId": "15a64c735e3708a8",
+      "condition": 160,
+      "energyReserve": 0,
+      "energyDrainPerHour": 25,
+      "vision": null,
+      "bright": 12,
+      "dim": 24,
+      "angle": 360,
+      "sourceItemUuids": [
+        "Item.0ef67603b150840e",
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 70,
+        "ingredients": [
+          {
+            "name": "Компонент электроники C класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств D класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 606,
+          "componentCost": 606,
+          "toolCost": 0,
+          "difficultyPercent": 9,
+          "final": 661
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": true,
+        "compatibleSources": 4
+      }
+    },
+    {
+      "id": "446eafd41ca7cbea",
+      "name": "Армейский фонарь «Фара»",
+      "class": "B",
+      "kind": null,
+      "price": 2331,
+      "folderId": "732469f2dac33fba",
+      "condition": 240,
+      "energyReserve": 0,
+      "energyDrainPerHour": 40,
+      "vision": null,
+      "bright": 20,
+      "dim": 40,
+      "angle": 360,
+      "sourceItemUuids": [
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 100,
+        "ingredients": [
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств C класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 2027,
+          "componentCost": 2027,
+          "toolCost": 0,
+          "difficultyPercent": 15,
+          "final": 2331
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": true,
+        "compatibleSources": 3
+      }
+    },
+    {
+      "id": "4afc8de4360d7fe4",
+      "name": "Поисковый фонарь «Маяк»",
+      "class": "A",
+      "kind": null,
+      "price": 6513,
+      "folderId": "6f1461ab76e2fd93",
+      "condition": 360,
+      "energyReserve": 0,
+      "energyDrainPerHour": 65,
+      "vision": null,
+      "bright": 32,
+      "dim": 64,
+      "angle": 360,
+      "sourceItemUuids": [
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 2
+          }
+        ],
+        "price": {
+          "rawComponentCost": 5128,
+          "componentCost": 5128,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 6513
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": true,
+        "compatibleSources": 2
+      }
+    },
+    {
+      "id": "20d035a96318b017",
+      "name": "Адаптивный прожектор «Белое солнце»",
+      "class": "S",
+      "kind": null,
+      "price": 15834,
+      "folderId": "55c6c82735e14d91",
+      "condition": 520,
+      "energyReserve": 0,
+      "energyDrainPerHour": 100,
+      "vision": null,
+      "bright": 50,
+      "dim": 100,
+      "angle": 360,
+      "sourceItemUuids": [
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент электроники S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          }
+        ],
+        "price": {
+          "rawComponentCost": 11151,
+          "componentCost": 11151,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 15834
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": true,
+        "compatibleSources": 1
+      }
+    }
+  ],
+  "optics": [
+    {
+      "id": "db728aebc7064e98",
+      "name": "Самодельный ПНВ «Крот»",
+      "class": "D",
+      "kind": "night",
+      "price": 152,
+      "folderId": "1b3e48b98c7bacf6",
+      "condition": 100,
+      "energyReserve": 0,
+      "energyDrainPerHour": 20,
+      "vision": 6,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.4umVpm4htpJBclCF",
+        "Item.0ef67603b150840e",
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 40,
+        "ingredients": [
+          {
+            "name": "Компонент электроники D класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса D класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств D класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 146,
+          "componentCost": 146,
+          "toolCost": 0,
+          "difficultyPercent": 4,
+          "final": 152
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 5
+      }
+    },
+    {
+      "id": "0dd1c8d7cc8dcb7c",
+      "name": "Гражданский ПНВ «Сова»",
+      "class": "C",
+      "kind": "night",
+      "price": 765,
+      "folderId": "509ac35c5fb65589",
+      "condition": 160,
+      "energyReserve": 0,
+      "energyDrainPerHour": 30,
+      "vision": 12,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.0ef67603b150840e",
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 70,
+        "ingredients": [
+          {
+            "name": "Компонент электроники C класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств C класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 702,
+          "componentCost": 702,
+          "toolCost": 0,
+          "difficultyPercent": 9,
+          "final": 765
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 4
+      }
+    },
+    {
+      "id": "aZ4HpVyZvyJQ4K2F",
+      "name": "Армейский монокуляр ПНВ «Филин»",
+      "class": "B",
+      "kind": "night",
+      "price": 3165,
+      "folderId": "26afe9c0c2be0d68",
+      "condition": 240,
+      "energyReserve": 0,
+      "energyDrainPerHour": 45,
+      "vision": 24,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 100,
+        "ingredients": [
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 2
+          }
+        ],
+        "price": {
+          "rawComponentCost": 2752,
+          "componentCost": 2752,
+          "toolCost": 0,
+          "difficultyPercent": 15,
+          "final": 3165
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 3
+      }
+    },
+    {
+      "id": "lf4QyxsaYnb470hs",
+      "name": "Панорамный ПНВ «Рейнджер»",
+      "class": "A",
+      "kind": "night",
+      "price": 8105,
+      "folderId": "e3a037caad8a4a2a",
+      "condition": 360,
+      "energyReserve": 0,
+      "energyDrainPerHour": 70,
+      "vision": 40,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 6382,
+          "componentCost": 6382,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 8105
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 2
+      }
+    },
+    {
+      "id": "78cc95164a889fb8",
+      "name": "Мультиспектральный ПНВ «Аргус»",
+      "class": "S",
+      "kind": "night",
+      "price": 17027,
+      "folderId": "f46e3603c42ee063",
+      "condition": 520,
+      "energyReserve": 0,
+      "energyDrainPerHour": 100,
+      "vision": 60,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент электроники S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 3
+          }
+        ],
+        "price": {
+          "rawComponentCost": 11991,
+          "componentCost": 11991,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 17027
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 1
+      }
+    },
+    {
+      "id": "4faccb7f049983c2",
+      "name": "Тепловизионный монокуляр «Ищейка»",
+      "class": "B",
+      "kind": "thermal",
+      "price": 3773,
+      "folderId": "26afe9c0c2be0d68",
+      "condition": 240,
+      "energyReserve": 0,
+      "energyDrainPerHour": 60,
+      "vision": 8,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 100,
+        "ingredients": [
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент каркаса B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката C класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 3281,
+          "componentCost": 3281,
+          "toolCost": 0,
+          "difficultyPercent": 15,
+          "final": 3773
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 3
+      }
+    },
+    {
+      "id": "r0qnoHY77X1oBJPG",
+      "name": "Тепловизор «Хищник»",
+      "class": "A",
+      "kind": "thermal",
+      "price": 8479,
+      "folderId": "e3a037caad8a4a2a",
+      "condition": 360,
+      "energyReserve": 0,
+      "energyDrainPerHour": 90,
+      "vision": 18,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент химиката B класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 6676,
+          "componentCost": 6676,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 8479
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 2
+      }
+    },
+    {
+      "id": "3019cb4e0fc292e0",
+      "name": "Тепловизионный комплекс «Василиск»",
+      "class": "S",
+      "kind": "thermal",
+      "price": 21966,
+      "folderId": "f46e3603c42ee063",
+      "condition": 520,
+      "energyReserve": 0,
+      "energyDrainPerHour": 140,
+      "vision": 35,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент электроники S класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств S класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 15469,
+          "componentCost": 15469,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 21966
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 1
+      }
+    }
+  ],
+  "protectiveFacewear": [
+    {
+      "id": "86c39c795f108c2b",
+      "name": "Баллистические очки Mk.IV",
+      "class": "A",
+      "kind": null,
+      "price": 4535,
+      "folderId": "c563d8a307741a58",
+      "condition": 180,
+      "energyReserve": 0,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент текстиля B класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 3571,
+          "componentCost": 3571,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 4535
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "59fdec1f599447f4",
+      "name": "Оптический щит «Эгида»",
+      "class": "S",
+      "kind": null,
+      "price": 14521,
+      "folderId": "b16f386cdae64256",
+      "condition": 300,
+      "energyReserve": 0,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент каркаса S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств S класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент текстиля A класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 10226,
+          "componentCost": 10226,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 14521
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "74c5220d616e67e5",
+      "name": "Герметичная маска РХБЗ Mk.IV",
+      "class": "A",
+      "kind": null,
+      "price": 8029,
+      "folderId": "c563d8a307741a58",
+      "condition": 340,
+      "energyReserve": 0,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент текстиля A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 6322,
+          "componentCost": 6322,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 8029
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    },
+    {
+      "id": "bd3aa32088c2c760",
+      "name": "Маска РХБЗ «Серафим»",
+      "class": "S",
+      "kind": null,
+      "price": 19660,
+      "folderId": "b16f386cdae64256",
+      "condition": 520,
+      "energyReserve": 0,
+      "energyDrainPerHour": 0,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент текстиля S класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент текстиля A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката S класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств S класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 13845,
+          "componentCost": 13845,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 19660
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 0,
+        "conditionalVisionEntries": 0,
+        "energyConsumer": false,
+        "compatibleSources": 0
+      }
+    }
+  ],
+  "integratedHelmets": [
+    {
+      "id": "db93d9e3ed98480c",
+      "name": "Боевой шлем Анклава «Сова»",
+      "class": "B",
+      "kind": null,
+      "price": 7541,
+      "folderId": "b56287defc854eb9",
+      "condition": 1275,
+      "energyReserve": 0,
+      "energyDrainPerHour": 55,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.dbcbc46a27759bb9",
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 100,
+        "ingredients": [
+          {
+            "name": "Компонент электроники B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент армирования B класса",
+            "quantity": 5
+          },
+          {
+            "name": "Компонент армирования C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса C класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств C класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 6557,
+          "componentCost": 6557,
+          "toolCost": 0,
+          "difficultyPercent": 15,
+          "final": 7541
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 3
+      }
+    },
+    {
+      "id": "40304d706c851ee3",
+      "name": "Шлем Красный Драгун «Хищник»",
+      "class": "A",
+      "kind": null,
+      "price": 19350,
+      "folderId": "04212309d49670e1",
+      "condition": 794,
+      "energyReserve": 0,
+      "energyDrainPerHour": 105,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 4
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент химиката B класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент армирования A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент текстиля A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент армирования B класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 2
+          }
+        ],
+        "price": {
+          "rawComponentCost": 15236,
+          "componentCost": 15236,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 19350
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 2
+      }
+    },
+    {
+      "id": "ac33a362da022121",
+      "name": "Силовой шлем X-01 «Следопыт»",
+      "class": "A",
+      "kind": null,
+      "price": 27542,
+      "folderId": "4701a8a7c632b0df",
+      "condition": 3400,
+      "energyReserve": 0,
+      "energyDrainPerHour": 140,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.eb4ce0411d6ce288",
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 140,
+        "ingredients": [
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 5
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент химиката B класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент армирования A класса",
+            "quantity": 5
+          },
+          {
+            "name": "Компонент армирования B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент каркаса A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент свойств B класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент механики A класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 21687,
+          "componentCost": 21687,
+          "toolCost": 0,
+          "difficultyPercent": 27,
+          "final": 27542
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 2
+      }
+    },
+    {
+      "id": "89b7ea04ce910544",
+      "name": "Ультрацитовый силовой шлем «Аргус»",
+      "class": "S",
+      "kind": null,
+      "price": 73170,
+      "folderId": "9a206b0e8d592080",
+      "condition": 5184,
+      "energyReserve": 0,
+      "energyDrainPerHour": 220,
+      "vision": null,
+      "bright": null,
+      "dim": null,
+      "angle": null,
+      "sourceItemUuids": [
+        "Item.37a74acbb092c98d"
+      ],
+      "craft": {
+        "difficulty": 180,
+        "ingredients": [
+          {
+            "name": "Компонент электроники S класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент электроники A класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент свойств S класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент свойств A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент химиката A класса",
+            "quantity": 2
+          },
+          {
+            "name": "Компонент армирования S класса",
+            "quantity": 8
+          },
+          {
+            "name": "Компонент армирования A класса",
+            "quantity": 1
+          },
+          {
+            "name": "Компонент каркаса S класса",
+            "quantity": 3
+          },
+          {
+            "name": "Компонент химиката S класса",
+            "quantity": 1
+          }
+        ],
+        "price": {
+          "rawComponentCost": 51528,
+          "componentCost": 51528,
+          "toolCost": 0,
+          "difficultyPercent": 42,
+          "final": 73170
+        }
+      },
+      "visionAudit": {
+        "visionEntries": 1,
+        "conditionalVisionEntries": 1,
+        "energyConsumer": true,
+        "compatibleSources": 1
+      }
+    }
+  ],
+  "normalizedHelmets": [
+    {
+      "id": "0U2pgwTLeMRzZUtv",
+      "name": "Маска ЗК с очками НЗ",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "14lH0CaHovwHmNk7",
+      "name": "Открытый Шлем Синта",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "1J2zDX0LxVaPWvKe",
+      "name": "Силовой шлем T-51a",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "1gOOdDOxEpPE9Uo5",
+      "name": "Боевой Шлем Бомбардировщика!",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "1iZFFLxj9oMzSoUU",
+      "name": "Силовой шлем Клинта",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "25E28djkDeIISZZD",
+      "name": "Силовой шлем «Уостер»",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "2EEmLfz7jH2ItoS0",
+      "name": "Шлем Гладиатора Мутанта",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "31DCY86HSwLuQZQM",
+      "name": "Силовой шлем T-45c",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "4AQplaqJZwgF4pId",
+      "name": "Строительная Каска",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "4RtCvHQwbSO72xOF",
+      "name": "Шлем Легата",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "4qM3ljTLoMKqWtFD",
+      "name": "Шлем «Тесла»",
+      "folderPath": "Снаряжение / Средние шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "4uoxAwOfCMC8QrXe",
+      "name": "Штурмовой Шлем Рейдеров",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "4wKvybEoMgPZQpYu",
+      "name": "Мотоциклетный Боевой Шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "54AbwCz5ZYVqpOvK",
+      "name": "Шлем Мастера Мутанта",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "5BlMYR9xiBMh5CG3",
+      "name": "Шлем Кратоса",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "5CCBU5SdGfy5sITt",
+      "name": "Боевой Шлем Анклава",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "5VhU3sA5QRx7ZdFq",
+      "name": "Боевой Шлем Фелдшера",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "5WTMO376SaumwXsX",
+      "name": "Шлем мутанта «Таран»",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "5gBpTy2qg97Rjjz2",
+      "name": "Шлем PEP-98E",
+      "folderPath": "Снаряжение / Средние шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "6JQgIcVx5sYbp4fu",
+      "name": "Шлем BBC-32G",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "6S65RcyGWzVsLXgm",
+      "name": "Каска",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "6ccRYpSo0474lNMK",
+      "name": "Силовой шлем «Расхититель костей»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "7BXXPRNOy8OQOtcZ",
+      "name": "Силовой Шлем EXC-17 «Кровавый Рейдер»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "7J2ahzshKZUXm11R",
+      "name": "Улучшенный Силовой Шлем Mk.II",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "8pTmEb8GOlV19uHA",
+      "name": "Силовой шлем Изгоев",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "9HyGamuC9E0lrV5Z",
+      "name": "Шлем костюма Химзащиты",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "9QB2RDPqJdFNAqLD",
+      "name": "Шлем Чемпиона Легиона",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "AaIypoXjq7b10d3L",
+      "name": "Шлем ударной пехоты НКР",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "B1WqivW7Ixt7p20I",
+      "name": "Силовой шлем X-01",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "BPR5uoqPfaykBkcE",
+      "name": "Боевой Шлем Командира Анклава Mk.I",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "BbeY8kuy4sbbMMav",
+      "name": "Силовой шлем «Огненный Воин»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "Bnb7HRZYiCdd2EQM",
+      "name": "Шлем Война Дорог",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "CV1xB261Nlad7IAI",
+      "name": "Шлем Инженера-Мастера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "CZxlN02x8PVuw7W2",
+      "name": "Силовой шлем Ренегатов",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "Cev9lgKz12uNRB9g",
+      "name": "Шлем SWAT",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "D2xSpz5ZwLrYewdc",
+      "name": "Футбольный Шлем красный",
+      "folderPath": "Снаряжение / Средние шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "D4dlzv3667awOmsX",
+      "name": "Шлем Военной Полиции НКР со Стеклом",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "DURsoJGTIv3RG8dr",
+      "name": "Шлем разведчика НКР",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "DdZbgO74BSpHIeKi",
+      "name": "Шлем Морской Пехоты",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "DgCR1RG0EdIzmMiv",
+      "name": "Пластмассовый Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "ENVGwWvmNQvcIOxi",
+      "name": "Шлем Хэнка",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "FBvXTo5w5ptYBpA3",
+      "name": "Укреплённый Защитный Капюшон",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "FYnuDkZbejmexs9G",
+      "name": "Шлем разведброни Mk.II",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "GDzQ46f8QxIn5xX1",
+      "name": "Шлем Скаута Секретной Службы",
+      "folderPath": "Снаряжение / Лёгкие шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "GLdQ3envIaRHUZh4",
+      "name": "Изолированный Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "GkxWtpPJgmkT2NdL",
+      "name": "Боевой шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "HPWZpipViT3bKBpp",
+      "name": "Мотоциклетный шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "HZF2uSuSYqd0rh0K",
+      "name": "Чёрный Боевой шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "HwtajJKO0hoqsF5Y",
+      "name": "Купол Скафандра Учёного Mk.II",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "IVg6YMhlmjzNm2lf",
+      "name": "Металлический Противорадиационный Шлем",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "IXE9EDCnry2EZdt3",
+      "name": "Боевой Шлем Mk.I",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "Ijdr0JcJ8cXR9ue8",
+      "name": "Силовой шлем T-45b",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "IpopW4dBibu7ki0q",
+      "name": "Шлем Рыцаря",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "IxUBCgSGa4VVEsCm",
+      "name": "Золотой Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "J58ebmUtW1ISYfGr",
+      "name": "Улучшенный Силовой Шлем Mk.I «Тесла»",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "JVjFDnfFuuC1J9gi",
+      "name": "Низкокачественный шлем бойца НКР",
+      "folderPath": "Снаряжение / Средние шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Jn9LPw2b1FXT6yue",
+      "name": "Шлем Чертей",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "JrAyF72MZ5GgAOpP",
+      "name": "Шлем рейнджера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "KDhrOe6NgJ1cqt7H",
+      "name": "Шлем Папы Хана",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "KHZCc740UE1I4Gnc",
+      "name": "Силовой шлем «Месть Убежища 13»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "KYnd3yh6OoXAW2vt",
+      "name": "Силовой шлем Пророка Потерянных",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "LP65pbmCTpyCivBx",
+      "name": "Шлем Зилота",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "LzZMqhlkFegYIJAH",
+      "name": "Шлем Волт-Тек РИОТ",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "MYS3Vmzapwrsjqko",
+      "name": "Шлем Риверов",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Mbmn8gu9qn4TXwmD",
+      "name": "Боевой Шлем Техасского Братства Стали Mk.I",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "NIcRALXeqICMUAj4",
+      "name": "Шлем рейнджера Охотника",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "NMxhkRvrt0uniCCV",
+      "name": "Шлем бойца НКР",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Nad5tvwOixKBuRLZ",
+      "name": "Композитный Армейский Шлем",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Nyz0XDMYKv2Th86v",
+      "name": "Шлем Рейдера Мусорщика",
+      "folderPath": "Снаряжение / Средние шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "ONei4WP11NBj7X8o",
+      "name": "Силовой шлем Ведро Рейдеров",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "OlYzZcwwPpyycAMK",
+      "name": "Силовой шлем «Гризли»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "PCVd7zF63JA2DFhH",
+      "name": "Маска Фуррии",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "Q1Q9qyB0XxFnPLcj",
+      "name": "Кожаный шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "QFs4qwfsnBrPQIuG",
+      "name": "Металлический Шлем Мутанта",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "QVAEbcOpxSPfTNAr",
+      "name": "Шлем FQ-1488U",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "Qojphv39CmfDVkd8",
+      "name": "Шлем НКР",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "QzxFzchvCvmVaNkx",
+      "name": "Боевой Шлем Братства Стали Mk.I",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "RA1PWkZjAZxPYOPi",
+      "name": "Шлем Скриптера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "RsQs5GF8YeE0NfJE",
+      "name": "Силовой шлем T-45a",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "RxOcxXYTKVJqCK41",
+      "name": "Силовой шлем T-45d",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "S5oMGMssEPVlvbBI",
+      "name": "Утеплённый Армейский Шлем",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "SRvXuO3L8Mhtsp0v",
+      "name": "Прочная Клетка Рейдера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "SSHZJP94LCxwCUIA",
+      "name": "Лёгкий Боевой Шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Sx0pLcvKYSEuyBO7",
+      "name": "Металлический шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "TC4VehrrGZDeX3ma",
+      "name": "Силовой шлем «Освободитель»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "TGIAoI1QQZwEZX0X",
+      "name": "Шлем Чёрный Драгун",
+      "folderPath": "Снаряжение / Лёгкие шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "TYxLj6kiA3u0SCzH",
+      "name": "Бойцовский Шлем мутанта",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "VPhQyuWHLcFzFqOL",
+      "name": "Шлем Драконорожденного",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "VlZLuW1uBrLMsH3G",
+      "name": "Шлем Механика",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "VqHEYRgiwhC5eobk",
+      "name": "Улучшенный Силовой Шлем Mk.I",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "W2x93QJZqhi4SXji",
+      "name": "Силовой Шлем Доктора Брауна",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "XlQoaHHKmfJcFfgZ",
+      "name": "Шлем Морпеха UAC",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "XusPVJmPRt09jZ2n",
+      "name": "Шлем SAK-71C",
+      "folderPath": "Снаряжение / Средние шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Y2ydDx1K23sp27ml",
+      "name": "Шлем Десантного Костюма СССР",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "Y6nGyjrHXyovuaSx",
+      "name": "Металлический шлем мод. II",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Y99tQ5sp6nexMWyk",
+      "name": "Силовой шлем «Рассказчик»",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "YL1ZtRk1bll6ozXu",
+      "name": "Силовой Шлем НКР",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "YU7PSypaHXaYOF9s",
+      "name": "Шлем Гладиатора Легиона",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "YeDGXvZnof7iVYxt",
+      "name": "Боевой Шлем с Очками",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "YtbQgMKfHxyk8myD",
+      "name": "Ультрацитовый Силовой Шлем",
+      "folderPath": "Снаряжение / Силовые шлемы / S",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "YwkgJ5NTcJLGaPMD",
+      "name": "Шлем Центуриона Легиона",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "Z2J4bposflIvKKw8",
+      "name": "Улучшенный полицейский шлем",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "Z4UyNHuniEso3tfm",
+      "name": "Закрытый Металлический Шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "ZNrj0pzF0jtvz3T7",
+      "name": "Шлем легионера-воина",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "ZOi1Br2jYhtvFqyT",
+      "name": "Шлем Киборг-Ниндзя",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "Zgt4F0TZjjuOp60T",
+      "name": "Шлем Биозащитной Брони",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "ZlrdwYFdSP5MXXZf",
+      "name": "Шлем Командос Анклава",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "ZyabKn0SXRoP7g26",
+      "name": "Шлем Охранны Города Убежища",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "ZzL2RSlmuD6r1YBP",
+      "name": "Укреплённый Шлем Механика",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "a0MxhEQ36eBq8eYw",
+      "name": "Изолированный шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "a4Q71uSLE8ZC0hYV",
+      "name": "Боевой Шлем Рейнджера",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "aKV14vRPZQsFmnWR",
+      "name": "Улучшенный Шлем Инженера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "ajjiB5F7wOeSnNkD",
+      "name": "Лётный Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "bQf17MuFt6RYNOPN",
+      "name": "Клетка Рейдера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "bTSb26EzezUN8iS7",
+      "name": "Шлем Охраны",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "bXP8KXQAiQPcDvQN",
+      "name": "Силовой шлем «Центурион»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "biOrruDn3RCPS6zR",
+      "name": "Силовой шлем «Всадник Войны»",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "biz9YvUGWFIpS9Y2",
+      "name": "Тяжёлый Шлем Синта",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "cLicAGda7FuK6Cnv",
+      "name": "Полицейский шлем",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "cYZhJOGYjb0gssTk",
+      "name": "Шлем Шакала",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "cbVYXxQG15jG78hv",
+      "name": "Китайский Стелс-Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "chBw5D0zGAXYMF62",
+      "name": "Шлем Охраны со Стеклом",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "cxg32rgWHjm1dzHU",
+      "name": "Шлем Элитного Рейнджера",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "e7kRZeILMXQWR24k",
+      "name": "Шлем Рыцаря Пустошей",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "eU8wst9eeQOzFxR0",
+      "name": "Ржавый Силовой шлем X-01",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "eZyEOOZ0uJqTiG5W",
+      "name": "Шлем XPN-20A",
+      "folderPath": "Снаряжение / Средние шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "fMzCzK9VFHHXjURj",
+      "name": "Металлический шлем Гонщика",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "fTXLdOkDNGQcbcph",
+      "name": "Шлем Биозащитной брони Mark.II",
+      "folderPath": "Снаряжение / Средние шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "gImrscQ9ael2jIp0",
+      "name": "Силовой шлем T-60",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "gSMLTAMxeWCXoZHI",
+      "name": "Силовой шлем СЗБС",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "gbfzra3zNQVcpAha",
+      "name": "Шлем Инженера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "gviZhn6w0IZGosqr",
+      "name": "Улучшенная Китайская Каска",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "hD2sYcM5u3oXmdsx",
+      "name": "Металлический Шлем с Забралом",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "hDgDW2HOik1HAOAd",
+      "name": "Шлем Дикаря",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "hFKf1RLZWHgmuPPq",
+      "name": "Гоночный шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "iTLdOoj87hc9w8H7",
+      "name": "Шлем патрульного",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "irM9LETJizRpUMyV",
+      "name": "Боевой шлем пустынного рейнджера",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "j6xHAh8IPNRn5ZN6",
+      "name": "Боевой Шлем Ренегата",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "j7Ib3ddIVJMJmfGt",
+      "name": "Защитный Капюшон",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "jWAQoaeREI6lcBxa",
+      "name": "Шлем Разрушителя",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "js47JknJhGbopKqp",
+      "name": "Антирадиационный шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "k0irgwPcDvO1wHUR",
+      "name": "Закалённый Мотоциклетный Боевой Шлем",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "k7xuejlWcsN9FZ3D",
+      "name": "Шлем Главного Гада",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "kJf5HTNTem0NNc3s",
+      "name": "Рогатый Шлем Великих Ханов",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "kiXOW9W968EZnt6Q",
+      "name": "Силовой Шлем «Хеллкэт»",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "lm907aeLKIDjCHZX",
+      "name": "Металлический Шлем Мутанта с Лезвиями",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "lmOpYk2pdcdwOLoG",
+      "name": "Элитный полицейский шлем",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "lodzMe6EtcgTkZ2O",
+      "name": "Антирадиационный Шлем Анклава",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "lpXzPVE2xqDvVRwO",
+      "name": "Сатурнитовый Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "m1o2JLXECc9V1TXy",
+      "name": "Боевой Шлем НКР",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "mIYETNCXTx0adYOS",
+      "name": "Шлем Психо-Рейдера",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "mLVK7ZZuuhKsbldU",
+      "name": "Боевой Шлем Патриота",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "mRzlORIDUuHixXHp",
+      "name": "Боевой Шлем Mk.I Компании Коготь",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "mc2tH7MQnL8PZJ4c",
+      "name": "Шлем Робота",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "mpXUguOW8IjC5FQV",
+      "name": "Силовой Шлем «Геенна»",
+      "folderPath": "Снаряжение / Силовые шлемы / S",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "nFQlBUGAwcF555xV",
+      "name": "Силовой шлем Волт-Тек",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "nWoV4Rs3YdvTwWfo",
+      "name": "Прочная Строительная Каска",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "nbqXbTspicBNVpMR",
+      "name": "Улучшенный Силовой Шлем Mk.II «Тесла»",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "o4xnRfixR2VrnyLf",
+      "name": "Силовой шлем T-65",
+      "folderPath": "Снаряжение / Силовые шлемы / S",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "o63kJH1sxaseTOmf",
+      "name": "Шлем HECU",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "oOEKLvYhgAdRFTP8",
+      "name": "Улучшенный Силовой шлем СЗБС",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "ookYDNjkj3FrLplg",
+      "name": "Шлем Рейнджера Патрульного НКР",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "ouXcVeGgbmCZWGjq",
+      "name": "Силовой шлем ТБС",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "ox4vM18Vvhg7cJSg",
+      "name": "Мозгошлем Доктора Зорбо",
+      "folderPath": "Снаряжение / Головные уборы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "pAgpZlKF4Fr1q8cP",
+      "name": "Боевой шлем, усиленный «Марк 2» Анклава",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "pLJmbXRtPFzC2LHx",
+      "name": "Силовой Шлем Круга Стали",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "qCbesGceZ6t93h3X",
+      "name": "Металлический шлем Скитальца",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "qYXVCDJzQzNh0dk3",
+      "name": "Боевой Шлем Ветерана Анкориджа",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "r4zyG6TqrNomeIxT",
+      "name": "Шлем Завоевателя",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "rOxSGnDCTmCvUnmH",
+      "name": "Шлем Синта Разведчика",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "rdEFIALX8fTSTDNt",
+      "name": "Шлем Механиста",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "sUgMWuNcIpojsOPu",
+      "name": "Шлем Секретной Службы",
+      "folderPath": "Снаряжение / Средние шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "scJ08od0ozNQ9Teo",
+      "name": "Шлем бойца НКР с очками",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "slDGbGd6sb2HbQLw",
+      "name": "Шлем разведброни",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "sqyuIr1ygSgT09Hc",
+      "name": "Шлем Военной Полиции НКР",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "srqMVujhUmUTcR6A",
+      "name": "Опалённая силовой шлем «Сьерра»",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "taZX5bNrUJ9LwKMu",
+      "name": "Силовой шлем Рейдеров",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "tlIQ4NaxQ3hr56yi",
+      "name": "Шлем НеМирмики",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "u6PWDFtt8af3Aanx",
+      "name": "Китайская Каска",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "uF2QzfbuTgtMipoQ",
+      "name": "Лётный Шлем",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "ukxu9cx7IJUoUvVL",
+      "name": "Закалённый Закрытый Металлический Шлем",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "umSXqGSPlJE9l68W",
+      "name": "Футбольный Шлем синий",
+      "folderPath": "Снаряжение / Средние шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "uurGjZyWGMENw3RC",
+      "name": "Силовой шлем EXC-17",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "vbsXTGobdEs1rf2O",
+      "name": "Лётный Шлем Братства Стали",
+      "folderPath": "Снаряжение / Лёгкие шлемы / D",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "vcb35SID4Qc2gtdr",
+      "name": "Y-17 Шлем Мобильного Травмокостюма",
+      "folderPath": "Снаряжение / Лёгкие шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "veAFuueZu5DclsIM",
+      "name": "Боевой шлем, усиленный «Марк 2»",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "vgJ5NRHVsCEJhQS1",
+      "name": "Шлем Палача Рока",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "wMH7vTu48H0hhadu",
+      "name": "Шлем Рейдера-Карателя",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "wOyFPYzdNFcO7FFG",
+      "name": "Силовой шлем Босса Рейдеров",
+      "folderPath": "Снаряжение / Силовые шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "wQjBGzup2brezRUt",
+      "name": "Боевой Шлем Компании Коготь",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "wcu8435Doa5QSaSn",
+      "name": "Шлем Морской Пехоты «Болотник»",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "x1pmFto53ca8F5Lk",
+      "name": "Чёрный Боевой Шлем Mk.I",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "x3pwTt4I5cf9Yj42",
+      "name": "Боевой Шлем Анклава Mk.I",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "xEs2uFPXs3Q8CfZR",
+      "name": "Силовой шлем Квант X-01",
+      "folderPath": "Снаряжение / Силовые шлемы / S",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "xXEZ8oJlRPOBmM9Y",
+      "name": "Шлем рейнджера НКР",
+      "folderPath": "Снаряжение / Средние шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "xvpobM4ktc4kIjTe",
+      "name": "Шлем Красный Драгун Mk.II",
+      "folderPath": "Снаряжение / Лёгкие шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "xyFDSULmRK2KD4Le",
+      "name": "Шлем Леона",
+      "folderPath": "Снаряжение / Тяжёлые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.7
+    },
+    {
+      "id": "ydcwjjvt4xJkMdDj",
+      "name": "Силовой шлем T-51b",
+      "folderPath": "Снаряжение / Силовые шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "yvqDMTgTdzwDkpAm",
+      "name": "Антирадиационный Шлем Убежища",
+      "folderPath": "Снаряжение / Лёгкие шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "zBqXYzGkurhmjfu0",
+      "name": "Усиленный Шлем Риверов",
+      "folderPath": "Снаряжение / Средние шлемы / B",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.55
+    },
+    {
+      "id": "zMJWK1s2aTwpvw0c",
+      "name": "Силовой шлем T-60 ВБС",
+      "folderPath": "Снаряжение / Силовые шлемы / A",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.85
+    },
+    {
+      "id": "zaiuSyXcGlJUs06e",
+      "name": "Сатурнитовый Шлем «ТермоСил-X»",
+      "folderPath": "Снаряжение / Лёгкие шлемы / S",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    },
+    {
+      "id": "znkD5rqih8byI0Ut",
+      "name": "Купол Скафандра Учёного",
+      "folderPath": "Снаряжение / Лёгкие шлемы / C",
+      "slotChanged": false,
+      "eyeProtectionChanged": false,
+      "eyeProtectionRatio": 0.4
+    }
+  ],
+  "folders": [
+    {
+      "id": "4749cf011f4c4fe9",
+      "name": "Приборы наблюдения",
+      "parentId": "tKHYJFstnwQ9BJ5e",
+      "sort": 850000
+    },
+    {
+      "id": "c447d7f7c5f94ee2",
+      "name": "Фонари",
+      "parentId": "tKHYJFstnwQ9BJ5e",
+      "sort": 900000
+    },
+    {
+      "id": "7d5f6a29b33f04b7",
+      "name": "Элементы питания",
+      "parentId": "IziPIPKQFiQ0sDCP",
+      "sort": 100000
+    },
+    {
+      "id": "f46e3603c42ee063",
+      "name": "S",
+      "parentId": "4749cf011f4c4fe9",
+      "sort": 100000
+    },
+    {
+      "id": "55c6c82735e14d91",
+      "name": "S",
+      "parentId": "c447d7f7c5f94ee2",
+      "sort": 100000
+    },
+    {
+      "id": "913bf22660d046e9",
+      "name": "S",
+      "parentId": "7d5f6a29b33f04b7",
+      "sort": 100000
+    },
+    {
+      "id": "e3a037caad8a4a2a",
+      "name": "A",
+      "parentId": "4749cf011f4c4fe9",
+      "sort": 200000
+    },
+    {
+      "id": "6f1461ab76e2fd93",
+      "name": "A",
+      "parentId": "c447d7f7c5f94ee2",
+      "sort": 200000
+    },
+    {
+      "id": "d11ac6946bde180b",
+      "name": "A",
+      "parentId": "7d5f6a29b33f04b7",
+      "sort": 200000
+    },
+    {
+      "id": "26afe9c0c2be0d68",
+      "name": "B",
+      "parentId": "4749cf011f4c4fe9",
+      "sort": 300000
+    },
+    {
+      "id": "732469f2dac33fba",
+      "name": "B",
+      "parentId": "c447d7f7c5f94ee2",
+      "sort": 300000
+    },
+    {
+      "id": "a2f3de4a80f29f1d",
+      "name": "B",
+      "parentId": "7d5f6a29b33f04b7",
+      "sort": 300000
+    },
+    {
+      "id": "509ac35c5fb65589",
+      "name": "C",
+      "parentId": "4749cf011f4c4fe9",
+      "sort": 400000
+    },
+    {
+      "id": "15a64c735e3708a8",
+      "name": "C",
+      "parentId": "c447d7f7c5f94ee2",
+      "sort": 400000
+    },
+    {
+      "id": "41d4a8b36b7038e6",
+      "name": "C",
+      "parentId": "7d5f6a29b33f04b7",
+      "sort": 400000
+    },
+    {
+      "id": "1b3e48b98c7bacf6",
+      "name": "D",
+      "parentId": "4749cf011f4c4fe9",
+      "sort": 500000
+    },
+    {
+      "id": "536b9fa3c11942ab",
+      "name": "D",
+      "parentId": "c447d7f7c5f94ee2",
+      "sort": 500000
+    },
+    {
+      "id": "837618688388d309",
+      "name": "D",
+      "parentId": "7d5f6a29b33f04b7",
+      "sort": 500000
+    }
+  ],
+  "readbackIssues": []
+}

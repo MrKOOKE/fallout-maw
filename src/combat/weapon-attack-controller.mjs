@@ -169,7 +169,10 @@ import {
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { energySourceMatchesConsumer, getActiveEnergySourceItem, getEnergySourceReserveState } from "../items/light-source.mjs";
 import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/construct-parts.mjs";
-import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
+import {
+  canTokenPhysicallySeeTarget,
+  testObserverVisibilityBatch
+} from "../canvas/physical-los.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
@@ -264,6 +267,8 @@ const ORDINARY_ATTACK_HARD_TIMEOUT_MS = 150000;
 const ORDINARY_ATTACK_COMPLETED_TTL_MS = 5 * 60 * 1000;
 const ORDINARY_ATTACK_CACHE_LIMIT = 512;
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
+const UNAIMED_ATTACK_MODE = "unaimed";
+const UNAIMED_ATTACK_DISADVANTAGE_COUNT = 3;
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
   { key: "rightToLeft", label: "Справа налево", mode: "swing" },
@@ -669,6 +674,16 @@ export const ORDINARY_WEAPON_ATTACK_TESTING = Object.freeze({
     ordinaryAttackActorQueues.clear();
     ordinaryAttackAuthoritySockets.clear();
   }
+});
+
+export const ATTACK_TARGETING_TESTING = Object.freeze({
+  unaimedAttackDisadvantageCount: UNAIMED_ATTACK_DISADVANTAGE_COUNT,
+  getUnseenAttackEdgeModifiers,
+  getTrajectoryTargetEntries,
+  isAttackImpactTarget,
+  isAttackTargetVisible,
+  selectRandomMeleeDirection,
+  getEnabledMeleeDirectionsFromSettings
 });
 
 function suspendWeaponAttackForNestedSelection(controller = activeAttack) {
@@ -1813,6 +1828,7 @@ class CommandedWeaponAttackController {
       directionKey: "",
       mode: "current",
       locked: false,
+      targetTokenUuidAllowlist: getAuthoritativeAttackPerceptionUuids(entry.token),
       targets: [],
       hoveredTarget: null,
       trajectoryAimTarget: null,
@@ -1988,6 +2004,7 @@ class CommandedWeaponAttackController {
   }
 
   lockEntry(entry) {
+    entry.targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids(entry.token);
     this.refreshEntry(entry, this.pointer);
     const geometry = entry.geometry;
     if (!geometry || !this.pointer) return false;
@@ -2069,20 +2086,29 @@ class CommandedWeaponAttackController {
     }
     let potentialTargets = getPotentialTargets(entry.token, geometry, {
       includeAttacker: isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId),
-      includeDead: isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)
+      includeDead: isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId),
+      targetTokenUuidAllowlist: entry.targetTokenUuidAllowlist
     });
     entry.hoveredTarget = MELEE_ACTION_KEYS.has(entry.actionKey)
       ? getAimedTargetUnderPointer(pointer, potentialTargets)
       : null;
     entry.trajectoryAimTarget = isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)
-      ? getVolleyTrajectoryAimTarget(entry.token, geometry, { includeAttacker: true, includeDead: true })
+      ? getVolleyTrajectoryAimTarget(entry.token, geometry, {
+        includeAttacker: true,
+        includeDead: true,
+        candidates: potentialTargets
+      })
       : (entry.hoveredTarget ?? potentialTargets.at(0) ?? null);
     geometry.aimPoint = entry.trajectoryAimTarget
       ? selectAttackGeometryAimPoint(entry.token, entry.trajectoryAimTarget, geometry)
       : null;
     if (isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId) && geometry.aimPoint) {
       geometry = aimVolleyGeometryAtPoint(entry.token, geometry, geometry.aimPoint);
-      potentialTargets = getPotentialTargets(entry.token, geometry, { includeAttacker: true, includeDead: true });
+      potentialTargets = getPotentialTargets(entry.token, geometry, {
+        includeAttacker: true,
+        includeDead: true,
+        targetTokenUuidAllowlist: entry.targetTokenUuidAllowlist
+      });
     } else if (geometry.aimPoint) {
       potentialTargets = getAimedElevationTargets(entry.token, geometry, potentialTargets);
     }
@@ -2096,11 +2122,20 @@ class CommandedWeaponAttackController {
     if (!entry?.geometry) return null;
     if (MELEE_ACTION_KEYS.has(entry.actionKey)) {
       const target = entry.hoveredTarget ?? entry.trajectoryAimTarget ?? entry.targets.find(target => target && target !== entry.token) ?? null;
-      if (!target?.actor) {
-        ui.notifications.warn(`${entry.token?.name ?? entry.token?.actor?.name ?? this.label}: нет цели для удара.`);
-        return null;
-      }
       const directions = getEnabledMeleeDirections(entry.weapon, entry.actionKey, entry.weaponFunctionId);
+      if (!target?.actor) {
+        if (entry.actionKey !== "meleeAttack" || !directions.length) {
+          ui.notifications.warn(`${entry.token?.name ?? entry.token?.actor?.name ?? this.label}: нет цели для удара.`);
+          return null;
+        }
+        return {
+          mode: UNAIMED_ATTACK_MODE,
+          target: null,
+          targetUuid: "",
+          selectedLimbKey: "",
+          directionKey: ""
+        };
+      }
       const direction = directions.find(direction => direction.mode === "thrust") ?? directions.at(0);
       if (!direction) return null;
       return {
@@ -2294,9 +2329,6 @@ function serializeOrdinaryAttackSelection(selection = {}) {
     directionKey: String(selection.directionKey ?? ""),
     selectedStrength: Math.max(1, toInteger(selection.selectedStrength) || 1),
     mode: String(selection.mode ?? "current"),
-    visibleTokenUuids: Array.from(new Set((selection.visibleTokenUuids ?? [])
-      .map(uuid => String(uuid ?? "").trim())
-      .filter(Boolean))),
     operationId: String(selection.operationId ?? "").trim(),
     previewAttackId: String(selection.previewAttackId ?? "").trim()
   };
@@ -2374,9 +2406,6 @@ async function handleOrdinaryWeaponAttackTicketQuery(data = {}, {
     || !selection.weaponUuid
     || !selection.actionKey
   ) return { ok: false, reason: "invalidSelection" };
-  if (!selection.visibleTokenUuids.length || selection.visibleTokenUuids.length > 2048) {
-    return { ok: false, reason: "invalidVisibility" };
-  }
   const authoritySocketId = String(game.socket?.id ?? "").trim();
   if (!authoritySocketId) return { ok: false, reason: "authorityUnavailable" };
   const preferredAuthoritySocketId = String(data?.preferredAuthoritySocketId ?? "").trim();
@@ -2755,32 +2784,14 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
     if (!selection.operationId || !selection.tokenUuid || !selection.weaponUuid || !selection.actionKey) {
       return { ok: false, executed: false, reason: "invalidSelection" };
     }
-    if (!selection.visibleTokenUuids.length || selection.visibleTokenUuids.length > 2048) {
-      return { ok: false, executed: false, reason: "invalidVisibility" };
-    }
-
-    const relevantTokenUuids = selection.visibleTokenUuids
-      .filter(uuid => uuid !== selection.tokenUuid);
-    const [tokenDocument, weapon, ...visibleTokenDocuments] = await Promise.all([
+    const [tokenDocument, weapon] = await Promise.all([
       fromUuid(selection.tokenUuid),
-      fromUuid(selection.weaponUuid),
-      ...relevantTokenUuids.map(uuid => fromUuid(uuid))
+      fromUuid(selection.weaponUuid)
     ]);
     const token = tokenDocument?.object ?? null;
     if (!token?.actor || !weapon) return { ok: false, executed: false, reason: "missingDocument" };
-    if (visibleTokenDocuments.some(document => !document?.object?.actor)) {
-      return { ok: false, executed: false, reason: "invalidVisibility" };
-    }
-    if (!isAttackSceneClient([tokenDocument, ...visibleTokenDocuments], { requirePlaceables: true })) {
+    if (!isAttackSceneClient([tokenDocument], { requirePlaceables: true })) {
       return { ok: false, executed: false, reason: "gmSceneUnavailable" };
-    }
-    if (!sender.isGM && visibleTokenDocuments.some(document => (
-      document.uuid !== tokenDocument.uuid && document.hidden
-    ))) {
-      return { ok: false, executed: false, reason: "invalidVisibility" };
-    }
-    if (!selection.visibleTokenUuids.includes(tokenDocument.uuid)) {
-      return { ok: false, executed: false, reason: "invalidVisibility" };
     }
     if (!sender.isGM && !token.actor.testUserPermission?.(sender, "OWNER")) {
       return { ok: false, executed: false, reason: "notOwner" };
@@ -2820,7 +2831,7 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
       return { ok: false, executed: false, reason: "invalidMode" };
     }
 
-    const targetTokenUuidAllowlist = new Set(selection.visibleTokenUuids);
+    const targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids(token);
     if (selection.targetUuid && !targetTokenUuidAllowlist.has(selection.targetUuid)) {
       return { ok: false, executed: false, reason: "invalidTarget" };
     }
@@ -2877,13 +2888,26 @@ function getOrdinaryAttackSceneGM(token = null) {
   return gm?.active && gm.isGM ? gm : null;
 }
 
-function getVisibleAttackTokenUuids(controller = null) {
-  return Array.from(new Set([
-    getTokenDocumentUuid(controller?.token),
-    ...(canvas.tokens?.placeables ?? [])
-      .filter(token => token?.actor && token.visible)
-      .map(getTokenDocumentUuid)
-  ].filter(Boolean)));
+function getAuthoritativeAttackPerceptionUuids(attackerToken = null) {
+  const attackerUuid = getTokenDocumentUuid(attackerToken);
+  if (!attackerToken?.actor || !attackerUuid) return new Set();
+  const candidates = (globalThis.canvas?.tokens?.placeables ?? []).filter(target => (
+    target === attackerToken || isAttackImpactTarget(target)
+  ));
+  const perceived = new Set([attackerUuid]);
+  if (attackerToken.vision?.active) {
+    for (const target of candidates) {
+      const uuid = getTokenDocumentUuid(target);
+      if (uuid && isAttackTargetVisible(target, null, attackerToken)) perceived.add(uuid);
+    }
+    return perceived;
+  }
+  const visibility = testObserverVisibilityBatch(attackerToken, candidates);
+  for (const target of candidates) {
+    const uuid = getTokenDocumentUuid(target);
+    if (uuid && visibility.get(uuid) === true) perceived.add(uuid);
+  }
+  return perceived;
 }
 
 function getOrdinaryAttackFailureMessage(reason = "") {
@@ -3027,12 +3051,15 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     if (!token?.actor || !weapon) {
       return { ok: false, reason: authorityContext ? "gmSceneUnavailable" : "missingDocument" };
     }
+    let target = null;
     if (selection.targetUuid) {
       const targetDocument = await fromUuid(String(selection.targetUuid));
       if (!targetDocument?.object && authorityContext) return { ok: false, reason: "gmSceneUnavailable" };
+      target = targetDocument?.object ?? targetDocument ?? null;
     }
     resolved.push({
       token,
+      target,
       weapon,
       actionKey: String(selection.actionKey ?? ""),
       weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
@@ -3060,6 +3087,17 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     if (isWeaponPlacementDisabled(selection.token.actor, selection.weapon)) return { ok: false, reason: "disabledPlacement" };
     const attackCount = getActionAttackCount(selection.weapon, selection.actionKey, selection.weaponFunctionId);
     if (!hasRequiredWeaponResources(selection.weapon, attackCount, selection.weaponFunctionId)) return { ok: false, reason: "weaponResources" };
+    selection.targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids(selection.token);
+    if (
+      selection.targetUuid
+      && (
+        !isAttackImpactTarget(selection.target)
+        || !selection.targetTokenUuidAllowlist.has(selection.targetUuid)
+      )
+    ) return { ok: false, reason: "invalidTarget" };
+    if (!validateCommandedAttackSelectionMode(selection, selection.weapon)) {
+      return { ok: false, reason: "invalidMode" };
+    }
     const current = actionPointCosts.get(selection.token.actor.uuid) ?? { actor: selection.token.actor, amount: 0 };
     current.amount += selection.actionPointCost;
     actionPointCosts.set(selection.token.actor.uuid, current);
@@ -3078,6 +3116,7 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     reportedActionPointCost: authorityContext ? selection.actionPointCost : null,
     reactionCoordinator,
     chainRef,
+    targetTokenUuidAllowlist: selection.targetTokenUuidAllowlist,
     suppressAttackPreviewBroadcast: Boolean(authorityContext),
     headlessExecution: Boolean(authorityContext)
   })));
@@ -3256,12 +3295,16 @@ async function validateCommandedAbilityAuthority({
     [sourceTokenDocument, ...targetTokenDocuments, ...attackTargetTokenDocuments],
     { requirePlaceables: true }
   )) return false;
+  if (
+    !sender.isGM
+    && [...targetTokenDocuments, ...attackTargetTokenDocuments]
+      .some(document => !isAttackImpactTarget(document?.object))
+  ) return false;
   const sourceSceneUuid = String(sourceTokenDocument.parent?.uuid ?? "");
   const seenActors = new Set();
   for (const targetTokenDocument of targetTokenDocuments) {
     const targetActor = targetTokenDocument?.actor;
     if (!targetActor || String(targetTokenDocument.parent?.uuid ?? "") !== sourceSceneUuid) return false;
-    if (!sender.isGM && targetTokenDocument.hidden) return false;
     if (settings.excludeSelf && targetActor.uuid === sourceActor.uuid) return false;
     if (seenActors.has(targetActor.uuid)) return false;
     seenActors.add(targetActor.uuid);
@@ -3285,6 +3328,7 @@ async function validateCommandedAbilityAuthority({
     }
   }
 
+  const perceptionByExecutor = new Map();
   for (const [selectionIndex, selection] of (selections ?? []).entries()) {
     const action = actions[selectionIndex];
     const allowedActionKeys = new Set(action.attackActionKeys?.includes(ABILITY_ATTACK_ACTION_ALL)
@@ -3296,7 +3340,14 @@ async function validateCommandedAbilityAuthority({
     const weapon = await fromUuid(String(selection?.weaponUuid ?? ""));
     if (!tokenDocument?.actor || weapon?.parent?.uuid !== tokenDocument.actor.uuid) return false;
     if (!validateCommandedAttackSelectionMode(selection, weapon)) return false;
-    if (!(await validateCommandedAttackSelectionGeometry(selection, tokenDocument.object, weapon))) return false;
+    let targetTokenUuidAllowlist = perceptionByExecutor.get(tokenDocument.uuid);
+    if (!targetTokenUuidAllowlist) {
+      targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids(tokenDocument.object);
+      perceptionByExecutor.set(tokenDocument.uuid, targetTokenUuidAllowlist);
+    }
+    if (!(await validateCommandedAttackSelectionGeometry(selection, tokenDocument.object, weapon, {
+      targetTokenUuidAllowlist
+    }))) return false;
     let expectedActionPointCost = 0;
     if (isActorInActiveCombat(tokenDocument.actor)) {
       if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed) {
@@ -3331,6 +3382,12 @@ function validateCommandedAttackSelectionMode(selection = {}, weapon = null) {
       actionKey,
       String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
     );
+    if (actionKey === "meleeAttack" && mode === UNAIMED_ATTACK_MODE) {
+      return directions.length > 0
+        && !targetUuid
+        && !String(selection?.selectedLimbKey ?? "")
+        && !String(selection?.directionKey ?? "");
+    }
     return mode === "directed"
       && Boolean(targetUuid)
       && directions.some(direction => direction.key === String(selection?.directionKey ?? ""))
@@ -3497,6 +3554,16 @@ async function executeCapturedWeaponAttack(selection = {}, {
   const targetDocument = selection.targetUuid ? await fromUuid(selection.targetUuid) : null;
   const selectedTarget = targetDocument?.object ?? targetDocument ?? null;
   try {
+    if (selection.mode === UNAIMED_ATTACK_MODE) {
+      if (ownsController) controller.refresh(true);
+      await controller.syncAttackAutoCoverForExecution();
+      controller.reuseValidatedGeometryOnce = !ownsController;
+      await controller.performUnaimedMeleeAttack();
+      return getCapturedWeaponAttackResult(controller, {
+        includeWeaponNoiseMetadata: returnWeaponNoiseMetadata,
+        includeAuthorityMetadata: returnAuthorityMetadata
+      });
+    }
     if (selection.mode === "aimed") {
       controller.selectedTarget = selectedTarget;
       controller.aimedMode = "limb";
@@ -3717,7 +3784,7 @@ function isAimedAttackGeometryTargetReachable({
 } = {}) {
   const attacker = attackerToken?.object ?? attackerToken;
   const target = targetToken?.object ?? targetToken;
-  if (!attacker?.actor || !target?.actor || !weapon || !isAttackTargetVisible(target)) return false;
+  if (!attacker?.actor || !target?.actor || !weapon || !isAttackTargetVisible(target, null, attacker)) return false;
   const origin = getTokenAimPoint(attacker);
   const targetPoint = getTokenAimPoint(target);
   const geometry = getAttackGeometry(
@@ -4092,7 +4159,10 @@ export class WeaponAttackController {
     this.useGmAuthority = Boolean(options.useGmAuthority);
     this.authorityExecutionSucceeded = false;
     this.authorityShouldFinish = false;
+    this.fixedTargetTokenUuidAllowlist = options.targetTokenUuidAllowlist !== null
+      && options.targetTokenUuidAllowlist !== undefined;
     this.targetTokenUuidAllowlist = normalizeTargetTokenUuidAllowlist(options.targetTokenUuidAllowlist);
+    this.refreshInactiveAttackerPerception();
     this.suppressAttackPreviewBroadcast = Boolean(options.suppressAttackPreviewBroadcast);
     this.headlessExecution = Boolean(options.headlessExecution);
     this.reuseValidatedGeometryOnce = false;
@@ -4507,6 +4577,18 @@ export class WeaponAttackController {
 
   createWeaponAttackSkillCheckContext(targetToken = null, extra = {}) {
     const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
+    const postureEdge = getPostureAttackEdgeModifiers({
+      attackerToken: this.token,
+      targetToken,
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId
+    });
+    const perceptionEdge = getUnseenAttackEdgeModifiers(
+      targetToken,
+      this.targetTokenUuidAllowlist,
+      this.token
+    );
     return {
       actorToken: this.token,
       targetToken,
@@ -4521,13 +4603,9 @@ export class WeaponAttackController {
       attackModifier: this.attackModifier,
       weaponActionModifierState: this.getWeaponActionModifierState(),
       suppressGenericEventReactions: this.suppressGenericEventReactions,
-      ...getPostureAttackEdgeModifiers({
-        attackerToken: this.token,
-        targetToken,
-        weapon: this.weapon,
-        actionKey: this.actionKey,
-        weaponFunctionId: this.weaponFunctionId
-      }),
+      ...mergeAttackEdgeModifiers(postureEdge, perceptionEdge),
+      attackTargetVisible: targetToken ? !perceptionEdge.disadvantage : true,
+      unaimedAttack: Boolean(perceptionEdge.disadvantage),
       ...extra
     };
   }
@@ -4757,6 +4835,12 @@ export class WeaponAttackController {
     }
     const shared = getSharedAbilityAttackTrialSession(this.abilityTrialSession);
     this.registerAbilityTrialTargets([target]);
+    const allTrialTargets = await this.getAbilityTrialTargets(target);
+    const sourceOnceUnperceivedTarget = allTrialTargets.find(candidate => !isAttackTargetVisible(
+      candidate,
+      this.targetTokenUuidAllowlist,
+      this.token
+    ));
     const laneKey = String(
       this.abilityTrialSession?.laneKey
       ?? target?.document?.uuid
@@ -4783,6 +4867,18 @@ export class WeaponAttackController {
         weaponFunctionId: this.weaponFunctionId,
         actionKey: this.actionKey,
         attackId: this.attackId
+      },
+      sourceCheckDataByMode: {
+        once: getUnseenAttackEdgeModifiers(
+          sourceOnceUnperceivedTarget,
+          this.targetTokenUuidAllowlist,
+          this.token
+        ),
+        perTarget: getUnseenAttackEdgeModifiers(
+          target,
+          this.targetTokenUuidAllowlist,
+          this.token
+        )
       },
       requester: "abilityAttackTrial",
       animate: false,
@@ -5048,6 +5144,7 @@ export class WeaponAttackController {
 
   beginProcessingCycle() {
     if (this.processing) return false;
+    this.refreshInactiveAttackerPerception({ force: true });
     this.finishTargetSelection();
     this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
     this.weaponNoiseAttempted = false;
@@ -5744,6 +5841,23 @@ export class WeaponAttackController {
     return targets.filter(target => this.targetTokenUuidAllowlist.has(getTokenDocumentUuid(target)));
   }
 
+  getAttackResolutionTargets(geometry = this.geometry, {
+    includeAttacker = false,
+    includeDead = false
+  } = {}) {
+    if (!geometry) return [];
+    const impactTargets = getPotentialTargets(this.token, geometry, {
+      includeAttacker,
+      includeDead,
+      purpose: "impact"
+    });
+    const impactSet = new Set(impactTargets);
+    return Array.from(new Set([
+      ...(this.targets ?? []).filter(target => impactSet.has(target)),
+      ...impactTargets
+    ]));
+  }
+
   async executeOrdinaryAttackViaGm(data = {}) {
     if (!this.shouldUseOrdinaryGmAuthority() || this.processing) return false;
     const gm = getOrdinaryAttackSceneGM(this.token);
@@ -5762,7 +5876,6 @@ export class WeaponAttackController {
       lockedGeometry: this.lockedGeometry ?? serializeGeometry(this.geometry),
       targetUuid: this.selectedTarget?.document?.uuid ?? this.selectedTarget?.uuid ?? "",
       selectedLimbKey: this.selectedLimbKey,
-      visibleTokenUuids: getVisibleAttackTokenUuids(this),
       operationId: foundry.utils.randomID(),
       previewAttackId: this.attackId,
       ...data
@@ -5897,7 +6010,7 @@ export class WeaponAttackController {
     if (this.processing || !this.geometry) return;
 
     this.refresh(true);
-    const targets = Array.from(new Set(this.targets ?? []))
+    const targets = Array.from(new Set(this.getAttackResolutionTargets()))
       .filter(target => target && target !== this.token);
     if (!targets.length) {
       ui.notifications.warn(`${this.attackModifier?.label || this.weapon.name}: нет целей в радиусе атаки.`);
@@ -5931,6 +6044,7 @@ export class WeaponAttackController {
     this.beginProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
+    this.registerAbilityTrialTargets(targets);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount: plannedAttackCount });
 
     const damageRequests = [];
@@ -5999,7 +6113,8 @@ export class WeaponAttackController {
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
     const totalAttackCount = duplicatePlan.totalAttackCount;
-    this.registerAbilityTrialTargets(this.targets);
+    const resolutionTargets = this.getAttackResolutionTargets();
+    this.registerAbilityTrialTargets(resolutionTargets);
 
     const trajectories = [];
     const damageRequests = [];
@@ -6009,7 +6124,7 @@ export class WeaponAttackController {
       this.weaponFunctionId
     );
     const forceBatchCheckMessage = totalAttackCount > 1
-      || this.targets.length > 1
+      || resolutionTargets.length > 1
       || projectileCountPerAttack > 1;
     const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext(),
@@ -6035,7 +6150,7 @@ export class WeaponAttackController {
       if (animationTrajectory) trajectories.push({ ...animationTrajectory, delayGroup: attackIndex });
       attempted = true;
 
-      for (const target of this.targets) {
+      for (const target of resolutionTargets) {
         if (this.attackCanceledByReaction) break;
         for (const [projectileIndex, projectile] of projectiles.entries()) {
           if (this.attackCanceledByReaction) break;
@@ -6298,7 +6413,6 @@ export class WeaponAttackController {
       burstRanges,
       { distribution: exactDistribution }
     );
-    const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, projectileCount, { primaryShots });
     let attempted = false;
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
@@ -6314,14 +6428,9 @@ export class WeaponAttackController {
         if (this.attackCanceledByReaction) break;
         const projectile = projectiles[shotIndex];
         const projectileIndex = (attackIndex * projectiles.length) + shotIndex;
-        const target = assignments[projectileIndex] ?? null;
         const primaryTrajectory = primaryShots[projectileIndex]?.trajectory ?? buildRandomTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry));
         const trajectory = primaryTrajectory;
         attempted = true;
-        if (!target) {
-          trajectories.push({ ...trajectory, delayGroup: attackIndex });
-          continue;
-        }
         const result = await this.resolveAttackTrajectory({
           checkBatch,
           trajectory,
@@ -6360,7 +6469,13 @@ export class WeaponAttackController {
   }
 
   onAimedConfirm() {
-    if (this.aimedMode !== "aim" || !this.hoveredTarget || !this.geometry) return undefined;
+    if (this.aimedMode !== "aim" || !this.geometry) return undefined;
+    if (!this.hoveredTarget) {
+      if (this.actionKey === "meleeAttack" && !this.requiresLimbSelection) {
+        void this.runInteractiveAttackOperation(() => this.performUnaimedMeleeAttack());
+      }
+      return undefined;
+    }
     const actionContext = this.createWeaponActionContext({ targetToken: this.hoveredTarget });
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return undefined;
@@ -6393,6 +6508,141 @@ export class WeaponAttackController {
     this.refresh(true);
     this.refreshAimedLimbMenu();
     return undefined;
+  }
+
+  async performUnaimedMeleeAttack() {
+    if (
+      this.processing
+      || this.actionKey !== "meleeAttack"
+      || this.aimedMode !== "aim"
+      || !this.geometry
+    ) return false;
+    if (this.interruptForIncapacitation()) return false;
+
+    this.refresh(true);
+    const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
+    if (!geometry) return false;
+    const enabledDirections = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId);
+    if (!enabledDirections.length) {
+      ui.notifications.warn(`${this.weapon.name}: нет разрешённого направления удара.`);
+      return false;
+    }
+
+    const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
+    const actionContext = this.createWeaponActionContext({ targetToken: null, geometry });
+    if (!this.hasRequiredWeaponResources(attackCount)) return false;
+    if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
+      this.token.actor,
+      this.weapon,
+      this.actionKey,
+      this.weaponFunctionId,
+      actionContext
+    )) return false;
+    if (this.captureOnly) return this.captureAttackSelection({ mode: UNAIMED_ATTACK_MODE });
+    if (this.shouldUseOrdinaryGmAuthority()) {
+      return this.executeOrdinaryAttackViaGm({ mode: UNAIMED_ATTACK_MODE });
+    }
+
+    this.beginProcessingCycle();
+    this.pendingCriticalFailureResourceCosts = [];
+    this.removeLimbMenu();
+    if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
+    this.refresh(true);
+
+    const resolvedGeometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
+    const direction = selectRandomMeleeDirection(
+      getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId)
+    );
+    if (!direction) return this.completeProcessingCycle();
+    const impactTargets = this.getAttackResolutionTargets(resolvedGeometry);
+    const thrustTrajectory = direction.mode === "thrust"
+      ? buildTrajectoryByAngle(
+        this.token,
+        resolvedGeometry,
+        Number(resolvedGeometry.angle) || 0,
+        Number(resolvedGeometry.elevationSlope) || 0
+      )
+      : null;
+    const selectedTarget = direction.mode === "swing"
+      ? getUnaimedSwingTargetSequence(direction.key, impactTargets, resolvedGeometry).at(0) ?? null
+      : getTrajectoryTargetEntries(
+        this.token,
+        thrustTrajectory,
+        this.targetTokenUuidAllowlist,
+        { purpose: "impact" }
+      ).at(0)?.target ?? null;
+
+    const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
+    const totalAttackCount = duplicatePlan.totalAttackCount;
+    const damageRequests = [];
+    const damageResults = [];
+    const trajectories = [];
+    const checkBatch = selectedTarget
+      ? this.createSkillCheckCollector({ requester: "weaponAttack", title: this.weapon.name })
+      : null;
+    let attempted = false;
+
+    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
+    for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
+      if (this.attackCanceledByReaction) break;
+      if (direction.mode === "thrust") {
+        const trajectory = foundry.utils.deepClone(thrustTrajectory);
+        if (selectedTarget) {
+          const result = await this.resolveDirectedThrustTrajectory(selectedTarget, trajectory, { checkBatch });
+          damageRequests.push(...result.damageRequests);
+          trajectories.push({ ...result.trajectory, delayGroup: cycleIndex });
+        } else {
+          trajectories.push({ ...trajectory, delayGroup: cycleIndex });
+        }
+        attempted = true;
+      } else if (selectedTarget) {
+        const result = await this.resolveDirectedSwing(selectedTarget, direction.key, {
+          checkBatch,
+          geometry: resolvedGeometry,
+          targets: impactTargets
+        });
+        damageRequests.push(...result.damageRequests);
+        if (result.trajectory) trajectories.push({ ...result.trajectory, delayGroup: cycleIndex });
+        attempted ||= result.attempted;
+      } else {
+        const trajectory = buildConeAnimationTrajectory(resolvedGeometry);
+        if (trajectory) trajectories.push({ ...trajectory, delayGroup: cycleIndex });
+        attempted = true;
+      }
+    }
+    await this.dodgeExposure.flush();
+
+    if (attempted) {
+      await this.spendCurrentAttackCosts({
+        attackCount: totalAttackCount,
+        point: getAttackLandingPoint(trajectories, resolvedGeometry.end ?? this.pointer),
+        actionContext
+      });
+    }
+    await checkBatch?.publish({ forceBatch: duplicatePlan.cycles > 1 });
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
+    this.releaseInteractiveControl();
+    if (!this.attackCanceledByReaction && damageRequests.length) {
+      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
+    }
+    await this.notifyAttackResolved({
+      attempted,
+      damageResults,
+      killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults)
+    });
+    this.completeProcessingCycle();
+    return true;
+  }
+
+  refreshInactiveAttackerPerception({ force = false } = {}) {
+    if (this.fixedTargetTokenUuidAllowlist || !globalThis.canvas?.ready) return;
+    if (this.token?.vision?.active) {
+      this.targetTokenUuidAllowlist = null;
+      return;
+    }
+    if (force || this.targetTokenUuidAllowlist === null) {
+      this.targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids(this.token);
+    }
   }
 
   async performAimedAttack(limbKey) {
@@ -6571,7 +6821,8 @@ export class WeaponAttackController {
           this.token,
           selectedTarget,
           trajectory,
-          this.targetTokenUuidAllowlist
+          this.targetTokenUuidAllowlist,
+          { purpose: "impact" }
         ).length;
       return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
         blockerBonus: getAimedTargetBlockerBonus(blockerCount),
@@ -6693,7 +6944,11 @@ export class WeaponAttackController {
     const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", this.getWeaponDamage(), this.weaponFunctionId, {
       percentBaseAmount: this.getWeaponDamagePercentBase()
     });
-    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist, { purpose: "impact" });
+    this.registerAbilityTrialTargets([
+      selectedTarget,
+      ...targets.map(entry => entry.target)
+    ]);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
     const subsequentTargets = targets.filter(entry => (
@@ -6764,15 +7019,21 @@ export class WeaponAttackController {
     return { damageRequests, trajectory, checkBatch };
   }
 
-  async resolveDirectedSwing(selectedTarget, directionKey, { limbKey = "", checkBatch = null, geometry = null } = {}) {
+  async resolveDirectedSwing(selectedTarget, directionKey, {
+    limbKey = "",
+    checkBatch = null,
+    geometry = null,
+    targets = this.targets
+  } = {}) {
     const damageRequests = [];
-    const targets = getSwingTargetSequence(selectedTarget, directionKey, this.targets, geometry ?? this.geometry);
+    const targetSequence = getSwingTargetSequence(selectedTarget, directionKey, targets, geometry ?? this.geometry);
+    this.registerAbilityTrialTargets(targetSequence);
     const hitTargets = [];
     const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", this.getWeaponDamage(), this.weaponFunctionId, {
       percentBaseAmount: this.getWeaponDamagePercentBase()
     });
 
-    for (const [index, target] of targets.entries()) {
+    for (const [index, target] of targetSequence.entries()) {
       const damageAmount = Math.max(0, Math.round(baseDamage * Math.max(0, 1 - (index * 0.2))));
       if (damageAmount <= 0) break;
       const request = await this.resolveDirectedAttackAgainstTarget(target, {
@@ -6922,7 +7183,11 @@ export class WeaponAttackController {
         title: this.weapon.name
       })
       : null;
-    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist, { purpose: "impact" });
+    this.registerAbilityTrialTargets([
+      selectedTarget,
+      ...targets.map(entry => entry.target)
+    ]);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
     const subsequentTargets = targets.filter(entry => (
@@ -7072,8 +7337,8 @@ export class WeaponAttackController {
   } = {}) {
     const damageRequests = [];
     trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
-    if (!this.targets.length && !Array.isArray(trajectory?.segments)) return { attempted: true, damageRequests, trajectory };
-    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist, { purpose: "impact" });
+    this.registerAbilityTrialTargets(targets.map(entry => entry.target));
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     let penetrationsUsed = 0;
     let attempted = true;
@@ -7320,11 +7585,11 @@ export class WeaponAttackController {
       finalGeometries.push(finalGeometry);
       blastOutcomes.push(blastOutcome);
       if (!delayedExplosion) {
-        const blastTargets = this.filterTargetTokens(getPotentialTargets(this.token, finalGeometry, {
+        const blastTargets = getPotentialTargets(this.token, finalGeometry, {
           includeAttacker: true,
           includeDead: true,
-          targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
-        }));
+          purpose: "impact"
+        });
         this.registerAbilityTrialTargets(blastTargets);
         const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
         if (regionRequest) regionRequests.push(regionRequest);
@@ -7966,7 +8231,8 @@ export class WeaponAttackController {
       : this.volleyAction
       ? getVolleyTrajectoryAimTarget(this.token, this.geometry, {
         includeAttacker: true,
-        includeDead: true
+        includeDead: true,
+        candidates: potentialTargets
       })
       : this.getTrajectoryAimTarget(potentialTargets);
     this.geometry.aimPoint = this.trajectoryAimTarget
@@ -9623,9 +9889,13 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
         shapePoints: []
       };
       const targets = attackerToken
-        ? getPotentialTargets(attackerToken, geometry, { includeAttacker: true, includeDead: true })
+        ? getPotentialTargets(attackerToken, geometry, {
+          includeAttacker: true,
+          includeDead: true,
+          purpose: "impact"
+        })
         : (canvas.tokens?.placeables ?? []).filter(target => (
-          target.actor && target.visible && isTokenInVolleyPlanarRadius(target, geometry)
+          isAttackImpactTarget(target) && isTokenInVolleyPlanarRadius(target, geometry)
         ));
       for (const target of targets) {
         if (!isDeadTarget(target)) {
@@ -11314,22 +11584,74 @@ function buildClippedCirclePoints(attackerToken, { origin, distance }) {
   return points;
 }
 
+function getAttackGeometryTokenCandidates(geometry) {
+  const points = [...getAttackPolygonPoints(geometry)];
+  for (const strip of geometry?.ricochetCone?.strips ?? []) {
+    if (Array.isArray(strip)) points.push(...strip);
+  }
+  if (!points.length) points.push(geometry?.origin, geometry?.end);
+  return getCanvasTokenCandidates(getPointCollectionBounds(points));
+}
+
+function getTrajectoryTokenCandidates(trajectory) {
+  return getCanvasTokenCandidates(getPointCollectionBounds([
+    trajectory?.origin,
+    trajectory?.end
+  ], 1));
+}
+
+function getPointCollectionBounds(points = [], padding = 1) {
+  const valid = points.filter(point => (
+    Number.isFinite(Number(point?.x))
+    && Number.isFinite(Number(point?.y))
+  ));
+  if (!valid.length) return null;
+  const inset = Math.max(0, Number(padding) || 0);
+  const left = Math.min(...valid.map(point => Number(point.x))) - inset;
+  const right = Math.max(...valid.map(point => Number(point.x))) + inset;
+  const top = Math.min(...valid.map(point => Number(point.y))) - inset;
+  const bottom = Math.max(...valid.map(point => Number(point.y))) + inset;
+  return {
+    left,
+    top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top)
+  };
+}
+
+function getCanvasTokenCandidates(bounds = null) {
+  const placeables = canvas.tokens?.placeables ?? [];
+  const quadtree = canvas.tokens?.quadtree;
+  const Rectangle = globalThis.PIXI?.Rectangle;
+  if (!bounds || typeof quadtree?.getObjects !== "function" || typeof Rectangle !== "function") {
+    return placeables;
+  }
+  const rectangle = new Rectangle(bounds.left, bounds.top, bounds.width, bounds.height);
+  return Array.from(quadtree.getObjects(rectangle));
+}
+
 function getPotentialTargets(attackerToken, geometry, {
   includeAttacker = false,
   includeDead = false,
-  targetTokenUuidAllowlist = null
+  targetTokenUuidAllowlist = null,
+  purpose = "preview"
 } = {}) {
   const allowlist = normalizeTargetTokenUuidAllowlist(targetTokenUuidAllowlist);
+  const impact = purpose === "impact";
+  const candidates = getAttackGeometryTokenCandidates(geometry);
+  const isEligible = target => impact
+    ? isAttackImpactTarget(target)
+    : isAttackTargetVisible(target, allowlist, attackerToken);
   if (Array.isArray(geometry?.ricochetCone?.strips)) {
     const entries = new Map();
-    return (canvas.tokens?.placeables ?? [])
+    return candidates
       .filter(target => {
         if (
           (!includeAttacker && target === attackerToken)
           || !target.actor
-          || !isAttackTargetVisible(target, allowlist)
+          || !isEligible(target)
         ) return false;
-        const entry = getRicochetTargetEntry(target, geometry, allowlist);
+        const entry = getRicochetTargetEntry(target, geometry, allowlist, { purpose });
         if (entry) entries.set(target, entry);
         return entry !== null;
       })
@@ -11338,11 +11660,11 @@ function getPotentialTargets(attackerToken, geometry, {
         - (entries.get(right)?.distance ?? Infinity)
       ));
   }
-  return (canvas.tokens?.placeables ?? []).filter(target => {
+  return candidates.filter(target => {
     if (
       (!includeAttacker && target === attackerToken)
       || !target.actor
-      || !isAttackTargetVisible(target, allowlist)
+      || !isEligible(target)
     ) return false;
     return geometry.type === VOLLEY_ACTION_KEY
       ? Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry))
@@ -11350,11 +11672,21 @@ function getPotentialTargets(attackerToken, geometry, {
   }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
 }
 
-function getVolleyTrajectoryAimTarget(attackerToken, geometry, { includeAttacker = false, includeDead = false } = {}) {
+function getVolleyTrajectoryAimTarget(attackerToken, geometry, {
+  includeAttacker = false,
+  includeDead = false,
+  candidates = null
+} = {}) {
   if (!geometry || geometry.type !== VOLLEY_ACTION_KEY) return null;
-  return (canvas.tokens?.placeables ?? [])
+  const perceivedCandidates = Array.isArray(candidates)
+    ? candidates
+    : (canvas.tokens?.placeables ?? []).filter(target => (
+      target?.actor && isAttackTargetVisible(target, null, attackerToken)
+    ));
+  return perceivedCandidates
     .filter(target => {
-      if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
+      if ((!includeAttacker && target === attackerToken) || !target.actor) return false;
+      if (!includeDead && isDeadTarget(target)) return false;
       return isTokenInVolleyPlanarRadius(target, geometry);
     })
     .sort((left, right) => getTokenVolleyPlanarCenterDistance(left, geometry) - getTokenVolleyPlanarCenterDistance(right, geometry))
@@ -12068,7 +12400,7 @@ function getRicochetSegmentBranchKey(trajectory = {}, segment = {}) {
   return path.slice(0, reflectionCount).join("|") || "direct";
 }
 
-function getRicochetTargetEntry(target, geometry, targetTokenUuidAllowlist = null) {
+function getRicochetTargetEntry(target, geometry, targetTokenUuidAllowlist = null, { purpose = "preview" } = {}) {
   const tokenPolygon = getTokenWorldPolygon(target);
   const cone = geometry?.ricochetCone;
   if (!tokenPolygon || !Array.isArray(cone?.strips)) return null;
@@ -12082,7 +12414,7 @@ function getRicochetTargetEntry(target, geometry, targetTokenUuidAllowlist = nul
 
   let best = null;
   for (const trajectory of cone.rays ?? []) {
-    const entries = getTrajectoryTargetEntries(null, trajectory, targetTokenUuidAllowlist);
+    const entries = getTrajectoryTargetEntries(null, trajectory, targetTokenUuidAllowlist, { purpose });
     const entry = entries.find(candidate => candidate.target === target);
     if (!entry) continue;
     if (!best || entry.distance < best.distance) best = { ...entry, trajectory };
@@ -12244,13 +12576,19 @@ function reflectAngleAcrossWall(angle, wallDirection) {
   return Math.atan2(dy - (2 * dot * ny), dx - (2 * dot * nx));
 }
 
-function getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist = null) {
+function getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist = null, {
+  purpose = "preview"
+} = {}) {
   const allowlist = normalizeTargetTokenUuidAllowlist(targetTokenUuidAllowlist);
+  const impact = purpose === "impact";
+  const isEligible = target => impact
+    ? isAttackImpactTarget(target)
+    : isAttackTargetVisible(target, allowlist, attackerToken);
   if (Array.isArray(trajectory?.segments) && trajectory.segments.length) {
     const byTarget = new Map();
     for (const segment of trajectory.segments) {
-      for (const target of canvas.tokens?.placeables ?? []) {
-        if (target === attackerToken || !target.actor || !isAttackTargetVisible(target, allowlist)) continue;
+      for (const target of getTrajectoryTokenCandidates(segment)) {
+        if (target === attackerToken || !target.actor || !isEligible(target)) continue;
         const hit = getTokenTrajectoryHit(target, segment);
         if (!hit) continue;
         const distance = (Number(segment.distanceOffset) || 0) + hit.distance;
@@ -12268,11 +12606,11 @@ function getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAl
     }
     return Array.from(byTarget.values()).sort((left, right) => left.distance - right.distance);
   }
-  return (canvas.tokens?.placeables ?? [])
+  return getTrajectoryTokenCandidates(trajectory)
     .filter(target => (
       target !== attackerToken
       && target.actor
-      && isAttackTargetVisible(target, allowlist)
+      && isEligible(target)
     ))
     .map(target => ({ target, hit: getTokenTrajectoryHit(target, trajectory) }))
     .filter(entry => entry.hit && hasLineOfSight(attackerToken, entry.hit.point, trajectory.origin))
@@ -13129,11 +13467,74 @@ function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "
     ));
 }
 
-function isAttackTargetVisible(target, targetTokenUuidAllowlist = null) {
+function isAttackTargetVisible(target, targetTokenUuidAllowlist = null, attackerToken = null) {
+  if (!target?.actor) return false;
+  if (target === attackerToken) return true;
+  if (!isAttackImpactTarget(target)) return false;
   const allowlist = normalizeTargetTokenUuidAllowlist(targetTokenUuidAllowlist);
-  return allowlist === null
-    ? Boolean(target?.visible)
-    : allowlist.has(getTokenDocumentUuid(target));
+  if (allowlist !== null) return allowlist.has(getTokenDocumentUuid(target));
+  if (!attackerToken?.actor) return Boolean(target?.visible);
+  if (canvas.visibility?.tokenVision === false) return true;
+
+  const visionSource = attackerToken.vision;
+  const createConfig = canvas.visibility?._createVisibilityTestConfig;
+  const getTestPoints = target.document?.getVisibilityTestPoints;
+  if (!visionSource?.active || typeof createConfig !== "function" || typeof getTestPoints !== "function") {
+    return Boolean(target.visible);
+  }
+
+  const config = createConfig.call(
+    canvas.visibility,
+    getTestPoints.call(target.document),
+    { tolerance: 0, object: target }
+  );
+  const modes = globalThis.CONFIG?.Canvas?.detectionModes ?? {};
+  const sourceModes = visionSource.object?.document?.detectionModes ?? {};
+  if (!visionSource.isBlinded) {
+    const basicMode = sourceModes.basicSight;
+    if (basicMode && modes.basicSight?.testVisibility?.(visionSource, basicMode, config) === true) return true;
+    const lightMode = sourceModes.lightPerception;
+    if (lightMode && modes.lightPerception?.testVisibility?.(visionSource, lightMode, config) === true) return true;
+  }
+  for (const [id, mode] of Object.entries(sourceModes)) {
+    if (id === "basicSight" || id === "lightPerception") continue;
+    if (modes[id]?.testVisibility?.(visionSource, mode, config) === true) return true;
+  }
+  return false;
+}
+
+function isAttackImpactTarget(target) {
+  if (!target?.actor || target?.document?.hidden === true) return false;
+  const secretDisposition = globalThis.CONST?.TOKEN_DISPOSITIONS?.SECRET;
+  return secretDisposition === undefined || target.document?.disposition !== secretDisposition;
+}
+
+function getUnseenAttackEdgeModifiers(target, targetTokenUuidAllowlist = null, attackerToken = null) {
+  if (!target?.actor || isAttackTargetVisible(target, targetTokenUuidAllowlist, attackerToken)) return {};
+  return {
+    disadvantage: true,
+    disadvantageCount: UNAIMED_ATTACK_DISADVANTAGE_COUNT
+  };
+}
+
+function mergeAttackEdgeModifiers(...modifiers) {
+  const entries = modifiers.filter(entry => entry && typeof entry === "object");
+  const result = Object.assign({}, ...entries);
+  const advantageCount = entries.reduce((total, entry) => (
+    total + Math.max(0, toInteger(entry.advantageCount ?? (entry.advantage ? 1 : 0)))
+  ), 0);
+  const disadvantageCount = entries.reduce((total, entry) => (
+    total + Math.max(0, toInteger(entry.disadvantageCount ?? (entry.disadvantage ? 1 : 0)))
+  ), 0);
+  if (advantageCount > 0) {
+    result.advantage = true;
+    result.advantageCount = advantageCount;
+  }
+  if (disadvantageCount > 0) {
+    result.disadvantage = true;
+    result.disadvantageCount = disadvantageCount;
+  }
+  return result;
 }
 
 function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponFunctionId = "", context = {}) {
@@ -13275,15 +13676,21 @@ function getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId = "") {
 }
 
 function getEnabledMeleeDirections(weapon, actionKey, weaponFunctionId = "") {
-  const directions = MELEE_DIRECTIONS.filter(direction => isWeaponAttackModeEnabled(weapon, actionKey, direction.mode, weaponFunctionId));
-  return directions.length ? directions : MELEE_DIRECTIONS;
+  const settings = getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey] ?? {};
+  return getEnabledMeleeDirectionsFromSettings(settings);
+}
+
+function getEnabledMeleeDirectionsFromSettings(settings = {}) {
+  return MELEE_DIRECTIONS.filter(direction => settings?.[direction.mode]?.enabled !== false);
+}
+
+function selectRandomMeleeDirection(directions = [], random = Math.random) {
+  if (!Array.isArray(directions) || !directions.length) return null;
+  const roll = clamp(Number(random?.()) || 0, 0, 0.999999999999);
+  return directions[Math.floor(roll * directions.length)] ?? null;
 }
 
 export function isWeaponAttackModeEnabled(weapon, actionKey, mode, weaponFunctionId = "") {
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const thrustEnabled = weaponData?.[actionKey]?.thrust?.enabled !== false;
-  const swingEnabled = weaponData?.[actionKey]?.swing?.enabled !== false;
-  if (!thrustEnabled && !swingEnabled) return true;
   return getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.enabled !== false;
 }
 
@@ -13569,16 +13976,6 @@ function buildBurstTargetRanges(
     distribution
   })
     .map(entry => [entry.target, entry.range]));
-}
-
-function buildBurstBulletAssignments(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
-  const amount = Math.max(1, toInteger(attackCount) || 1);
-  const allowedTargets = new Set(targets);
-  const shots = getBurstPrimaryShots(attackerToken, geometry, amount, primaryShots, targets);
-  return Array.from({ length: amount }, (_value, index) => {
-    const target = shots[index]?.target ?? null;
-    return target && allowedTargets.has(target) ? target : null;
-  });
 }
 
 function buildBurstTargetEntries(
@@ -14090,6 +14487,22 @@ function getSwingTargetSequence(selectedTarget, directionKey, targets = [], geom
     })
     .map(entry => entry.target);
   return [selectedTarget, ...nextTargets];
+}
+
+function getUnaimedSwingTargetSequence(directionKey, targets = [], geometry = null) {
+  if (!geometry) return [];
+  const movingLeft = directionKey === "rightToLeft";
+  return Array.from(new Set(targets ?? []))
+    .filter(target => target?.actor)
+    .map(target => ({ target, span: getTokenSwingArcSpan(target, geometry) }))
+    .filter(entry => entry.span)
+    .sort((left, right) => {
+      const arcOrder = movingLeft
+        ? right.span.lateralCenter - left.span.lateralCenter
+        : left.span.lateralCenter - right.span.lateralCenter;
+      return arcOrder || left.span.distance - right.span.distance;
+    })
+    .map(entry => entry.target);
 }
 
 function getTokenSwingArcSpan(target, geometry) {
@@ -15396,10 +15809,12 @@ function getActorRequirementValue(actor, requirement = {}) {
   return toInteger(actor?.system?.characteristics?.[key]);
 }
 
-function getAimedTargetBlockers(attackerToken, selectedTarget, trajectory, targetTokenUuidAllowlist = null) {
+function getAimedTargetBlockers(attackerToken, selectedTarget, trajectory, targetTokenUuidAllowlist = null, {
+  purpose = "preview"
+} = {}) {
   const selectedHit = getTokenTrajectoryHit(selectedTarget, trajectory);
   if (!selectedHit) return [];
-  return getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist)
+  return getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist, { purpose })
     .filter(entry => entry.target !== selectedTarget && entry.hit.distance < selectedHit.distance - 0.5);
 }
 

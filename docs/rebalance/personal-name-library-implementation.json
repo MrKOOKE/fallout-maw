@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-08-09T09:03:09.988Z",
+  "mode": "direct-write",
+  "status": "written",
+  "sourcePath": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\docs\\rebalance\\legacy-personal-name-library.json",
+  "modulePath": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\src\\data\\personal-name-library.mjs",
+  "blocks": [
+    {
+      "id": "default-male-names",
+      "name": "Мужские имена",
+      "names": 332,
+      "characters": 2520
+    },
+    {
+      "id": "default-female-names",
+      "name": "Женские имена",
+      "names": 326,
+      "characters": 2484
+    },
+    {
+      "id": "default-surnames-common",
+      "name": "Простолюдинские фамилии",
+      "names": 351,
+      "characters": 2754
+    },
+    {
+      "id": "default-surnames-noble",
+      "name": "Знатные фамилии",
+      "names": 121,
+      "characters": 1150
+    }
+  ],
+  "totalNames": 1130,
+  "excludedCustomBlocks": [
+    {
+      "id": "OtC9SvTzw0eIOv0d",
+      "name": "Клички",
+      "names": 2
+    }
+  ],
+  "worldSetting": {
+    "found": true,
+    "changed": true,
+    "verified": true,
+    "key": "!settings!SWHCaJ5yXZGpzd3L"
+  },
+  "presets": [
+    {
+      "id": "fallout-maw-migration-seed",
+      "revision": "87f94f455454bee3e31b2af3796d320709cb2a389affd03e4c18a811e26f6188",
+      "saves": 0,
+      "targets": [
+        "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\storage\\settings-presets\\fallout-maw-migration-seed.json"
+      ]
+    },
+    {
+      "id": "fallout-maw",
+      "revision": "ba5862c62689f37b60a36555a488eb6335744ea57509493567b8cf65a1053e0a",
+      "saves": 2,
+      "targets": [
+        "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\storage\\settings-presets\\fallout-maw.json",
+        "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\settings-presets\\fallout-maw.json"
+      ]
+    },
+    {
+      "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
+      "revision": "018a5ae4a46b122d2c3eb8d8f80b878897624f515fa3adc3fea714d7b0963f94",
+      "saves": 1,
+      "targets": [
+        "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\storage\\settings-presets\\preset-29RLMkIuBBuzp9eClV99Sxcj.json",
+        "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\settings-presets\\preset-29RLMkIuBBuzp9eClV99Sxcj.json"
+      ]
+    }
+  ]
+}

@@ -206,6 +206,19 @@ test("ability trial critical damage is outcome-bound without changing ordinary w
   assert.match(ordinaryWeaponCritical, /getWeaponProficiencyInfluenceBonus\(weapon,\s*weaponFunctionId,\s*"criticalDamage"\)/);
 });
 
+test("ability trial source checks inherit the attacker's target-perception penalty", () => {
+  const abilityTrialRuntime = sliceBetween(
+    controllerSource,
+    "async resolveAbilityTrialAttackAgainstTarget",
+    "hasRequiredWeaponResources(multiplier"
+  );
+  assert.match(
+    abilityTrialRuntime,
+    /sourceCheckDataByMode:\s*\{[\s\S]*?once:\s*getUnseenAttackEdgeModifiers\(\s*sourceOnceUnperceivedTarget,[\s\S]*?perTarget:\s*getUnseenAttackEdgeModifiers\(\s*target,/
+  );
+  assert.match(abilityTrialRuntime, /const allTrialTargets = await this\.getAbilityTrialTargets\(target\)/);
+});
+
 test("HUD buttons and terminal ability dispatch include attack actions", () => {
   const buttons = sliceBetween(
     hudSource,

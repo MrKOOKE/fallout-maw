@@ -53,37 +53,41 @@ export function testObserverVisibilityBatch(observerToken, targetTokens = []) {
   try {
     Object.assign(source.blinded, observerToken._getVisionBlindedStates?.() ?? {});
     const sourceData = observerToken._getVisionSourceData();
-    const origin = getTokenAimPoint(observerToken, sourceData);
     source.initialize({
       ...sourceData,
-      x: origin.x,
-      y: origin.y,
-      elevation: origin.elevation,
       disabled: false,
       preview: false
     });
-    if (source.isBlinded) {
-      for (const targetToken of targetTokens) {
-        const uuid = tokenDocumentUuid(targetToken);
-        if (uuid) results.set(uuid, false);
-      }
-      return results;
-    }
-
+    const origin = {
+      x: Number(sourceData?.x) || 0,
+      y: Number(sourceData?.y) || 0,
+      elevation: Number(sourceData?.elevation) || 0
+    };
     for (const targetToken of targetTokens) {
       const uuid = tokenDocumentUuid(targetToken);
       if (!uuid) continue;
       try {
-        const points = getTokenVisibilityTestPoints(targetToken, origin);
+        const points = typeof targetToken?.document?.getVisibilityTestPoints === "function"
+          ? targetToken.document.getVisibilityTestPoints()
+          : getTokenVisibilityTestPoints(targetToken, origin);
         const config = canvas.visibility._createVisibilityTestConfig(points, {
           tolerance: 0,
           object: targetToken
         });
         let visible = false;
-        for (const modeId of ["basicSight", "lightPerception"]) {
-          const mode = tokenDocument.detectionModes?.[modeId];
+        const detectionModes = tokenDocument.detectionModes ?? {};
+        if (!source.isBlinded) for (const modeId of ["basicSight", "lightPerception"]) {
+          const mode = detectionModes?.[modeId];
           const detectionMode = CONFIG.Canvas.detectionModes?.[modeId];
           if (mode && detectionMode?.testVisibility(source, mode, config) === true) {
+            visible = true;
+            break;
+          }
+        }
+        if (!visible) for (const [modeId, mode] of Object.entries(detectionModes)) {
+          if (modeId === "basicSight" || modeId === "lightPerception") continue;
+          const detectionMode = CONFIG.Canvas.detectionModes?.[modeId];
+          if (detectionMode?.testVisibility(source, mode, config) === true) {
             visible = true;
             break;
           }

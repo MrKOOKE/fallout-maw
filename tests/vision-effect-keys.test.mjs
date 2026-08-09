@@ -61,6 +61,7 @@ globalThis.CONFIG = {
 };
 
 const {
+  DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER,
   expandDetectionModeRangeEffectChange,
   getDetectionModeIdFromRangeEffectKey,
   getDetectionModeRangeEffectKey,
@@ -109,7 +110,11 @@ test("Night Vision updates both Foundry sight geometry and basic detection range
     { ...source, key: "sight.enabled", type: "add", value: true },
     { ...source, key: "detectionModes.basicSight.enabled", type: "add", value: true },
     { ...source, key: "sight.range" },
-    { ...source, key: "detectionModes.basicSight.range" }
+    {
+      ...source,
+      key: "detectionModes.basicSight.range",
+      [DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER]: "basicSight"
+    }
   ]);
   assert.deepEqual(source, {
     key: "fallout-maw.vision.detectionModes.basicSight.range",
@@ -121,7 +126,7 @@ test("Night Vision updates both Foundry sight geometry and basic detection range
   assert.equal(expandDetectionModeRangeEffectChange({ key: "system.unrelated" }), null);
 });
 
-test("special detection senses do not enlarge ordinary sight geometry", () => {
+test("special detection senses seed a finite zero base without enlarging ordinary sight", () => {
   const source = {
     key: "fallout-maw.vision.detectionModes.customSense.range",
     type: "override",
@@ -131,6 +136,21 @@ test("special detection senses do not enlarge ordinary sight geometry", () => {
   assert.deepEqual(expandDetectionModeRangeEffectChange(source), [
     { ...source, key: "sight.enabled", type: "add", value: true },
     { ...source, key: "detectionModes.customSense.enabled", type: "add", value: true },
-    { ...source, key: "detectionModes.customSense.range" }
+    {
+      ...source,
+      key: "detectionModes.customSense.range",
+      [DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER]: "customSense"
+    }
   ]);
+});
+
+test("See All range changes are marked for source-aware Token application", () => {
+  const expanded = expandDetectionModeRangeEffectChange({
+    key: "fallout-maw.vision.detectionModes.seeAll.range",
+    type: "add",
+    value: "5"
+  });
+  const rangeChange = expanded.find(change => change.key === "detectionModes.seeAll.range");
+
+  assert.equal(rangeChange[DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER], "seeAll");
 });

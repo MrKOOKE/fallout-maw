@@ -102,9 +102,237 @@ globalThis.game = {
 };
 
 const {
+  ATTACK_TARGETING_TESTING,
   ORDINARY_WEAPON_ATTACK_TESTING,
   WeaponAttackController
 } = await import("../src/combat/weapon-attack-controller.mjs");
+
+test("perception preview and physical impact use independent target policies", () => {
+  const perceived = {
+    actor: {},
+    visible: true,
+    document: { hidden: false, uuid: "Scene.scene.Token.perceived" }
+  };
+  const smokeHidden = {
+    actor: {},
+    visible: false,
+    document: { hidden: false, uuid: "Scene.scene.Token.smoke-hidden" }
+  };
+  const administrativelyHidden = {
+    actor: {},
+    visible: false,
+    document: { hidden: true, uuid: "Scene.scene.Token.admin-hidden" }
+  };
+  const secret = {
+    actor: {},
+    visible: true,
+    document: {
+      hidden: false,
+      disposition: -2,
+      uuid: "Scene.scene.Token.secret"
+    }
+  };
+
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(perceived), true);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(smokeHidden), false);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackImpactTarget(smokeHidden), true);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackImpactTarget(administrativelyHidden), false);
+  assert.deepEqual(ATTACK_TARGETING_TESTING.getUnseenAttackEdgeModifiers(smokeHidden), {
+    disadvantage: true,
+    disadvantageCount: 3
+  });
+  assert.deepEqual(ATTACK_TARGETING_TESTING.getUnseenAttackEdgeModifiers(perceived), {});
+
+  const playerVisibility = new Set([perceived.document.uuid]);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(smokeHidden, playerVisibility), false);
+  assert.equal(ATTACK_TARGETING_TESTING.getUnseenAttackEdgeModifiers(
+    smokeHidden,
+    playerVisibility
+  ).disadvantageCount, 3);
+
+  const previousConst = globalThis.CONST;
+  globalThis.CONST = {
+    ...(previousConst ?? {}),
+    TOKEN_DISPOSITIONS: {
+      ...(previousConst?.TOKEN_DISPOSITIONS ?? {}),
+      SECRET: -2
+    }
+  };
+  try {
+    assert.equal(ATTACK_TARGETING_TESTING.isAttackImpactTarget(secret), false);
+    assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(secret), false);
+    assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(
+      secret,
+      new Set([secret.document.uuid])
+    ), false);
+  } finally {
+    globalThis.CONST = previousConst;
+  }
+});
+
+test("attacker-specific perception overrides global token visibility without removing physical impact", () => {
+  const previousCanvas = globalThis.canvas;
+  const previousPIXI = globalThis.PIXI;
+  const previousIntersection = foundry.utils.lineSegmentIntersection;
+  const previousCanvasConfig = CONFIG.Canvas;
+
+  class Polygon {
+    constructor(points = []) {
+      this.points = points;
+    }
+
+    contains(x, y) {
+      let inside = false;
+      for (let index = 0, previous = (this.points.length / 2) - 1; index < this.points.length / 2; previous = index++) {
+        const xi = this.points[index * 2];
+        const yi = this.points[(index * 2) + 1];
+        const xj = this.points[previous * 2];
+        const yj = this.points[(previous * 2) + 1];
+        if (((yi > y) !== (yj > y)) && (x < (((xj - xi) * (y - yi)) / (yj - yi)) + xi)) inside = !inside;
+      }
+      return inside;
+    }
+  }
+
+  class Rectangle {
+    constructor(x, y, width, height) {
+      Object.assign(this, { x, y, width, height });
+    }
+
+    normalize() {
+      return this;
+    }
+
+    toPolygon() {
+      return new Polygon([
+        this.x, this.y,
+        this.x + this.width, this.y,
+        this.x + this.width, this.y + this.height,
+        this.x, this.y + this.height
+      ]);
+    }
+  }
+
+  foundry.utils.lineSegmentIntersection = (a, b, c, d) => {
+    const denominator = ((a.x - b.x) * (c.y - d.y)) - ((a.y - b.y) * (c.x - d.x));
+    if (Math.abs(denominator) < 1e-9) return null;
+    const left = (a.x * b.y) - (a.y * b.x);
+    const right = (c.x * d.y) - (c.y * d.x);
+    const x = ((left * (c.x - d.x)) - ((a.x - b.x) * right)) / denominator;
+    const y = ((left * (c.y - d.y)) - ((a.y - b.y) * right)) / denominator;
+    const within = (value, first, second) => value >= Math.min(first, second) - 1e-9
+      && value <= Math.max(first, second) + 1e-9;
+    return within(x, a.x, b.x) && within(y, a.y, b.y)
+      && within(x, c.x, d.x) && within(y, c.y, d.y)
+      ? { x, y }
+      : null;
+  };
+  globalThis.PIXI = {
+    Polygon,
+    Rectangle,
+    Circle: class Circle {},
+    Ellipse: class Ellipse {}
+  };
+
+  const attackerVision = {
+    active: true,
+    isBlinded: false,
+    object: {
+      document: {
+        detectionModes: {
+          basicSight: { id: "basicSight", enabled: true, range: 100 }
+        }
+      }
+    }
+  };
+  const attacker = {
+    actor: {},
+    checkCollision: () => false,
+    document: { hidden: false, uuid: "Scene.scene.Token.attacker" },
+    vision: attackerVision
+  };
+  const target = {
+    actor: {},
+    document: {
+      _source: { depth: 1, elevation: 0 },
+      getVisibilityTestPoints: () => [{ x: 50, y: 5, elevation: 0 }],
+      hidden: false,
+      uuid: "Scene.scene.Token.unseen"
+    },
+    position: { x: 50, y: 0 },
+    shape: new Rectangle(0, 0, 10, 10),
+    // Another controlled source can make Foundry's aggregate Token.visible true.
+    visible: true
+  };
+  globalThis.canvas = {
+    dimensions: { distance: 1 },
+    scene: { grid: { distance: 1 } },
+    tokens: { placeables: [attacker, target] },
+    visibility: {
+      tokenVision: true,
+      _createVisibilityTestConfig: (points, options) => ({ points, object: options.object })
+    }
+  };
+  CONFIG.Canvas = {
+    detectionModes: {
+      basicSight: {
+        testVisibility: source => source !== attackerVision
+      }
+    }
+  };
+  const trajectory = {
+    distance: 100,
+    end: { x: 100, y: 5, elevation: 0 },
+    origin: { x: 0, y: 5, elevation: 0 }
+  };
+
+  try {
+    assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(target, null, attacker), false);
+    assert.deepEqual(ATTACK_TARGETING_TESTING.getUnseenAttackEdgeModifiers(target, null, attacker), {
+      disadvantage: true,
+      disadvantageCount: 3
+    });
+    assert.deepEqual(ATTACK_TARGETING_TESTING.getTrajectoryTargetEntries(attacker, trajectory), []);
+    const impacts = ATTACK_TARGETING_TESTING.getTrajectoryTargetEntries(
+      attacker,
+      trajectory,
+      null,
+      { purpose: "impact" }
+    );
+    assert.equal(impacts.length, 1);
+    assert.equal(impacts[0].target, target);
+    assert.equal(impacts[0].hit.distance, 50);
+
+    target.document.hidden = true;
+    assert.deepEqual(ATTACK_TARGETING_TESTING.getTrajectoryTargetEntries(
+      attacker,
+      trajectory,
+      null,
+      { purpose: "impact" }
+    ), []);
+  } finally {
+    foundry.utils.lineSegmentIntersection = previousIntersection;
+    globalThis.canvas = previousCanvas;
+    if (previousCanvasConfig === undefined) delete CONFIG.Canvas;
+    else CONFIG.Canvas = previousCanvasConfig;
+    if (previousPIXI === undefined) delete globalThis.PIXI;
+    else globalThis.PIXI = previousPIXI;
+  }
+});
+
+test("unaimed melee randomizes only among explicitly enabled directions", () => {
+  const swingOnly = ATTACK_TARGETING_TESTING.getEnabledMeleeDirectionsFromSettings({
+    thrust: { enabled: false },
+    swing: { enabled: true }
+  });
+  assert.deepEqual(swingOnly.map(direction => direction.key), ["rightToLeft", "leftToRight"]);
+  assert.equal(ATTACK_TARGETING_TESTING.selectRandomMeleeDirection(swingOnly, () => 0).key, "rightToLeft");
+  assert.equal(ATTACK_TARGETING_TESTING.selectRandomMeleeDirection(swingOnly, () => 0.999).key, "leftToRight");
+  assert.deepEqual(ATTACK_TARGETING_TESTING.getEnabledMeleeDirectionsFromSettings({
+    thrust: { enabled: false },
+    swing: { enabled: false }
+  }), []);
+});
 
 test("a 100-projectile HUD attack uses one authenticated ticket and one authority operation", async () => {
   ORDINARY_WEAPON_ATTACK_TESTING.reset();
@@ -208,10 +436,7 @@ test("a 100-projectile HUD attack uses one authenticated ticket and one authorit
   assert.equal(queryCalls.length, 1);
   assert.equal(queryCalls[0].name, ORDINARY_WEAPON_ATTACK_TESTING.queryName);
   assert.equal(queryCalls[0].options.timeout, 3000);
-  assert.deepEqual(
-    queryCalls[0].data.selection.visibleTokenUuids.sort(),
-    [sourceDocument.uuid, visibleDocument.uuid, irrelevantDocument.uuid].sort()
-  );
+  assert.equal(Object.hasOwn(queryCalls[0].data.selection, "visibleTokenUuids"), false);
   assert.equal(emitted.filter(payload => payload.action === "ordinaryAttackRequest").length, 1);
   assert.deepEqual(deliveryOptions.find(Boolean), { recipients: [gm.id] });
   assert.equal(began, 1);
@@ -454,50 +679,118 @@ test("authenticated sender ownership cannot be forged in the authority payload",
   assert.equal(result.reason, "notOwner");
 });
 
-test("authority rejects a hidden target injected into the visibility snapshot", async () => {
-  const sourceDocument = createTokenDocument("visibility-source");
-  const hiddenDocument = createTokenDocument("hidden", { hidden: true });
+test("authority derives perception from the attacker and ignores a forged globally-visible target", async () => {
+  const previousCanvas = globalThis.canvas;
+  const previousCanvasConfig = CONFIG.Canvas;
+  const previousFromUuid = globalThis.fromUuid;
+  const previousUser = game.user;
+  const previousActiveGM = game.users.activeGM;
+  const sourceDocument = createTokenDocument("observer-source");
+  const targetDocument = createTokenDocument("globally-visible-target");
   const sourceActor = {
-    uuid: "Actor.visibility-source",
+    effects: [],
+    items: [],
+    system: {},
+    uuid: "Actor.observer-source",
     testUserPermission: () => true
   };
   sourceDocument.actor = sourceActor;
   sourceDocument.object.actor = sourceActor;
+  sourceDocument.detectionModes = {
+    basicSight: { id: "basicSight", enabled: true, range: 100 }
+  };
+  Object.assign(sourceDocument.object, {
+    center: { x: 0, y: 0 },
+    hasSight: true,
+    _getVisionBlindedStates: () => ({}),
+    _getVisionSourceData: () => ({ x: 0, y: 0, elevation: 0, radius: 100 })
+  });
+  Object.assign(targetDocument.object, {
+    center: { x: 100, y: 0 },
+    // Aggregate visibility may come from a different controlled Token.
+    visible: true
+  });
   const weapon = {
+    type: "weapon",
     uuid: `${sourceActor.uuid}.Item.weapon`,
-    parent: sourceActor
+    parent: sourceActor,
+    system: {
+      functions: {
+        weapon: {
+          enabled: true,
+          availableActions: { aimedShot: true },
+          aimedShot: { enabled: true }
+        }
+      }
+    }
   };
   const documents = new Map([
     [sourceDocument.uuid, sourceDocument],
-    [hiddenDocument.uuid, hiddenDocument],
+    [targetDocument.uuid, targetDocument],
     [weapon.uuid, weapon]
   ]);
+
+  class ObserverVisionSource {
+    constructor({ object }) {
+      this.object = object;
+      this.blinded = {};
+      this.isBlinded = false;
+    }
+
+    initialize(data) {
+      this.data = data;
+    }
+
+    destroy() {}
+  }
+
   globalThis.fromUuid = async uuid => documents.get(uuid) ?? null;
   globalThis.canvas = {
+    ready: true,
     level: { id: "level" },
     scene: { id: "scene" },
-    tokens: {
-      placeables: [sourceDocument.object, hiddenDocument.object]
+    tokens: { placeables: [sourceDocument.object, targetDocument.object] },
+    visibility: {
+      tokenVision: true,
+      _createVisibilityTestConfig: (points, options) => ({ points, object: options.object })
+    }
+  };
+  CONFIG.Canvas = {
+    visionSourceClass: ObserverVisionSource,
+    detectionModes: {
+      basicSight: { testVisibility: () => false }
     }
   };
   game.user = gm;
   game.users.activeGM = gm;
 
-  const result = await ORDINARY_WEAPON_ATTACK_TESTING.executeSelection({
-    operationId: "hidden-injection",
-    previewAttackId: "preview-hidden",
-    tokenUuid: sourceDocument.uuid,
-    weaponUuid: weapon.uuid,
-    actionKey: "snapshot",
-    weaponFunctionId: "weapon",
-    pointer: { x: 300, y: 100, elevation: 0 },
-    geometry: createGeometry(),
-    visibleTokenUuids: [sourceDocument.uuid, hiddenDocument.uuid],
-    mode: "current"
-  }, player);
+  try {
+    const result = await ORDINARY_WEAPON_ATTACK_TESTING.executeSelection({
+      operationId: "forged-global-visibility",
+      previewAttackId: "preview-global-visibility",
+      tokenUuid: sourceDocument.uuid,
+      weaponUuid: weapon.uuid,
+      actionKey: "aimedShot",
+      weaponFunctionId: "weapon",
+      pointer: { x: 300, y: 100, elevation: 0 },
+      geometry: createGeometry(),
+      targetUuid: targetDocument.uuid,
+      selectedLimbKey: "torso",
+      visibleTokenUuids: [sourceDocument.uuid, targetDocument.uuid],
+      mode: "aimed"
+    }, player);
 
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, "invalidVisibility");
+    assert.equal(targetDocument.object.visible, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "invalidTarget");
+  } finally {
+    globalThis.canvas = previousCanvas;
+    globalThis.fromUuid = previousFromUuid;
+    game.user = previousUser;
+    game.users.activeGM = previousActiveGM;
+    if (previousCanvasConfig === undefined) delete CONFIG.Canvas;
+    else CONFIG.Canvas = previousCanvasConfig;
+  }
 });
 
 test("ticket selects one GM socket and repeated operationId reuses the cached result", async () => {
@@ -617,7 +910,7 @@ test("authority target policy overrides the GM viewport and keeps one headless c
   assert.deepEqual(controller.filterTargetTokens([allowed, denied]), [allowed]);
 
   const source = await readFile(new URL("../src/combat/weapon-attack-controller.mjs", import.meta.url), "utf8");
-  assert.match(source, /isAttackTargetVisible\(target,\s*allowlist\)/u);
+  assert.match(source, /const targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids\(token\)/u);
   assert.match(source, /controller:\s*suppliedController/u);
   assert.match(source, /headlessExecution:\s*true/u);
   assert.match(source, /attackId:\s*selection\.operationId/u);
@@ -627,6 +920,49 @@ test("authority target policy overrides the GM viewport and keeps one headless c
   assert.match(source, /\{ recipients: \[pending\.authorityUserId\] \}/u);
   assert.match(source, /handleWeaponAttackSocketMessage\(payload = \{\}, socketSenderUserId = ""\)/u);
   assert.match(source, /skipActionPointCost:\s*false,\s*\n\s*skipBaseWeaponResourceCosts:\s*false,/u);
+});
+
+test("unaimed attacks keep preview private while authority resolves physical impacts", async () => {
+  const source = await readFile(new URL("../src/combat/weapon-attack-controller.mjs", import.meta.url), "utf8");
+  const resolutionTargets = source.slice(
+    source.indexOf("getAttackResolutionTargets("),
+    source.indexOf("async executeOrdinaryAttackViaGm", source.indexOf("getAttackResolutionTargets("))
+  );
+  const trajectoryResolution = source.slice(
+    source.indexOf("async resolveAttackTrajectory("),
+    source.indexOf("async resolveAttackAgainstTarget", source.indexOf("async resolveAttackTrajectory("))
+  );
+  const preview = source.slice(
+    source.indexOf("function getPotentialTargets("),
+    source.indexOf("function getVolleyTrajectoryAimTarget", source.indexOf("function getPotentialTargets("))
+  );
+  const pelletResolution = source.slice(
+    source.indexOf("async resolveAttackPellets("),
+    source.indexOf("async resolveAttackTrajectory(", source.indexOf("async resolveAttackPellets("))
+  );
+  const burstResolution = source.slice(
+    source.indexOf("async performBurstAttack("),
+    source.indexOf("onAimedConfirm()", source.indexOf("async performBurstAttack("))
+  );
+  const volleyResolution = source.slice(
+    source.indexOf("async performVolleyAttack("),
+    source.indexOf("async resolveVolleyBlastPoint", source.indexOf("async performVolleyAttack("))
+  );
+
+  assert.match(resolutionTargets, /purpose:\s*"impact"/u);
+  assert.match(trajectoryResolution, /purpose:\s*"impact"/u);
+  assert.doesNotMatch(trajectoryResolution, /!this\.targets\.length/u);
+  assert.match(trajectoryResolution, /buildAttackTrajectory\(this\.token, this\.geometry, this\.targets\)/u);
+  assert.match(pelletResolution, /buildAttackTrajectories\([\s\S]*?this\.targets,/u);
+  assert.doesNotMatch(pelletResolution, /buildAttackTrajectories\([\s\S]*?getAttackResolutionTargets/u);
+  assert.match(burstResolution, /getBurstTargetHitDistribution\([\s\S]*?this\.targets,/u);
+  assert.match(volleyResolution, /purpose:\s*"impact"/u);
+  assert.match(preview, /purpose\s*=\s*"preview"/u);
+  assert.match(source, /hasTargets:\s*this\.targets\.length > 0/u);
+  assert.match(source, /mode:\s*UNAIMED_ATTACK_MODE/u);
+  assert.match(source, /selectRandomMeleeDirection\(/u);
+  assert.match(source, /canvas\.tokens\?\.quadtree/u);
+  assert.match(source, /disadvantageCount:\s*UNAIMED_ATTACK_DISADVANTAGE_COUNT/u);
 });
 
 function createAuthorityController({ sourceToken, targets = [], weapon }) {
