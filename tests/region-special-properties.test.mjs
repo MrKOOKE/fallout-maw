@@ -197,6 +197,19 @@ test("actor smoke perception changes retained vision without changing smoke data
   transitRegion.shapes[0] = { type: "circle", x: 100, y: 0, radius: 50 };
   transitRegion.object.bounds = { x: 50, y: -50, width: 100, height: 100 };
   const transitScene = createScene([transitRegion]);
+  const enhancedSmokeOnlyTransit = measureSmokePath(
+    { x: 0, y: 0, elevation: 0 },
+    { x: 200, y: 0, elevation: 0 },
+    {
+      scene: transitScene,
+      elevation: 0,
+      budget: 50,
+      chargeClearDistance: false,
+      densityAdjustment: getActorSmokeDensityAdjustment(actor)
+    }
+  );
+  assert.equal(enhancedSmokeOnlyTransit.cost, 50);
+  assert.equal(enhancedSmokeOnlyTransit.visibleDistance, 200);
   const improvedInside = measureSmokePath(
     { x: 0, y: 0, elevation: 0 },
     { x: 140, y: 0, elevation: 0 },
@@ -278,6 +291,8 @@ test("partial smoke constrains global light while restoring observer smoke block
   const lightPerception = { _testRange: nativeRange };
   const specialSense = { _testRange: nativeRange };
   const constrainedMasks = [];
+  let emittedShapeShift = 0;
+  let emittedSurfaceExposureShift = 0;
   class MockVisionSource {
     get lightRadius() { return 200; }
     get radius() { return 200; }
@@ -316,7 +331,18 @@ test("partial smoke constrains global light while restoring observer smoke block
       applyConstraint(constraint, options) {
         constrainedMasks.push({ name, constraint, options });
         const constrained = createMask(name, limit, origin);
-        constrained.points = constraint.points;
+        constrained.points = name === "emitted-light" && emittedShapeShift
+          ? constraint.points.map((value, index) => index % 2 ? value : value + emittedShapeShift)
+          : constraint.points;
+        if (name === "emitted-light") {
+          constrained.surfaceExposure = {
+            polygons: [{
+              points: constraint.points.map((value, index) => (
+                index % 2 ? value : value + emittedSurfaceExposureShift
+              ))
+            }]
+          };
+        }
         return constrained;
       },
       intersectPolygon() { return this; },
@@ -404,7 +430,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     globalThis.canvas = {
       ready: false,
       scene,
-      dimensions: { maxR: 1000 }
+      dimensions: { maxR: 1000, distancePixels: 100 }
     };
 
     registerSmokeVisionHooks();
@@ -453,6 +479,61 @@ test("partial smoke constrains global light while restoring observer smoke block
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, reachedByForeignLight), true);
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, { document: {} }, outside), true);
     assert.equal(differenceCalls, 1);
+    const initialVisionConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
+
+    // Foundry may initialize every light source again even when no light geometry changed. That native no-op must not
+    // invalidate either the observer constraint or the cached Region-minus-light geometry.
+    lightSource._createShapes();
+    visionSource._createShapes();
+    assert.equal(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, initialVisionConstraint);
+    assert.equal(differenceCalls, 1);
+
+    // Foundry represents surface exposure as a PolygonTree. Recreating an equal tree is a native no-op, while an
+    // actual exposure-ring change must receive a new semantic light version without recursive polygon comparison.
+    emittedSurfaceExposureShift = 0.25;
+    lightSource._createShapes();
+    visionSource._createShapes();
+    const surfaceExposureConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
+    assert.notEqual(surfaceExposureConstraint, initialVisionConstraint);
+    assert.equal(differenceCalls, 2);
+
+    // A semantically changed light outside this observer's bounds receives its own version without invalidating the
+    // observer's local candidate signature.
+    const distantLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
+    Object.assign(distantLightSource, {
+      active: true,
+      data: { x: 2_000, y: 0, elevation: 0, bright: 200, dim: 200 }
+    });
+    distantLightSource._createShapes();
+    globalThis.canvas.effects.lightSources.add(distantLightSource);
+    visionSource._createShapes();
+    assert.equal(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.equal(differenceCalls, 2);
+    globalThis.canvas.effects.lightSources.delete(distantLightSource);
+    distantLightSource._destroy();
+
+    // The same two-dimensional mask on another Foundry elevation cannot disperse smoke for this observer.
+    const elevatedLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
+    Object.assign(elevatedLightSource, {
+      active: true,
+      data: { x: 100, y: 0, elevation: 10, bright: 200, dim: 200 }
+    });
+    elevatedLightSource._createShapes();
+    globalThis.canvas.effects.lightSources.add(elevatedLightSource);
+    visionSource._createShapes();
+    assert.equal(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.equal(differenceCalls, 2);
+    globalThis.canvas.effects.lightSources.delete(elevatedLightSource);
+    elevatedLightSource._destroy();
+
+    // The smoke bands can stay cached while a native wall changes the final emitted shape. Since physical smoke
+    // dispersion consumes that final shape, this is a real semantic change and must invalidate the local geometry.
+    emittedShapeShift = 0.5;
+    lightSource._createShapes();
+    visionSource._createShapes();
+    assert.notEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.equal(differenceCalls, 3);
+
     lightSource._configure({});
     assert.equal(lightSource.nativeConfigured, true);
     assert.equal(lightSource._drawMesh("illumination"), "native-illumination");
@@ -460,6 +541,22 @@ test("partial smoke constrains global light while restoring observer smoke block
     assert.equal(lightSource.nativeAnimated, true);
     lightSource._destroy();
     assert.equal(lightSource.nativeDestroyed, true);
+
+    // A ray between different Foundry elevations must reach the native 3D Region segmentizer before elevation
+    // filtering. Filtering only at the observer elevation would incorrectly discard this opaque middle floor.
+    const elevatedSmoke = createSmokeRegion("sloped-ray-smoke", 100);
+    elevatedSmoke.elevation = { bottom: 4, top: 6 };
+    elevatedSmoke.shapes[0] = { type: "circle", x: 0, y: 0, radius: 100 };
+    elevatedSmoke.object.bounds = { x: -100, y: -100, width: 200, height: 200 };
+    globalThis.canvas.scene = createScene([elevatedSmoke]);
+    globalThis.canvas.effects.lightSources = new Set();
+    invalidateSmokeRegionIndex(globalThis.canvas.scene);
+    assert.equal(basicSight._testRange(
+      visionSource,
+      { range: 1 },
+      token,
+      { point: { x: 100, y: 0, elevation: 10 } }
+    ), false);
   } finally {
     globalThis.CONFIG = previous.CONFIG;
     globalThis.Hooks = previous.Hooks;
@@ -586,6 +683,24 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
   const includedSmokeEdges = [];
   const perceptionUpdates = [];
   const appliedConstraints = [];
+  let retessellateNativeLos = false;
+  const countRadialTransitions = (points, originX, originY, minimumDistance = 1) => (
+    points.reduce((count, _value, index) => {
+      if (index % 2) return count;
+      const next = (index + 2) % points.length;
+      const ax = points[index] - originX;
+      const ay = points[index + 1] - originY;
+      const bx = points[next] - originX;
+      const by = points[next + 1] - originY;
+      const cross = Math.abs((ax * by) - (ay * bx));
+      const lengthProduct = Math.max(1, Math.hypot(ax, ay) * Math.hypot(bx, by));
+      return cross <= lengthProduct * 1e-8
+        && ((ax * bx) + (ay * by)) > 0
+        && Math.abs(Math.hypot(ax, ay) - Math.hypot(bx, by)) > minimumDistance
+        ? count + 1
+        : count;
+    }, 0)
+  );
 
   class MockSweep {
     static create(origin, config) {
@@ -597,16 +712,20 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
       polygon.config = config;
       includedSmokeEdges.push([...globalThis.canvas.edges.values()]
         .some(edge => polygon._testEdgeInclusion(edge, {})));
+      const points = Array.from({ length: config.density }, (_, index) => {
+        const angle = (Math.PI * 2 * index) / config.density;
+        return [
+          origin.x + (Math.cos(angle) * config.radius),
+          origin.y + (Math.sin(angle) * config.radius)
+        ];
+      }).flat();
+      if (retessellateNativeLos) {
+        points.splice(2, 0, (points[0] + points[2]) / 2, (points[1] + points[3]) / 2);
+      }
       return {
         origin,
         config,
-        points: Array.from({ length: config.density }, (_, index) => {
-          const angle = (Math.PI * 2 * index) / config.density;
-          return [
-            origin.x + (Math.cos(angle) * config.radius),
-            origin.y + (Math.sin(angle) * config.radius)
-          ];
-        }).flat(),
+        points,
         applyConstraint(constraint) {
           appliedConstraints.push(constraint);
           return this;
@@ -746,6 +865,11 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
     assert.equal(sweepCalls, 3);
     assert.equal(includedSmokeEdges[2], false);
     assert.equal(appliedConstraints.length, 3);
+    assert.ok(countRadialTransitions(
+      appliedConstraints.at(-1).points,
+      outsideLightSource.data.x,
+      outsideLightSource.data.y
+    ) >= 2);
 
     const modifiedActor = {
       effects: [{
@@ -793,6 +917,198 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
           && Math.abs((boundaryDx * rayDy) - (boundaryDy * rayDx)) <= scale * 1e-8;
       }), true);
     }
+    const radialTransitionCount = countRadialTransitions(
+      boundaryAnchoredConstraint,
+      modifiedVisionSource.data.x,
+      modifiedVisionSource.data.y
+    );
+    assert.ok(radialTransitionCount >= 2);
+
+    // Native ClockwiseSweep may add or remove a redundant collinear point near a wall. That re-tessellation must not
+    // alter the independently computed smoke medium constraint at the same source position.
+    retessellateNativeLos = true;
+    const retessellatedVisionSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    Object.assign(retessellatedVisionSource, {
+      data: { ...modifiedVisionSource.data },
+      object: modifiedVisionSource.object
+    });
+    retessellatedVisionSource._createShapes();
+    const retessellatedConstraint = appliedConstraints.at(-1).points;
+    assert.deepEqual(retessellatedConstraint, boundaryAnchoredConstraint);
+
+    // Sub-pixel source movement keeps the same event topology and moves every contour point continuously.
+    const movedVisionSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    Object.assign(movedVisionSource, {
+      data: { ...modifiedVisionSource.data, x: modifiedVisionSource.data.x + 0.01 },
+      object: modifiedVisionSource.object
+    });
+    movedVisionSource._createShapes();
+    const movedConstraint = appliedConstraints.at(-1).points;
+    const distanceToSegments = (x, y, polygon) => {
+      let distance = Infinity;
+      for (let index = 0, previous = polygon.length - 2; index < polygon.length; previous = index, index += 2) {
+        const ax = polygon[previous];
+        const ay = polygon[previous + 1];
+        const dx = polygon[index] - ax;
+        const dy = polygon[index + 1] - ay;
+        const lengthSquared = (dx * dx) + (dy * dy);
+        const t = lengthSquared
+          ? Math.max(0, Math.min(1, (((x - ax) * dx) + ((y - ay) * dy)) / lengthSquared))
+          : 0;
+        distance = Math.min(distance, Math.hypot(x - (ax + (dx * t)), y - (ay + (dy * t))));
+      }
+      return distance;
+    };
+    const directedHausdorff = (from, to) => {
+      let distance = 0;
+      for (let index = 0; index < from.length; index += 2) {
+        distance = Math.max(distance, distanceToSegments(from[index], from[index + 1], to));
+      }
+      return distance;
+    };
+    const contourShift = Math.max(
+      directedHausdorff(boundaryAnchoredConstraint, movedConstraint),
+      directedHausdorff(movedConstraint, boundaryAnchoredConstraint)
+    );
+    assert.ok(contourShift <= 0.25, `symmetric contour shift was ${contourShift}`);
+
+    // A smoke-cost minimum can lie inside one regular Foundry angular slab. Both slab endpoints are then blocked
+    // while its midpoint is visible, so the contour requires two ordered radial transitions. Exercise both an
+    // ordinary slab and the final slab which wraps through 2π back to angle zero.
+    const angularStep = (Math.PI * 2) / 32;
+    const createRotatedStripRegion = (id, normalAngle) => {
+      const stripRegion = createSmokeRegion(id, 50);
+      const normal = { x: Math.cos(normalAngle), y: Math.sin(normalAngle) };
+      const tangent = { x: -normal.y, y: normal.x };
+      const near = 20;
+      const far = 45;
+      const halfLength = 200;
+      const point = (normalDistance, tangentDistance) => ({
+        x: (normal.x * normalDistance) + (tangent.x * tangentDistance),
+        y: (normal.y * normalDistance) + (tangent.y * tangentDistance)
+      });
+      const corners = [
+        point(near, -halfLength),
+        point(far, -halfLength),
+        point(far, halfLength),
+        point(near, halfLength)
+      ];
+      const points = corners.flatMap(({ x, y }) => [x, y]);
+      const xs = corners.map(({ x }) => x);
+      const ys = corners.map(({ y }) => y);
+      stripRegion.shapes = [{ type: "polygon" }];
+      stripRegion.object.bounds = {
+        x: Math.min(...xs),
+        y: Math.min(...ys),
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys)
+      };
+      Object.defineProperty(stripRegion, "polygons", {
+        configurable: true,
+        value: [{ points }]
+      });
+      stripRegion.polygonTree = {
+        polygons: stripRegion.polygons,
+        testPoint: ({ x, y }) => {
+          const normalDistance = (x * normal.x) + (y * normal.y);
+          const tangentDistance = (x * tangent.x) + (y * tangent.y);
+          return normalDistance >= near
+            && normalDistance <= far
+            && Math.abs(tangentDistance) <= halfLength;
+        }
+      };
+      return stripRegion;
+    };
+    const getRadialTransitionAngles = (points, originX, originY) => {
+      const result = [];
+      for (let index = 0; index < points.length; index += 2) {
+        const next = (index + 2) % points.length;
+        const ax = points[index] - originX;
+        const ay = points[index + 1] - originY;
+        const bx = points[next] - originX;
+        const by = points[next + 1] - originY;
+        const radiusA = Math.hypot(ax, ay);
+        const radiusB = Math.hypot(bx, by);
+        const scale = Math.max(1, radiusA * radiusB);
+        if (Math.abs((ax * by) - (ay * bx)) > scale * 1e-8) continue;
+        if ((ax * bx) + (ay * by) <= 0 || Math.abs(radiusA - radiusB) <= 20) continue;
+        result.push(((Math.atan2(ay, ax) % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2));
+      }
+      return result;
+    };
+    for (const [id, normalAngle, containsAngle] of [
+      ["two-roots", angularStep / 2, angle => angle > 0 && angle < angularStep],
+      ["two-roots-wrap", -angularStep / 2, angle => angle > (Math.PI * 2) - angularStep]
+    ]) {
+      globalThis.canvas.scene = createScene([createRotatedStripRegion(id, normalAngle)]);
+      const twoRootSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+      Object.assign(twoRootSource, {
+        data: { x: 0, y: 0, elevation: 0, externalRadius: 0 },
+        object: {
+          document: { detectionModes: { basicSight: { enabled: true, range: 0.501 } } },
+          getLightRadius: range => range * 100
+        }
+      });
+      twoRootSource._createShapes();
+      const slabTransitions = getRadialTransitionAngles(appliedConstraints.at(-1).points, 0, 0)
+        .filter(containsAngle)
+        .sort((left, right) => left - right);
+      assert.equal(slabTransitions.length, 2, `${id} transition count`);
+      assert.ok(slabTransitions[0] < slabTransitions[1], `${id} angular order`);
+    }
+
+    // When one opaque Region ends in front of another opaque Region, both one-sided rays remain blocked but the
+    // active collision distance changes. Preserve that discontinuity as two consecutive points on the same ray.
+    const nearRegion = createSmokeRegion("near-opaque", 100);
+    const farRegion = createSmokeRegion("far-opaque", 100);
+    const configureRectangle = (rectangleRegion, points, bounds, contains) => {
+      rectangleRegion.shapes = [{ type: "polygon" }];
+      rectangleRegion.object.bounds = bounds;
+      Object.defineProperty(rectangleRegion, "polygons", {
+        configurable: true,
+        value: [{ points }]
+      });
+      rectangleRegion.polygonTree = {
+        polygons: rectangleRegion.polygons,
+        testPoint: contains
+      };
+    };
+    configureRectangle(
+      nearRegion,
+      [20, 0, 40, 0, 40, 40, 20, 40],
+      { x: 20, y: 0, width: 20, height: 40 },
+      ({ x, y }) => x >= 20 && x <= 40 && y >= 0 && y <= 40
+    );
+    configureRectangle(
+      farRegion,
+      [60, -80, 80, -80, 80, 80, 60, 80],
+      { x: 60, y: -80, width: 20, height: 160 },
+      ({ x, y }) => x >= 60 && x <= 80 && y >= -80 && y <= 80
+    );
+    globalThis.canvas.scene = createScene([nearRegion, farRegion]);
+    const sameStateVisionSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    Object.assign(sameStateVisionSource, {
+      data: { x: 0, y: 0, elevation: 0, externalRadius: 0 },
+      object: {
+        document: { detectionModes: { basicSight: { enabled: true, range: 1 } } },
+        getLightRadius: range => range * 100
+      }
+    });
+    sameStateVisionSource._createShapes();
+    const sameStateConstraint = appliedConstraints.at(-1).points;
+    assert.equal(sameStateConstraint.some((_value, index, points) => {
+      if (index % 2) return false;
+      const next = (index + 2) % points.length;
+      const first = { x: points[index], y: points[index + 1] };
+      const second = { x: points[next], y: points[next + 1] };
+      return Math.abs(first.y) < 1e-6
+        && Math.abs(second.y) < 1e-6
+        && first.x > 0
+        && second.x > 0
+        && first.x < 100
+        && second.x < 100
+        && Math.abs(first.x - second.x) > 20;
+    }), true);
 
     globalThis.canvas.scene = createScene([]);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
