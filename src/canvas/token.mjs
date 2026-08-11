@@ -26,6 +26,7 @@ import {
   getActorFormulaApplicationPhase
 } from "../utils/actor-formulas.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
+import { buildHexEffectLayout, getHexEffectPolygonPoints } from "./token-effect-layout.mjs";
 import { isTokenEquipmentHudEnabled, openTokenHudForInteraction } from "./token-equipment-hud.mjs";
 import { appendGrappleFollowMovement, commitGrappleFollowOrchestrations, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION } from "../combat/active-actions.mjs";
 import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
@@ -602,22 +603,96 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
   }
 
   async _drawEffectIcon(effect) {
-    const icon = await super._drawEffect(effect.img, effect.tint);
+    const icon = canvas.grid.isHexagonal
+      ? await this._drawHexEffect(effect.img, effect.tint)
+      : await super._drawEffect(effect.img, effect.tint);
     if (!icon) return icon;
     this._activateEffectIconInteraction(icon, effect);
     return icon;
   }
 
+  async _drawHexEffect(src, tint) {
+    if (!src) return undefined;
+    const texture = await foundry.canvas.loadTexture(src, { fallback: "icons/svg/hazard.svg" });
+    const width = Math.max(1, Number(texture.width) || 1);
+    const height = Math.max(1, Number(texture.height) || 1);
+    // Foundry replaces PIXI.Graphics with non-batchable SmoothGraphics. The
+    // retained Pixi class batches these six-vertex textured icons like sprites.
+    const icon = new (PIXI.LegacyGraphics ?? PIXI.Graphics)();
+    icon.beginTextureFill({ texture, color: tint ?? 0xFFFFFF });
+    icon.drawPolygon(getHexEffectPolygonPoints(width / 2, height / 2, width, height, canvas.grid.columns));
+    icon.endFill();
+    return this.effects.addChild(icon);
+  }
+
   async _drawEffectOverlay(effect) {
-    const icon = await this._drawEffectIcon(effect);
-    if (icon) icon.alpha = 0.8;
+    const icon = await super._drawEffect(effect.img, effect.tint);
+    if (icon) {
+      icon.alpha = 0.8;
+      this._activateEffectIconInteraction(icon, effect);
+    }
     this.effects.overlay = icon ?? null;
     return icon;
   }
 
+  /** @override */
+  _refreshEffects() {
+    if (!canvas.grid.isHexagonal) return super._refreshEffects();
+
+    const scale = canvas.dimensions.uiScale;
+    const { width, height } = this.document.getSize();
+    const center = this.document.getCenterPoint({ x: 0, y: 0 });
+    const background = this.effects.bg.clear().beginFill(0x000000, 0.40).lineStyle(scale, 0x000000);
+    const statusIcons = [];
+
+    for (const effect of this.effects.children) {
+      if (effect === background) continue;
+      if (effect === this.effects.overlay) {
+        const overlaySize = Math.min(width * 0.6, height * 0.6);
+        effect.width = effect.height = overlaySize;
+        effect.position = center;
+        effect.anchor.set(0.5, 0.5);
+        continue;
+      }
+      statusIcons.push(effect);
+    }
+    if (!statusIcons.length) {
+      background.endFill();
+      return;
+    }
+
+    const columns = canvas.grid.columns;
+    const shape = this.shape;
+    const layout = buildHexEffectLayout({
+      width,
+      height,
+      centerX: center.x,
+      centerY: center.y,
+      shortDiameter: Math.min(20 * scale, columns ? height : width),
+      count: statusIcons.length,
+      columns,
+      contains: typeof shape?.contains === "function" ? (x, y) => shape.contains(x, y) : null
+    });
+
+    for (let index = 0; index < statusIcons.length; index += 1) {
+      const effect = statusIcons[index];
+      const slot = layout.slots[index] ?? center;
+      effect.width = layout.iconWidth;
+      effect.height = layout.iconHeight;
+      effect.position.set(slot.x - (layout.iconWidth / 2), slot.y - (layout.iconHeight / 2));
+      background.drawPolygon(getHexEffectPolygonPoints(
+        slot.x,
+        slot.y,
+        layout.iconWidth,
+        layout.iconHeight,
+        columns
+      ));
+    }
+    background.endFill();
+  }
+
   _activateEffectIconInteraction(icon, effect) {
     icon.eventMode = "static";
-    icon.interactive = true;
     icon.cursor = "help";
     icon.on("pointerover", event => this._scheduleEffectTooltip(event, icon, effect));
     icon.on("pointerout", () => scheduleEffectTooltipDeactivation());
@@ -1046,12 +1121,14 @@ function getIconClientRect(icon) {
   const view = canvas?.app?.view;
   const rect = view?.getBoundingClientRect?.();
   if (bounds && rect) {
-    const resolution = canvas.app.renderer?.resolution || 1;
+    const screen = canvas.app.renderer?.screen;
+    const scaleX = rect.width / (Number(screen?.width) || rect.width || 1);
+    const scaleY = rect.height / (Number(screen?.height) || rect.height || 1);
     return {
-      left: rect.left + (bounds.x / resolution),
-      top: rect.top + (bounds.y / resolution),
-      width: bounds.width / resolution,
-      height: bounds.height / resolution
+      left: rect.left + ((bounds.x - (Number(screen?.x) || 0)) * scaleX),
+      top: rect.top + ((bounds.y - (Number(screen?.y) || 0)) * scaleY),
+      width: bounds.width * scaleX,
+      height: bounds.height * scaleY
     };
   }
 
