@@ -9,6 +9,7 @@ import {
   setSkillSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
+import { FIXED_SIGNATURE_SKILL_MULTIPLIER } from "../advancement/index.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
@@ -57,6 +58,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     return {
       ...(await super._prepareContext(options)),
       characteristics,
+      fixedAdvancement: this.skillAdvancement.mode === "fixed",
       signatureMultiplier: this.skillAdvancement.signatureMultiplier,
       signatureFlatBonus: this.skillAdvancement.signatureFlatBonus,
       developmentLimit: this.skillAdvancement.developmentLimit,
@@ -84,7 +86,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, _formData) {
     const skills = this.#readSkillsFromForm();
-    const advancement = this.#readSkillAdvancementFromForm();
+    const advancement = this.#readSkillAdvancementFromForm(skills);
     const skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
     this.#validateSkills(skills);
     await setSkillSettings({ entries: skills, advancement });
@@ -153,7 +155,22 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     }));
   }
 
-  #readSkillAdvancementFromForm() {
+  #readSkillAdvancementFromForm(skills = this.skills) {
+    if (this.skillAdvancement.mode === "fixed") {
+      const characteristics = getCharacteristicSettings();
+      return {
+        signatureMultiplier: FIXED_SIGNATURE_SKILL_MULTIPLIER,
+        signatureFlatBonus: 0,
+        developmentLimit: Number(this.form?.querySelector("[data-field='developmentLimit']")?.value ?? 0),
+        developmentLimitPureOnly: Boolean(
+          this.form?.querySelector("[data-field='developmentLimitPureOnly']")?.checked
+        ),
+        entries: Object.fromEntries(skills.map(skill => [skill.key, {
+          base: 1,
+          characteristics: Object.fromEntries(characteristics.map(characteristic => [characteristic.key, 0]))
+        }]))
+      };
+    }
     const rows = Array.from(this.form?.querySelectorAll("[data-skill-advancement-row]") ?? []);
     return {
       signatureMultiplier: Number(this.form?.querySelector("[data-field='signatureMultiplier']")?.value ?? 0),

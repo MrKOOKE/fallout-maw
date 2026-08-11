@@ -1,6 +1,7 @@
 ﻿import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -601,6 +602,10 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   })
 ]);
 
+let fixedAbilityRuntimeHooksRegistered = false;
+let fixedAbilitySocketRegistered = false;
+let fixedAbilitySocketLifecycleRegistered = false;
+
 export function registerFixedAbilityFunctionHooks() {
   Hooks.on("updateActor", (actor, _changes, options = {}) => {
     if (
@@ -610,72 +615,94 @@ export function registerFixedAbilityFunctionHooks() {
       && !options?.falloutMawTrialRuntime
     ) queueActiveApplicationEffectSync(actor);
   });
+  CONFIG.queries[ACTIVE_APPLICATION_QUERY_NAME] = handleActiveApplicationEffectQuery;
+  Hooks.on(`${SYSTEM_ID}.settingsPresetApplied`, registerFixedAbilityRuntimeHooks);
+  registerFixedAbilityRuntimeHooks();
+}
+
+function registerFixedAbilityRuntimeHooks() {
+  if (fixedAbilityRuntimeHooksRegistered || !areFixedAbilityFunctionsEnabled()) return;
+  fixedAbilityRuntimeHooksRegistered = true;
+
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
-  registerWeaponAttackResolvedHandler("fallout-maw.fixed.counterAttack", requestCounterAttackReaction);
+  registerWeaponAttackResolvedHandler(
+    "fallout-maw.fixed.counterAttack",
+    runFixedAbilityRuntimeHandler(requestCounterAttackReaction)
+  );
   registerOversightReactionProvider();
   registerWatchOutReactionProvider();
   registerCounterSniperReactionProvider();
   registerWhereAreYouGoingReactionProvider();
   registerWhereAreYouGoingMovementProvider();
   registerOversightMovementProvider();
-  CONFIG.queries[OVERSIGHT_QUERY_NAME] = handleOversightAttackQuery;
-  CONFIG.queries[ACTIVE_APPLICATION_QUERY_NAME] = handleActiveApplicationEffectQuery;
-  Hooks.on("sightRefresh", () => scheduleOversightVisibilityRefresh());
-  Hooks.on("canvasReady", () => scheduleOversightVisibilityRefresh());
-  Hooks.on("deleteToken", token => {
+  CONFIG.queries[OVERSIGHT_QUERY_NAME] = runFixedAbilityRuntimeHandler(handleOversightAttackQuery);
+  Hooks.on("sightRefresh", runFixedAbilityRuntimeHandler(() => scheduleOversightVisibilityRefresh()));
+  Hooks.on("canvasReady", runFixedAbilityRuntimeHandler(() => scheduleOversightVisibilityRefresh()));
+  Hooks.on("deleteToken", runFixedAbilityRuntimeHandler(token => {
     void cleanupOversightToken(token);
-  });
-  registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
-  registerActorTurnStartPreparedHandler(context => deleteDefensiveTacticsEffects(context?.actor));
-  registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
+  }));
+  registerActorTurnEndHandler(runFixedAbilityRuntimeHandler(context => applyDefensiveTacticsAtTurnEnd(context)));
+  registerActorTurnStartPreparedHandler(runFixedAbilityRuntimeHandler(context => deleteDefensiveTacticsEffects(context?.actor)));
+  registerLethalDamagePreventionHandler(runFixedAbilityRuntimeHandler(context => processLastChanceLethalDamage(context)));
   registerDamageAppliedHandler(
     "fallout-maw.fixed.deusExMachinaProgress",
-    context => advanceDeusExMachinaProgressFromDamage(context?.results ?? [])
+    runFixedAbilityRuntimeHandler(context => advanceDeusExMachinaProgressFromDamage(context?.results ?? []))
   );
-  Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, context => {
+  Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
     void requestCurseAndBlessingAttackResolution(context);
-  });
-  Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
+  }));
+  Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
     void consumeAllOrNothingResultEffects(context);
     void consumeLethalAttackPreparationEffects(context);
     void processReaperAttackResolution(context);
     void updateVirtuosoLastWeapon(context);
     void processKeepAwayAttackResolution(context);
-  });
-  Hooks.on(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, context => {
+  }));
+  Hooks.on(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
     void consumeVirtuosoAttackBonus(context);
-  });
-  Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, context => {
+  }));
+  Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestDoubleAttackDuplicate(context);
-  });
-  Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, context => {
+  }));
+  Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestFullForceWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
     requestRicochetWeaponActionModifiers(context);
     requestKeepAwayWeaponActionModifiers(context);
     requestLethalAttackWeaponActionModifiers(context);
-  });
-  Hooks.on("fallout-maw.weaponActionResolved", context => {
+  }));
+  Hooks.on("fallout-maw.weaponActionResolved", runFixedAbilityRuntimeHandler(context => {
     void processAtRandomAttackResolution(context);
-  });
-  Hooks.on("fallout-maw.modifySkillCheck", check => {
+  }));
+  Hooks.on("fallout-maw.modifySkillCheck", runFixedAbilityRuntimeHandler(check => {
     applyFourLeafCloverCriticalBonus(check);
-  });
-  Hooks.on("fallout-maw.skillCheckResolved", outcome => {
+  }));
+  Hooks.on("fallout-maw.skillCheckResolved", runFixedAbilityRuntimeHandler(outcome => {
     void updateFourLeafCloverCharges(outcome);
-  });
-  Hooks.on(GRAPPLE_MODIFIER_HOOK, state => {
+  }));
+  Hooks.on(GRAPPLE_MODIFIER_HOOK, runFixedAbilityRuntimeHandler(state => {
     applyGrapplingMasterGrappleModifiers(state);
-  });
+  }));
 }
 
 export function registerFixedAbilityFunctionSocket() {
-  game.socket.on(FIXED_ABILITY_SOCKET, handleFixedAbilitySocketMessage);
+  if (!fixedAbilitySocketLifecycleRegistered) {
+    fixedAbilitySocketLifecycleRegistered = true;
+    Hooks.on(`${SYSTEM_ID}.settingsPresetApplied`, ensureFixedAbilityFunctionSocket);
+  }
+  ensureFixedAbilityFunctionSocket();
+}
+
+function ensureFixedAbilityFunctionSocket() {
+  if (fixedAbilitySocketRegistered || !areFixedAbilityFunctionsEnabled()) return;
+  fixedAbilitySocketRegistered = true;
+  game.socket.on(FIXED_ABILITY_SOCKET, runFixedAbilityRuntimeHandler(handleFixedAbilitySocketMessage));
 }
 
 export function getFixedAbilityFunctionDefinitions() {
+  if (!areFixedAbilityFunctionsEnabled()) return [];
   return [...FIXED_ABILITY_FUNCTIONS].sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang));
 }
 
@@ -695,6 +722,7 @@ export function getFixedAbilityFunctionChoices() {
 }
 
 export function createFixedAbilityFunction(fixedKey = "") {
+  if (!areFixedAbilityFunctionsEnabled()) return null;
   const definition = getFixedAbilityFunctionDefinition(fixedKey);
   return definition?.create?.() ?? null;
 }
@@ -704,6 +732,7 @@ export function getFixedAbilityFunctionLabel(fixedKey = "") {
 }
 
 export function isFixedAbilityFunctionActive(abilityFunction = {}) {
+  if (!areFixedAbilityFunctionsEnabled()) return false;
   if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.fixed) return false;
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.active);
 }
@@ -723,6 +752,7 @@ export function isActiveAbilityFunction(abilityFunction = {}) {
 }
 
 export function isFixedAbilityFunctionToggleable(abilityFunction = {}) {
+  if (!areFixedAbilityFunctionsEnabled()) return false;
   if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.fixed) return false;
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.toggleable);
 }
@@ -748,6 +778,7 @@ export function hasActiveAbilityFunction(item) {
 }
 
 export function getFixedAbilityFunctionProgressEntries(abilityItem) {
+  if (!areFixedAbilityFunctionsEnabled()) return [];
   if (abilityItem?.type !== "ability") return [];
   const state = getFixedAbilityState(abilityItem);
   return normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
@@ -809,6 +840,7 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
   const combatValues = { accuracy: 0, damagePercent: 0 };
   const resourceCostMultipliers = { condition: 1 };
   const sources = [];
+  if (!areFixedAbilityFunctionsEnabled()) return { combatValues, resourceCostMultipliers, sources };
   const weaponName = String(weapon?.name ?? "").trim();
   const weaponSkillKey = String(weaponData?.skillKey ?? "").trim();
   if (!actor || !weaponName) return { combatValues, resourceCostMultipliers, sources };
@@ -861,6 +893,7 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
 }
 
 export function getActorTwoHandsEntry(actor) {
+  if (!areFixedAbilityFunctionsEnabled()) return null;
   for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
@@ -908,6 +941,7 @@ export async function useFixedAbilityFunctionItem({
   functionId = "",
   onInteractionCancelled = null
 } = {}) {
+  if (!areFixedAbilityFunctionsEnabled()) return false;
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
     return false;
@@ -4403,8 +4437,8 @@ function findFullControlEffect(actor, abilityItem, abilityFunction) {
 function registerWatchOutReactionProvider() {
   registerReactionProvider({
     id: WATCH_OUT_REACTION_PROVIDER_ID,
-    collect: collectWatchOutReactionOffers,
-    execute: executeWatchOutReaction
+    collect: runFixedAbilityRuntimeHandler(collectWatchOutReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeWatchOutReaction)
   });
 }
 
@@ -4711,8 +4745,8 @@ function getOversightActors() {
 function registerOversightMovementProvider() {
   registerMovementInterruptionProvider({
     id: OVERSIGHT_MOVEMENT_PROVIDER_ID,
-    collect: collectOversightMovementInterruptions,
-    execute: resumeOversightMovement
+    collect: runFixedAbilityRuntimeHandler(collectOversightMovementInterruptions),
+    execute: runFixedAbilityRuntimeHandler(resumeOversightMovement)
   });
 }
 
@@ -4778,8 +4812,8 @@ async function resumeOversightMovement({
 function registerOversightReactionProvider() {
   registerReactionProvider({
     id: OVERSIGHT_REACTION_PROVIDER_ID,
-    collect: collectOversightReactionOffers,
-    execute: executeOversightReaction
+    collect: runFixedAbilityRuntimeHandler(collectOversightReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeOversightReaction)
   });
 }
 
@@ -5626,38 +5660,38 @@ async function useDisarm(actor, abilityItem, abilityFunction) {
 }
 
 function registerDisarmReactionProvider() {
-  CONFIG.queries[DISARM_QUERY_NAME] = handleDisarmQuery;
+  CONFIG.queries[DISARM_QUERY_NAME] = runFixedAbilityRuntimeHandler(handleDisarmQuery);
   registerReactionProvider({
     id: DISARM_REACTION_PROVIDER_ID,
-    collect: collectDisarmReactionOffers,
-    execute: executeDisarmReaction
+    collect: runFixedAbilityRuntimeHandler(collectDisarmReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeDisarmReaction)
   });
 }
 
 function registerCounterAttackReactionProvider() {
   registerReactionProvider({
     id: COUNTER_ATTACK_REACTION_PROVIDER_ID,
-    collect: collectCounterAttackReactionOffers,
-    execute: executeCounterAttackReaction
+    collect: runFixedAbilityRuntimeHandler(collectCounterAttackReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeCounterAttackReaction)
   });
 }
 
 function registerWhereAreYouGoingReactionProvider() {
-  CONFIG.queries[WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME] = handleWhereAreYouGoingWeaponQuery;
+  CONFIG.queries[WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME] = runFixedAbilityRuntimeHandler(handleWhereAreYouGoingWeaponQuery);
   registerReactionProvider({
     id: WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID,
-    collect: collectWhereAreYouGoingReactionOffers,
-    execute: executeWhereAreYouGoingReaction
+    collect: runFixedAbilityRuntimeHandler(collectWhereAreYouGoingReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeWhereAreYouGoingReaction)
   });
 }
 
 function registerWhereAreYouGoingMovementProvider() {
   registerMovementInterruptionProvider({
     id: WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID,
-    collect: collectWhereAreYouGoingMovementInterruptions,
-    execute: executeWhereAreYouGoingMovementInterruption,
+    collect: runFixedAbilityRuntimeHandler(collectWhereAreYouGoingMovementInterruptions),
+    execute: runFixedAbilityRuntimeHandler(executeWhereAreYouGoingMovementInterruption),
     synchronizeOnMove: true,
-    synchronize: synchronizeWhereAreYouGoingSuppression
+    synchronize: runFixedAbilityRuntimeHandler(synchronizeWhereAreYouGoingSuppression)
   });
 }
 
@@ -7057,11 +7091,11 @@ function areCounterSniperActorsAllied(left, right) {
 }
 
 function registerCounterSniperReactionProvider() {
-  CONFIG.queries[COUNTER_SNIPER_AIM_QUERY_NAME] = handleCounterSniperAimQuery;
+  CONFIG.queries[COUNTER_SNIPER_AIM_QUERY_NAME] = runFixedAbilityRuntimeHandler(handleCounterSniperAimQuery);
   registerReactionProvider({
     id: COUNTER_SNIPER_REACTION_PROVIDER_ID,
-    collect: collectCounterSniperReactionOffers,
-    execute: executeCounterSniperReaction
+    collect: runFixedAbilityRuntimeHandler(collectCounterSniperReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeCounterSniperReaction)
   });
 }
 
@@ -7924,6 +7958,14 @@ function getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0)
 
 export function getFixedAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0) {
   return getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost);
+}
+
+function areFixedAbilityFunctionsEnabled() {
+  return getActiveRulesProfile().fixedAbilityFunctionsEnabled !== false;
+}
+
+function runFixedAbilityRuntimeHandler(handler) {
+  return (...args) => areFixedAbilityFunctionsEnabled() ? handler(...args) : undefined;
 }
 
 async function deactivateFixedAbilityFunction(abilityItem, abilityFunction) {

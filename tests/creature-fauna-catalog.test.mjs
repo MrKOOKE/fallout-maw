@@ -139,14 +139,22 @@ test("natural attacks follow hidden threat classes and use only the neutral stoc
   assert.deepEqual([moleRatBite.damage, moleRatBite.penetration], [21, 4]);
   assert.deepEqual([feralClaw.damage, feralClaw.penetration], [40, 3]);
   assert.deepEqual([reaverClaw.damage, reaverClaw.penetration], [80, 8]);
-  assert.deepEqual(radroach.map(attack => [attack.damage, attack.penetration]), [[4, 1], [4, 0]]);
+  assert.deepEqual(radroach.map(attack => [attack.damage, attack.penetration]), [[4, 1], [18, 0]]);
   assert.deepEqual([deathclawClaw.damage, deathclawClaw.penetration], [180, 23]);
 
   for (const race of CREATURE_RACE_SPECS.filter(entry => entry.key !== "human")) {
     for (const subtype of race.subtypes) {
       const profile = getCreatureSubtypeCombatProfile(race.key, subtype.key);
       const benchmark = getThreatClassBenchmark(profile.threatClass);
-      assert.ok(Math.max(...subtype.naturalAttacks.map(attack => attack.damage)) <= profile.primaryDamage * 1.1 + 5);
+      for (const attack of subtype.naturalAttacks) {
+        const poisonPercent = Number(
+          attack.damageTypes.find(entry => entry.key === "poison")?.percent
+        ) || 0;
+        const poisonFloor = poisonPercent > 0
+          ? Math.ceil(18 * 100 / poisonPercent)
+          : 0;
+        assert.ok(attack.damage <= Math.max(profile.primaryDamage * 1.1 + 5, poisonFloor));
+      }
       assert.ok(profile.level >= 1 && profile.level <= 100);
       assert.ok(profile.primaryDamage >= benchmark.damageRange[0] * 0.5);
       assert.ok(subtype.naturalAttacks.every(attack => attack.img === NATURAL_WEAPON_STOCK_IMG));

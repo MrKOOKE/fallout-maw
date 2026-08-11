@@ -20,6 +20,17 @@ import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
+export function registerActorFactionConfigHooks() {
+  Hooks.on("getActorContextOptions", (app, entryOptions) => {
+    entryOptions.unshift({
+      label: localize("FALLOUTMAW.Factions.ActorButton"),
+      icon: "fa-solid fa-flag",
+      visible: li => getActorFromDirectoryEntry(app, li)?.isOwner === true,
+      onClick: (_event, li) => openActorFactionConfig(getActorFromDirectoryEntry(app, li))
+    });
+  });
+}
+
 export class FactionSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
@@ -275,6 +286,12 @@ export class ActorFactionConfig extends FalloutMaWFormApplicationV2 {
 export function openActorFactionConfig(actor) {
   if (!actor?.isOwner) return undefined;
   return new ActorFactionConfig(actor).render(true);
+}
+
+function getActorFromDirectoryEntry(app, li) {
+  const entry = li?.closest?.("[data-entry-id]") ?? li;
+  const actorId = entry?.dataset?.entryId ?? entry?.dataset?.documentId ?? "";
+  return app?.collection?.get?.(actorId) ?? game.actors?.get?.(actorId) ?? null;
 }
 
 function clampScore(value) {

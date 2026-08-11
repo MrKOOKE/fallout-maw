@@ -38,15 +38,14 @@ const detectionZoneCache = new Map();
 const detectionPointCache = new Map();
 const settingsSignatures = new WeakMap();
 let detectionZoneCachedCells = 0;
+let detectionCacheRevision = 0;
 
 /**
  * Build the observer zones relevant to one hidden token.
  *
- * For players, `visibleOnly` means that the hidden token can physically see
- * the observer. This preserves the anti-metagame direction of the UI while
- * batching every target through one temporary VisionSource. A GM must see the
- * same complete observer set used by authoritative stealth checks, including
- * asymmetric smoke-perception cases.
+ * `visibleOnly` means that the hidden token can perceive the observer. The
+ * preview is actor-specific for every user role and batches every target
+ * through one temporary native VisionSource.
  */
 export function getStealthObserverZones(hiddenToken, {
   visibleOnly = false,
@@ -57,7 +56,7 @@ export function getStealthObserverZones(hiddenToken, {
 
   let observers = (activeCanvas.tokens?.placeables ?? [])
     .filter(observerToken => isValidStealthObserver(hiddenToken, observerToken));
-  if (visibleOnly && observers.length && !globalThis.game?.user?.isGM) {
+  if (visibleOnly && observers.length) {
     observers = observers.filter(isObserverVisibleToLocalPreview);
     const visibility = testObserverVisibilityBatch(hiddenToken, observers);
     observers = observers.filter(observerToken => visibility.get(getTokenDocumentUuid(observerToken)) === true);
@@ -98,7 +97,8 @@ export function buildObserverDetectionZone(observerToken, {
       contactKeys: new Set([getGridSpaceOffsetKey({ ...offset, k: contactLevel })]),
       origin: center,
       range: 0,
-      truncated: false
+      truncated: false,
+      cacheSignature: `${detectionCacheRevision}:${cacheKey}`
     };
     writeDetectionZoneCache(cacheKey, zone);
     return zone;
@@ -155,7 +155,8 @@ export function buildObserverDetectionZone(observerToken, {
     }))),
     origin: center,
     range: maxRange,
-    truncated: previewRange.truncated
+    truncated: previewRange.truncated,
+    cacheSignature: `${detectionCacheRevision}:${cacheKey}`
   };
   writeDetectionZoneCache(cacheKey, zone);
   return zone;
@@ -682,6 +683,7 @@ export function invalidateStealthDetectionCache() {
   detectionZoneCache.clear();
   detectionPointCache.clear();
   detectionZoneCachedCells = 0;
+  detectionCacheRevision += 1;
 }
 
 export function getStealthDetectionCacheStats() {
@@ -811,13 +813,9 @@ function getTokenDocumentUuid(token) {
 }
 
 function isObserverVisibleToLocalPreview(observerToken) {
-  if (globalThis.game?.user?.isGM) return true;
   if (observerToken?.document?.hidden === true || observerToken?.hidden === true) return false;
-  if (
-    observerToken?.visible === false
-    || observerToken?.isVisible === false
-    || observerToken?.renderable === false
-  ) return false;
+  const secret = globalThis.CONST?.TOKEN_DISPOSITIONS?.SECRET;
+  if (secret !== undefined && observerToken?.document?.disposition === secret) return false;
   return true;
 }
 

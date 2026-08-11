@@ -13,7 +13,6 @@ import {
   getDiseaseSettings,
   getLevelSettings,
   getNeedSettings,
-  getProficiencyInfluenceSettings,
   getProficiencySettings,
   getResourceSettings,
   getSkillAdvancementSettings,
@@ -22,6 +21,7 @@ import {
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import {
   canUseWeaponSlotForItem,
   doesItemOccupyEquipmentSlot,
@@ -209,6 +209,10 @@ import {
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  getWeaponProficiencyInfluenceBonus,
+  getWeaponProficiencyInfluenceLayers
+} from "../utils/weapon-proficiencies.mjs";
 import { grantActorInventoryItem, planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import {
@@ -235,7 +239,11 @@ import {
 import { decomposePreparedSkillValue } from "../utils/skill-value-attribution.mjs";
 import { buildAbilityTooltipCostGroups } from "../utils/ability-tooltip-costs.mjs";
 import { actorHasAbility, grantAbilityItemData, grantCatalogAbility } from "../abilities/purchase.mjs";
-import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
+import {
+  getFixedAbilityEnergyCost,
+  getFixedAbilityFunctionProgressEntries,
+  getFixedWeaponPreviewModifiers
+} from "../abilities/fixed-functions.mjs";
 import {
   getAbilityOverloadResourceCostSources,
   isAbilityOverloadReactionCostId,
@@ -5094,6 +5102,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const settings = normalizeActiveApplicationSettings(activeApplicationEntry.activeSettings);
     return buildActiveApplicationResourceCostRows(item, actor, activeApplicationEntry, settings);
   }
+  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return [];
   const entry = functions
     .find(abilityFunction => (
       abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
@@ -7061,7 +7070,7 @@ function buildWeaponTooltipValueBreakdowns({
     minimum: Number.NEGATIVE_INFINITY,
     formatValue: formatSignedNumber
   });
-  appendProficiencyAttribution(accuracyBonus, actor, data, proficiencyAccuracy);
+  appendProficiencyAttribution(accuracyBonus, actor, data, "accuracy");
   appendAttributionDeltaSources(accuracyBonus, accuracyAttribution.sources);
   appendFixedCombatAttribution(accuracyBonus, fixedModifiers, "accuracy");
   appendStealthAttackAttribution(accuracyBonus, actor, {
@@ -7086,7 +7095,7 @@ function buildWeaponTooltipValueBreakdowns({
     minimum: Number.NEGATIVE_INFINITY,
     formatValue: value => `${formatSignedNumber(value)}%`
   });
-  appendProficiencyAttribution(criticalChanceModifier, actor, data, proficiencyCriticalChance, { suffix: "%" });
+  appendProficiencyAttribution(criticalChanceModifier, actor, data, "criticalChance", { suffix: "%" });
   appendAttributionDeltaSources(criticalChanceModifier, criticalChanceAttribution.sources, { suffix: "%" });
   appendStealthAttackAttribution(criticalChanceModifier, actor, {
     formula: stealth?.criticalChanceFormula,
@@ -7113,7 +7122,7 @@ function buildWeaponTooltipValueBreakdowns({
     minimum: 0,
     formatValue: value => `${formatNumber(value)}%`
   });
-  appendProficiencyAttribution(criticalDamagePercent, actor, data, proficiencyCriticalDamage, { suffix: "%", minimum: 0 });
+  appendProficiencyAttribution(criticalDamagePercent, actor, data, "criticalDamage", { suffix: "%", minimum: 0 });
   appendAttributionDeltaSources(criticalDamagePercent, criticalDamageAttribution?.sources, { suffix: "%" });
   appendStealthAttackAttribution(criticalDamagePercent, actor, {
     formula: stealth?.criticalDamagePercentFormula,
@@ -7366,7 +7375,11 @@ function appendWeaponDamagePercentSources(breakdown, {
     img: item?.img,
     value: attackPowerDamagePercent
   });
-  if (proficiencyDamage) appendInformationalPercentSource(breakdown, buildProficiencySource(actor, data, proficiencyDamage));
+  if (proficiencyDamage) {
+    for (const source of buildProficiencySources(actor, data, "damage")) {
+      appendInformationalPercentSource(breakdown, source);
+    }
+  }
   for (const source of damagePercentAttribution?.sources ?? []) appendInformationalPercentSource(breakdown, source);
   for (const source of fixedModifiers?.sources ?? []) {
     const value = toInteger(source?.combatValues?.damagePercent);
@@ -7435,23 +7448,23 @@ function appendParallelPercentSources(breakdown, sources = [], {
   return result;
 }
 
-function appendProficiencyAttribution(breakdown, actor, data, value = 0, { suffix = "", minimum = Number.NEGATIVE_INFINITY } = {}) {
-  if (!value) return;
-  const source = buildProficiencySource(actor, data, value);
-  appendBreakdownStep(breakdown, {
-    ...source,
-    valueLabel: `${formatSignedNumber(value)}${suffix}`
-  }, { minimum });
+function appendProficiencyAttribution(breakdown, actor, data, influenceKey = "", { suffix = "", minimum = Number.NEGATIVE_INFINITY } = {}) {
+  for (const source of buildProficiencySources(actor, data, influenceKey)) {
+    if (!source.value) continue;
+    appendBreakdownStep(breakdown, {
+      ...source,
+      valueLabel: `${formatSignedNumber(source.value)}${suffix}`
+    }, { minimum });
+  }
 }
 
-function buildProficiencySource(actor, data = {}, value = 0) {
-  const proficiency = getWeaponProficiencySetting(data);
-  return {
-    name: `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownProficiency", "Владение")}: ${proficiency?.label ?? proficiency?.key ?? "—"}`,
+function buildProficiencySources(actor, data = {}, influenceKey = "") {
+  return getWeaponProficiencyInfluenceLayers(actor, data, influenceKey).map(layer => ({
+    name: `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownProficiency", "Владение")}: ${layer.label || layer.key || "—"}`,
     img: actor?.img,
     operation: "add",
-    value
-  };
+    value: layer.value
+  }));
 }
 
 function appendFixedCombatAttribution(breakdown, fixedModifiers = {}, key = "") {
@@ -7915,26 +7928,6 @@ function getTooltipContextualCombatValue(actor, key, context = {}) {
     ...context,
     baseValue: Number(actor?.system?.combat?.[key]) || 0
   });
-}
-
-function getWeaponProficiencyInfluenceBonus(actor, data = {}, influenceKey = "") {
-  if (!actor) return 0;
-  const proficiency = getWeaponProficiencySetting(data);
-  if (!proficiency) return 0;
-  const range = getProficiencyInfluenceSettings(proficiency)?.[influenceKey] ?? { min: 0, max: 0 };
-  const minimum = toInteger(range.min);
-  const maximum = toInteger(range.max);
-  const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
-  const settingMax = Math.max(0, toInteger(proficiency.max));
-  const ratio = settingMax > 0 ? Math.max(0, Math.min(1, actorValue / settingMax)) : 0;
-  return Math.round(minimum + ((maximum - minimum) * ratio));
-}
-
-function getWeaponProficiencySetting(data = {}) {
-  const proficiencies = getProficiencySettings();
-  if (!proficiencies.length) return null;
-  const key = String(data?.proficiencyKey ?? "");
-  return proficiencies.find(proficiency => proficiency.key === key) ?? proficiencies[0] ?? null;
 }
 
 function formatWeaponDamageValue(data = {}, damage = 0) {
@@ -9328,7 +9321,9 @@ function buildEffectPathLabelMap({
     value: valueLabel,
     max: maximumLabel
   });
-  addEffectPathLabels(map, "system.resources", resourceSettings.filter(entry => String(entry?.key ?? "").trim() !== "health"), {
+  addEffectPathLabels(map, "system.resources", resourceSettings.filter(entry => (
+    String(entry?.key ?? "").trim() !== "health" || entry?.formulaSource === "race"
+  )), {
     bonus: bonusLabel
   });
   map.set("system.resources.reactionPoints.value", `Очки реакции: ${valueLabel}`);
@@ -9584,10 +9579,11 @@ function prepareDevelopmentPointEntries(development = {}) {
     { key: "researches", label: "Свободные ОИ" },
     { key: "traits", label: "Очки особенностей" },
     { key: "proficiencies", label: "Очки владений" }
-  ].map(entry => ({
+  ].filter(entry => entry.key !== "proficiencies" || getProficiencySettings().length)
+    .map(entry => ({
     ...entry,
     value: Math.max(0, toInteger(points?.[entry.key]))
-  }));
+    }));
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {

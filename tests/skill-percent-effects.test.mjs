@@ -74,6 +74,7 @@ const {
   invalidateActorFormulaData
 } = await import("../src/utils/actor-formulas.mjs");
 const { evaluateEffectChangeNumber } = await import("../src/utils/effect-change-values.mjs");
+const { buildActorFormulaReferenceData } = await import("../src/formulas/actor-references.mjs");
 const {
   configureSmokePerceptionFormulaEvaluator,
   getActorSmokePerceptionPercent,
@@ -211,6 +212,24 @@ test("characteristic aliases keep evaluator priority over colliding prepared ind
     getActorFormulaApplicationPhase({ ...limbBonusChange, value: "consciousnessValue" }, null, { formulaData }),
     "final"
   );
+});
+
+test("actor level is available to initial effect formulas in English and Russian", () => {
+  const formulaData = buildActorFormulaReferenceData({
+    system: { attributes: { level: 7 } }
+  });
+  const change = {
+    key: "system.resources.health.bonus",
+    phase: "initial",
+    value: "2 * уровень"
+  };
+
+  assert.equal(formulaData.formulaVariables.level, 7);
+  assert.equal(formulaData.formulaVariables["уровень"], 7);
+  assert.equal(evaluateEffectChangeNumber({}, "level + уровень", { formulaData }), 14);
+  assert.equal(evaluateEffectChangeNumber({}, change.value, { formulaData }), 14);
+  assert.equal(formulaUsesPreparedActorReferences(change.value, formulaData), false);
+  assert.equal(getActorFormulaApplicationPhase(change, null, { formulaData }), "initial");
 });
 
 test("smoke perception changes use actor formula aliases and refresh their cached value", () => {

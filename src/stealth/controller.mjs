@@ -39,6 +39,7 @@ import {
 } from "./weapon-noise.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
+import { getSmokeRegionRevision } from "../canvas/smoke-vision.mjs";
 import { getDetectionModeIdFromRangeEffectKey } from "../canvas/vision-effect-keys.mjs";
 import {
   canRenderDetectionVisualizationForLocalUser,
@@ -47,6 +48,7 @@ import {
   configureStealthVisualization,
   onTokenHoverForDetectionZone,
   queueDetectionVisualizationRefresh,
+  refreshDetectionVisualizationMaskState,
   removeDetectionVisualization,
   setPersistentDetectionVisualization,
   trackDetectionVisualizationMovement,
@@ -74,7 +76,7 @@ let hooksRegistered = false;
 let stealthSocketRegistered = false;
 let refreshTimeout = null;
 let runtimePerceptionUiTimeout = null;
-let runtimePerceptionSignature = null;
+let runtimeSightSignature = null;
 let nextRuntimeSignatureObjectId = 1;
 let refreshAllWindowsPending = false;
 let visibilityRefreshPending = false;
@@ -105,7 +107,7 @@ export function registerStealthHooks() {
   Hooks.on("deleteToken", onTokenDeleted);
   Hooks.on("drawToken", synchronizePersistentDetectionVisualization);
   Hooks.on("refreshToken", onTokenRefreshed);
-  Hooks.on("controlToken", () => queueStealthRefresh({ visualization: true }));
+  Hooks.on("controlToken", onControlledTokenChanged);
   Hooks.on("canvasReady", onCanvasReady);
   Hooks.on("canvasTearDown", cleanupAllStealthUi);
   Hooks.on("updateScene", onSceneUpdated);
@@ -125,7 +127,7 @@ export function registerStealthHooks() {
   // animation and Region viewed/animated state are examples. The signature
   // filters the render-frame hooks before any cache or UI work is performed.
   Hooks.on("lightingRefresh", onRuntimePerceptionRefresh);
-  Hooks.on("sightRefresh", onRuntimePerceptionRefresh);
+  Hooks.on("sightRefresh", onRuntimeSightRefresh);
   Hooks.on("hoverToken", onTokenHoverForDetectionZone);
   Hooks.on("moveToken", onTokenMoved);
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, onStealthSettingsChanged);
@@ -553,6 +555,12 @@ function onTokenMoved(tokenDocument, movement = {}) {
   }, movement?.animation?.ended);
 }
 
+function onControlledTokenChanged() {
+  synchronizePersistentStealthVisualizations();
+  refreshDetectionVisualizationMaskState();
+  queueStealthRefresh({ visualization: true });
+}
+
 function onTokenDeleted(tokenDocument) {
   const tokenId = tokenDocument?.id;
   const emittedLight = tokenEmitsLight(tokenDocument);
@@ -575,14 +583,31 @@ function onCanvasReady() {
 }
 
 /**
- * Handle V14 perception refreshes which do not necessarily originate from a
- * Document update. The hook itself may run every render frame, so only a
- * changed logical signature is allowed to invalidate caches.
+ * Foundry has already decided that lighting needs a refresh. Keep this hot
+ * hook O(1): invalidate exact-query caches immediately, but batch every
+ * window and geometry redraw until the animation reaches a quiet tail.
  */
 function onRuntimePerceptionRefresh() {
-  const nextSignature = getRuntimePerceptionSignature();
-  if (nextSignature === null || nextSignature === runtimePerceptionSignature) return;
-  runtimePerceptionSignature = nextSignature;
+  invalidateLightingAnalysisCache();
+  invalidateStealthDetectionCache();
+  queueRuntimePerceptionUiRefresh();
+}
+
+/**
+ * Sight refreshes occur throughout token movement. The native vision mask
+ * already animates the overlay on the GPU, so this hot hook only watches the
+ * two semantic inputs which can change without a Document update.
+ */
+function onRuntimeSightRefresh() {
+  refreshDetectionVisualizationMaskState();
+  const nextSignature = getRuntimeSightSignature();
+  if (nextSignature === null) return;
+  if (runtimeSightSignature === null) {
+    runtimeSightSignature = nextSignature;
+    return;
+  }
+  if (nextSignature === runtimeSightSignature) return;
+  runtimeSightSignature = nextSignature;
   invalidateLightingAnalysisCache();
   invalidateStealthDetectionCache();
   queueRuntimePerceptionUiRefresh();
@@ -599,83 +624,21 @@ function queueRuntimePerceptionUiRefresh() {
 }
 
 function captureRuntimePerceptionSignature() {
-  runtimePerceptionSignature = getRuntimePerceptionSignature();
+  runtimeSightSignature = getRuntimeSightSignature();
 }
 
-function getRuntimePerceptionSignature() {
+function getRuntimeSightSignature() {
   const activeCanvas = globalThis.canvas;
   if (!activeCanvas?.ready) return null;
   const scene = activeCanvas.scene;
-  const environment = activeCanvas.environment;
-  const effects = activeCanvas.effects;
   return JSON.stringify([
     scene?.id ?? "",
     activeCanvas.level?.id ?? "",
-    normalizeRuntimeSignatureNumber(environment?.darknessLevel),
-    getEffectSourceRuntimeSignature(environment?.globalLightSource),
-    getEffectCollectionRuntimeSignature(effects?.lightSources),
-    getEffectCollectionRuntimeSignature(effects?.darknessSources),
-    getDarknessMeshRuntimeSignature(effects?.illumination?.darknessLevelMeshes?.children),
-    getRegionSurfaceRuntimeSignature(scene, "light"),
+    getSmokeRegionRevision(scene),
     getRegionSurfaceRuntimeSignature(scene, "sight")
   ]);
 }
 
-function getEffectCollectionRuntimeSignature(collection) {
-  if (!collection) return [];
-  const values = typeof collection.values === "function" ? collection.values() : collection;
-  try {
-    return Array.from(values, getEffectSourceRuntimeSignature);
-  } catch (_error) {
-    return [];
-  }
-}
-
-function getEffectSourceRuntimeSignature(source) {
-  if (!source) return null;
-  const data = source.data ?? {};
-  const origin = source.origin ?? source;
-  return [
-    source.sourceId ?? source.name ?? getRuntimeSignatureObjectId(source),
-    getRuntimeSignatureObjectId(source),
-    normalizeRuntimeSignatureNumber(source.updateId),
-    Boolean(source.active),
-    Boolean(source.suppressed),
-    getRuntimeSignatureObjectId(source.shape),
-    normalizeRuntimeSignatureNumber(origin.x),
-    normalizeRuntimeSignatureNumber(origin.y),
-    normalizeRuntimeSignatureNumber(origin.elevation),
-    normalizeRuntimeSignatureNumber(data.bright),
-    normalizeRuntimeSignatureNumber(data.dim),
-    normalizeRuntimeSignatureNumber(data.radius),
-    normalizeRuntimeSignatureNumber(data.priority ?? source.priority),
-    normalizeRuntimeSignatureNumber(data.darkness?.min),
-    normalizeRuntimeSignatureNumber(data.darkness?.max),
-    data.level ?? "",
-    Boolean(data.disabled)
-  ];
-}
-
-function getDarknessMeshRuntimeSignature(children) {
-  if (!Array.isArray(children)) return [];
-  return children.map(mesh => {
-    const shader = mesh?.shader ?? {};
-    const region = mesh?.region;
-    const elevation = region?.animationState?.elevation ?? region?.document?.elevation ?? {};
-    return [
-      mesh?.name ?? "",
-      getRuntimeSignatureObjectId(mesh),
-      getRuntimeSignatureObjectId(mesh?.geometry),
-      getRuntimeSignatureObjectId(region?.animationState?.shapes),
-      normalizeRuntimeSignatureNumber(elevation.bottom),
-      normalizeRuntimeSignatureNumber(elevation.top),
-      normalizeRuntimeSignatureNumber(shader.mode),
-      normalizeRuntimeSignatureNumber(shader.modifier),
-      normalizeRuntimeSignatureNumber(shader.darknessLevel),
-      normalizeRuntimeSignatureNumber(shader.uniforms?.darknessLevel)
-    ];
-  });
-}
 
 function getRegionSurfaceRuntimeSignature(scene, type) {
   if (typeof scene?.getSurfaces !== "function") return "";
@@ -696,14 +659,6 @@ function getRuntimeSignatureObjectId(value) {
     runtimeSignatureObjectIds.set(value, id);
   }
   return id;
-}
-
-function normalizeRuntimeSignatureNumber(value) {
-  const number = Number(value);
-  if (Number.isNaN(number)) return "NaN";
-  if (number === Infinity) return "+Infinity";
-  if (number === -Infinity) return "-Infinity";
-  return number;
 }
 
 function onSceneUpdated(scene, changes = {}) {
@@ -763,7 +718,10 @@ function synchronizePersistentStealthVisualizations() {
 
 function synchronizePersistentDetectionVisualization(token) {
   if (!token?.id) return false;
-  const active = canRenderDetectionVisualizationForLocalUser(token);
+  const controlled = globalThis.canvas?.tokens?.controlled ?? [];
+  const active = controlled.length === 1
+    && controlled[0]?.id === token.id
+    && canRenderDetectionVisualizationForLocalUser(token);
   setPersistentDetectionVisualization(token, active);
   return active;
 }
@@ -875,7 +833,7 @@ function cleanupAllStealthUi() {
   refreshAllWindowsPending = false;
   visibilityRefreshPending = false;
   visualizationRefreshPending = false;
-  runtimePerceptionSignature = null;
+  runtimeSightSignature = null;
   invalidateStealthDetectionCache();
   invalidateLightingAnalysisCache();
 }

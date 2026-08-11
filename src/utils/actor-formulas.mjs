@@ -1,5 +1,6 @@
 import { calculateSkillDevelopmentBonuses } from "../advancement/calculations.mjs";
 import {
+  ACTOR_LEVEL_FORMULA_VARIABLE,
   buildActorFormulaAutocompleteEntries,
   buildActorFormulaReferenceData
 } from "../formulas/actor-references.mjs";
@@ -26,6 +27,11 @@ import {
 
 const FORMULA_IDENTIFIER_PATTERN = /@?[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)*/gu;
 const PREPARED_REFERENCE_PATH_PATTERN = /@?(?:system\.)?(?:skills|resources|needs|proficiencies|limbs|load)\.[\p{L}_]/iu;
+const INITIAL_ACTOR_FORMULA_VARIABLE_ALIASES = new Set([
+  ACTOR_LEVEL_FORMULA_VARIABLE.key,
+  ACTOR_LEVEL_FORMULA_VARIABLE.abbr,
+  ...(ACTOR_LEVEL_FORMULA_VARIABLE.aliases ?? [])
+].map(alias => String(alias ?? "").toLowerCase()));
 let actorFormulaDataCache = new WeakMap();
 let sharedFormulaSettingsCache = null;
 let sharedFormulaSettingsCacheScheduled = false;
@@ -156,6 +162,7 @@ export function formulaUsesPreparedActorReferences(formula = "", data = {}) {
     if (!explicitReference && (
       characteristicAliases.has(normalized)
       || skillAliases.has(normalized)
+      || INITIAL_ACTOR_FORMULA_VARIABLE_ALIASES.has(normalized)
     )) continue;
     if (variableAliases.has(normalized)) return true;
     if (

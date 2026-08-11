@@ -1,5 +1,8 @@
 import { TEMPLATES } from "../constants.mjs";
-import { DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA } from "../config/defaults.mjs";
+import {
+  DEFAULT_HEALTH_PER_LEVEL_FORMULA,
+  DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+} from "../config/defaults.mjs";
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getAbilityCatalog,
@@ -8,6 +11,7 @@ import {
   getDamageTypeSettings,
   getNeedSettings,
   getProficiencySettings,
+  getResourceSettings,
   getSkillSettings,
   setCreatureOptions
 } from "../settings/accessors.mjs";
@@ -18,9 +22,11 @@ import {
   createRaceDefaults,
   DEFAULT_BLEEDING_RESISTANCE_FORMULA,
   DEFAULT_ENERGY_REGENERATION_FORMULA,
+  DEFAULT_HEALTH_FORMULA,
   DEFAULT_ORGANISM_DEVELOPMENT_LIMIT,
   DEFAULT_REGENERATION_FORMULA
 } from "../settings/creature-options.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { LOCKED_FEATURES_CATEGORY_ID } from "../settings/abilities.mjs";
 import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
@@ -115,6 +121,10 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     const characteristics = getCharacteristicSettings();
     const damageTypes = getDamageTypeSettings();
     const configurableDamageTypes = getConfigurableDamageTypes(damageTypes);
+    const rulesProfile = getActiveRulesProfile();
+    const raceHealthEnabled = rulesProfile.healthFormulaSource === "race";
+    const weaponProficienciesEnabled = rulesProfile.weaponProficienciesEnabled !== false;
+    const hasEnergyResource = getResourceSettings().some(resource => resource.key === "power");
     const selectedType = this.creatureOptions.types.find(type => type.id === this.activeTypeId) ?? this.creatureOptions.types[0] ?? null;
     const racesForType = selectedType ? this.creatureOptions.races.filter(race => race.typeId === selectedType.id) : [];
     const selectedRace = this.#editorMode === "race"
@@ -147,6 +157,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         value: toInteger(selectedRace?.characteristics?.[characteristic.key])
       })),
       baseParameters: selectedRace?.baseParameters ?? createDefaultRaceBaseParameters(),
+      raceHealthEnabled,
+      weaponProficienciesEnabled,
+      hasEnergyResource,
       limbs: selectedRace?.limbs ?? [],
       hasLimbSilhouette: Boolean(selectedRace?.limbSilhouette),
       equipmentSlots: selectedRace?.equipmentSlots ?? [],
@@ -697,11 +710,19 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         toInteger(formData.race?.characteristics?.[characteristic.key])
       ])
     );
+    const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
     race.baseParameters = {
       characteristicDistributionPoints: toInteger(formData.race?.baseParameters?.characteristicDistributionPoints),
       signatureSkillPoints: toInteger(formData.race?.baseParameters?.signatureSkillPoints),
       traitPoints: toInteger(formData.race?.baseParameters?.traitPoints),
-      proficiencyPoints: toInteger(formData.race?.baseParameters?.proficiencyPoints),
+      proficiencyPoints: weaponProficienciesEnabled
+        ? toInteger(formData.race?.baseParameters?.proficiencyPoints)
+        : 0,
+      healthFormula: String(
+        formData.race?.baseParameters?.healthFormula
+        ?? race.baseParameters?.healthFormula
+        ?? DEFAULT_HEALTH_FORMULA
+      ).trim() || DEFAULT_HEALTH_FORMULA,
       loadFormula: String(
         formData.race?.baseParameters?.loadFormula ?? createDefaultRaceBaseParameters().loadFormula
       ).trim() || createDefaultRaceBaseParameters().loadFormula,
@@ -719,10 +740,13 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
     };
+    const hasEnergyResource = getResourceSettings().some(resource => resource.key === "power");
     race.regeneration = {
       formula: String(formData.race?.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA,
-      energyFormula: String(formData.race?.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA).trim()
-        || DEFAULT_ENERGY_REGENERATION_FORMULA
+      ...(hasEnergyResource ? {
+        energyFormula: String(formData.race?.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA).trim()
+          || DEFAULT_ENERGY_REGENERATION_FORMULA
+      } : {})
     };
     race.bleedingResistanceFormula = String(formData.race?.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim()
       || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
@@ -735,10 +759,17 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     );
     race.needSettings = this.#readRaceNeedsFromForm();
     race.progression = {
+      healthPerLevel: String(
+        formData.race?.progression?.healthPerLevel
+        ?? race.progression?.healthPerLevel
+        ?? DEFAULT_HEALTH_PER_LEVEL_FORMULA
+      ).trim() || DEFAULT_HEALTH_PER_LEVEL_FORMULA,
       skillPointsPerLevel: String(formData.race?.progression?.skillPointsPerLevel ?? "10 + int").trim() || "10 + int",
       researchPointsPerLevel: String(formData.race?.progression?.researchPointsPerLevel ?? "1000").trim() || "1000",
-      proficiencyPointsPerLevel: String(formData.race?.progression?.proficiencyPointsPerLevel ?? DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA).trim()
-        || DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+      proficiencyPointsPerLevel: weaponProficienciesEnabled
+        ? (String(formData.race?.progression?.proficiencyPointsPerLevel ?? DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA).trim()
+          || DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA)
+        : "0"
     };
     race.organismDevelopment = {
       threshold: readOrganismDevelopmentThresholdFromForm(this.form, formData),
@@ -847,6 +878,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
     const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
+    const hasEnergyResource = getResourceSettings().some(resource => resource.key === "power");
+    const rulesProfile = getActiveRulesProfile();
+    const raceHealthEnabled = rulesProfile.healthFormulaSource === "race";
     for (const race of this.creatureOptions.races) {
       try {
         validateFormula(race.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA, { allowSkills: true, characteristics, skills });
@@ -871,13 +905,23 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         ui.notifications.error(`${race.name || race.id} / Регенерация / Здоровье: ${error.message}`);
         throw error;
       }
-      try {
-        validateFormula(race.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
-      } catch (error) {
-        ui.notifications.error(`${race.name || race.id} / Регенерация / Энергия: ${error.message}`);
-        throw error;
+      if (hasEnergyResource) {
+        try {
+          validateFormula(race.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
+        } catch (error) {
+          ui.notifications.error(`${race.name || race.id} / Регенерация / Энергия: ${error.message}`);
+          throw error;
+        }
       }
 
+      if (raceHealthEnabled) {
+        try {
+          validateFormula(race.baseParameters?.healthFormula ?? DEFAULT_HEALTH_FORMULA, { allowSkills: true, characteristics, skills });
+        } catch (error) {
+          ui.notifications.error(`${race.name || race.id} / Здоровье: ${error.message}`);
+          throw error;
+        }
+      }
       const loadFormula = race.baseParameters?.loadFormula ?? createDefaultRaceBaseParameters().loadFormula;
       try {
         validateFormula(loadFormula, { allowSkills: true, characteristics, skills });
@@ -887,9 +931,14 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       }
 
       for (const [key, label] of [
+        ...(raceHealthEnabled
+          ? [["healthPerLevel", "Здоровье за уровень"]]
+          : []),
         ["skillPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel")],
         ["researchPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel")],
-        ["proficiencyPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ProficiencyPointsPerLevel")]
+        ...(rulesProfile.weaponProficienciesEnabled !== false
+          ? [["proficiencyPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ProficiencyPointsPerLevel")]]
+          : [])
       ]) {
         try {
           validateFormula(race.progression?.[key] ?? "0", { characteristics });

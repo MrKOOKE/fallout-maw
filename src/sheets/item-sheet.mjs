@@ -9,6 +9,7 @@ import {
 import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
 import { hasAdvancementPureValueFunctionChanges } from "../advancement/pure-value-keys.mjs";
@@ -30,6 +31,8 @@ import {
   getSelectedToolFunctionKey,
   getToolKeyFromFunctionKey,
   getWeaponSpecialPropertyType,
+  normalizeWeaponAdditionalProficiencyKeys,
+  normalizeWeaponLimbDamageMultipliers,
   normalizeWeaponSpecialProperties,
   normalizeWeaponAttackPowerData,
   normalizeWeaponCriticalDamageData,
@@ -237,6 +240,16 @@ const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
+const STANDARD_WEAPON_LIMB_KEYS = Object.freeze([
+  "head",
+  "eyes",
+  "torso",
+  "groin",
+  "leftArm",
+  "rightArm",
+  "leftLeg",
+  "rightLeg"
+]);
 const DEFAULT_LIGHT_SOURCE_ANGLE_DEGREES = 360;
 const DEFAULT_LIGHT_SOURCE_COLOR = "";
 const TRAP_DETECTION_LIGHTING_CONDITION = "lighting";
@@ -357,6 +370,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const priceCurrency = item.system?.priceCurrency ?? "";
     const currencySettings = getCurrencySettings();
     const itemCategory = item.system?.itemCategory ?? "";
+    const itemSubcategory = item.system?.itemSubcategory ?? "";
+    const itemCategories = getItemCategorySettings();
+    const itemSubcategoryChoices = buildItemSubcategoryChoices(itemCategory, itemSubcategory, itemCategories);
     const occupiedSlots = item.system?.occupiedSlots ?? {};
     const occupiedSlotMode = item.system?.occupiedSlotMode ?? "all";
     const weaponSlotRequirement = item.system?.weaponSlotRequirement ?? {};
@@ -366,7 +382,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const damageTypeSettings = getDamageTypeSettings();
     const toolSettings = getToolSettings();
     const skillSettings = getSkillSettings();
-    const proficiencySettings = getProficiencySettings();
+    const rulesProfile = getActiveRulesProfile();
+    const proficiencySettings = getProficiencySettings(rulesProfile);
     const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(creatureOptions);
     const weaponSlotGroups = groupRaceWeaponSlotsBySet(creatureOptions);
     const equipmentSlotSelections = new Map();
@@ -528,7 +545,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ABILITY_FUNCTION_TYPES.acquisitionChanges,
         label: "Разовое изменение при приобретении"
       }
-    ];
+    ].filter(choice => (
+      rulesProfile.fixedAbilityFunctionsEnabled !== false
+      || choice.value !== ABILITY_FUNCTION_TYPES.fixed
+    ));
 
     for (const group of equipmentSlotGroups) {
       for (const slot of group.slots) {
@@ -701,7 +721,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isAbilityOnlyFree: Boolean(item.system?.acquisition?.onlyFree),
       isAbilityOnlyManual: Boolean(item.system?.acquisition?.onlyManual),
       canAddAbilityFunction: true,
-      showFixedAbilityFunctionPicker: this.#fixedAbilityFunctionPickerActive,
+      showFixedAbilityFunctionPicker: rulesProfile.fixedAbilityFunctionsEnabled !== false
+        && this.#fixedAbilityFunctionPickerActive,
       fixedAbilityFunctionChoices: getFixedAbilityFunctionChoices(),
       abilityFunctionChoices,
       abilityResearchSkillChoices: skillSettings.map((skill, index) => ({
@@ -719,7 +740,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         ...currency,
         selected: currency.key === priceCurrency
       })),
-      itemCategoryChoices: buildItemCategoryChoices(itemCategory),
+      itemCategoryChoices: buildItemCategoryChoices(itemCategory, itemCategories),
+      itemSubcategoryChoices,
+      hasItemSubcategories: itemSubcategoryChoices.length > 1,
+      weaponProficienciesEnabled: rulesProfile.weaponProficienciesEnabled !== false
+        && proficiencySettings.length > 0,
       itemRequirements: buildWeaponRequirementRowsForData(
         item.system?.functions?.damageMitigation ?? {},
         characteristicSettings,
@@ -838,6 +863,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
     normalizeSubmittedNeedChangeDurations(form, submitData);
+    normalizeSubmittedItemSubcategory(submitData, this.item);
     preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
     // Keep every DOM read above synchronous while its form snapshot is live.
     // Only document writes are serialized so a slower update cannot win later.
@@ -1433,6 +1459,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponSpecialProperty(event));
+    });
+    this.element?.querySelectorAll("[data-add-weapon-additional-proficiency]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponAdditionalProficiency(event));
+    });
+    this.element?.querySelectorAll("[data-delete-weapon-additional-proficiency]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponAdditionalProficiency(event));
     });
     this.element?.querySelectorAll("[data-add-weapon-requirement]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponRequirement(event));
@@ -4044,6 +4076,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     );
   }
 
+  #getSubmittedWeaponFunctionData(path = "") {
+    const current = foundry.utils.getProperty(this.item, path) ?? {};
+    if (!this.form) return current;
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return foundry.utils.getProperty(submitData, path) ?? current;
+  }
+
   #getAbilityFunctionPathForEvent(event) {
     return String(
       event.currentTarget?.dataset?.functionPath
@@ -5256,6 +5296,61 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const properties = normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
     properties.splice(index, 1);
     return this.item.update({ [`${path}.specialProperties`]: properties });
+  }
+
+  async #onAddWeaponAdditionalProficiency(event) {
+    event.preventDefault();
+    const propertyIndex = Number(event.currentTarget?.dataset?.addWeaponAdditionalProficiency);
+    if (!Number.isInteger(propertyIndex) || propertyIndex < 0) return undefined;
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    if (isAttackActionSettingsSection(section)) {
+      const settings = this.#getSubmittedAttackActionSettings(path);
+      const property = settings.specialProperties[propertyIndex];
+      const keys = normalizeWeaponAdditionalProficiencyKeys(property?.proficiencyKeys);
+      const next = getFirstUnusedWeaponAdditionalProficiencyKey(settings.proficiencyKey, keys);
+      if (!property || !next) return undefined;
+      property.proficiencyKeys = [...keys, next];
+      await this.#submitCurrentForm({ [path]: settings });
+      return this.render();
+    }
+    await this.#submitQueue;
+    const source = this.#getSubmittedWeaponFunctionData(path);
+    const properties = normalizeWeaponSpecialProperties(source.specialProperties);
+    const property = properties[propertyIndex];
+    const keys = normalizeWeaponAdditionalProficiencyKeys(property?.proficiencyKeys);
+    const next = getFirstUnusedWeaponAdditionalProficiencyKey(source.proficiencyKey, keys);
+    if (!property || !next) return undefined;
+    property.proficiencyKeys = [...keys, next];
+    await this.item.update({ [`${path}.specialProperties`]: properties });
+    return this.render();
+  }
+
+  async #onDeleteWeaponAdditionalProficiency(event) {
+    event.preventDefault();
+    const propertyIndex = Number(event.currentTarget?.dataset?.propertyIndex);
+    const proficiencyIndex = Number(event.currentTarget?.dataset?.deleteWeaponAdditionalProficiency);
+    if (!Number.isInteger(propertyIndex) || propertyIndex < 0 || !Number.isInteger(proficiencyIndex) || proficiencyIndex < 0) return undefined;
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    if (isAttackActionSettingsSection(section)) {
+      const settings = this.#getSubmittedAttackActionSettings(path);
+      const property = settings.specialProperties[propertyIndex];
+      if (!property) return undefined;
+      property.proficiencyKeys = normalizeWeaponAdditionalProficiencyKeys(property.proficiencyKeys);
+      property.proficiencyKeys.splice(proficiencyIndex, 1);
+      await this.#submitCurrentForm({ [path]: settings });
+      return this.render();
+    }
+    await this.#submitQueue;
+    const source = this.#getSubmittedWeaponFunctionData(path);
+    const properties = normalizeWeaponSpecialProperties(source.specialProperties);
+    const property = properties[propertyIndex];
+    if (!property) return undefined;
+    property.proficiencyKeys = normalizeWeaponAdditionalProficiencyKeys(property.proficiencyKeys);
+    property.proficiencyKeys.splice(proficiencyIndex, 1);
+    await this.item.update({ [`${path}.specialProperties`]: properties });
+    return this.render();
   }
 
   #onAddWeaponRequirement(event) {
@@ -7870,7 +7965,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
   const isEngagedSkill = type === ABILITY_CONDITION_TYPES.engagedSkill;
   const isSkillCondition = isWeaponSkill || isEngagedSkill;
-  const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
+  const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency
+    && getActiveRulesProfile().weaponProficienciesEnabled !== false;
   const isTrial = type === ABILITY_CONDITION_TYPES.trial;
   const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
@@ -8277,8 +8373,11 @@ function buildAbilityConditionTypeChoices(selected = "", {
     label: "Применение предмета",
     selected: selected === ABILITY_CONDITION_TYPES.itemUse
   });
-  if (!eventReactionMode) return choices;
-  return choices
+  const activeChoices = getActiveRulesProfile().weaponProficienciesEnabled !== false
+    ? choices
+    : choices.filter(choice => choice.value !== ABILITY_CONDITION_TYPES.weaponProficiency);
+  if (!eventReactionMode) return activeChoices;
+  return activeChoices
     .filter(choice => (
       !choice.value
       || choice.value === ABILITY_CONDITION_TYPES.toggleable
@@ -10303,6 +10402,7 @@ function buildAttackActionSpecialPropertyRows(settings = {}) {
   const properties = Array.isArray(settings?.specialProperties)
     ? settings.specialProperties
     : Object.values(settings?.specialProperties ?? {});
+  const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
   return properties.map((property, index) => {
     const type = getWeaponSpecialPropertyType(property);
     const normalizedPower = normalizeWeaponAttackPowerData(property?.attackPower);
@@ -10322,6 +10422,13 @@ function buildAttackActionSpecialPropertyRows(settings = {}) {
       choices: buildAttackActionSpecialPropertyChoices(property, properties),
       isAttackPower: type === WEAPON_SPECIAL_PROPERTIES.attackPower,
       isCriticalDamage: type === WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+      isLimbDamageMultipliers: type === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers,
+      limbDamageMultiplierRows: type === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers
+        ? buildWeaponLimbDamageMultiplierRows(property)
+        : [],
+      isAdditionalProficiencies: type === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies
+        && weaponProficienciesEnabled,
+      additionalProficiencyRows: buildWeaponAdditionalProficiencyRows(property, settings.proficiencyKey),
       criticalDamage: {
         ...normalizedCriticalDamage,
         outcomeChoices: buildItemAttackCriticalDamageOutcomeChoices(
@@ -10345,6 +10452,7 @@ function buildAttackActionSpecialPropertyRows(settings = {}) {
 function buildAttackActionSpecialPropertyChoices(selected, properties = []) {
   const selectedType = getWeaponSpecialPropertyType(selected);
   const usedTypes = new Set(properties.map(property => getWeaponSpecialPropertyType(property)));
+  const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
   return [
     {
       value: WEAPON_SPECIAL_PROPERTIES.pending,
@@ -10355,14 +10463,25 @@ function buildAttackActionSpecialPropertyChoices(selected, properties = []) {
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
     },
     {
+      value: WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialLimbDamageMultipliers")
+    },
+    {
       value: WEAPON_SPECIAL_PROPERTIES.attackPower,
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
     },
     {
       value: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
       label: "Критический урон по исходу"
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.additionalProficiencies,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAdditionalProficiencies")
     }
-  ].map(choice => ({
+  ].filter(choice => (
+    weaponProficienciesEnabled
+    || choice.value !== WEAPON_SPECIAL_PROPERTIES.additionalProficiencies
+  )).map(choice => ({
     ...choice,
     selected: choice.value === selectedType,
     disabled: Boolean(
@@ -10613,18 +10732,30 @@ function getDefaultNewWeaponResourceCostType(
 
 function buildWeaponSpecialPropertyRowsForData(weaponData) {
   const properties = normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
-  return properties.map((property, index) => ({
-    index,
-    type: getWeaponSpecialPropertyType(property),
-    choices: buildWeaponSpecialPropertyChoices(property, properties),
-    isAttackPower: getWeaponSpecialPropertyType(property) === WEAPON_SPECIAL_PROPERTIES.attackPower,
-    attackPower: buildWeaponAttackPowerSettingsForData(weaponData, property)
-  }));
+  const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
+  return properties.map((property, index) => {
+    const type = getWeaponSpecialPropertyType(property);
+    return {
+      index,
+      type,
+      choices: buildWeaponSpecialPropertyChoices(property, properties),
+      isAttackPower: type === WEAPON_SPECIAL_PROPERTIES.attackPower,
+      isLimbDamageMultipliers: type === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers,
+      limbDamageMultiplierRows: type === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers
+        ? buildWeaponLimbDamageMultiplierRows(property)
+        : [],
+      isAdditionalProficiencies: type === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies
+        && weaponProficienciesEnabled,
+      additionalProficiencyRows: buildWeaponAdditionalProficiencyRows(property, weaponData?.proficiencyKey),
+      attackPower: buildWeaponAttackPowerSettingsForData(weaponData, property)
+    };
+  });
 }
 
 function buildWeaponSpecialPropertyChoices(selected, properties = []) {
   const selectedType = getWeaponSpecialPropertyType(selected);
   const usedTypes = new Set(properties.map(property => getWeaponSpecialPropertyType(property)).filter(Boolean));
+  const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
     return [
       {
       value: WEAPON_SPECIAL_PROPERTIES.pending,
@@ -10640,10 +10771,25 @@ function buildWeaponSpecialPropertyChoices(selected, properties = []) {
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialConcentratedPelletImpact")
     },
     {
+      value: WEAPON_SPECIAL_PROPERTIES.impactConditionWear,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialImpactConditionWear")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialLimbDamageMultipliers")
+    },
+    {
       value: WEAPON_SPECIAL_PROPERTIES.attackPower,
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.additionalProficiencies,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAdditionalProficiencies")
     }
-  ].map(choice => ({
+  ].filter(choice => (
+    weaponProficienciesEnabled
+    || choice.value !== WEAPON_SPECIAL_PROPERTIES.additionalProficiencies
+  )).map(choice => ({
     ...choice,
     selected: choice.value === selectedType,
     disabled: Boolean(choice.disabled || (
@@ -10652,6 +10798,15 @@ function buildWeaponSpecialPropertyChoices(selected, properties = []) {
       && choice.value !== selectedType
       && usedTypes.has(choice.value)
     ))
+  }));
+}
+
+function buildWeaponLimbDamageMultiplierRows(property = {}) {
+  const multipliers = normalizeWeaponLimbDamageMultipliers(property?.limbDamageMultipliers);
+  return STANDARD_WEAPON_LIMB_KEYS.map(key => ({
+    key,
+    label: game.i18n.localize(`FALLOUTMAW.Item.WeaponLimbKeys.${key}`),
+    value: Object.hasOwn(multipliers, key) ? multipliers[key] : 1
   }));
 }
 
@@ -10702,6 +10857,27 @@ function buildWeaponAttackPowerResourceCostRows(weaponData = {}, configuredCosts
         amount: configuredCost?.amount ?? 0
       };
     });
+}
+
+function buildWeaponAdditionalProficiencyRows(property = {}, primaryKey = "") {
+  const keys = normalizeWeaponAdditionalProficiencyKeys(property?.proficiencyKeys);
+  const settings = getProficiencySettings();
+  const used = new Set(keys);
+  const primary = String(primaryKey ?? "").trim();
+  return keys.map((key, index) => ({
+    index,
+    choices: settings.map(proficiency => ({
+      value: proficiency.key,
+      label: proficiency.label || proficiency.key,
+      selected: proficiency.key === key,
+      disabled: proficiency.key !== key && (proficiency.key === primary || used.has(proficiency.key))
+    }))
+  }));
+}
+
+function getFirstUnusedWeaponAdditionalProficiencyKey(primaryKey = "", keys = []) {
+  const used = new Set([String(primaryKey ?? "").trim(), ...normalizeWeaponAdditionalProficiencyKeys(keys)]);
+  return getProficiencySettings().find(proficiency => !used.has(proficiency.key))?.key ?? "";
 }
 
 function getWeaponAttackPowerBaseResourceCosts(weaponData = {}) {
@@ -13719,9 +13895,9 @@ function createToolFunctionSelectionUpdate(item, toolKey = "", { enabled = true,
   return update;
 }
 
-function buildItemCategoryChoices(selectedCategory = "") {
+function buildItemCategoryChoices(selectedCategory = "", itemCategories = getItemCategorySettings()) {
   const selected = String(selectedCategory ?? "").trim();
-  const categories = getItemCategorySettings()
+  const categories = itemCategories
     .map(category => String(category?.label ?? category ?? "").trim())
     .filter(Boolean);
   if (selected && !categories.includes(selected)) categories.push(selected);
@@ -13734,6 +13910,39 @@ function buildItemCategoryChoices(selectedCategory = "") {
       selected: label === selected
     }))
   ];
+}
+
+function buildItemSubcategoryChoices(selectedCategory = "", selectedSubcategory = "", itemCategories = getItemCategorySettings()) {
+  const categoryLabel = String(selectedCategory ?? "").trim();
+  const selected = String(selectedSubcategory ?? "").trim();
+  const category = itemCategories.find(entry => String(entry?.label ?? "").trim() === categoryLabel);
+  const subcategories = (category?.subcategories ?? [])
+    .map(entry => String(entry?.label ?? entry ?? "").trim())
+    .filter(Boolean);
+
+  return [
+    { value: "", label: "", selected: !subcategories.includes(selected) },
+    ...subcategories.map(label => ({
+      value: label,
+      label,
+      selected: label === selected
+    }))
+  ];
+}
+
+function normalizeSubmittedItemSubcategory(submitData = {}, item = null) {
+  const hasCategory = foundry.utils.hasProperty(submitData, "system.itemCategory");
+  const hasSubcategory = foundry.utils.hasProperty(submitData, "system.itemSubcategory");
+  if (!hasCategory && !hasSubcategory) return;
+  const categoryLabel = String(hasCategory
+    ? foundry.utils.getProperty(submitData, "system.itemCategory")
+    : item?.system?.itemCategory ?? "").trim();
+  const subcategory = String(hasSubcategory
+    ? foundry.utils.getProperty(submitData, "system.itemSubcategory")
+    : item?.system?.itemSubcategory ?? "").trim();
+  const category = getItemCategorySettings().find(entry => String(entry?.label ?? "").trim() === categoryLabel);
+  const allowed = new Set((category?.subcategories ?? []).map(entry => String(entry?.label ?? entry ?? "").trim()));
+  foundry.utils.setProperty(submitData, "system.itemSubcategory", allowed.has(subcategory) ? subcategory : "");
 }
 
 function buildConditionRecoveryMethodRows(item, toolSettings = []) {

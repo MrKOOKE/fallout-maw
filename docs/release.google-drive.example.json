@@ -1,0 +1,7 @@
+{
+  "packageUrl": "https://github.com/MrKOOKE/fallout-maw",
+  "drive": {
+    "manifestFileId": "PASTE_SYSTEM_JSON_FILE_ID_HERE",
+    "archiveFileId": "PASTE_FALLOUT_MAW_ZIP_FILE_ID_HERE"
+  }
+}

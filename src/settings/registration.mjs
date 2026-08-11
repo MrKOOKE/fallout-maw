@@ -38,7 +38,11 @@ import {
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
 import { SettingsPresetsConfig } from "../apps/settings-presets-config.mjs";
-import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
+import {
+  invalidatePreparedRuntimeSettingsCache,
+  refreshPreparedActors,
+  syncSettingsIntoSystemConfig
+} from "./accessors.mjs";
 import {
   createDefaultSettingsPresetState,
   getMainPresetDefault,
@@ -83,6 +87,11 @@ import {
   TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING,
   TOKEN_PROTOTYPE_DEFAULTS_SETTING
 } from "./constants.mjs";
+import {
+  getActiveRulesProfile,
+  registerRulesProfileTools,
+  syncActiveRulesProfile
+} from "./rules-profiles.mjs";
 import { createDefaultAbilityCatalog } from "./abilities.mjs";
 import { createDefaultCampSettings, createEmptyCampState } from "./camp.mjs";
 import { createDefaultCombatSettings } from "./combat.mjs";
@@ -107,6 +116,7 @@ import {
 import { syncLoadedActorNaturalRaceItems } from "../races/natural-items.mjs";
 
 export function registerSystemSettings() {
+  registerRulesProfileTools();
   registerPersonalGeneratorSettings();
 
   game.settings.register(FALLOUT_MAW.id, DOCUMENT_MIGRATION_VERSION_SETTING, {
@@ -122,8 +132,10 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultSettingsPresetState()
+    default: createDefaultSettingsPresetState(),
+    onChange: onSettingsPresetStateChanged
   });
+  syncActiveRulesProfile(game.settings.get(FALLOUT_MAW.id, SETTINGS_PRESET_STATE_SETTING));
 
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
     name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
@@ -505,13 +517,7 @@ export function registerSystemSettings() {
     restricted: true
   });
 
-  game.settings.registerMenu(FALLOUT_MAW.id, "proficiencySettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
-    icon: "fa-solid fa-crosshairs",
-    type: ProficiencySettingsConfig,
-    restricted: true
-  });
+  syncProficiencySettingsMenu();
 
   game.settings.registerMenu(FALLOUT_MAW.id, "damageTypesMenu", {
     name: localize("FALLOUTMAW.Settings.DamageTypes.Title"),
@@ -697,6 +703,32 @@ function refreshCombatUi() {
   ui.combat?.render?.(false);
   ui.combatDock?.refresh?.();
   game.combat?._updateTurnMarkers?.();
+}
+
+function onSettingsPresetStateChanged(state) {
+  if (!syncActiveRulesProfile(state)) return;
+  invalidatePreparedRuntimeSettingsCache();
+  syncProficiencySettingsMenu();
+}
+
+function syncProficiencySettingsMenu() {
+  const key = `${FALLOUT_MAW.id}.proficiencySettingsMenu`;
+  const enabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
+  if (enabled === game.settings.menus.has(key)) return;
+
+  if (enabled) {
+    game.settings.registerMenu(FALLOUT_MAW.id, "proficiencySettingsMenu", {
+      name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
+      label: localize("FALLOUTMAW.Settings.Open"),
+      icon: "fa-solid fa-crosshairs",
+      type: ProficiencySettingsConfig,
+      restricted: true
+    });
+  } else {
+    game.settings.menus.delete(key);
+    void foundry.applications.instances.get("fallout-maw-proficiency-settings")?.close();
+  }
+  void foundry.applications.instances.get("settings-config")?.render();
 }
 
 function onFactionSettingsChanged() {

@@ -1,3 +1,6 @@
+import { getConfiguredWeaponProficiencyKeys } from "./item-functions.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
+
 /** Keep only weapon fields used by contextual condition filters and event mirrors. */
 export function serializeWeaponContextData(weaponData = null) {
   if (!weaponData || typeof weaponData !== "object") return null;
@@ -5,6 +8,11 @@ export function serializeWeaponContextData(weaponData = null) {
     id: String(weaponData.id ?? weaponData._id ?? ""),
     uuid: String(weaponData.uuid ?? ""),
     skillKey: String(weaponData.skillKey ?? ""),
-    proficiencyKey: String(weaponData.proficiencyKey ?? "")
+    ...(getActiveRulesProfile().weaponProficienciesEnabled !== false
+      ? {
+        proficiencyKey: String(weaponData.proficiencyKey ?? ""),
+        proficiencyKeys: getConfiguredWeaponProficiencyKeys(weaponData)
+      }
+      : {})
   };
 }

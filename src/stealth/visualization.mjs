@@ -21,6 +21,7 @@ const WEAPON_SOURCE_PREFIX = "weapon:";
 const VISUALIZATION_COALESCE_MS = 50;
 const BASE_ZONE_COLOR = 0xff3b3b;
 const WEAPON_NOISE_ZONE_COLOR = 0xff3b3b;
+const STEALTH_VISION_MASK_FILTER = Symbol("falloutMawStealthVisionMaskFilter");
 
 const visualizationSources = new Map();
 const detectionVisualizations = new Map();
@@ -59,17 +60,18 @@ export function setPersistentDetectionVisualization(token, active = true) {
 }
 
 /**
- * Apply one local privacy gate to persistent, window, and weapon sources.
- * Foundry can consider a controlled manually-hidden token visible, so that
- * document flag must be checked explicitly for non-GM users.
+ * Apply one role-independent local privacy gate to persistent, window, and
+ * weapon sources. Administrative hiding never exposes a visualization merely
+ * because the current user is a GM.
  */
 export function canRenderDetectionVisualizationForLocalUser(token) {
   const activeCanvas = globalThis.canvas;
-  const user = globalThis.game?.user;
   if (!activeCanvas?.ready || !token?.actor || !isActorStealthed(token.actor)) return false;
   const parentScene = token.document?.parent;
   if (parentScene?.documentName === "Scene" && parentScene.id !== activeCanvas.scene?.id) return false;
-  if (!user?.isGM && (token.document?.hidden === true || token.hidden === true)) return false;
+  if (token.document?.hidden === true || token.hidden === true) return false;
+  const controlled = activeCanvas.tokens?.controlled ?? [];
+  if (controlled.length !== 1 || controlled[0]?.id !== token.id) return false;
   if (!canControlStealth(token.actor)) return false;
   if (token.visible === false || token.isVisible === false || token.renderable === false) return false;
   return true;
@@ -171,6 +173,7 @@ function destroyRenderedDetectionVisualization(tokenId) {
 export function refreshDetectionVisualizations({ invalidate = false } = {}) {
   if (invalidate) invalidateStealthDetectionCache();
   const activeCanvas = globalThis.canvas;
+  refreshDetectionVisualizationMaskState();
   const settings = getRuntimeStealthSettings();
   for (const [tokenId, sources] of [...visualizationSources]) {
     const token = activeCanvas?.tokens?.get(tokenId);
@@ -192,6 +195,22 @@ export function refreshDetectionVisualizations({ invalidate = false } = {}) {
     rebuildDetectionVisualization(token, request, settings);
   }
   refreshDetectionHoverFill();
+}
+
+/**
+ * Fail closed synchronously when Foundry changes the active point of view.
+ * VisionMaskFilter disables itself when no VisionSource is active, so keeping
+ * a stale renderable layer for even one frame would expose its full geometry.
+ */
+export function refreshDetectionVisualizationMaskState() {
+  const activeCanvas = globalThis.canvas;
+  const renderable = canRenderLocalStealthOverlay();
+  const layer = activeCanvas?.controls?.[STEALTH_DETECTION_LAYER];
+  if (layer) layer.renderable = renderable;
+  const highlightLayer = activeCanvas?.interface?.grid
+    ?.getHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
+  if (highlightLayer) highlightLayer.renderable = renderable;
+  return renderable;
 }
 
 export function queueDetectionVisualizationRefresh({ invalidate = false } = {}) {
@@ -265,8 +284,10 @@ export function cleanupAllStealthVisualizations() {
   pendingInvalidation = false;
   hoverTokenId = null;
   const gridLayer = globalThis.canvas?.interface?.grid;
+  destroyNativeVisionMask(gridLayer?.getHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER));
   gridLayer?.destroyHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
   const layer = globalThis.canvas?.controls?.[STEALTH_DETECTION_LAYER];
+  destroyNativeVisionMask(layer);
   layer?.destroy?.({ children: true });
   if (globalThis.canvas?.controls) delete canvas.controls[STEALTH_DETECTION_LAYER];
 }
@@ -304,6 +325,15 @@ function rebuildDetectionVisualization(token, request, settings) {
     return;
   }
 
+  const layer = getDetectionLayer();
+  const renderSignature = getDetectionVisualizationRenderSignature(zones, noiseZone);
+  if (previous?.renderSignature === renderSignature) {
+    previous.zones = zones;
+    previous.noiseZone = noiseZone;
+    refreshDetectionHoverFill();
+    return;
+  }
+
   const container = new PIXI.Container();
   container.eventMode = "none";
   container.interactiveChildren = false;
@@ -321,9 +351,25 @@ function rebuildDetectionVisualization(token, request, settings) {
     drawBaseGridZone(graphics, zone);
     container.addChild(graphics);
   }
-  getDetectionLayer().addChild(container);
-  detectionVisualizations.set(token.id, { container, zones, noiseZone });
+  layer.addChild(container);
+  detectionVisualizations.set(token.id, { container, zones, noiseZone, renderSignature });
   previous?.container?.destroy?.({ children: true });
+}
+
+function getDetectionVisualizationRenderSignature(zones, noiseZone) {
+  const zoneParts = zones.map(zone => [
+    zone.observerToken?.document?.uuid ?? zone.observerToken?.id ?? "",
+    zone.cacheSignature ?? getGridZoneOffsetSignature(zone)
+  ].join("@"));
+  return `${zoneParts.join("|")}::${getGridZoneOffsetSignature(noiseZone)}`;
+}
+
+function getGridZoneOffsetSignature(zone) {
+  if (!zone) return "";
+  return [
+    Number(zone.noiseLevel) || 0,
+    ...(zone.offsets ?? []).map(getGridOffsetKey)
+  ].join(":");
 }
 
 function updateDetectionVisualizationForTokenCell(token, { force = false, renderWindows = false } = {}) {
@@ -361,18 +407,53 @@ function isTokenRelevantToDetectionVisualization(token) {
 function getDetectionLayer() {
   const activeCanvas = globalThis.canvas;
   activeCanvas.controls[STEALTH_DETECTION_LAYER] ??= activeCanvas.controls.addChild(new PIXI.Container());
-  activeCanvas.controls[STEALTH_DETECTION_LAYER].eventMode = "none";
-  activeCanvas.controls[STEALTH_DETECTION_LAYER].interactiveChildren = false;
+  const layer = activeCanvas.controls[STEALTH_DETECTION_LAYER];
+  layer.eventMode = "none";
+  layer.interactiveChildren = false;
+  layer.renderable = canRenderLocalStealthOverlay();
   if (activeCanvas.masks?.canvas) {
-    activeCanvas.controls[STEALTH_DETECTION_LAYER].mask = activeCanvas.masks.canvas;
+    layer.mask = activeCanvas.masks.canvas;
   }
-  return activeCanvas.controls[STEALTH_DETECTION_LAYER];
+  applyNativeVisionMask(layer);
+  return layer;
+}
+
+/**
+ * Reuse Foundry's cached vision texture. The filter follows the engine's
+ * continuously-updated mask on the GPU, so movement does not trigger a JS
+ * rebuild of every detection cell. Unlike the core Region editor, this
+ * gameplay overlay deliberately applies the same filter to GMs.
+ */
+function applyNativeVisionMask(displayObject) {
+  if (!displayObject || displayObject[STEALTH_VISION_MASK_FILTER]) return;
+  const Filter = globalThis.foundry?.canvas?.rendering?.filters?.VisionMaskFilter
+    ?? globalThis.VisionMaskFilter;
+  if (typeof Filter?.create !== "function") return;
+  const filter = Filter.create();
+  if (!filter) return;
+  displayObject.filters = [...(displayObject.filters ?? []), filter];
+  displayObject.filterArea = globalThis.canvas?.app?.screen ?? displayObject.filterArea;
+  displayObject[STEALTH_VISION_MASK_FILTER] = filter;
+}
+
+function destroyNativeVisionMask(displayObject) {
+  const filter = displayObject?.[STEALTH_VISION_MASK_FILTER];
+  if (!filter) return;
+  displayObject.filters = (displayObject.filters ?? []).filter(candidate => candidate !== filter);
+  filter.destroy?.();
+  delete displayObject[STEALTH_VISION_MASK_FILTER];
 }
 
 function refreshDetectionHoverFill() {
   clearDetectionHoverFill();
   const activeCanvas = globalThis.canvas;
-  if (!hoverTokenId || !detectionVisualizations.size || !activeCanvas?.interface?.grid || activeCanvas.grid?.isGridless) return;
+  if (
+    !canRenderLocalStealthOverlay()
+    || !hoverTokenId
+    || !detectionVisualizations.size
+    || !activeCanvas?.interface?.grid
+    || activeCanvas.grid?.isGridless
+  ) return;
 
   const baseOffsetGroups = [];
   const contactingNoiseOffsetGroups = [];
@@ -394,7 +475,9 @@ function refreshDetectionHoverFill() {
   if (!baseOffsetGroups.length) return;
 
   const gridLayer = activeCanvas.interface.grid;
-  gridLayer.addHighlightLayer(STEALTH_DETECTION_HOVER_LAYER);
+  const highlightLayer = gridLayer.addHighlightLayer(STEALTH_DETECTION_HOVER_LAYER);
+  if (highlightLayer) highlightLayer.renderable = canRenderLocalStealthOverlay();
+  applyNativeVisionMask(highlightLayer);
   const highlightedOffsets = collectUniqueGridOffsets([
     ...baseOffsetGroups,
     ...contactingNoiseOffsetGroups
@@ -407,6 +490,29 @@ function refreshDetectionHoverFill() {
 
 function clearDetectionHoverFill() {
   globalThis.canvas?.interface?.grid?.clearHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
+}
+
+function canRenderLocalStealthOverlay() {
+  const activeCanvas = globalThis.canvas;
+  const controlled = activeCanvas?.tokens?.controlled ?? [];
+  if (controlled.length !== 1) return false;
+  if (!activeCanvas.visibility?.tokenVision) return true;
+  if (activeCanvas.visibility?.visible === false) return false;
+  const pointOfView = controlled[0];
+  const sources = activeCanvas.effects?.visionSources;
+  if (sources) {
+    const activeSources = [];
+    for (const source of sources?.values?.() ?? sources ?? []) {
+      if (!source?.active) continue;
+      if (source?.data?.preview === true || source?.preview === true || source?.isPreview === true) return false;
+      activeSources.push(source);
+    }
+    if (activeSources.length !== 1) return false;
+    const [source] = activeSources;
+    return source.object === pointOfView
+      || Boolean(source.object?.id && source.object.id === pointOfView.id);
+  }
+  return pointOfView?.vision?.active === true;
 }
 
 function highlightGridOffsets(gridLayer, offsets, { color, alpha }) {

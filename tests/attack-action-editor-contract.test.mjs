@@ -67,15 +67,15 @@ test("item-sheet special-property mutations submit the live full attack settings
   );
   assert.equal(
     (mutationBlock.match(/if \(isAttackActionSettingsSection\(section\)\)/g) ?? []).length,
-    3
+    5
   );
   assert.equal(
     (mutationBlock.match(/#getSubmittedAttackActionSettings\(path\)/g) ?? []).length,
-    3
+    5
   );
   assert.equal(
     (mutationBlock.match(/#submitCurrentForm\(\{ \[path\]: settings \}\)/g) ?? []).length,
-    3
+    5
   );
 });
 

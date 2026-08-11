@@ -24,7 +24,9 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createCategory: this.#onCreateCategory,
-      deleteCategory: this.#onDeleteCategory
+      deleteCategory: this.#onDeleteCategory,
+      createSubcategory: this.#onCreateSubcategory,
+      deleteSubcategory: this.#onDeleteSubcategory
     }
   };
 
@@ -63,7 +65,7 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
   static #onCreateCategory(event) {
     event.preventDefault();
     this.categories = this.#readCategoriesFromForm();
-    this.categories.push({ label: this.#getUniqueLabel("Новая категория") });
+    this.categories.push({ label: this.#getUniqueLabel("Новая категория"), subcategories: [] });
     return this.forceRender();
   }
 
@@ -78,11 +80,42 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onCreateSubcategory(event, target) {
+    event.preventDefault();
+    const rows = Array.from(this.form?.querySelectorAll("[data-item-category-row]") ?? []);
+    const index = rows.indexOf(target.closest("[data-item-category-row]"));
+    if (index < 0) return undefined;
+
+    this.categories = this.#readCategoriesFromForm();
+    const category = this.categories[index];
+    category.subcategories.push({
+      label: this.#getUniqueSubcategoryLabel(category, "Новая подкатегория")
+    });
+    return this.forceRender();
+  }
+
+  static #onDeleteSubcategory(event, target) {
+    event.preventDefault();
+    const categoryRows = Array.from(this.form?.querySelectorAll("[data-item-category-row]") ?? []);
+    const categoryIndex = categoryRows.indexOf(target.closest("[data-item-category-row]"));
+    if (categoryIndex < 0) return undefined;
+    const subcategoryRows = Array.from(categoryRows[categoryIndex].querySelectorAll("[data-item-subcategory-row]"));
+    const subcategoryIndex = subcategoryRows.indexOf(target.closest("[data-item-subcategory-row]"));
+    if (subcategoryIndex < 0) return undefined;
+
+    this.categories = this.#readCategoriesFromForm();
+    this.categories[categoryIndex].subcategories.splice(subcategoryIndex, 1);
+    return this.forceRender();
+  }
+
 
   #readCategoriesFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-item-category-row]") ?? []);
     return rows.map(row => ({
-      label: row.querySelector("[data-field='label']")?.value?.trim() ?? ""
+      label: row.querySelector("[data-field='categoryLabel']")?.value?.trim() ?? "",
+      subcategories: Array.from(row.querySelectorAll("[data-item-subcategory-row]")).map(subcategoryRow => ({
+        label: subcategoryRow.querySelector("[data-field='subcategoryLabel']")?.value?.trim() ?? ""
+      }))
     }));
   }
 
@@ -93,11 +126,31 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
       if (!label) throwValidationError(`Категория ${index + 1}: название не должно быть пустым.`);
       if (labels.has(label)) throwValidationError(`Категория предметов "${label}" повторяется.`);
       labels.add(label);
+      const subcategoryLabels = new Set();
+      for (const [subcategoryIndex, subcategory] of (category.subcategories ?? []).entries()) {
+        const subcategoryLabel = String(subcategory?.label ?? "").trim();
+        if (!subcategoryLabel) {
+          throwValidationError(`Категория "${label}", подкатегория ${subcategoryIndex + 1}: название не должно быть пустым.`);
+        }
+        if (subcategoryLabels.has(subcategoryLabel)) {
+          throwValidationError(`Подкатегория "${subcategoryLabel}" в категории "${label}" повторяется.`);
+        }
+        subcategoryLabels.add(subcategoryLabel);
+      }
     }
   }
 
   #getUniqueLabel(baseLabel) {
     const labels = new Set(this.categories.map(category => category.label));
+    if (!labels.has(baseLabel)) return baseLabel;
+
+    let index = 2;
+    while (labels.has(`${baseLabel} ${index}`)) index += 1;
+    return `${baseLabel} ${index}`;
+  }
+
+  #getUniqueSubcategoryLabel(category, baseLabel) {
+    const labels = new Set((category?.subcategories ?? []).map(entry => entry.label));
     if (!labels.has(baseLabel)) return baseLabel;
 
     let index = 2;

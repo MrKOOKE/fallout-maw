@@ -104,8 +104,112 @@ globalThis.game = {
 const {
   ATTACK_TARGETING_TESTING,
   ORDINARY_WEAPON_ATTACK_TESTING,
+  WEAPON_CONDITION_WEAR_TESTING,
   WeaponAttackController
 } = await import("../src/combat/weapon-attack-controller.mjs");
+
+test("impact condition wear uses one hit base plus total armor-blocked damage", () => {
+  const summary = WEAPON_CONDITION_WEAR_TESTING.summarizeDamageResults([{
+    mode: "damage",
+    amount: 25,
+    mitigationBlocked: 20
+  }, {
+    mode: "damage",
+    amount: 0,
+    mitigationBlocked: 2.4
+  }, {
+    mode: "damage",
+    amount: 1,
+    mitigationBlocked: 0.6
+  }, {
+    mode: "healing",
+    amount: 10,
+    mitigationBlocked: 100
+  }]);
+
+  assert.deepEqual(summary, {
+    hit: true,
+    blockedDamage: 23,
+    multiplier: 0,
+    conditionLoss: 0
+  });
+  assert.equal(WEAPON_CONDITION_WEAR_TESTING.calculateConditionLoss(100, summary.blockedDamage, 2), 50);
+  assert.equal(WEAPON_CONDITION_WEAR_TESTING.calculateConditionLoss(30, summary.blockedDamage, 2), 30);
+});
+
+test("ordinary impact condition wear derives its multiplier from the configured condition cost", async () => {
+  const weaponData = {
+    resourceCosts: [{ type: "condition", amount: 6 }],
+    specialProperties: [{ type: "impactConditionWear" }]
+  };
+  const actor = {
+    documentName: "Actor",
+    uuid: "Actor.impact-wear",
+    items: new Map()
+  };
+  const weapon = {
+    id: "impact-wear-weapon",
+    parent: actor,
+    system: {
+      functions: {
+        condition: { enabled: true, value: 100 },
+        weapon: weaponData
+      }
+    },
+    async update(changes) {
+      this.system.functions.condition.value = changes["system.functions.condition.value"];
+    }
+  };
+  actor.items.set(weapon.id, weapon);
+
+  const result = await WEAPON_CONDITION_WEAR_TESTING.applyImpactConditionWear(
+    weapon,
+    "weapon",
+    [{ mode: "damage", amount: 10 }],
+    { weaponData }
+  );
+
+  assert.equal(result.multiplier, 6);
+  assert.equal(result.conditionLoss, 12);
+  assert.equal(weapon.system.functions.condition.value, 88);
+});
+
+test("pellets share one base impact wear and preserve their combined blocked damage", () => {
+  const pellets = Array.from({ length: 8 }, () => ({
+    mode: "damage",
+    amount: 20,
+    mitigationBlocked: 2.5
+  }));
+  const summary = WEAPON_CONDITION_WEAR_TESTING.summarizeDamageResults(pellets);
+
+  assert.equal(summary.blockedDamage, 20);
+  assert.equal(WEAPON_CONDITION_WEAR_TESTING.calculateConditionLoss(1000, summary.blockedDamage, 6), 132);
+});
+
+test("fully mitigated weapon damage still counts as a hit", () => {
+  assert.deepEqual(WEAPON_CONDITION_WEAR_TESTING.summarizeDamageResults([{
+    mode: "damage",
+    amount: 0,
+    mitigationBlocked: 20
+  }]), {
+    hit: true,
+    blockedDamage: 20,
+    multiplier: 0,
+    conditionLoss: 0
+  });
+  assert.equal(WEAPON_CONDITION_WEAR_TESTING.calculateConditionLoss(100, 20, 2), 44);
+});
+
+test("fully delayed periodic damage still counts as a weapon hit", async () => {
+  assert.equal(WEAPON_CONDITION_WEAR_TESTING.summarizeDamageResults([{
+    mode: "damage",
+    amount: 0,
+    delayedAmount: 20
+  }]).hit, true);
+
+  const source = await readFile(new URL("../src/combat/damage-hub.mjs", import.meta.url), "utf8");
+  assert.match(source, /delayedAmount:\s*roundDamageAmount\(result\.delayedAmount\)/u);
+});
 
 test("perception preview and physical impact use independent target policies", () => {
   const perceived = {

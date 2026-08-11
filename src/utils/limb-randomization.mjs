@@ -1,4 +1,5 @@
 import { toInteger } from "./numbers.mjs";
+import { isLimbDestroyed } from "./limb-state.mjs";
 
 const RANDOM_LIMB_BASE_EXPONENT = 2.4;
 const RANDOM_LIMB_DIFFICULTY_EXPONENT_STEP = 50;
@@ -9,7 +10,7 @@ export function selectRandomWeightedLimbKey(actor, {
 } = {}) {
   const entries = Object.entries(actor?.system?.limbs ?? {})
     .filter(([_key, limb]) => limb && typeof limb === "object")
-    .filter(([_key, limb]) => includeDestroyed || !isLimbDestroyed(limb))
+    .filter(([key]) => includeDestroyed || !isLimbDestroyed(actor, key))
     .filter(([_key, limb]) => !criticalOnly || limb?.critical === true)
     .map(([key, limb]) => ({
       key,
@@ -32,8 +33,4 @@ export function getRandomLimbWeight(limb = {}) {
   const difficulty = Math.max(0, toInteger(limb?.aimedDifficultyPercent));
   const exponent = RANDOM_LIMB_BASE_EXPONENT + (difficulty / RANDOM_LIMB_DIFFICULTY_EXPONENT_STEP);
   return Math.pow(100 / (100 + difficulty), exponent);
-}
-
-function isLimbDestroyed(limb = {}) {
-  return toInteger(limb?.value) <= toInteger(limb?.min);
 }

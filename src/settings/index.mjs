@@ -11,3 +11,4 @@ export * from "./presets/schema.mjs";
 export * from "./camp.mjs";
 export * from "./crafting.mjs";
 export * from "./registration.mjs";
+export * from "./rules-profiles.mjs";

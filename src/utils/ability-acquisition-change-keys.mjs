@@ -1,4 +1,5 @@
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
+import { getProficiencySettings } from "../settings/accessors.mjs";
 
 const ACQUISITION_CHANGE_GROUP = "Ability acquisition";
 const ACQUISITION_CHANGE_KEYS = Object.freeze([
@@ -56,7 +57,7 @@ const ACQUISITION_CHANGE_KEYS = Object.freeze([
 const ACQUISITION_CHANGE_PATHS = new Set(ACQUISITION_CHANGE_KEYS.map(entry => entry.path));
 
 export function buildAbilityAcquisitionChangeKeyTokens() {
-  return ACQUISITION_CHANGE_KEYS.map(entry => createEffectKeyToken({
+  return getActiveAcquisitionChangeKeys().map(entry => createEffectKeyToken({
     code: entry.code,
     key: entry.key,
     label: localizeOrFallback(entry.labelKey, entry.fallback),
@@ -66,7 +67,15 @@ export function buildAbilityAcquisitionChangeKeyTokens() {
 }
 
 export function isAbilityAcquisitionChangeKey(key = "") {
-  return ACQUISITION_CHANGE_PATHS.has(String(key ?? "").trim());
+  const path = String(key ?? "").trim();
+  if (path === "system.development.points.proficiencies" && !getProficiencySettings().length) return false;
+  return ACQUISITION_CHANGE_PATHS.has(path);
+}
+
+function getActiveAcquisitionChangeKeys() {
+  return getProficiencySettings().length
+    ? ACQUISITION_CHANGE_KEYS
+    : ACQUISITION_CHANGE_KEYS.filter(entry => entry.key !== "proficiencies");
 }
 
 function localizeOrFallback(key, fallback) {

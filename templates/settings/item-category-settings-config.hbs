@@ -17,7 +17,18 @@
       {{#each categories}}
       <div class="fallout-maw-settings-row" data-item-category-row>
         <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
-        <input type="text" data-field="label" value="{{label}}">
+        <div class="fallout-maw-item-category-fields">
+          <input type="text" data-field="categoryLabel" value="{{label}}">
+          <div class="fallout-maw-item-subcategory-list">
+            {{#each subcategories}}
+            <div class="fallout-maw-item-subcategory-row" data-item-subcategory-row>
+              <input type="text" data-field="subcategoryLabel" value="{{label}}">
+              <button type="button" data-action="deleteSubcategory" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            {{/each}}
+            <button type="button" class="fallout-maw-secondary-button" data-action="createSubcategory"><i class="fa-solid fa-plus"></i> Добавить подкатегорию</button>
+          </div>
+        </div>
         <button type="button" data-action="deleteCategory" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}

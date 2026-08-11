@@ -17,6 +17,7 @@
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Color"}}</span>
+        <span>Источник максимума</span>
         <span>{{localize "FALLOUTMAW.Common.Formula"}}</span>
         <span></span>
       </div>
@@ -27,6 +28,14 @@
         <input type="text" data-field="key" value="{{key}}" {{#if locked}}disabled{{/if}}>
         <input type="text" data-field="label" value="{{label}}">
         <input type="color" data-field="color" value="{{color}}">
+        {{#if health}}
+        <select data-field="formulaSource">
+          <option value="formula" {{#unless raceFormulaSelected}}selected{{/unless}}>Формула ресурса</option>
+          {{#if raceFormulaAvailable}}<option value="race" {{#if raceFormulaSelected}}selected{{/if}}>Формула выбранной расы</option>{{/if}}
+        </select>
+        {{else}}
+        <span>Формула ресурса</span>
+        {{/if}}
         <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all" {{#if formulaLocked}}disabled{{/if}}>
         {{#if locked}}
         <span class="fallout-maw-locked-resource-indicator" title="{{localize 'FALLOUTMAW.Common.Locked'}}"><i class="fa-solid fa-lock"></i></span>

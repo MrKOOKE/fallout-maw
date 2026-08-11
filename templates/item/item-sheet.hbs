@@ -54,6 +54,16 @@
           {{/each}}
         </select>
       </label>
+      {{#if hasItemSubcategories}}
+      <label>
+        <span>Подкатегория предмета</span>
+        <select name="system.itemSubcategory">
+          {{#each itemSubcategoryChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
         <input type="number" name="system.weight" value="{{system.weight}}" min="0" step="0.1">
@@ -1485,13 +1495,14 @@
       data-weapon-function-path="{{path}}"
     >
       <div class="fallout-maw-panel-header">
-        <h3>Кнопка и владение</h3>
+        <h3>{{#if @root.weaponProficienciesEnabled}}Кнопка и владение{{else}}Кнопка атаки{{/if}}</h3>
       </div>
       <div class="fallout-maw-list-grid three-columns">
         <label>
           <span>Название действия</span>
           <input type="text" name="{{path}}.name" value="{{name}}" placeholder="Название способности">
         </label>
+        {{#if @root.weaponProficienciesEnabled}}
         <label>
           <span>{{localize "FALLOUTMAW.Item.WeaponType"}}</span>
           <select name="{{path}}.proficiencyKey">
@@ -1500,6 +1511,7 @@
             {{/each}}
           </select>
         </label>
+        {{/if}}
       </div>
 
       <div class="fallout-maw-panel-header">
@@ -1923,6 +1935,43 @@
           </select>
           <button type="button" data-delete-weapon-special-property="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         </div>
+        {{#if isAdditionalProficiencies}}
+        <section class="fallout-maw-weapon-special-property-settings">
+          <div class="fallout-maw-panel-header subsection">
+            <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialAdditionalProficiencies"}}</h4>
+            <button type="button" data-add-weapon-additional-proficiency="{{index}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddAdditionalProficiency"}}</button>
+          </div>
+          <div class="fallout-maw-settings-table fallout-maw-weapon-additional-proficiencies">
+            {{#each additionalProficiencyRows}}
+            <div class="fallout-maw-settings-row">
+              <select name="{{../../path}}.specialProperties.{{../index}}.proficiencyKeys.{{index}}">
+                {{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}
+              </select>
+              <button type="button" data-property-index="{{../index}}" data-delete-weapon-additional-proficiency="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            {{else}}<p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoAdditionalProficiencies"}}</p>{{/each}}
+          </div>
+        </section>
+        {{/if}}
+        {{#if isLimbDamageMultipliers}}
+        <section class="fallout-maw-weapon-special-property-settings">
+          <div class="fallout-maw-panel-header subsection">
+            <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialLimbDamageMultipliers"}}</h4>
+          </div>
+          <div class="fallout-maw-settings-table">
+            <div class="fallout-maw-settings-row fallout-maw-grid-header">
+              <span>{{localize "FALLOUTMAW.Item.WeaponLimbDamageMultiplierTarget"}}</span>
+              <span>{{localize "FALLOUTMAW.Item.WeaponLimbDamageMultiplier"}}</span>
+            </div>
+            {{#each limbDamageMultiplierRows}}
+            <div class="fallout-maw-settings-row">
+              <span>{{label}} <small>({{key}})</small></span>
+              <input type="number" name="{{../../path}}.specialProperties.{{../index}}.limbDamageMultipliers.{{key}}" value="{{value}}" min="0" step="0.1">
+            </div>
+            {{/each}}
+          </div>
+        </section>
+        {{/if}}
         {{#if isAttackPower}}
         <section class="fallout-maw-weapon-special-property-settings fallout-maw-weapon-attack-power-settings">
           <div class="fallout-maw-list-grid three-columns">
@@ -3213,6 +3262,16 @@
           {{/each}}
         </select>
       </label>
+      {{#if hasItemSubcategories}}
+      <label>
+        <span>Подкатегория предмета</span>
+        <select name="system.itemSubcategory">
+          {{#each itemSubcategoryChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
         <input type="number" name="system.weight" value="{{system.weight}}" min="0" step="0.1">
@@ -4481,6 +4540,10 @@
           {{/each}}
         </select>
       </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MitigationWearResistance"}}</span>
+        <input type="number" name="system.functions.damageMitigation.wearResistance" value="{{system.functions.damageMitigation.wearResistance}}" min="0" step="1">
+      </label>
       {{#if showDamageMitigationLimbSetSelector}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.MitigationLimbSet"}}</span>
@@ -5195,6 +5258,43 @@
         </select>
         <button type="button" data-delete-weapon-special-property="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
+      {{#if isAdditionalProficiencies}}
+      <section class="fallout-maw-weapon-special-property-settings">
+        <div class="fallout-maw-panel-header subsection">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialAdditionalProficiencies"}}</h4>
+          <button type="button" data-add-weapon-additional-proficiency="{{index}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddAdditionalProficiency"}}</button>
+        </div>
+        <div class="fallout-maw-settings-table fallout-maw-weapon-additional-proficiencies">
+          {{#each additionalProficiencyRows}}
+          <div class="fallout-maw-settings-row">
+            <select name="{{../../path}}.specialProperties.{{../index}}.proficiencyKeys.{{index}}">
+              {{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}
+            </select>
+            <button type="button" data-property-index="{{../index}}" data-delete-weapon-additional-proficiency="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}<p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoAdditionalProficiencies"}}</p>{{/each}}
+        </div>
+      </section>
+      {{/if}}
+      {{#if isLimbDamageMultipliers}}
+      <section class="fallout-maw-weapon-special-property-settings">
+        <div class="fallout-maw-panel-header subsection">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialLimbDamageMultipliers"}}</h4>
+        </div>
+        <div class="fallout-maw-settings-table">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Item.WeaponLimbDamageMultiplierTarget"}}</span>
+            <span>{{localize "FALLOUTMAW.Item.WeaponLimbDamageMultiplier"}}</span>
+          </div>
+          {{#each limbDamageMultiplierRows}}
+          <div class="fallout-maw-settings-row">
+            <span>{{label}} <small>({{key}})</small></span>
+            <input type="number" name="{{../../path}}.specialProperties.{{../index}}.limbDamageMultipliers.{{key}}" value="{{value}}" min="0" step="0.1">
+          </div>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
       {{#if isAttackPower}}
       <section class="fallout-maw-weapon-special-property-settings fallout-maw-weapon-attack-power-settings">
         <div class="fallout-maw-panel-header subsection">
@@ -6103,6 +6203,7 @@
       <input type="hidden" name="{{path}}.enabled" value="true">
     </div>
     {{/if}}
+    {{#if @root.weaponProficienciesEnabled}}
     <div class="fallout-maw-panel-header fallout-maw-weapon-type-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponType"}}</h3>
       <select name="{{path}}.proficiencyKey">
@@ -6111,6 +6212,7 @@
         {{/each}}
       </select>
     </div>
+    {{/if}}
 
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponCombatStats"}}</h3>
@@ -6339,6 +6441,43 @@
         </select>
         <button type="button" data-delete-weapon-special-property="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
+      {{#if isAdditionalProficiencies}}
+      <section class="fallout-maw-weapon-special-property-settings">
+        <div class="fallout-maw-panel-header subsection">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialAdditionalProficiencies"}}</h4>
+          <button type="button" data-add-weapon-additional-proficiency="{{index}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddAdditionalProficiency"}}</button>
+        </div>
+        <div class="fallout-maw-settings-table fallout-maw-weapon-additional-proficiencies">
+          {{#each additionalProficiencyRows}}
+          <div class="fallout-maw-settings-row">
+            <select name="{{../../path}}.specialProperties.{{../index}}.proficiencyKeys.{{index}}">
+              {{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}
+            </select>
+            <button type="button" data-property-index="{{../index}}" data-delete-weapon-additional-proficiency="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}<p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoAdditionalProficiencies"}}</p>{{/each}}
+        </div>
+      </section>
+      {{/if}}
+      {{#if isLimbDamageMultipliers}}
+      <section class="fallout-maw-weapon-special-property-settings">
+        <div class="fallout-maw-panel-header subsection">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialLimbDamageMultipliers"}}</h4>
+        </div>
+        <div class="fallout-maw-settings-table">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Item.WeaponLimbDamageMultiplierTarget"}}</span>
+            <span>{{localize "FALLOUTMAW.Item.WeaponLimbDamageMultiplier"}}</span>
+          </div>
+          {{#each limbDamageMultiplierRows}}
+          <div class="fallout-maw-settings-row">
+            <span>{{label}} <small>({{key}})</small></span>
+            <input type="number" name="{{../../path}}.specialProperties.{{../index}}.limbDamageMultipliers.{{key}}" value="{{value}}" min="0" step="0.1">
+          </div>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
       {{#if isAttackPower}}
       <section class="fallout-maw-weapon-special-property-settings fallout-maw-weapon-attack-power-settings">
         <div class="fallout-maw-panel-header subsection">

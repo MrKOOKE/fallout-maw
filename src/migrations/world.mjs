@@ -8,6 +8,7 @@ import {
   LEGACY_CONSCIOUSNESS_MIGRATION_PENDING_FLAG
 } from "./documents.mjs";
 import { DOCUMENT_MIGRATION_VERSION_SETTING } from "../settings/constants.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 
 const CONSCIOUSNESS_DOCUMENT_MIGRATION_VERSION = 1;
 const UNCONSCIOUS_STATUS_ID = "unconscious";
@@ -15,6 +16,9 @@ const LEGACY_SHOCK_FLAG = "shockUnconscious";
 let consciousnessMigrationHooksRegistered = false;
 
 export async function migrateWorldConsciousnessData() {
+  if (getActiveRulesProfile().disableConsciousness) {
+    return { migrated: 0, failed: 0 };
+  }
   registerConsciousnessMigrationHooks();
   if (!game.user?.isActiveGM) return { migrated: 0, failed: 0 };
 

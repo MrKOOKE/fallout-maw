@@ -57,6 +57,7 @@ import {
   getNeedSettings,
   getProficiencySettings,
   getResourceSettings,
+  getSkillAdvancementSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getCoverBonusPercentEffectKey } from "../settings/cover.mjs";
@@ -329,6 +330,7 @@ export function buildAllSkillsCriticalFailureChanceEffectKeyToken() {
 }
 
 export function buildSkillAdvancementMultiplierEffectKeyTokens() {
+  if (getSkillAdvancementSettings().mode === "fixed") return [];
   const group = localizeOrFallback(
     "FALLOUTMAW.Effects.SkillAdvancementMultiplierGroup",
     "Множители развития навыков"
@@ -435,7 +437,7 @@ export function buildSkillCheckActionEffectKeyTokens() {
 
 export function buildResourceBonusEffectKeyTokens(group = game.i18n.localize("FALLOUTMAW.Common.Resources")) {
   return getResourceSettings()
-    .filter(entry => String(entry?.key ?? "").trim() !== "health")
+    .filter(entry => String(entry?.key ?? "").trim() !== "health" || entry?.formulaSource === "race")
     .map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

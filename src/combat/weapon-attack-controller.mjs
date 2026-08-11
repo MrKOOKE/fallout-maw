@@ -6,7 +6,7 @@ import {
   playWeaponAttackAnimations,
   playWeaponExplosionAnimation
 } from "./attack-animations.mjs";
-import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import {
   createPelletImpactProjectiles,
@@ -41,7 +41,7 @@ import {
   hasWeaponSpecialPropertyData,
   parseModuleWeaponFunctionId
 } from "../utils/item-functions.mjs";
-import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_POINT_COST_MODES,
@@ -72,6 +72,7 @@ import {
 } from "./reaction-resources.mjs";
 import { applyAttackActionPointMovementLoss } from "./attack-action-point-movement-loss.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getWeaponProficiencyInfluenceBonus as getWeaponProficiencyInfluenceBonusForData } from "../utils/weapon-proficiencies.mjs";
 import { normalizeRegionSpecialProperties, resolveRegionSpecialProperties } from "../utils/region-special-properties.mjs";
 import { getSphericalRegionElevation, getSphericalRegionFlags } from "../utils/region-elevation.mjs";
 import {
@@ -684,6 +685,12 @@ export const ATTACK_TARGETING_TESTING = Object.freeze({
   isAttackTargetVisible,
   selectRandomMeleeDirection,
   getEnabledMeleeDirectionsFromSettings
+});
+
+export const WEAPON_CONDITION_WEAR_TESTING = Object.freeze({
+  applyImpactConditionWear: applyWeaponImpactConditionWear,
+  calculateConditionLoss: calculateWeaponImpactConditionLoss,
+  summarizeDamageResults: summarizeWeaponImpactDamageResults
 });
 
 function suspendWeaponAttackForNestedSelection(controller = activeAttack) {
@@ -4085,6 +4092,7 @@ export function buildWeaponExplosionDamageRequests({
       ? concentratedLimbKey
       : selectRandomLimbKey(actor);
     if (!limbKey) continue;
+    const conditionWearPacketId = foundry.utils.randomID();
     const typeAmounts = distributeIntegerAmount(pelletDamage, normalizedTypes.map(entry => entry.weight));
     for (let typeIndex = 0; typeIndex < normalizedTypes.length; typeIndex += 1) {
       const amount = typeAmounts[typeIndex] ?? 0;
@@ -4100,6 +4108,7 @@ export function buildWeaponExplosionDamageRequests({
           targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
           penetrationPower,
           pelletIndex,
+          conditionWearPacketId,
           ...(concentratedPelletImpact ? {
             pelletImpactCount: pelletDamages.length,
             pelletImpactIndex: pelletIndex
@@ -4361,6 +4370,13 @@ export class WeaponAttackController {
 
   async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
     if (!attempted) return;
+    const resolvedDamageResults = Array.isArray(damageResults) ? damageResults : [];
+    const impactConditionWear = this.skipBaseWeaponResourceCosts
+      ? summarizeWeaponImpactDamageResults(resolvedDamageResults)
+      : await applyWeaponImpactConditionWear(this.weapon, this.weaponFunctionId, resolvedDamageResults, {
+        modifierState: this.getWeaponActionModifierState(),
+        chainRef: this.chainRef
+      });
     const actionPointCostApplied = this.reportedActionPointCostApplied ?? (
       !this.skipActionPointCost && isCombatActionPointSpendingActive(this.token?.actor)
     );
@@ -4398,7 +4414,8 @@ export class WeaponAttackController {
       canceledByReaction: Boolean(this.attackCanceledByReaction),
       criticalDamageUsed: this.criticalDamageUsed,
       attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
-      damageResults: Array.isArray(damageResults) ? damageResults : [],
+      damageResults: resolvedDamageResults,
+      impactConditionWear,
       modifierState: this.getWeaponActionModifierState(),
       reactionCoordinator: this.reactionCoordinator,
       chainRef: this.chainRef,
@@ -7628,7 +7645,11 @@ export class WeaponAttackController {
         attackerToken: this.token,
         finalGeometries,
         blastOutcomes,
-        damageContext: delayedDamageContext
+        damageContext: delayedDamageContext,
+        impactConditionWearMultiplier: getWeaponImpactConditionWearMultiplier(
+          getWeaponAttackData(this.weapon, this.weaponFunctionId),
+          this.getWeaponActionModifierState()
+        )
       })
       : null;
 
@@ -9990,6 +10011,13 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
 
     await dodgeExposure.flush();
     const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
+    const impactConditionWear = delayedWeapon
+      ? await applyWeaponImpactConditionWear(delayedWeapon, String(source.weaponFunctionId ?? ""), damageResults, {
+        chainRef: source.chainRef ?? null,
+        multiplier: source.impactConditionWearMultiplier,
+        weaponData: source.weaponData
+      })
+      : summarizeWeaponImpactDamageResults(damageResults);
     await publishWeaponAttackResolved({
       actor: contextualAttackerActor,
       actorToken: contextualAttackerToken,
@@ -10010,6 +10038,8 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
       canceledByReaction: false,
       criticalDamageUsed: damageRequests.some(request => request?.source?.criticalSuccess === true),
       attackCheckCount: explosions.length,
+      damageResults,
+      impactConditionWear,
       chainRef: source.chainRef ?? null,
       damageHubOperationRef: String(source.damageHubOperationRef ?? ""),
       senderUserId: game.user?.id ?? ""
@@ -10452,6 +10482,10 @@ export function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctio
 export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const costs = getWeaponResourceCosts(weaponData, { modifierState });
+  const defersConditionCost = hasWeaponSpecialPropertyData(
+    weaponData,
+    WEAPON_SPECIAL_PROPERTIES.impactConditionWear
+  );
   const actor = getWeaponOwnerActor(weapon);
   const actorResourceTotals = getWeaponActorResourceCostTotals(weapon, { costs });
   for (const [resourceKey, required] of actorResourceTotals) {
@@ -10481,6 +10515,7 @@ export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunct
       };
     }
     if (cost.type === "condition") {
+      if (defersConditionCost) continue;
       const current = toInteger(weapon.system?.functions?.condition?.value);
       if (current < amount) return {
         type: "condition",
@@ -11034,9 +11069,14 @@ function collectWeaponResourceSpendTotals(
   const actorCostRows = [];
   const baseMultiplier = Math.max(1, toInteger(multiplier));
   const baseCosts = skipBaseCosts ? [] : getWeaponResourceCosts(weaponData, { modifierState });
+  const defersConditionCost = hasWeaponSpecialPropertyData(
+    weaponData,
+    WEAPON_SPECIAL_PROPERTIES.impactConditionWear
+  );
   for (const [index, cost] of baseCosts.entries()) {
     const type = String(cost?.type ?? "").trim();
     if (!type) continue;
+    if (type === "condition" && defersConditionCost) continue;
     if (type === "actorResource") {
       actorCostRows.push({
         id: String(cost?.id ?? "").trim() || `weapon-actor-cost-${index + 1}`,
@@ -11063,6 +11103,90 @@ function collectWeaponResourceSpendTotals(
     itemTotals.set(type, (itemTotals.get(type) ?? 0) + amount);
   }
   return { itemTotals, actorCostRows };
+}
+
+function summarizeWeaponImpactDamageResults(damageResults = []) {
+  let hit = false;
+  let totalBlockedDamage = 0;
+  for (const result of damageResults.flat(Infinity).filter(Boolean)) {
+    if ((result.mode && result.mode !== "damage") || result.cancelled || result.failed) continue;
+    const blocked = Math.max(0, Number(result.mitigationBlocked) || 0);
+    const hasImpact = blocked > 0 || [
+      result.amount,
+      result.potentialAmount,
+      result.delayedAmount,
+      result.preBarrierAmount,
+      result.amountAfterBarrier,
+      result.barrierAbsorbed,
+      result.healthDelta,
+      result.limbDelta,
+      result.itemConditionDelta
+    ].some(value => Number(value) > 0);
+    if (!hasImpact) continue;
+    hit = true;
+    totalBlockedDamage += blocked;
+  }
+  return {
+    hit,
+    blockedDamage: Math.floor(totalBlockedDamage),
+    multiplier: 0,
+    conditionLoss: 0
+  };
+}
+
+async function applyWeaponImpactConditionWear(
+  weapon,
+  weaponFunctionId = "",
+  damageResults = [],
+  { modifierState = null, chainRef = null, multiplier, weaponData: suppliedWeaponData = null } = {}
+) {
+  const summary = summarizeWeaponImpactDamageResults(damageResults);
+  if (!summary.hit) return summary;
+  const actor = getWeaponOwnerActor(weapon);
+  if (!actor || !weapon?.id) return summary;
+
+  return weaponResourceActorLock.run(actor, null, async () => {
+    const currentWeapon = actor.items?.get?.(weapon.id);
+    if (!currentWeapon || !hasItemFunction(currentWeapon, ITEM_FUNCTIONS.condition, { ignoreBroken: true })) return summary;
+    const weaponData = suppliedWeaponData && typeof suppliedWeaponData === "object"
+      ? suppliedWeaponData
+      : getWeaponAttackData(currentWeapon, weaponFunctionId);
+    if (!hasWeaponSpecialPropertyData(weaponData, WEAPON_SPECIAL_PROPERTIES.impactConditionWear)) return summary;
+    const conditionMultiplier = Number.isFinite(Number(multiplier))
+      ? Math.max(0, toInteger(multiplier))
+      : getWeaponImpactConditionWearMultiplier(weaponData, modifierState);
+    if (!conditionMultiplier) return summary;
+
+    const current = Math.max(0, toInteger(currentWeapon.system?.functions?.condition?.value));
+    const conditionLoss = calculateWeaponImpactConditionLoss(
+      current,
+      summary.blockedDamage,
+      conditionMultiplier
+    );
+    if (conditionLoss > 0) {
+      await currentWeapon.update({
+        "system.functions.condition.value": current - conditionLoss
+      }, chainRef ? {
+        chainRef,
+        falloutMawSystemEventChainRef: chainRef
+      } : {});
+    }
+    return { ...summary, multiplier: conditionMultiplier, conditionLoss };
+  });
+}
+
+function getWeaponImpactConditionWearMultiplier(weaponData = {}, modifierState = null) {
+  if (!hasWeaponSpecialPropertyData(weaponData, WEAPON_SPECIAL_PROPERTIES.impactConditionWear)) return 0;
+  return getWeaponResourceCosts(weaponData, { modifierState })
+    .filter(cost => String(cost?.type ?? "").trim() === "condition")
+    .reduce((total, cost) => total + Math.max(0, toInteger(cost?.amount)), 0);
+}
+
+function calculateWeaponImpactConditionLoss(current, blockedDamage, multiplier) {
+  const available = Math.max(0, toInteger(current));
+  const costMultiplier = Math.max(0, toInteger(multiplier));
+  const blocked = Math.max(0, Math.floor(Number(blockedDamage) || 0));
+  return Math.min(available, (2 + blocked) * costMultiplier);
 }
 
 function getMissingCollectedWeaponItemResourceCost(
@@ -12775,6 +12899,7 @@ function buildDelayedVolleyExplosionRegionRequest({
   blastOutcomes = [],
   baseDamage = 0,
   damageContext = null,
+  impactConditionWearMultiplier = 0,
   attachmentTokenId = ""
 } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
@@ -12900,6 +13025,7 @@ function buildDelayedVolleyExplosionRegionRequest({
       weaponName: weapon?.name ?? "",
       weaponFunctionId,
       actionKey,
+      impactConditionWearMultiplier: Math.max(0, toInteger(impactConditionWearMultiplier)),
       weaponData: foundry.utils.deepClone(weaponData)
     }
   };
@@ -12980,13 +13106,20 @@ function computeVolleyBlastCenter({ attackerToken = null, intendedCenter = null,
   const target = serializePoint(intendedCenter);
   const radius = Math.max(1, Number(radiusPixels) || 1);
   const resultKey = String(outcome?.result?.key ?? "");
-  const roll = Math.max(1, Math.min(100, toInteger(outcome?.selectedRoll?.total) || 50));
+  const rollMaximum = Math.max(1, toInteger(outcome?.resultProfile?.maximum) || 100);
+  const roll = Math.max(1, Math.min(rollMaximum, toInteger(outcome?.selectedRoll?.total) || Math.ceil(rollMaximum / 2)));
+  const rollQualityValue = outcome?.resultProfile?.rollDirection === "low"
+    ? (rollMaximum - roll) + 1
+    : roll;
   const difficulty = Math.max(1, toInteger(outcome?.check?.difficulty) || BASE_VOLLEY_DIFFICULTY);
   const total = Math.max(0, toInteger(outcome?.total));
   const baseAngle = Math.atan2(target.y - origin.y, target.x - origin.x);
-  const margin = total - difficulty;
-  const successQuality = Math.max(0, Math.min(1, (Math.max(0, margin) + roll) / 160));
-  const missSeverity = Math.max(0, Math.min(1, ((Math.max(0, -margin) / Math.max(25, difficulty)) * 0.7) + ((100 - roll) / 100 * 0.3)));
+  const margin = Number.isFinite(Number(outcome?.resolutionMargin))
+    ? Number(outcome.resolutionMargin)
+    : total - difficulty;
+  const successQuality = Math.max(0, Math.min(1, (Math.max(0, margin) + rollQualityValue) / (rollMaximum + 60)));
+  const missSeverity = Math.max(0, Math.min(1, ((Math.max(0, -margin) / Math.max(25, difficulty)) * 0.7)
+    + (((rollMaximum - rollQualityValue) / rollMaximum) * 0.3)));
   const criticalFailure = resultKey === "criticalFailure";
   let candidate = target;
 
@@ -13187,6 +13320,7 @@ function buildWeaponDamageRequests(weapon, {
     });
   const requestSource = {
     ...source,
+    conditionWearPacketId: source.conditionWearPacketId ?? foundry.utils.randomID(),
     weaponFunctionId: source.weaponFunctionId ?? weaponFunctionId,
     weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
     targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
@@ -13245,6 +13379,7 @@ function buildWeaponConditionDamageRequests(weapon, {
     });
   const requestSource = {
     ...source,
+    conditionWearPacketId: source.conditionWearPacketId ?? foundry.utils.randomID(),
     weaponFunctionId: source.weaponFunctionId ?? weaponFunctionId,
     weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
     targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
@@ -13325,27 +13460,14 @@ function distributeIntegerAmount(amount, weights = []) {
   return [...shares].sort((left, right) => left.index - right.index).map(share => share.whole);
 }
 
-function estimateDamageRequestGroup(requests = []) {
-  return requests.reduce((total, request) => {
-    const estimate = estimateDamageApplication(request);
-    total.amount += estimate.amount ?? 0;
-    total.healthDamage += estimate.healthDamage ?? 0;
-    total.limbDamage += estimate.limbDamage ?? 0;
-    total.itemConditionDamage += estimate.itemConditionDamage ?? 0;
-    total.partDamage += estimate.partDamage ?? Math.max(estimate.limbDamage ?? 0, estimate.itemConditionDamage ?? 0);
-    if (Number.isFinite(Number(estimate.penetrationRemainder))) {
-      total.penetrationRemainder = total.penetrationRemainder === null
-        ? Math.max(0, toInteger(estimate.penetrationRemainder))
-        : Math.min(total.penetrationRemainder, Math.max(0, toInteger(estimate.penetrationRemainder)));
-    }
-    return total;
-  }, { amount: 0, healthDamage: 0, limbDamage: 0, itemConditionDamage: 0, partDamage: 0, penetrationRemainder: null });
+function estimateDamageRequestGroup(requests = [], actor = null) {
+  return estimateDamageApplicationsBatch(actor, requests);
 }
 
 function doesDamageRequestGroupPenetratePart(requests = [], actor = null, targetSelection = null) {
   const relevantRequests = (Array.isArray(requests) ? requests : [requests])
     .filter(request => isDamageRequestForTargetSelection(request, targetSelection));
-  const estimate = estimateDamageRequestGroup(relevantRequests);
+  const estimate = estimateDamageRequestGroup(relevantRequests, actor);
   const max = getTargetSelectionConditionMax(actor, targetSelection);
   if (max <= 0 || estimate.partDamage <= 0) return false;
   const remainingPenetration = Math.max(0, toInteger(estimate.penetrationRemainder));
@@ -13743,24 +13865,11 @@ function resolveSkillKey(actor, skillKey = "") {
 function getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId = "", influenceKey = "") {
   const actor = getWeaponOwnerActor(weapon);
   if (!actor) return 0;
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const proficiency = getWeaponProficiencySetting(weaponData);
-  if (!proficiency) return 0;
-
-  const range = getProficiencyInfluenceSettings(proficiency)?.[influenceKey] ?? { min: 0, max: 0 };
-  const minimum = toInteger(range.min);
-  const maximum = toInteger(range.max);
-  const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
-  const settingMax = Math.max(0, toInteger(proficiency.max));
-  const ratio = settingMax > 0 ? clamp(actorValue / settingMax, 0, 1) : 0;
-  return Math.round(minimum + ((maximum - minimum) * ratio));
-}
-
-function getWeaponProficiencySetting(weaponData = {}) {
-  const proficiencies = getProficiencySettings();
-  if (!proficiencies.length) return null;
-  const key = String(weaponData?.proficiencyKey ?? "");
-  return proficiencies.find(proficiency => proficiency.key === key) ?? proficiencies[0] ?? null;
+  return getWeaponProficiencyInfluenceBonusForData(
+    actor,
+    getWeaponAttackData(weapon, weaponFunctionId),
+    influenceKey
+  );
 }
 
 function getWeaponOwnerActor(weapon) {

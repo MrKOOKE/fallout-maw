@@ -202,6 +202,20 @@ test("critical damage properties preserve their stable outcome id and percent fo
   );
 });
 
+test("additional proficiencies survive attack action normalization", () => {
+  const settings = normalizeAttackActionSettings({
+    specialProperties: [{
+      type: WEAPON_SPECIAL_PROPERTIES.additionalProficiencies,
+      proficiencyKeys: [" rifle ", "pistol", "rifle", ""]
+    }]
+  });
+
+  assert.deepEqual(settings.specialProperties, [{
+    type: WEAPON_SPECIAL_PROPERTIES.additionalProficiencies,
+    proficiencyKeys: ["rifle", "pistol"]
+  }]);
+});
+
 test("adding a critical damage property preserves the complete attack settings block", () => {
   const before = normalizeAttackActionSettings({
     name: "Плазменная перегрузка",

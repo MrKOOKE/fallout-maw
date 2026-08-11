@@ -21,6 +21,7 @@ export function getDamageSourceAdjustedNoiseLevel(weaponData = {}, damageSource 
  */
 export function mergeDamageSourceSpecialProperties(weaponData = {}, damageSource = {}) {
   const weaponProperties = normalizeWeaponSpecialProperties(weaponData?.specialProperties);
+  const sourceProperties = normalizeWeaponSpecialProperties(damageSource?.specialProperties);
   const inheritedTypes = new Set(
     weaponProperties
       .map(property => getWeaponSpecialPropertyType(property))
@@ -28,11 +29,24 @@ export function mergeDamageSourceSpecialProperties(weaponData = {}, damageSource
   );
   const inheritedProperties = [];
 
-  for (const property of normalizeWeaponSpecialProperties(damageSource?.specialProperties)) {
+  for (const property of sourceProperties) {
     const type = getWeaponSpecialPropertyType(property);
     if (!type || type === WEAPON_SPECIAL_PROPERTIES.pending || inheritedTypes.has(type)) continue;
     inheritedTypes.add(type);
     inheritedProperties.push(property);
+  }
+
+  const weaponAdditional = weaponProperties.find(
+    property => property.type === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies
+  );
+  const sourceAdditional = sourceProperties.find(
+    property => property.type === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies
+  );
+  if (weaponAdditional && sourceAdditional) {
+    weaponAdditional.proficiencyKeys = Array.from(new Set([
+      ...weaponAdditional.proficiencyKeys,
+      ...sourceAdditional.proficiencyKeys
+    ]));
   }
 
   return [...weaponProperties, ...inheritedProperties];

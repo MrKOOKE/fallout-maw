@@ -18,6 +18,7 @@ import {
   normalizeSkillSettings
 } from "../formulas/index.mjs";
 import { ITEM_FUNCTIONS, getConstructPartFunction, hasItemFunction } from "../utils/item-functions.mjs";
+import { usesIndependentHealthModel } from "../combat/independent-health.mjs";
 import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./currency-settings.mjs";
 import {
   ABILITIES_CATALOG_SETTING,
@@ -57,6 +58,7 @@ import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseas
 import { createDefaultItemCategorySettings, normalizeItemCategorySettings } from "./item-categories.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
 import { createDefaultTraumaSettings, normalizeTraumaSettings } from "./traumas.mjs";
+import { getActiveRulesProfile } from "./rules-profiles.mjs";
 import {
   createDefaultSystemActionSettings,
   createDefaultToolSettings,
@@ -246,9 +248,15 @@ export function getSkillSettings() {
 
 export function getSkillAdvancementSettings(characteristics = getCharacteristicSettings(), skills = getSkillSettings()) {
   try {
-    return normalizeSkillAdvancementSettings(game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING), skills, characteristics);
+    return {
+      ...normalizeSkillAdvancementSettings(game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING), skills, characteristics),
+      mode: getActiveRulesProfile().skillAdvancementMode
+    };
   } catch (_error) {
-    return createDefaultSkillAdvancementSettings(skills, characteristics);
+    return {
+      ...createDefaultSkillAdvancementSettings(skills, characteristics),
+      mode: getActiveRulesProfile().skillAdvancementMode
+    };
   }
 }
 
@@ -274,7 +282,8 @@ export async function setSkillDevelopmentCostSettings(settings) {
   return normalized;
 }
 
-export function getProficiencySettings() {
+export function getProficiencySettings(rulesProfile = getActiveRulesProfile()) {
+  if (rulesProfile.weaponProficienciesEnabled === false) return [];
   try {
     return normalizeProficiencySettings(game.settings.get(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING));
   } catch (_error) {
@@ -365,11 +374,16 @@ export async function setItemCategorySettings(settings) {
   return normalized.categories;
 }
 
-export function getCreatureOptions(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
+export function getCreatureOptions(
+  characteristics = getCharacteristicSettings(),
+  damageTypes = getDamageTypeSettings(),
+  resources = getResourceSettings()
+) {
+  const options = { includeEnergyRegeneration: resources.some(resource => resource.key === "power") };
   try {
-    return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics, damageTypes);
+    return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics, damageTypes, options);
   } catch (_error) {
-    return normalizeCreatureOptions(createEmptyCreatureOptions(), characteristics, damageTypes);
+    return normalizeCreatureOptions(createEmptyCreatureOptions(), characteristics, damageTypes, options);
   }
 }
 
@@ -387,20 +401,41 @@ export function getCreatureRaceSummaries() {
   }
 }
 
-export async function setCreatureOptions(options, characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
-  return game.settings.set(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, normalizeCreatureOptions(options, characteristics, damageTypes));
+export async function setCreatureOptions(
+  options,
+  characteristics = getCharacteristicSettings(),
+  damageTypes = getDamageTypeSettings(),
+  resources = getResourceSettings()
+) {
+  return game.settings.set(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, normalizeCreatureOptions(
+    options,
+    characteristics,
+    damageTypes,
+    { includeEnergyRegeneration: resources.some(resource => resource.key === "power") }
+  ));
 }
 
-export function getResourceSettings() {
+export function getResourceSettings(profile = getActiveRulesProfile()) {
+  const normalizationOptions = {
+    optionalFixedResourceKeys: profile.optionalResourceKeys,
+    healthFormulaSource: profile.healthFormulaSource
+  };
   try {
-    return normalizeResourceSettings(game.settings.get(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING));
+    return normalizeResourceSettings(
+      game.settings.get(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING),
+      normalizationOptions
+    );
   } catch (_error) {
-    return createDefaultResourceSettings();
+    return normalizeResourceSettings(createDefaultResourceSettings(), normalizationOptions);
   }
 }
 
 export async function setResourceSettings(settings) {
-  const normalized = normalizeResourceSettings(settings);
+  const profile = getActiveRulesProfile();
+  const normalized = normalizeResourceSettings(settings, {
+    optionalFixedResourceKeys: profile.optionalResourceKeys,
+    healthFormulaSource: profile.healthFormulaSource
+  });
   await game.settings.set(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING, normalized);
   return normalized;
 }
@@ -536,15 +571,18 @@ export function getPreparedRuntimeSettings() {
   const characteristicSettings = getCharacteristicSettings();
   const skillSettings = getSkillSettings();
   const damageTypeSettings = getDamageTypeSettings();
-  const creatureOptions = getCreatureOptions(characteristicSettings, damageTypeSettings);
+  const rulesProfile = getActiveRulesProfile();
+  const resourceSettings = getResourceSettings(rulesProfile);
+  const creatureOptions = getCreatureOptions(characteristicSettings, damageTypeSettings, resourceSettings);
   preparedRuntimeSettingsCache = Object.freeze({
     characteristicSettings,
     skillSettings,
     skillAdvancementSettings: getSkillAdvancementSettings(characteristicSettings, skillSettings),
-    proficiencySettings: getProficiencySettings(),
+    proficiencySettings: getProficiencySettings(rulesProfile),
     damageTypeSettings,
     currencySettings: getCurrencySettings(),
-    resourceSettings: getResourceSettings(),
+    resourceSettings,
+    rulesProfile,
     creatureOptions,
     traumaSettings: getTraumaSettings(creatureOptions, damageTypeSettings)
   });
@@ -735,6 +773,28 @@ export function refreshPreparedActorsAfterConfig({ worldOnly = false } = {}) {
     if (actor.sheet?.rendered) actor.sheet.render(false);
   }
   globalThis.Hooks?.callAll?.(`${FALLOUT_MAW.id}.preparedActorsRefreshed`, actors);
+  return actors;
+}
+
+export async function persistPreparedHealthDevelopment(actors = getLoadedActors()) {
+  const runtimeSettings = getPreparedRuntimeSettings();
+  const worldUpdates = [];
+  const tokenUpdates = [];
+  for (const actor of actors) {
+    if (!usesIndependentHealthModel(actor, runtimeSettings)) continue;
+    if (actor._source?.system?.development?.healthInitialized === true) continue;
+    const update = {
+      _id: actor.id,
+      "system.development.health": Math.max(0, toInteger(actor.system?.development?.health)),
+      "system.development.healthInitialized": true
+    };
+    if (actor.isToken) tokenUpdates.push([actor, update]);
+    else worldUpdates.push(update);
+  }
+
+  for (const [actor, update] of tokenUpdates) await actor.update(update);
+  if (worldUpdates.length) await getDocumentClass("Actor").updateDocuments(worldUpdates);
+  return worldUpdates.length + tokenUpdates.length;
 }
 
 export function syncActorTrackableAttributes() {

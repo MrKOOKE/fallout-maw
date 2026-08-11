@@ -12,6 +12,8 @@ import {
   normalizeAttackEffectiveRange
 } from "../utils/attack-distance.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
+import { getConfiguredWeaponProficiencyKeys } from "../utils/item-functions.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import {
   registerSystemEventObserver,
   registerSystemEventRootFinalizer
@@ -1039,7 +1041,12 @@ function serializeWeaponAttackUseContext(context = {}) {
       .filter(Boolean),
     weaponData: weaponData ? {
       skillKey: String(weaponData.skillKey ?? "").trim(),
-      proficiencyKey: String(weaponData.proficiencyKey ?? "").trim()
+      ...(getActiveRulesProfile().weaponProficienciesEnabled !== false
+        ? {
+          proficiencyKey: String(weaponData.proficiencyKey ?? "").trim(),
+          proficiencyKeys: getConfiguredWeaponProficiencyKeys(weaponData)
+        }
+        : {})
     } : null
   };
   payload.limitedUseOperationId = operationId;

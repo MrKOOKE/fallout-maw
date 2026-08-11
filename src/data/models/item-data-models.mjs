@@ -10,8 +10,11 @@ const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
 const WEAPON_SPECIAL_PROPERTY_PENDING = "pending";
 const WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
 const WEAPON_SPECIAL_PROPERTY_CONCENTRATED_PELLET_IMPACT = "concentratedPelletImpact";
+const WEAPON_SPECIAL_PROPERTY_IMPACT_CONDITION_WEAR = "impactConditionWear";
+const WEAPON_SPECIAL_PROPERTY_LIMB_DAMAGE_MULTIPLIERS = "limbDamageMultipliers";
 const WEAPON_SPECIAL_PROPERTY_ATTACK_POWER = "attackPower";
 const WEAPON_SPECIAL_PROPERTY_CRITICAL_DAMAGE = "criticalDamage";
+const WEAPON_SPECIAL_PROPERTY_ADDITIONAL_PROFICIENCIES = "additionalProficiencies";
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
@@ -25,6 +28,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         rotated: new BooleanField({ required: false, nullable: true, initial: null })
       }), { required: true, initial: [] }),
       itemCategory: new StringField({ required: true, blank: true, initial: "" }),
+      itemSubcategory: new StringField({ required: true, blank: true, initial: "" }),
       weight: new NumberField({ required: true, min: 0, initial: 0 }),
       price: new NumberField({ required: true, min: 0, initial: 0 }),
       priceCurrency: new StringField({ required: true, blank: true, initial: () => getPrimaryCurrencyKey() }),
@@ -91,6 +95,7 @@ export class GearDataModel extends BaseItemDataModel {
         damageMitigation: new SchemaField({
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, choices: ["defense", "resistance"], initial: "defense" }),
+          wearResistance: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
           requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
           limbSetIds: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
           entries: new TypedObjectField(
@@ -1074,11 +1079,25 @@ function weaponSpecialPropertyField() {
     [WEAPON_SPECIAL_PROPERTY_PENDING]: {},
     [WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS]: {},
     [WEAPON_SPECIAL_PROPERTY_CONCENTRATED_PELLET_IMPACT]: {},
+    [WEAPON_SPECIAL_PROPERTY_IMPACT_CONDITION_WEAR]: {},
+    [WEAPON_SPECIAL_PROPERTY_LIMB_DAMAGE_MULTIPLIERS]: {
+      limbDamageMultipliers: new TypedObjectField(
+        new NumberField({ required: true, min: 0, initial: 1 }),
+        { required: true, initial: {} }
+      )
+    },
     [WEAPON_SPECIAL_PROPERTY_ATTACK_POWER]: {
       attackPower: weaponAttackPowerField()
     },
     [WEAPON_SPECIAL_PROPERTY_CRITICAL_DAMAGE]: {
       criticalDamage: weaponCriticalDamageField()
+    },
+    [WEAPON_SPECIAL_PROPERTY_ADDITIONAL_PROFICIENCIES]: {
+      proficiencyKeys: new ArrayField(new StringField({
+        required: true,
+        blank: false,
+        initial: ""
+      }), { required: true, initial: [] })
     }
   }, { required: true });
 }

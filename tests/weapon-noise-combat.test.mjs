@@ -51,7 +51,7 @@ test("an attempt is recorded only after the resource and action-cost path comple
 test("weapon Item resources commit through one shared inventory transaction", () => {
   const spend = sliceBetween(
     "async function spendWeaponResources",
-    "export function canPerformWeaponActionAgainstToken"
+    "function collectWeaponResourceSpendTotals"
   );
   assert.match(spend, /planInventoryItemConsumption\(/);
   assert.match(spend, /createActorItemOrInstalledModuleUpdate\(/);

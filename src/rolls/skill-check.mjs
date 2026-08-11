@@ -1,6 +1,7 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { isAttackingWeaponAction } from "../abilities/runtime-state.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
@@ -48,6 +49,7 @@ const DEFAULT_CHECK = Object.freeze({
   criticalSuccessBonus: 0,
   criticalFailureBonus: 0
 });
+const LEGACY_VARIABLE_LOW_ROLL_MODE = "legacyVariableLowRoll";
 const SKILL_CHECK_SOCKET = `system.${SYSTEM_ID}`;
 const ACTIVE_SKILL_CHECK_ANIMATIONS = new Map();
 const SKILL_CHECK_ANIMATION_LAYOUT = Object.freeze({
@@ -881,15 +883,17 @@ async function performSkillCheck(actor, skill, data = {}) {
   const check = createMutableCheck(actor, skill, data);
   Hooks.callAll("fallout-maw.modifySkillCheck", check);
 
-  const edge = calculateEdge(check.advantageCount, check.disadvantageCount);
+  const edge = calculateEdge(check.advantageCount, check.disadvantageCount, check.skillCheckMode);
+  check.difficulty = toInteger(check.difficulty) + edge.difficultyModifier;
   const finalSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier) + edge.skillModifier;
-  const critical = calculateCriticalThresholds(check, finalSkillValue, check.difficulty);
+  const critical = calculateCriticalThresholds(check, finalSkillValue, check.difficulty, check.skillCheckMode);
   const forcedResult = normalizeForcedResult(check.forcedResult);
   const smartFudgeResult = forcedResult ? "" : normalizeForcedResult(check.smartFudgeResult);
   const resultProfile = buildSkillCheckResultProfile(check.difficulty, critical, finalSkillValue, {
     disabledResults: forcedResult ? {} : check.disabledResults,
-    mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, check.difficulty) && !forcedResult,
-    markAutomatic: !forcedResult
+    mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, check.difficulty, check.skillCheckMode) && !forcedResult,
+    markAutomatic: !forcedResult,
+    skillCheckMode: check.skillCheckMode
   });
   const smartFudgeRollRange = smartFudgeResult
     ? getSmartFudgeRollRange(smartFudgeResult, resultProfile)
@@ -897,12 +901,20 @@ async function performSkillCheck(actor, skill, data = {}) {
   const forcedRollTotal = forcedResult
     ? getForcedRollTotal(forcedResult, resultProfile, check.difficulty, critical, finalSkillValue)
     : null;
-  const rolls = await rollD100(edge.rollMode === "normal" ? 1 : 2, {
+  const rolls = await rollSkillCheckDice(edge.rollMode === "normal" ? 1 : 2, {
+    maximum: resultProfile.maximum,
     forcedTotal: forcedRollTotal,
     smartRange: smartFudgeRollRange
   });
-  const selectedRoll = selectRoll(rolls, edge.rollMode);
+  const selectedRoll = selectRoll(rolls, edge.rollMode, resultProfile.rollDirection);
   const total = finalSkillValue + selectedRoll.total;
+  const resolutionMargin = calculateSkillCheckResolutionMargin(
+    selectedRoll.total,
+    finalSkillValue,
+    check.difficulty,
+    critical,
+    check.skillCheckMode
+  );
   const result = determineResult(selectedRoll.total, resultProfile, forcedResult);
 
   return {
@@ -914,6 +926,7 @@ async function performSkillCheck(actor, skill, data = {}) {
     edge,
     finalSkillValue,
     total,
+    resolutionMargin,
     critical,
     resultProfile,
     automatic: result.automatic,
@@ -964,6 +977,7 @@ function normalizeSkillCheckMessageData(messageData = {}) {
 function buildSkillCheckViewContext(outcome) {
   const { actor, check, skill, rolls, selectedRoll, edge, finalSkillValue, total, critical, resultProfile, result } = outcome;
   const automatic = Boolean(result?.automatic);
+  const progressTarget = automatic ? 100 : toSkillCheckScalePercent(selectedRoll.total, resultProfile);
   return {
     actor: prepareSkillCheckActorView(actor),
     skill,
@@ -980,7 +994,7 @@ function buildSkillCheckViewContext(outcome) {
     automatic,
     automaticResultKey: automatic ? String(result?.key ?? "") : "",
     autoFailure: Boolean(result?.autoFailure),
-    progressTarget: automatic ? 100 : clamp(selectedRoll.total, 1, 100),
+    progressTarget,
     edge: {
       ...edge,
       modeLabel: formatEdgeMode(edge),
@@ -1049,16 +1063,19 @@ function buildSkillCheckAnimationTracks(context) {
     }];
   }
 
-  return context.rollEntries.map(entry => ({
-    index: entry.index,
-    label: `${game.i18n.localize("FALLOUTMAW.SkillCheck.Roll")} ${entry.index}`,
-    selected: entry.selected,
-    result: entry.result,
-    scaleSegments: buildScaleSegments(context.resultProfile, entry.total),
-    progressCells: buildProgressCellsForTarget(context.progressCells, entry.total),
-    progressTarget: clamp(entry.total, 1, 100),
-    progressMarker: clamp(entry.total, 1, 100)
-  }));
+  return context.rollEntries.map(entry => {
+    const progressTarget = toSkillCheckScalePercent(entry.total, context.resultProfile);
+    return {
+      index: entry.index,
+      label: `${game.i18n.localize("FALLOUTMAW.SkillCheck.Roll")} ${entry.index}`,
+      selected: entry.selected,
+      result: entry.result,
+      scaleSegments: buildScaleSegments(context.resultProfile, entry.total),
+      progressCells: buildProgressCellsForTarget(context.progressCells, progressTarget),
+      progressTarget,
+      progressMarker: progressTarget
+    };
+  });
 }
 
 async function showSkillCheckAnimation(context) {
@@ -1299,7 +1316,7 @@ function clampNumber(value, min, max) {
 }
 
 function animateSkillCheckCells(cells, target) {
-  const targetPercent = clamp(target, 1, 100);
+  const targetPercent = clamp(target, 0, 100);
   const fullScaleDuration = 2000;
   const brakeDuration = 500;
   const targetCellCount = Math.ceil(targetPercent / 5);
@@ -1604,6 +1621,7 @@ function createMutableCheck(actor, skill, data) {
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    skillCheckMode: getActiveRulesProfile().skillCheckMode,
     modifiers: [],
     ...context
   };
@@ -1642,35 +1660,35 @@ function getActorContextToken(actor) {
   return active.length === 1 ? active[0] : null;
 }
 
-async function rollD100(count, { forcedTotal = null, smartRange = null } = {}) {
+async function rollSkillCheckDice(count, { maximum = 100, forcedTotal = null, smartRange = null } = {}) {
+  const faces = Math.max(1, toInteger(maximum));
   const rolls = [];
   for (let index = 0; index < count; index += 1) {
     if (forcedTotal) {
-      const roll = new Roll(String(clamp(forcedTotal, 1, 100)));
+      const roll = new Roll(String(clamp(forcedTotal, 1, faces)));
       rolls.push(await roll.evaluate());
     } else if (smartRange) {
-      rolls.push(await rollD100InRange(smartRange));
+      rolls.push(await rollSkillCheckInRange(smartRange, faces));
     } else {
-      const roll = new Roll("1d100");
+      const roll = new Roll(`1d${faces}`);
       rolls.push(await roll.evaluate());
     }
   }
   return rolls;
 }
 
-async function rollD100InRange(range = {}) {
-  const minimum = clamp(range.minimum, 1, 100);
-  const maximum = clamp(range.maximum, minimum, 100);
-  let fallback = null;
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    const roll = await new Roll("1d100").evaluate();
-    fallback = roll;
-    if (roll.total >= minimum && roll.total <= maximum) return roll;
-  }
-  return fallback ?? new Roll(String(minimum)).evaluate();
+function rollSkillCheckInRange(range = {}, rollMaximum = 100) {
+  const maximumFace = Math.max(1, toInteger(rollMaximum));
+  const minimum = clamp(range.minimum, 1, maximumFace);
+  const maximum = clamp(range.maximum, minimum, maximumFace);
+  const span = (maximum - minimum) + 1;
+  const formula = span === 1
+    ? String(minimum)
+    : `1d${span}${minimum > 1 ? ` + ${minimum - 1}` : ""}`;
+  return new Roll(formula).evaluate();
 }
 
-function calculateEdge(advantageCount, disadvantageCount) {
+function calculateEdge(advantageCount, disadvantageCount, skillCheckMode = "standard") {
   const net = toInteger(advantageCount) - toInteger(disadvantageCount);
   if (net > 0) {
     const extra = Math.max(0, net - 1);
@@ -1678,15 +1696,18 @@ function calculateEdge(advantageCount, disadvantageCount) {
       net,
       rollMode: "advantage",
       skillModifier: extra * 30,
+      difficultyModifier: 0,
       extra
     };
   }
   if (net < 0) {
     const extra = Math.max(0, Math.abs(net) - 1);
+    const legacyLowRoll = skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE;
     return {
       net,
       rollMode: "disadvantage",
-      skillModifier: extra * -30,
+      skillModifier: legacyLowRoll ? 0 : extra * -30,
+      difficultyModifier: legacyLowRoll ? extra * 30 : 0,
       extra
     };
   }
@@ -1694,17 +1715,30 @@ function calculateEdge(advantageCount, disadvantageCount) {
     net: 0,
     rollMode: "normal",
     skillModifier: 0,
+    difficultyModifier: 0,
     extra: 0
   };
 }
 
-function selectRoll(rolls, rollMode) {
-  if (rollMode === "advantage") return rolls.reduce((best, roll) => roll.total > best.total ? roll : best, rolls[0]);
-  if (rollMode === "disadvantage") return rolls.reduce((worst, roll) => roll.total < worst.total ? roll : worst, rolls[0]);
+function selectRoll(rolls, rollMode, rollDirection = "high") {
+  const preferLower = rollDirection === "low";
+  if (rollMode === "advantage") {
+    return rolls.reduce((best, roll) => (
+      preferLower ? (roll.total < best.total ? roll : best) : (roll.total > best.total ? roll : best)
+    ), rolls[0]);
+  }
+  if (rollMode === "disadvantage") {
+    return rolls.reduce((worst, roll) => (
+      preferLower ? (roll.total > worst.total ? roll : worst) : (roll.total < worst.total ? roll : worst)
+    ), rolls[0]);
+  }
   return rolls[0];
 }
 
-function calculateCriticalThresholds(check, finalSkillValue = 0, difficulty = 0) {
+function calculateCriticalThresholds(check, finalSkillValue = 0, difficulty = 0, skillCheckMode = "standard") {
+  if (skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE) {
+    return calculateLegacyVariableLowRollThresholds(check, finalSkillValue, difficulty);
+  }
   const gambling = toInteger(check.actor?.system?.skills?.gambling?.value);
   const baseFailureChance = clamp(toInteger(check.criticalFailureBonus) + 5, 0, 100);
   const excessSkillSteps = Math.max(0, Math.floor((toInteger(finalSkillValue) - toInteger(difficulty)) / 20));
@@ -1723,6 +1757,72 @@ function calculateCriticalThresholds(check, finalSkillValue = 0, difficulty = 0)
   };
 }
 
+function calculateLegacyVariableLowRollThresholds(check, finalSkillValue, difficulty) {
+  const ranges = calculateLegacyVariableLowRollRanges(finalSkillValue, difficulty);
+  const criticalSuccessPercent = toInteger(check.actor?.system?.characteristics?.luck)
+    + toInteger(check.criticalSuccessBonus);
+  const criticalFailurePercent = 5 + toInteger(check.criticalFailureBonus);
+  const criticalSuccessCount = ranges.successCount > 0
+    ? Math.min(
+      ranges.successCount,
+      Math.max(1, Math.floor((ranges.successCount * criticalSuccessPercent) / 100))
+    )
+    : 0;
+  const rawCriticalFailureCount = Math.max(
+    1,
+    Math.ceil((ranges.failureCount * criticalFailurePercent) / 100)
+  );
+  const criticalFailureCount = Math.min(
+    Math.max(0, ranges.failureCount - 1),
+    rawCriticalFailureCount
+  );
+  return {
+    baseFailureChance: criticalFailurePercent,
+    failureChance: criticalFailurePercent,
+    successChance: criticalSuccessPercent,
+    failureReduction: 0,
+    criticalSuccessOverflow: 0,
+    failureMaximum: 0,
+    successMinimum: ranges.maximum + 1,
+    maximum: ranges.maximum,
+    successMaximum: ranges.successCount,
+    criticalSuccessMaximum: criticalSuccessCount,
+    criticalFailureMinimum: criticalFailureCount > 0
+      ? (ranges.maximum - criticalFailureCount) + 1
+      : ranges.maximum + 1,
+    autoFailure: ranges.autoFailure
+  };
+}
+
+function calculateLegacyVariableLowRollRanges(skillValue, difficulty) {
+  let effectiveSkillValue = toInteger(skillValue);
+  let effectiveDifficulty = toInteger(difficulty);
+  if (effectiveDifficulty < 0) {
+    effectiveSkillValue += Math.abs(effectiveDifficulty);
+    effectiveDifficulty = 0;
+  }
+
+  const skillDifference = effectiveSkillValue - effectiveDifficulty;
+  if (skillDifference < 0) {
+    return {
+      maximum: 100,
+      successCount: 0,
+      failureCount: 100,
+      autoFailure: true
+    };
+  }
+
+  const minimumDifficultyBonus = clamp(effectiveSkillValue - 85, 0, 15);
+  const maximum = Math.max(100, effectiveSkillValue + minimumDifficultyBonus);
+  const successCount = Math.max(0, Math.min(skillDifference, maximum - 15));
+  return {
+    maximum,
+    successCount,
+    failureCount: maximum - successCount,
+    autoFailure: false
+  };
+}
+
 export function calculateSkillCheckSuccessChance(actor, finalSkillValue, difficulty, options = {}) {
   const {
     criticalSuccessBonus = 0,
@@ -1733,7 +1833,8 @@ export function calculateSkillCheckSuccessChance(actor, finalSkillValue, difficu
     criticalSuccessBonus,
     criticalFailureBonus
   };
-  const critical = calculateCriticalThresholds(check, finalSkillValue, difficulty);
+  const skillCheckMode = getActiveRulesProfile().skillCheckMode;
+  const critical = calculateCriticalThresholds(check, finalSkillValue, difficulty, skillCheckMode);
   const disabledResults = options.disabledResults !== undefined
     ? normalizeSkillCheckDisabledResults(options.disabledResults)
     : options.context
@@ -1741,13 +1842,15 @@ export function calculateSkillCheckSuccessChance(actor, finalSkillValue, difficu
       : normalizeSkillCheckDisabledResults(actor?.system?.skillCheck?.disabledResults);
   const profile = buildSkillCheckResultProfile(difficulty, critical, finalSkillValue, {
     disabledResults,
-    mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, difficulty)
+    mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, difficulty, skillCheckMode),
+    skillCheckMode
   });
-  return clamp(profile.definitions.reduce((total, definition) => (
+  const successfulFaces = profile.definitions.reduce((total, definition) => (
     definition.key === "success" || definition.key === "criticalSuccess"
       ? total + ((definition.maximum - definition.minimum) + 1)
       : total
-  ), 0), 0, 100);
+  ), 0);
+  return clamp(Math.round((successfulFaces / profile.maximum) * 100), 0, 100);
 }
 
 function normalizeForcedResult(value) {
@@ -1759,10 +1862,24 @@ function getForcedRollTotal(forcedResult, profile, difficulty, critical, finalSk
   const target = profile?.definitions?.find(definition => definition.key === forcedResult);
   if (target) return Math.round((target.minimum + target.maximum) / 2);
 
+  const maximum = Math.max(1, toInteger(profile?.maximum) || 100);
+  if (profile?.rollDirection === "low") {
+    if (forcedResult === "criticalFailure") return maximum;
+    if (forcedResult === "criticalSuccess") return 1;
+    if (forcedResult === "failure") return clamp(toInteger(critical.successMaximum) + 1, 1, maximum);
+    if (forcedResult === "success") return clamp(critical.successMaximum, 1, maximum);
+    return null;
+  }
   if (forcedResult === "criticalFailure") return Math.max(1, Math.min(5, critical.failureMaximum || 1));
-  if (forcedResult === "criticalSuccess") return Math.min(100, Math.max(96, critical.successMinimum || 100));
-  if (forcedResult === "failure") return Math.max(1, clamp(toInteger(difficulty) - toInteger(finalSkillValue) - 1, 1, 100));
-  if (forcedResult === "success") return Math.min(100, clamp(toInteger(difficulty) - toInteger(finalSkillValue), 1, 100));
+  if (forcedResult === "criticalSuccess") {
+    return Math.min(maximum, Math.max(maximum - 4, critical.successMinimum || maximum));
+  }
+  if (forcedResult === "failure") {
+    return Math.max(1, clamp(toInteger(difficulty) - toInteger(finalSkillValue) - 1, 1, maximum));
+  }
+  if (forcedResult === "success") {
+    return Math.min(maximum, clamp(toInteger(difficulty) - toInteger(finalSkillValue), 1, maximum));
+  }
   return null;
 }
 
@@ -1775,16 +1892,17 @@ function getSmartFudgeRollRange(targetResult, profile) {
   )[0] ?? resultKey;
   const target = profile?.definitions?.find(definition => definition.key === redirectedResultKey);
   if (!target) return null;
+  const maximum = Math.max(1, toInteger(profile?.maximum) || 100);
   return {
-    minimum: clamp(target.minimum, 1, 100),
-    maximum: clamp(target.maximum, 1, 100)
+    minimum: clamp(target.minimum, 1, maximum),
+    maximum: clamp(target.maximum, 1, maximum)
   };
 }
 
 function determineResult(roll, profile, forcedResult = "") {
   const forced = normalizeForcedResult(forcedResult);
   if (forced) return buildForcedResult(forced);
-  const normalizedRoll = clamp(roll, 1, 100);
+  const normalizedRoll = clamp(roll, 1, Math.max(1, toInteger(profile?.maximum) || 100));
   const definition = profile?.definitions?.find(entry => (
     normalizedRoll >= entry.minimum && normalizedRoll <= entry.maximum
   ));
@@ -1808,8 +1926,18 @@ function buildSkillCheckResult(resultKey, { automatic = false } = {}) {
   };
 }
 
-function isAutomaticFailure(finalSkillValue, difficulty) {
+function isAutomaticFailure(finalSkillValue, difficulty, skillCheckMode = "standard") {
+  if (skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE) {
+    return calculateLegacyVariableLowRollRanges(finalSkillValue, difficulty).autoFailure;
+  }
   return (toInteger(difficulty) - toInteger(finalSkillValue)) >= 100;
+}
+
+function calculateSkillCheckResolutionMargin(roll, finalSkillValue, difficulty, critical, skillCheckMode = "standard") {
+  if (skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE) {
+    return toInteger(critical.successMaximum) - toInteger(roll);
+  }
+  return toInteger(finalSkillValue) + toInteger(roll) - toInteger(difficulty);
 }
 
 function activateSkillCheckDialog(dialog) {
@@ -1858,9 +1986,9 @@ function buildRollEntries(
 }
 
 function buildThresholdRows(profile) {
-  return (profile?.definitions ?? [])
-    .slice()
-    .reverse()
+  const definitions = (profile?.definitions ?? []).slice();
+  if (profile?.rollDirection !== "low") definitions.reverse();
+  return definitions
     .map(definition => buildThresholdRow(definition.cssClass, definition.label, definition.minimum, definition.maximum))
     .filter(Boolean);
 }
@@ -1870,18 +1998,24 @@ function buildScaleSegments(
   selectedRollTotal,
   forcedResult = ""
 ) {
-  const roll = clamp(selectedRollTotal, 1, 100);
+  const maximum = Math.max(1, toInteger(profile?.maximum) || 100);
+  const roll = clamp(selectedRollTotal, 1, maximum);
   const forcedKey = normalizeForcedResult(forcedResult);
   return (profile?.definitions ?? [])
     .map(definition => ({
       ...definition,
       active: forcedKey ? definition.key === forcedKey : roll >= definition.minimum && roll <= definition.maximum,
-      width: (((definition.maximum - definition.minimum) + 1) / 100) * 100
+      width: (((definition.maximum - definition.minimum) + 1) / maximum) * 100
     }));
 }
 
 function buildProgressCells(profile) {
-  const definitions = profile?.definitions ?? [];
+  const maximum = Math.max(1, toInteger(profile?.maximum) || 100);
+  const definitions = (profile?.definitions ?? []).map(definition => ({
+    ...definition,
+    scaleStart: ((definition.minimum - 1) / maximum) * 100,
+    scaleEnd: (definition.maximum / maximum) * 100
+  }));
   return Array.from({ length: 20 }, (_value, index) => {
     const start = index * 5;
     const end = start + 5;
@@ -1896,7 +2030,7 @@ function buildProgressCells(profile) {
 }
 
 function buildProgressCellsForTarget(progressCells, targetPercent) {
-  const target = clamp(targetPercent, 1, 100);
+  const target = clamp(targetPercent, 0, 100);
   const targetCellIndex = Math.ceil(target / 5);
   return progressCells.map(cell => {
     if (cell.index !== targetCellIndex) return cell;
@@ -1915,8 +2049,8 @@ function buildProgressCellFillGradient(cell, targetPercent) {
   const stops = [];
 
   for (const definition of cell.definitions ?? []) {
-    const rangeStart = definition.minimum - 1;
-    const rangeEnd = definition.maximum;
+    const rangeStart = definition.scaleStart ?? definition.minimum - 1;
+    const rangeEnd = definition.scaleEnd ?? definition.maximum;
     const overlapStart = Math.max(cellStart, rangeStart);
     const overlapEnd = Math.min(fillEnd, rangeEnd);
     if (overlapEnd <= overlapStart) continue;
@@ -1933,8 +2067,8 @@ function buildProgressCellFillGradient(cell, targetPercent) {
 function buildProgressCellGradient(cellStart, cellEnd, definitions) {
   const stops = [];
   for (const definition of definitions) {
-    const rangeStart = definition.minimum - 1;
-    const rangeEnd = definition.maximum;
+    const rangeStart = definition.scaleStart ?? definition.minimum - 1;
+    const rangeEnd = definition.scaleEnd ?? definition.maximum;
     const overlapStart = Math.max(cellStart, rangeStart);
     const overlapEnd = Math.min(cellEnd, rangeEnd);
     if (overlapEnd <= overlapStart) continue;
@@ -1962,15 +2096,24 @@ function formatPercent(value) {
   return `${rounded}%`;
 }
 
+function toSkillCheckScalePercent(roll, profile) {
+  const maximum = Math.max(1, toInteger(profile?.maximum) || 100);
+  return (clamp(roll, 1, maximum) / maximum) * 100;
+}
+
 function buildSkillCheckResultProfile(difficulty, critical, finalSkillValue, {
   disabledResults = {},
   mathematicalAutoFailure = isAutomaticFailure(finalSkillValue, difficulty),
-  markAutomatic = true
+  markAutomatic = true,
+  skillCheckMode = "standard"
 } = {}) {
-  const baseResultKeys = Array.from({ length: 100 }, (_entry, index) => (
+  const maximum = skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE
+    ? Math.max(1, toInteger(critical.maximum))
+    : 100;
+  const baseResultKeys = Array.from({ length: maximum }, (_entry, index) => (
     mathematicalAutoFailure
       ? "failure"
-      : getBaseSkillCheckResultKey(index + 1, difficulty, critical, finalSkillValue)
+      : getBaseSkillCheckResultKey(index + 1, difficulty, critical, finalSkillValue, skillCheckMode, maximum)
   ));
   const normalizedDisabledResults = normalizeSkillCheckDisabledResults(disabledResults);
   const resolvedResultKeys = resolveSkillCheckResultKeys(baseResultKeys, normalizedDisabledResults);
@@ -1978,6 +2121,9 @@ function buildSkillCheckResultProfile(difficulty, critical, finalSkillValue, {
   const automatic = Boolean(markAutomatic && uniqueResultKeys.length === 1);
   const definitions = buildSkillCheckResultDefinitions(resolvedResultKeys, { automatic });
   return {
+    mode: skillCheckMode,
+    maximum,
+    rollDirection: skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE ? "low" : "high",
     definitions,
     disabledResults: normalizedDisabledResults,
     mathematicalAutoFailure: Boolean(mathematicalAutoFailure),
@@ -2018,9 +2164,22 @@ function resolveSkillCheckResultKey(resultKey, disabledResults, enabledResultKey
     })[0] ?? "success";
 }
 
-function getBaseSkillCheckResultKey(roll, difficulty, critical, finalSkillValue) {
+function getBaseSkillCheckResultKey(
+  roll,
+  difficulty,
+  critical,
+  finalSkillValue,
+  skillCheckMode = "standard",
+  rollMaximum = 100
+) {
+  if (skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE) {
+    if (roll <= critical.criticalSuccessMaximum) return "criticalSuccess";
+    if (roll <= critical.successMaximum) return "success";
+    if (roll >= critical.criticalFailureMinimum) return "criticalFailure";
+    return "failure";
+  }
   if (critical.failureMaximum > 0 && roll <= critical.failureMaximum) return "criticalFailure";
-  if (critical.successMinimum <= 100 && roll >= critical.successMinimum) return "criticalSuccess";
+  if (critical.successMinimum <= rollMaximum && roll >= critical.successMinimum) return "criticalSuccess";
   return toInteger(finalSkillValue) + toInteger(roll) >= toInteger(difficulty) ? "success" : "failure";
 }
 

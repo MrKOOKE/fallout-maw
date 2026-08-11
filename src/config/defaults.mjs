@@ -166,6 +166,8 @@ export const FIXED_RESOURCE_KEYS = Object.freeze([
   "movementPoints"
 ]);
 
+export const DEFAULT_HEALTH_PER_LEVEL_FORMULA = "1 + con / 3";
+
 export const DEFAULT_RESOURCES = Object.freeze([
   { key: "health", abbr: "hea", label: "Здоровье", formula: "limbs" },
   { key: "consciousness", abbr: "con", label: "Сознание", formula: "criticalLimbs" },

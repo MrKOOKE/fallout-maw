@@ -5,6 +5,7 @@ import {
   DEFAULT_LIMBS,
   DEFAULT_LOAD_FORMULA,
   DEFAULT_LOAD_LIMIT_PERCENT,
+  DEFAULT_HEALTH_PER_LEVEL_FORMULA,
   DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
@@ -20,6 +21,7 @@ export const DEFAULT_BLEEDING_RESISTANCE_FORMULA = "0";
 export const DEFAULT_REGENERATION_FORMULA = "10 + con * 5";
 export const DEFAULT_ENERGY_REGENERATION_FORMULA = "20 + energy / 10";
 export const DEFAULT_ORGANISM_DEVELOPMENT_LIMIT = 50;
+export const DEFAULT_HEALTH_FORMULA = "20 + str + con * 2";
 
 export function createEmptyCreatureOptions() {
   return { types: [], races: [] };
@@ -40,6 +42,7 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     needSettings: createDefaultNeedSettings(),
     progression: {
+      healthPerLevel: DEFAULT_HEALTH_PER_LEVEL_FORMULA,
       skillPointsPerLevel: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
       researchPointsPerLevel: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
       proficiencyPointsPerLevel: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
@@ -74,17 +77,24 @@ export function createDefaultInventorySize() {
 }
 
 export function createDefaultRaceBaseParameters() {
-  return { ...DEFAULT_BASE_PARAMETER_POOLS, loadFormula: DEFAULT_LOAD_FORMULA, loadLimitPercent: DEFAULT_LOAD_LIMIT_PERCENT };
-}
-
-export function createDefaultRegeneration() {
   return {
-    formula: DEFAULT_REGENERATION_FORMULA,
-    energyFormula: DEFAULT_ENERGY_REGENERATION_FORMULA
+    ...DEFAULT_BASE_PARAMETER_POOLS,
+    healthFormula: DEFAULT_HEALTH_FORMULA,
+    loadFormula: DEFAULT_LOAD_FORMULA,
+    loadLimitPercent: DEFAULT_LOAD_LIMIT_PERCENT
   };
 }
 
-export function normalizeCreatureOptions(options = {}, characteristics = [], damageTypes = []) {
+export function createDefaultRegeneration({ includeEnergy = true } = {}) {
+  return {
+    formula: DEFAULT_REGENERATION_FORMULA,
+    ...(includeEnergy ? { energyFormula: DEFAULT_ENERGY_REGENERATION_FORMULA } : {})
+  };
+}
+
+export function normalizeCreatureOptions(options = {}, characteristics = [], damageTypes = [], {
+  includeEnergyRegeneration = true
+} = {}) {
   const defaults = createEmptyCreatureOptions();
   const normalized = {
     types: Array.isArray(options?.types) ? options.types : defaults.types,
@@ -117,11 +127,15 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         naturalItemSets: normalizeNaturalItemSetEntries(race.naturalItemSets, race.naturalWeapons, race.naturalFeatures),
         inventorySize: normalizeInventorySize(race.inventorySize),
-        regeneration: normalizeRegeneration(race.regeneration),
+        regeneration: normalizeRegeneration(race.regeneration, { includeEnergy: includeEnergyRegeneration }),
         bleedingResistanceFormula: normalizeBleedingResistanceFormula(race.bleedingResistanceFormula),
         damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
         needSettings: normalizeRaceNeedSettings(race.needSettings),
         progression: {
+          healthPerLevel: normalizeProgressionFormula(
+            race.progression?.healthPerLevel,
+            DEFAULT_HEALTH_PER_LEVEL_FORMULA
+          ),
           skillPointsPerLevel: normalizeProgressionFormula(
             race.progression?.skillPointsPerLevel,
             DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
@@ -146,11 +160,13 @@ function normalizeBleedingResistanceFormula(value) {
   return String(value ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim() || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
 }
 
-function normalizeRegeneration(value = {}) {
+function normalizeRegeneration(value = {}, { includeEnergy = true } = {}) {
   return {
     formula: String(value?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA,
-    energyFormula: String(value?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA).trim()
-      || DEFAULT_ENERGY_REGENERATION_FORMULA
+    ...(includeEnergy ? {
+      energyFormula: String(value?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA).trim()
+        || DEFAULT_ENERGY_REGENERATION_FORMULA
+    } : {})
   };
 }
 
@@ -196,6 +212,7 @@ function normalizeRaceBaseParameters(values = {}) {
     signatureSkillPoints: toInteger(values?.signatureSkillPoints ?? defaults.signatureSkillPoints),
     traitPoints: toInteger(values?.traitPoints ?? defaults.traitPoints),
     proficiencyPoints: toInteger(values?.proficiencyPoints ?? defaults.proficiencyPoints),
+    healthFormula: String(values?.healthFormula ?? defaults.healthFormula).trim() || defaults.healthFormula,
     loadFormula: String(values?.loadFormula ?? defaults.loadFormula).trim() || defaults.loadFormula,
     loadLimitPercent: Math.max(0, toInteger(values?.loadLimitPercent ?? defaults.loadLimitPercent))
   };

@@ -394,9 +394,33 @@ function normalizeProficiencyInfluenceRange(range = {}, defaults = { min: 0, max
   };
 }
 
-export function normalizeResourceSettings(settings) {
-  const normalized = normalizeFormulaSettings(settings, createDefaultResourceSettings(), "Ресурс");
-  return ensureFixedResourceSettings(migrateResourceSettings(removeInternalResourceSettings(normalized)));
+export function normalizeResourceSettings(settings, {
+  optionalFixedResourceKeys = [],
+  healthFormulaSource = "formula"
+} = {}) {
+  const source = normalizeCollectionInput(settings, createDefaultResourceSettings());
+  const sourceByKey = new Map(source.map(setting => [String(setting?.key ?? "").trim(), setting]));
+  const normalized = normalizeFormulaSettings(source, createDefaultResourceSettings(), "Ресурс")
+    .map(setting => setting.key === "health"
+      ? {
+        ...setting,
+        formulaSource: healthFormulaSource === "race"
+          && sourceByKey.get("health")?.formulaSource === "race"
+          ? "race"
+          : "formula"
+      }
+      : setting);
+  return ensureFixedResourceSettings(
+    migrateResourceSettings(removeInternalResourceSettings(normalized)),
+    optionalFixedResourceKeys
+  );
+}
+
+export function usesRaceHealthFormula(settings = []) {
+  return Array.from(settings ?? []).some(setting => (
+    String(setting?.key ?? "").trim() === "health"
+    && setting?.formulaSource === "race"
+  ));
 }
 
 export function isFixedResourceKey(key = "") {
@@ -496,7 +520,8 @@ function migrateResourceSettings(settings = []) {
   });
 }
 
-function ensureFixedResourceSettings(settings = []) {
+function ensureFixedResourceSettings(settings = [], optionalFixedResourceKeys = []) {
+  const optionalKeys = new Set(Array.from(optionalFixedResourceKeys ?? []).map(key => String(key ?? "").trim()));
   const byKey = new Map(settings.map(setting => [setting.key, setting]));
   const fixedByKey = new Map(DEFAULT_RESOURCES.map(defaultResource => [
     defaultResource.key,
@@ -518,6 +543,7 @@ function ensureFixedResourceSettings(settings = []) {
   }
 
   for (const defaultResource of DEFAULT_RESOURCES) {
+    if (optionalKeys.has(defaultResource.key)) continue;
     if (!usedFixedKeys.has(defaultResource.key)) ordered.push(fixedByKey.get(defaultResource.key));
   }
 
@@ -525,7 +551,7 @@ function ensureFixedResourceSettings(settings = []) {
 }
 
 function normalizeFixedResourceSetting(defaultResource, source = {}) {
-  return {
+  const normalized = {
     key: defaultResource.key,
     abbr: defaultResource.abbr,
     label: source.label || defaultResource.label,
@@ -534,6 +560,10 @@ function normalizeFixedResourceSetting(defaultResource, source = {}) {
       : source.formula || defaultResource.formula,
     color: normalizeHexColor(source.color, getDefaultColorForKey(defaultResource.key))
   };
+  if (defaultResource.key === "health") {
+    normalized.formulaSource = source.formulaSource === "race" ? "race" : "formula";
+  }
+  return normalized;
 }
 
 export function resolveProficiencyInfluenceSettings(settings = {}, proficiency = null) {

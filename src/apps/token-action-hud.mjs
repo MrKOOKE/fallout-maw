@@ -6,8 +6,6 @@ import {
   getActorNeedSettings,
   getDamageTypeSettings,
   getLevelSettings,
-  getProficiencyInfluenceSettings,
-  getProficiencySettings,
   getResourceSettings,
   getSkillSettings,
   getSystemActionSettings,
@@ -48,6 +46,7 @@ import {
   CANVAS_TARGET_SELECTION_STARTED_HOOK
 } from "../canvas/target-selection-lifecycle.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import { getWeaponProficiencyInfluenceBonus } from "../utils/weapon-proficiencies.mjs";
 import {
   applyWeaponEffectiveRangeBonuses,
   resolveBaseWeaponEffectiveRange
@@ -4129,16 +4128,7 @@ function getWeaponAttackPowerChangedKeys(weaponData = {}) {
 }
 
 function getDialogWeaponProficiencyInfluenceBonus(actor = null, weaponData = {}, influenceKey = "") {
-  if (!actor) return 0;
-  const proficiency = getProficiencySettings().find(entry => entry.key === String(weaponData?.proficiencyKey ?? ""))
-    ?? getProficiencySettings().at(0)
-    ?? null;
-  if (!proficiency) return 0;
-  const range = getProficiencyInfluenceSettings(proficiency)?.[influenceKey] ?? { min: 0, max: 0 };
-  const settingMax = Math.max(0, toInteger(proficiency.max));
-  const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
-  const ratio = settingMax > 0 ? Math.max(0, Math.min(1, actorValue / settingMax)) : 0;
-  return Math.round(toInteger(range.min) + ((toInteger(range.max) - toInteger(range.min)) * ratio));
+  return getWeaponProficiencyInfluenceBonus(actor, weaponData, influenceKey);
 }
 
 function getWeaponAttackPowerResourceCostPreviewLabel(identity = "") {

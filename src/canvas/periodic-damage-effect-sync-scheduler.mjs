@@ -31,8 +31,8 @@ export class PeriodicDamageEffectSyncScheduler {
   constructor({
     sync,
     onError = null,
-    setTimer = globalThis.setTimeout,
-    clearTimer = globalThis.clearTimeout,
+    setTimer = scheduleTimer,
+    clearTimer = cancelTimer,
     debounceMs = DEFAULT_DEBOUNCE_MS,
     getActorKey = getDocumentStableKey,
     getSceneKey = getDocumentStableKey
@@ -283,4 +283,12 @@ function getDocumentStableKey(document) {
     return String(document);
   }
   return document?.uuid ?? document?.id ?? document?._id ?? null;
+}
+
+function scheduleTimer(callback, delay) {
+  return globalThis.setTimeout(callback, delay);
+}
+
+function cancelTimer(timerId) {
+  globalThis.clearTimeout(timerId);
 }

@@ -4,6 +4,8 @@ export function createDefaultActorDevelopment(characteristicSettings = [], skill
   return {
     initialized: false,
     experience: 0,
+    health: 0,
+    healthInitialized: false,
     points: {
       characteristics: 0,
       signatureSkills: 0,
@@ -25,6 +27,8 @@ export function normalizeActorDevelopment(development = {}, characteristicSettin
   return {
     initialized: Boolean(development?.initialized),
     experience: Math.max(0, toInteger(development?.experience)),
+    health: Math.max(0, toInteger(development?.health ?? defaults.health)),
+    healthInitialized: Boolean(development?.healthInitialized),
     points: {
       characteristics: Math.max(0, toInteger(development?.points?.characteristics ?? defaults.points.characteristics)),
       signatureSkills: Math.max(0, toInteger(development?.points?.signatureSkills ?? defaults.points.signatureSkills)),
@@ -37,13 +41,22 @@ export function normalizeActorDevelopment(development = {}, characteristicSettin
       characteristicSettings.map(entry => [entry.key, Math.max(0, toInteger(development?.characteristics?.[entry.key]))])
     ),
     traits: normalizeTraitSpending(development?.traits),
-    proficiencies: Object.fromEntries(
-      proficiencySettings.map(entry => [entry.key, Math.max(0, toInteger(development?.proficiencies?.[entry.key]))])
-    ),
+    proficiencies: proficiencySettings.length
+      ? Object.fromEntries(
+        proficiencySettings.map(entry => [entry.key, Math.max(0, toInteger(development?.proficiencies?.[entry.key]))])
+      )
+      : normalizeStoredProficiencyDevelopment(development?.proficiencies),
     skills: Object.fromEntries(
       skillSettings.map(entry => [entry.key, normalizeSkillDevelopment(development?.skills?.[entry.key])])
     )
   };
+}
+
+function normalizeStoredProficiencyDevelopment(value = {}) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value)
+    .map(([key, points]) => [String(key).trim(), Math.max(0, toInteger(points))])
+    .filter(([key]) => key));
 }
 
 export function cloneActorDevelopment(development = {}, characteristicSettings = [], skillSettings = [], proficiencySettings = []) {

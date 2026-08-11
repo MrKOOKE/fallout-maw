@@ -68,11 +68,13 @@ function countWholeHourTicks(seconds) {
 async function applyActorRegeneration(actor, tickCount) {
   const ticks = Math.max(0, toInteger(tickCount));
   const healthAmount = Math.max(0, evaluateActorRegeneration(actor) * ticks);
-  const energyAmount = Math.max(0, evaluateActorRegeneration(actor, {
-    formulaKey: "energyFormula",
-    fallbackFormula: DEFAULT_ENERGY_REGENERATION_FORMULA,
-    label: "energy"
-  }) * ticks);
+  const energyAmount = actor.system?.resources?.[ENERGY_RESOURCE_KEY]
+    ? Math.max(0, evaluateActorRegeneration(actor, {
+      formulaKey: "energyFormula",
+      fallbackFormula: DEFAULT_ENERGY_REGENERATION_FORMULA,
+      label: "energy"
+    }) * ticks)
+    : 0;
   if (healthAmount <= 0 && energyAmount <= 0) return;
 
   if (healthAmount > 0) {

@@ -11,6 +11,12 @@ const LOAD_INDICATOR = Object.freeze({
   abbr: "load",
   label: "Нагрузка"
 });
+export const ACTOR_LEVEL_FORMULA_VARIABLE = Object.freeze({
+  key: "level",
+  abbr: "уровень",
+  aliases: [],
+  label: "Уровень актёра"
+});
 
 const COMMON_FIELDS = Object.freeze([
   Object.freeze({ field: "value", suffix: "Value", label: "текущее значение" }),
@@ -59,6 +65,12 @@ export function buildActorFormulaReferenceData({
   skillValues = {}
 } = {}) {
   const state = createReferenceState();
+
+  addScalarVariable(
+    state,
+    ACTOR_LEVEL_FORMULA_VARIABLE,
+    Math.max(1, Math.trunc(toFiniteNumber(system?.attributes?.level)))
+  );
 
   addScalarReferenceGroup(state, {
     root: "characteristics",
@@ -127,7 +139,7 @@ export function buildActorFormulaAutocompleteEntries({
   limbs = [],
   includeLoad = true
 } = {}) {
-  const entries = [];
+  const entries = [{ ...ACTOR_LEVEL_FORMULA_VARIABLE, type: "actor" }];
   addIndicatorAutocompleteEntries(entries, skills, "skill-indicator");
   addIndicatorAutocompleteEntries(entries, mergeDefinitions(resources, [REACTION_RESOURCE]), "resource", {
     includeMissingPercent: true
@@ -153,6 +165,24 @@ function addScalarReferenceGroup(state, { root = "", definitions = [], values = 
     const value = toFiniteNumber(values?.[definition.key]);
     addExplicitReference(state, `${root}.${definition.key}`, value, definition.label);
   }
+}
+
+function addScalarVariable(state, definition = {}, value = 0) {
+  const key = String(definition?.key ?? "").trim();
+  const abbr = String(definition?.abbr ?? "").trim();
+  const aliases = Array.from(definition?.aliases ?? []).map(alias => String(alias ?? "").trim());
+  const acceptedAliases = [key, abbr, ...aliases].filter(isValidIdentifier);
+  if (!acceptedAliases.length) return;
+
+  for (const alias of acceptedAliases) {
+    if (!Object.hasOwn(state.formulaVariables, alias)) state.formulaVariables[alias] = value;
+  }
+  state.formulaVariableSettings.push({
+    key,
+    abbr,
+    aliases: acceptedAliases.filter(alias => alias !== key && alias !== abbr),
+    label: String(definition?.label ?? key).trim() || key
+  });
 }
 
 function addIndicatorReferenceGroup(state, {

@@ -216,7 +216,7 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
   static async #onSaveVersion(event, target) {
     event.preventDefault();
     const preset = await this.#getTargetPreset(target);
-    if (!preset) return undefined;
+    if (!preset?.canModify) return undefined;
     const name = await DialogV2.prompt({
       window: { title: `Сохранить версию «${escapeHTML(preset.name)}»`, icon: "fa-solid fa-camera" },
       content: `<label class="form-group"><span>Название сохранения</span><input type="text" name="name" placeholder="Дата и время" autocomplete="off"></label>`,
@@ -231,7 +231,7 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
   static async #onViewVersions(event, target) {
     event.preventDefault();
     const row = await this.#getTargetPreset(target);
-    if (!row) return undefined;
+    if (!row?.canModify) return undefined;
     while (true) {
       let preset;
       try {
@@ -442,7 +442,9 @@ function preparePresetContext(preset, activePresetId) {
   const syncState = String(preset?.syncState ?? "");
   const isMain = Boolean(preset?.isMain) || id === MAIN_PRESET_ID;
   const active = Boolean(preset?.active) || (!!id && id === activePresetId);
-  const canDelete = !isMain && (preset?.canDelete ?? true);
+  const canModify = preset?.canModify ?? !source.startsWith("module:");
+  const canDelete = canModify && !isMain && (preset?.canDelete ?? true);
+  const saveCount = Number(preset?.saveCount ?? 0);
 
   return {
     ...preset,
@@ -452,7 +454,9 @@ function preparePresetContext(preset, activePresetId) {
     shortId: shorten(id, 12),
     shortRevision: revision ? shorten(revision, 12) : "—",
     source,
-    sourceLabel: localizeEnum(source, SOURCE_KEYS),
+    sourceLabel: source.startsWith("module:")
+      ? `Модуль: ${source.slice("module:".length)}`
+      : localizeEnum(source, SOURCE_KEYS),
     syncState,
     syncLabel: localizeEnum(syncState, SYNC_STATE_KEYS),
     syncClass: normalizeCssToken(syncState, "unknown"),
@@ -460,10 +464,13 @@ function preparePresetContext(preset, activePresetId) {
     isMain,
     seedPending: Boolean(preset?.seedPending),
     canActivate: !active,
-    canRename: true,
+    canModify,
+    canRename: canModify,
     canDelete,
     canExport: true,
-    saveCount: Number(preset?.saveCount ?? 0),
+    canSaveVersions: canModify,
+    canViewVersions: canModify && saveCount > 0,
+    saveCount,
     rowClass: active ? "is-active" : ""
   };
 }

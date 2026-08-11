@@ -12,11 +12,13 @@ import {
   getActorLimbDestructionMode
 } from "../settings/combat.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { withQueuedReactionOpportunityWave } from "./reaction-hub.mjs";
 import { advanceWorldTime, registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
+  CONSTRUCT_PART_MITIGATION_LIMB_KEY,
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
   getConditionFunction,
@@ -24,10 +26,16 @@ import {
   getConstructPartFunction,
   getDamageMitigationFunction,
   getProsthesisFunction,
+  getWeaponLimbDamageMultiplier,
   getWeaponFunctionById,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
+import {
+  isConstructPartDestroyed,
+  isLimbDestroyed,
+  isLimbPhysicallyMissing
+} from "../utils/limb-state.mjs";
 import {
   evaluateActorEffectChangeBaseNumber,
   evaluateActorEffectChangeNumber,
@@ -109,10 +117,19 @@ import {
 } from "../utils/active-effect-source.mjs";
 import { applyActorNeedChanges } from "../needs/need-change-runtime.mjs";
 import { mergeMatchingTraumaEffectChanges } from "./trauma-effect-merging.mjs";
+import {
+  applyIndependentHealthChange,
+  buildIndependentHealthUpdate,
+  calculateIndependentLimbDamage,
+  calculateIntegratedProsthesisHealthLoss,
+  createIndependentHealthState,
+  usesIndependentHealthModel
+} from "./independent-health.mjs";
 export {
   getResourceBlockState,
   getResourceLimitState
 } from "./resource-limits.mjs";
+export { isLimbDestroyed, isLimbPhysicallyMissing };
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 export const DAMAGE_APPLIED_HOOK = "fallout-maw.damageApplied";
@@ -345,14 +362,16 @@ export async function startConsciousnessStatusSynchronization() {
 }
 
 function actorNeedsStartupVitalStatusSync(actor) {
-  const dead = hasDestroyedCriticalLimb(actor);
-  const unconscious = !dead && isActorConsciousnessDepleted(actor);
+  const dead = isActorHealthDepleted(actor) || hasDestroyedCriticalLimb(actor);
+  const consciousnessEnabled = isConsciousnessRulesEnabled(actor);
+  const unconscious = consciousnessEnabled && !dead && isActorConsciousnessDepleted(actor);
   const hasDeadStatus = actor?.statuses?.has?.(STATUS_EFFECTS.dead) === true;
   const hasUnconsciousStatus = actor?.statuses?.has?.(STATUS_EFFECTS.unconscious) === true;
   if (dead !== hasDeadStatus || unconscious !== hasUnconsciousStatus) return true;
   if (dead || unconscious || hasDeadStatus || hasUnconsciousStatus) return true;
-  return toInteger(actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.recoveryTarget)
-    !== toInteger(actor.system?.combat?.consciousnessRecoveryTarget);
+  return consciousnessEnabled
+    && toInteger(actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.recoveryTarget)
+      !== toInteger(actor.system?.combat?.consciousnessRecoveryTarget);
 }
 
 export function registerDamageSocket() {
@@ -960,6 +979,7 @@ function serializeDamageEventResult(result = {}) {
     barrierAbsorbed: Math.max(0, Number(result?.barrierAbsorbed) || 0),
     amountAfterBarrier: Math.max(0, Number(result?.amountAfterBarrier ?? result?.amount) || 0),
     barrierDepletedCount: Array.isArray(result?.barrierDepleted) ? result.barrierDepleted.length : 0,
+    mitigationBlocked: Math.max(0, Number(result?.mitigationBlocked) || 0),
     preventedAmount: Math.max(0, Number(result?.preventedAmount) || 0),
     healthDelta: Number(result?.healthDelta) || 0,
     resourceHealthDelta: Number(result?.resourceHealthDelta) || 0,
@@ -985,6 +1005,7 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationB
   if (!application) {
     if (hasApplicationBreakdown) {
       return {
+        mitigationBlocked: 0,
         preBarrierAmount: 0,
         barrierAbsorbed: 0,
         amountAfterBarrier: 0,
@@ -998,6 +1019,7 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationB
       };
     }
     return {
+      mitigationBlocked: Math.max(0, Number(result?.mitigationBlocked) || 0),
       preBarrierAmount: Math.max(0, Number(result?.preBarrierAmount) || 0),
       barrierAbsorbed: Math.max(0, Number(result?.barrierAbsorbed) || 0),
       amountAfterBarrier: Math.max(0, Number(result?.amountAfterBarrier ?? result?.amount) || 0),
@@ -1010,6 +1032,7 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationB
   }
   const depleted = application.depleted;
   return {
+    mitigationBlocked: Math.max(0, Number(application.mitigationBlocked) || 0),
     preBarrierAmount: application.preBarrierAmount,
     barrierAbsorbed: application.barrierAbsorbed,
     amountAfterBarrier: application.amountAfterBarrier,
@@ -1027,7 +1050,7 @@ function getDamageEventActorSnapshot(actor, request = {}) {
   if (!actor) return null;
   const limb = request.limbKey ? actor.system?.limbs?.[request.limbKey] : null;
   return {
-    health: Number(calculateAggregateHealth(actor).value) || 0,
+    health: getCurrentActorHealthValue(actor),
     limb: limb ? {
       key: request.limbKey,
       value: Number(limb.value) || 0,
@@ -1208,10 +1231,12 @@ function serializeDamageCycleSocketResults(results = []) {
   return results.flat(Infinity).filter(Boolean).map(result => ({
     actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
     amount: roundDamageAmount(result.amount),
+    delayedAmount: roundDamageAmount(result.delayedAmount),
     preBarrierAmount: roundDamageAmount(result.preBarrierAmount),
     barrierAbsorbed: roundDamageAmount(result.barrierAbsorbed),
     amountAfterBarrier: roundDamageAmount(result.amountAfterBarrier ?? result.amount),
     barrierDepletedCount: Array.isArray(result.barrierDepleted) ? result.barrierDepleted.length : 0,
+    mitigationBlocked: roundDamageAmount(result.mitigationBlocked),
     healthDelta: roundDamageAmount(result.healthDelta),
     resourceHealthDelta: roundDamageAmount(result.resourceHealthDelta),
     limbDelta: roundDamageAmount(result.limbDelta),
@@ -1398,7 +1423,8 @@ async function applyDamageApplicationNow(request = {}, {
       chanceOperationId: getActiveUseOperationId(data?.source, getCurrentDamageHubOperationRef())
     }))
     : data.amount;
-  const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
+  const runtimeSettings = getPreparedRuntimeSettings();
+  const damageType = runtimeSettings.damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
   if (shouldSplitPeriodicDamage(data, mode, periodic) && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
     return applyPeriodicSplitDamageApplicationNow(actor, { ...data, amount: requestedAmount }, {
@@ -1415,6 +1441,7 @@ async function applyDamageApplicationNow(request = {}, {
   const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
     ? calculateDamageMitigation(actor, requestedAmount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
+      damageMitigationCalculation: runtimeSettings.rulesProfile.damageMitigationCalculation,
       itemOnlyMitigation: hasInstalledProsthesis(actor, data.limbKey),
       includeEquipmentConditionDamage: data.processDamageTypeSettings,
       includeResistanceOverheat: data.processDamageTypeSettings
@@ -1422,15 +1449,31 @@ async function applyDamageApplicationNow(request = {}, {
     : { amount: requestedAmount, display: null };
   const mitigatedAmount = mitigationResult.amount;
   const effectiveAmountBeforeBarrier = mode === MODE_DAMAGE && data.processDamageTypeSettings
-    ? hasInstalledProsthesis(actor, data.limbKey)
+    ? hasInstalledProsthesis(actor, data.limbKey) || isIndependentHealthModelActive(actor)
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
   mitigationDisplay = mode === MODE_DAMAGE && data.applyMitigation
     ? buildDamageMitigationDisplay(data.amount, mitigatedAmount)
     : null;
+  const mitigationBlocked = Math.max(0, roundDamageAmount(mitigationDisplay?.blocked));
   if (effectiveAmountBeforeBarrier <= 0) {
-    return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
+    if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
+      await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
+      await applyResistanceOverheats(actor, [mitigationResult.resistanceOverheat]);
+    }
+    return {
+      actor,
+      amount: 0,
+      mitigationBlocked,
+      healthDelta: 0,
+      limbDelta: 0,
+      mode,
+      scope,
+      limbKey: data.limbKey,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      source: data.source
+    };
   }
 
   const barrierApplication = mode === MODE_DAMAGE
@@ -1460,6 +1503,7 @@ async function applyDamageApplicationNow(request = {}, {
       barrierAbsorbed: barrierApplication.absorbed,
       amountAfterBarrier: 0,
       barrierDepleted: barrierApplication.depleted,
+      mitigationBlocked,
       healthDelta: 0,
       limbDelta: 0,
       mode,
@@ -1497,6 +1541,7 @@ async function applyDamageApplicationNow(request = {}, {
         barrierAbsorbed: barrierApplication.absorbed,
         amountAfterBarrier: effectiveAmount,
         barrierDepleted: barrierApplication.depleted,
+        mitigationBlocked,
         preventedAmount: effectiveAmount,
         lethalDamagePrevented: true,
         healthDelta: 0,
@@ -1529,6 +1574,7 @@ async function applyDamageApplicationNow(request = {}, {
         barrierAbsorbed: barrierApplication.absorbed,
         amountAfterBarrier: 0,
         barrierDepleted: barrierApplication.depleted,
+        mitigationBlocked,
         healthDelta: 0,
         limbDelta: 0,
         mode,
@@ -1556,6 +1602,7 @@ async function applyDamageApplicationNow(request = {}, {
   result.barrierAbsorbed = barrierApplication.absorbed;
   result.amountAfterBarrier = effectiveAmount;
   result.barrierDepleted = barrierApplication.depleted;
+  result.mitigationBlocked = mitigationBlocked;
   if (mode === MODE_DAMAGE && data.processDamageTypeSettings && result.healthDelta > 0) {
     await createResourceLimitEffect(actor, {
       damageType,
@@ -1628,8 +1675,9 @@ async function applyItemConditionDamageApplicationNow(actor, data = {}, { create
   }
 
   const condition = getConditionFunction(item);
+  const conditionDamage = Math.max(0, requestedAmount - getDamageMitigationWearResistance(item));
   const current = Math.max(0, toInteger(condition.value));
-  const next = Math.max(0, current - requestedAmount);
+  const next = Math.max(0, current - conditionDamage);
   const delta = Math.max(0, current - next);
   if (delta > 0) {
     await actor.updateEmbeddedDocuments("Item", [{
@@ -1710,13 +1758,14 @@ export function estimateDamageApplication(request = {}) {
   const data = normalizeDamageRequest(request);
   const actor = request.actor ?? (data.actorUuid ? fromUuidSync(data.actorUuid) : null);
   if (!actor || data.mode !== MODE_DAMAGE) {
-    return { amount: 0, healthDamage: 0, limbDamage: 0, partDamage: 0, penetrationRemainder: 0, damageTypeKey: data.damageTypeKey };
+    return { amount: 0, mitigationBlocked: 0, healthDamage: 0, limbDamage: 0, partDamage: 0, penetrationRemainder: 0, damageTypeKey: data.damageTypeKey };
   }
 
   if (data.scope === SCOPE_ITEM_CONDITION) {
     const itemConditionDamage = estimateItemConditionDamage(actor, data);
     return {
       amount: Math.max(0, roundDamageAmount(data.amount)),
+      mitigationBlocked: 0,
       healthDamage: 0,
       limbDamage: 0,
       itemConditionDamage,
@@ -1726,16 +1775,18 @@ export function estimateDamageApplication(request = {}) {
     };
   }
 
-  const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
+  const runtimeSettings = getPreparedRuntimeSettings();
+  const damageType = runtimeSettings.damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const mitigationResult = data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
+      damageMitigationCalculation: runtimeSettings.rulesProfile.damageMitigationCalculation,
       itemOnlyMitigation: hasInstalledProsthesis(actor, data.limbKey)
     })
     : { amount: data.amount, penetrationRemainder: getDamageMitigationPenetration(data.source) };
   const mitigatedAmount = mitigationResult.amount;
   let effectiveAmount = data.processDamageTypeSettings
-    ? hasInstalledProsthesis(actor, data.limbKey)
+    ? hasInstalledProsthesis(actor, data.limbKey) || isIndependentHealthModelActive(actor)
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
@@ -1751,26 +1802,15 @@ export function estimateDamageApplication(request = {}) {
   if (data.processDamageTypeSettings && needIncrease?.enabled && needIncrease.preventHealthDamage) effectiveAmount = 0;
 
   const scope = normalizeScope(data.scope, data.limbKey);
-  const installedProsthesis = data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
-    ? getInstalledProsthesis(actor, data.limbKey)
-    : null;
-  const result = installedProsthesis
-    ? estimateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
-      prosthesis: installedProsthesis,
-      damageType,
-      damageTypeKey: damageType?.key ?? data.damageTypeKey
-    })
-    : data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
-      ? estimateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, {
-      damageType,
-      damageTypeKey: damageType?.key ?? data.damageTypeKey
-    })
-    : estimateEvenLimbDamage(actor, effectiveAmount, {
-      damageType,
-      damageTypeKey: damageType?.key ?? data.damageTypeKey
-    });
+  const result = estimateDirectDamageApplication(actor, {
+    ...data,
+    amount: effectiveAmount,
+    scope,
+    damageTypeKey: damageType?.key ?? data.damageTypeKey
+  }, damageType);
   return {
     amount: Math.max(0, roundDamageAmount(data.amount)),
+    mitigationBlocked: Math.max(0, roundDamageAmount(data.amount - mitigatedAmount)),
     preBarrierAmount: Math.max(0, roundDamageAmount(preBarrierAmount)),
     barrierAbsorbed: Math.max(0, roundDamageAmount(barrierApplication.absorbed)),
     amountAfterBarrier: Math.max(0, roundDamageAmount(barrierApplication.remaining)),
@@ -1779,6 +1819,91 @@ export function estimateDamageApplication(request = {}) {
     partDamage: Math.max(0, roundDamageAmount(result.limbDelta)),
     penetrationRemainder: Math.max(0, toInteger(mitigationResult.penetrationRemainder)),
     damageTypeKey: damageType?.key ?? data.damageTypeKey
+  };
+}
+
+export function estimateDamageApplicationsBatch(actor, requests = []) {
+  if (!actor) {
+    return {
+      amount: 0,
+      healthDamage: 0,
+      limbDamage: 0,
+      itemConditionDamage: 0,
+      partDamage: 0,
+      penetrationRemainder: 0
+    };
+  }
+
+  const normalizedRequests = (Array.isArray(requests) ? requests : [requests])
+    .map(request => normalizeDamageRequest(request))
+    .filter(data => data.mode === MODE_DAMAGE);
+  const damageBarrierLedger = normalizedRequests.some(data => data.scope !== SCOPE_ITEM_CONDITION)
+    ? createActorDamageBarrierLedger(actor)
+    : null;
+  const preparationContext = createDamageBatchPreparationContext(actor);
+  const preparedEntries = [];
+  const conditionRemainingByItem = new Map();
+  const conditionDamageByPacket = new Map();
+  let amount = 0;
+  let itemConditionDamage = 0;
+  let penetrationRemainder = null;
+
+  for (const [requestIndex, data] of normalizedRequests.entries()) {
+    amount += Math.max(0, roundDamageAmount(data.amount));
+    if (data.scope === SCOPE_ITEM_CONDITION) {
+      const item = getDamageRequestConditionItem(actor, data);
+      if (!item) continue;
+      const remaining = conditionRemainingByItem.has(item.id)
+        ? conditionRemainingByItem.get(item.id)
+        : Math.max(0, toInteger(getConditionFunction(item).value));
+      const packetId = getConditionWearPacketId(data.source) || `request:${requestIndex}`;
+      const packetKey = `${item.id}:${packetId}`;
+      const packet = conditionDamageByPacket.get(packetKey) ?? { raw: 0, applied: 0 };
+      packet.raw += Math.max(0, roundDamageAmount(data.amount));
+      const requested = Math.max(
+        0,
+        packet.raw - getDamageMitigationWearResistance(item) - packet.applied
+      );
+      const applied = Math.min(remaining, requested);
+      packet.applied += applied;
+      conditionDamageByPacket.set(packetKey, packet);
+      conditionRemainingByItem.set(item.id, remaining - applied);
+      itemConditionDamage += applied;
+      const itemPenetration = getDamageMitigationPenetration(data.source);
+      penetrationRemainder = penetrationRemainder === null
+        ? itemPenetration
+        : Math.min(penetrationRemainder, itemPenetration);
+      continue;
+    }
+
+    const entry = prepareDamageBatchEntry(actor, data, {
+      damageBarrierLedger,
+      preparationContext,
+      processEquipmentConditionDamage: false
+    });
+    if (!entry) continue;
+    const entryPenetration = Math.max(
+      0,
+      toInteger(entry.penetrationRemainder ?? getDamageMitigationPenetration(data.source))
+    );
+    penetrationRemainder = penetrationRemainder === null
+      ? entryPenetration
+      : Math.min(penetrationRemainder, entryPenetration);
+    if (entry.amount > 0) preparedEntries.push(entry);
+  }
+
+  const batch = preparedEntries.length
+    ? estimateDamageEntriesBatch(actor, preparedEntries)
+    : createLimbMutationResult();
+  const healthDamage = Math.max(0, roundDamageAmount(batch.healthDelta));
+  const limbDamage = Math.max(0, roundDamageAmount(batch.limbDelta));
+  return {
+    amount,
+    healthDamage,
+    limbDamage,
+    itemConditionDamage,
+    partDamage: limbDamage + itemConditionDamage,
+    penetrationRemainder: penetrationRemainder ?? 0
   };
 }
 
@@ -1805,6 +1930,28 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   });
 }
 
+function combineItemConditionDamagePackets(requests = [], actorUuid = "") {
+  const combined = [];
+  for (const request of requests) {
+    const data = normalizeDamageRequest({ ...request, actorUuid });
+    const packetId = data.scope === SCOPE_ITEM_CONDITION
+      ? getConditionWearPacketId(data.source)
+      : "";
+    const previous = combined.at(-1);
+    if (
+      packetId
+      && previous?.scope === SCOPE_ITEM_CONDITION
+      && previous.itemId === data.itemId
+      && getConditionWearPacketId(previous.source) === packetId
+    ) {
+      previous.amount += data.amount;
+      continue;
+    }
+    combined.push(data);
+  }
+  return combined;
+}
+
 async function applyDamageApplicationsNow(
   { actorUuid = "", requests = [] } = {},
   { createSummary = true, deferredShockChecks = null, feedbackQueue = null } = {}
@@ -1829,7 +1976,7 @@ async function applyDamageApplicationsNow(
   let mitigationDisplay = null;
   let batchResult = null;
   try {
-  const resourceHealthBefore = calculateAggregateHealth(actor).value;
+  const resourceHealthBefore = getCurrentActorHealthValue(actor);
 
   const batchRequests = [];
   const singleResults = [];
@@ -1839,8 +1986,7 @@ async function applyDamageApplicationsNow(
   const pendingPeriodicDamageEffects = [];
   const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
   let preparationContext = null;
-  for (const request of requests) {
-    const data = normalizeDamageRequest({ ...request, actorUuid });
+  for (const data of combineItemConditionDamagePackets(requests, actorUuid)) {
     if (data.mode !== MODE_DAMAGE) {
       singleResults.push(await applyDamageApplicationNow(data, {
         createSummary: false,
@@ -1875,6 +2021,7 @@ async function applyDamageApplicationsNow(
   }
 
   mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
+  const batchMitigationBlocked = Math.max(0, roundDamageAmount(mitigationDisplay?.blocked));
 
   const batchPotentialAmount = batchRequests.reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.amount)), 0);
   const batchPreBarrierAmount = damageApplications
@@ -1910,7 +2057,10 @@ async function applyDamageApplicationsNow(
     }
     : batchRequests.length
       ? await applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks })
-      : batchBarrierAbsorbed > 0
+      : batchPreBarrierAmount > 0
+        || batchBarrierAbsorbed > 0
+        || batchMitigationBlocked > 0
+        || pendingPeriodicDamageEffects.length > 0
         ? {
           actor,
           amount: 0,
@@ -1922,7 +2072,14 @@ async function applyDamageApplicationsNow(
         }
         : undefined;
   const applicationDeltaIndex = buildDamageApplicationDeltaIndex(batchResult?.applicationDeltas);
-  if (batchResult && (batchPreBarrierAmount > 0 || batchBarrierAbsorbed > 0)) {
+  if (batchResult) batchResult.mitigationBlocked = batchMitigationBlocked;
+  if (batchResult && pendingPeriodicDamageEffects.length) {
+    batchResult.delayedAmount = pendingPeriodicDamageEffects.reduce(
+      (total, entry) => total + Math.max(0, roundDamageAmount(entry.amount)),
+      0
+    );
+  }
+  if (batchResult && (batchPreBarrierAmount > 0 || batchBarrierAbsorbed > 0 || batchMitigationBlocked > 0)) {
     batchResult.preBarrierAmount = batchPreBarrierAmount;
     batchResult.barrierAbsorbed = batchBarrierAbsorbed;
     batchResult.amountAfterBarrier = batchAmountAfterBarrier;
@@ -1932,6 +2089,7 @@ async function applyDamageApplicationsNow(
       return {
         damageEventIndex: entry.damageEventIndex,
         damageTypeKey: entry.damageTypeKey,
+        mitigationBlocked: Math.max(0, roundDamageAmount(entry.damageMitigationDisplay?.blocked)),
         preBarrierAmount: entry.preBarrierAmount,
         barrierAbsorbed: entry.barrierAbsorbed,
         amountAfterBarrier: entry.amount,
@@ -1963,7 +2121,7 @@ async function applyDamageApplicationsNow(
     await createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries);
   }
   if (batchResult) {
-    const resourceHealthAfter = calculateAggregateHealth(actor).value;
+    const resourceHealthAfter = getCurrentActorHealthValue(actor);
     batchResult = {
       ...batchResult,
       resourceHealthDelta: Math.max(0, roundDamageAmount(resourceHealthBefore - resourceHealthAfter))
@@ -2036,20 +2194,27 @@ export function buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey = ""
   if (!actor || !damageTypeKey || !limbKey) return { totals, sources };
 
   for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
-    if (item.type !== "gear" || !item.system?.equipped) continue;
+    const isConstructPart = item.type === "gear"
+      && hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart;
+    if (item.type !== "gear" || (!item.system?.equipped && !isConstructPart)) continue;
     if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
+    if (isConstructPart && getConstructPartLimbKey(getConstructPartSlotId(item)) !== limbKey) continue;
 
     const mitigation = getDamageMitigationFunction(item);
     const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
-    const entry = mitigation.entries?.[limbKey]?.[damageTypeKey];
+    const entryKey = isConstructPart ? CONSTRUCT_PART_MITIGATION_LIMB_KEY : limbKey;
+    const entry = mitigation.entries?.[entryKey]?.[damageTypeKey];
     const baseValue = toInteger(entry?.value);
-    if (baseValue <= 0) continue;
+    if (!baseValue) continue;
 
     const weakening = getConditionWeakeningData(item);
-    const value = Math.max(0, Math.floor(baseValue * (weakening.active ? weakening.ratio : 1)));
-    if (value <= 0) continue;
+    const value = baseValue > 0
+      ? Math.floor(baseValue * (weakening.active ? weakening.ratio : 1))
+      : baseValue;
+    if (!value) continue;
     if (Object.hasOwn(totals, mode)) totals[mode] += value;
-    if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    if (value < 0 || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
     sources.push({
       item,
       itemId: item.id,
@@ -2071,10 +2236,12 @@ function prepareDamageBatchEntry(actor, data = {}, {
   equipmentConditionDamageState = null,
   pendingPeriodicDamageEffects = null,
   damageBarrierLedger = null,
-  preparationContext = null
+  preparationContext = null,
+  processEquipmentConditionDamage = true
 } = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
-  const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
+  const runtimeSettings = getPreparedRuntimeSettings();
+  const damageType = runtimeSettings.damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
   if (
     shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic)
@@ -2090,7 +2257,17 @@ function prepareDamageBatchEntry(actor, data = {}, {
       source: data.source,
       worldTime: getDamageApplicationWorldTime(data.source)
     });
-    if (!immediateAmount) return null;
+    if (!immediateAmount) {
+      return {
+        ...data,
+        amount: 0,
+        delayedAmount,
+        damageTypeKey: damageType?.key ?? data.damageTypeKey,
+        damageType,
+        scope,
+        penetrationRemainder: getDamageMitigationPenetration(data.source)
+      };
+    }
     return prepareDamageBatchEntry(actor, {
       ...data,
       amount: immediateAmount,
@@ -2100,7 +2277,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       equipmentConditionDamageState,
       pendingPeriodicDamageEffects,
       damageBarrierLedger,
-      preparationContext
+      preparationContext,
+      processEquipmentConditionDamage
     });
   }
 
@@ -2112,10 +2290,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       getDamageBatchProsthesisContext(preparationContext, actor)
     )
     : null;
-  const includeEquipmentConditionDamage = shouldCalculateEquipmentConditionDamage(
-    damageType,
-    data.processDamageTypeSettings
-  );
+  const includeEquipmentConditionDamage = processEquipmentConditionDamage
+    && shouldCalculateEquipmentConditionDamage(damageType, data.processDamageTypeSettings);
   const equipmentSnapshot = data.applyMitigation && (prosthesis || includeEquipmentConditionDamage)
     ? getDamageBatchMitigationEquipmentSnapshot(
       preparationContext,
@@ -2127,6 +2303,7 @@ function prepareDamageBatchEntry(actor, data = {}, {
   const mitigationResult = data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
+      damageMitigationCalculation: runtimeSettings.rulesProfile.damageMitigationCalculation,
       itemOnlyMitigation: Boolean(prosthesis),
       itemMitigationTotals: equipmentSnapshot?.totals,
       includeEquipmentConditionDamage,
@@ -2138,7 +2315,7 @@ function prepareDamageBatchEntry(actor, data = {}, {
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
   const effectiveAmountBeforeBarrier = data.processDamageTypeSettings
-    ? prosthesis
+    ? prosthesis || isIndependentHealthModelActive(actor)
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
@@ -2154,7 +2331,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
         damageType,
         scope,
         damageMitigationDisplay,
-        resistanceOverheat: mitigationResult.resistanceOverheat
+        resistanceOverheat: mitigationResult.resistanceOverheat,
+        penetrationRemainder: mitigationResult.penetrationRemainder
       }
       : null;
   }
@@ -2177,7 +2355,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       damageType,
       scope,
       damageMitigationDisplay,
-      resistanceOverheat: mitigationResult.resistanceOverheat
+      resistanceOverheat: mitigationResult.resistanceOverheat,
+      penetrationRemainder: mitigationResult.penetrationRemainder
     };
   }
 
@@ -2201,7 +2380,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
     damageType,
     scope,
     damageMitigationDisplay,
-    resistanceOverheat: mitigationResult.resistanceOverheat
+    resistanceOverheat: mitigationResult.resistanceOverheat,
+    penetrationRemainder: mitigationResult.penetrationRemainder
   };
 }
 
@@ -2209,6 +2389,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   const effectiveAmount = Math.max(0, roundDamageAmount(data.amount));
+  const independentHealthRules = getIndependentHealthRules(actor);
   if (mode === MODE_HEALING && actor?.type === "construct") {
     return {
       actor,
@@ -2233,26 +2414,85 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   let limbStates = new Map();
   let damageAccumulation = new Map();
   let shockCheck = null;
+  let targetedProsthesis = null;
 
   if (mode === MODE_DAMAGE) {
     const traumaDamageTypeKey = getTraumaDamageTypeKey(data.damageTypeKey);
-    const installedProsthesis = shouldUpdateLimb ? getInstalledProsthesis(actor, data.limbKey) : null;
-    const result = installedProsthesis
-      ? await calculateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
-        prosthesis: installedProsthesis,
+    targetedProsthesis = shouldUpdateLimb ? getInstalledProsthesis(actor, data.limbKey) : null;
+    let independentHealthDelta = 0;
+    let result;
+    if (independentHealthRules && targetedProsthesis) {
+      result = await calculateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
+        prosthesis: targetedProsthesis,
+        limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
         damageType,
         damageTypeKey: data.damageTypeKey,
         traumaDamageTypeKey
-      })
-      : shouldUpdateLimb
-      ? await calculateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey, traumaDamageTypeKey })
-      : await calculateEvenLimbDamage(actor, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey, traumaDamageTypeKey });
+      });
+      const healthState = createIndependentHealthState(actor.system?.resources?.health);
+      independentHealthDelta = applyIndependentHealthChange(
+        healthState,
+        result.healthDelta,
+        MODE_DAMAGE
+      );
+      if (independentHealthDelta > 0) Object.assign(updateData, buildIndependentHealthUpdate(healthState));
+    } else if (independentHealthRules) {
+      const healthState = createIndependentHealthState(actor.system?.resources?.health);
+      independentHealthDelta = applyIndependentHealthChange(
+        healthState,
+        effectiveAmount,
+        MODE_DAMAGE
+      );
+      if (independentHealthDelta > 0) Object.assign(updateData, buildIndependentHealthUpdate(healthState));
+      result = shouldUpdateLimb
+        ? calculateIndependentOrganicLimbDamage(actor, data.limbKey, independentHealthDelta, {
+          profileMultiplier: independentHealthRules.limbDamageFromLostHealthMultiplier,
+          limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
+          damageType,
+          damageTypeKey: data.damageTypeKey,
+          traumaDamageTypeKey
+        })
+        : createLimbMutationResult();
+    } else {
+      result = targetedProsthesis
+        ? await calculateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
+          prosthesis: targetedProsthesis,
+          limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
+          damageType,
+          damageTypeKey: data.damageTypeKey,
+          traumaDamageTypeKey
+        })
+        : shouldUpdateLimb
+          ? await calculateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, {
+            limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
+            damageType,
+            damageTypeKey: data.damageTypeKey,
+            traumaDamageTypeKey
+          })
+          : await calculateEvenLimbDamage(actor, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey, traumaDamageTypeKey });
+    }
     limbStates = result.limbStates;
     damageAccumulation = result.damageAccumulation;
     shockCheck = result.shockCheck;
-    actualHealthDelta = result.healthDelta;
+    actualHealthDelta = independentHealthRules ? independentHealthDelta : result.healthDelta;
     actualLimbDelta = result.limbDelta;
     if (shouldUpdateLimb) {
+      const state = limbStates.get(data.limbKey);
+      nextLimbValue = state?.nextValue ?? previousLimbValue;
+    }
+  } else if (independentHealthRules) {
+    const healthState = createIndependentHealthState(actor.system?.resources?.health);
+    actualHealthDelta = applyIndependentHealthChange(
+      healthState,
+      scope === SCOPE_LIMB ? 0 : effectiveAmount,
+      MODE_HEALING
+    );
+    if (actualHealthDelta > 0) Object.assign(updateData, buildIndependentHealthUpdate(healthState));
+    if (shouldUpdateLimb) {
+      const result = calculateTargetedLimbHealing(actor, data.limbKey, effectiveAmount);
+      limbStates = result.limbStates;
+      damageAccumulation = result.damageAccumulation;
+      actualLimbDelta = result.limbDelta;
       const state = limbStates.get(data.limbKey);
       nextLimbValue = state?.nextValue ?? previousLimbValue;
     }
@@ -2289,9 +2529,18 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   }
   if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
 
-  const destroyedLimbKeys = mode === MODE_DAMAGE && actualLimbDelta > 0
-    ? await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()))
-    : new Set();
+  let destroyedLimbKeys = new Set();
+  if (mode === MODE_DAMAGE) {
+    const destructionCandidates = new Set(limbStates.keys());
+    if (
+      shouldUpdateLimb
+      && !targetedProsthesis
+      && !isLimbPhysicallyMissing(actor, data.limbKey)
+    ) destructionCandidates.add(data.limbKey);
+    if (destructionCandidates.size) {
+      destroyedLimbKeys = await applyDestroyedLimbConsequencesNow(actor, Array.from(destructionCandidates));
+    }
+  }
   if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck, { chainRef: data.source?.chainRef ?? null });
   const destroyedLimbShockCheck = aggregateNegativeLimbShockChecks(actor, buildDestroyedLimbShockChecks(actor, destroyedLimbKeys));
   if (destroyedLimbShockCheck) {
@@ -2653,7 +2902,9 @@ export function clampActorLimbValuesToCurrentCaps(
     limb.spent = calculateLimbSpentFromValue(limb, boundedValue);
     changed = true;
   }
-  if (changed) synchronizePreparedAggregateHealthResource(actor, context);
+  if (changed && !isIndependentHealthModelActive(actor)) {
+    synchronizePreparedAggregateHealthResource(actor, context);
+  }
   return changed;
 }
 
@@ -2676,23 +2927,6 @@ function getTraumaLimbHealingCap(trauma, limbMax = 0) {
   const max = Math.max(0, toInteger(limbMax));
   const percent = Math.max(0, Math.min(100, toInteger(trauma?.system?.thresholdPercent)));
   return Math.floor((max * percent) / 100);
-}
-
-export function isLimbPhysicallyMissing(actor, limbKey = "") {
-  const limb = actor?.system?.limbs?.[limbKey];
-  if (!limb) return false;
-  return Boolean(limb.missing);
-}
-
-export function isLimbDestroyed(actor, limbKey = "") {
-  const limb = actor?.system?.limbs?.[limbKey];
-  if (!limb) return false;
-  const constructSlot = getConstructPartSlotForLimb(actor, limbKey);
-  const constructPart = getConstructPartItemForLimb(actor, limbKey);
-  if (constructSlot && !constructPart) return true;
-  if (constructPart) return isConstructPartDestroyed(constructPart);
-  if (hasInstalledProsthesis(actor, limbKey)) return false;
-  return isLimbPhysicallyMissing(actor, limbKey);
 }
 
 export function getDestroyedLimbStateLabel(actor, limbKey = "") {
@@ -2833,6 +3067,19 @@ export async function restoreActorHealthCost(actor, amount = 0, { chainRef = nul
   }
   return queueActorDamageMutation(actor.uuid, async freshActor => {
     if (!freshActor?.isOwner) return { actor: freshActor ?? actor, requested, healthDelta: 0 };
+    if (isIndependentHealthModelActive(freshActor)) {
+      const health = createIndependentHealthState(freshActor.system?.resources?.health);
+      const healthDelta = applyIndependentHealthChange(health, requested, MODE_HEALING);
+      if (healthDelta > 0) {
+        await freshActor.update(buildIndependentHealthUpdate(health), {
+          falloutMawSkipDamageStatusSync: true,
+          falloutMawHealthCostRollback: true,
+          ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
+        });
+      }
+      await queueActorDamageStatusSync(freshActor);
+      return { actor: freshActor, requested, healthDelta, limbDelta: 0 };
+    }
     const result = await calculateManualAggregateHealthAdjustment(
       freshActor,
       requested,
@@ -2878,6 +3125,7 @@ export function getDamageCostModifierState(actor, { actionKey = "" } = {}) {
 
 export async function prepareActorDamageUpdate(actor, changes = {}, options = {}) {
   captureActorVitalStatusSnapshot(actor, changes, options);
+  normalizeIndependentHealthValueUpdate(actor, changes);
   const manualHealthAdjusted = !options?.falloutMawSkipDamageStatusSync
     && await distributeManualHealthValueUpdate(actor, changes);
   const manuallyRestoredHealth = synchronizeManualLimbValueUpdates(actor, changes);
@@ -2906,6 +3154,7 @@ export function prepareItemDamageUpdate(item, changes = {}, options = {}, { oper
   ) return 0;
 
   const actor = item?.parent;
+  if (isIndependentHealthModelActive(actor)) return 0;
   const actorUuid = String(actor?.uuid ?? "").trim();
   if (!actorUuid || !itemMutationMayChangeAggregateHealth(item, changes, operation)) return 0;
 
@@ -3084,7 +3333,7 @@ function captureActorVitalStatusSnapshot(actor, changes = {}, options = {}) {
   if (!actorUuid) return;
   const snapshots = options[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION] ??= {};
   snapshots[actorUuid] ??= {
-    dead: hasDestroyedCriticalLimb(actor),
+    dead: isActorHealthDepleted(actor) || hasDestroyedCriticalLimb(actor),
     unconscious: isActorConsciousnessDepleted(actor),
     healthValue: Math.max(0, roundDamageAmount(actor?.system?.resources?.health?.value)),
     consciousnessValue: toInteger(actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.value)
@@ -3095,11 +3344,12 @@ function hasActorVitalStatusTransition(actor, options = {}) {
   const actorUuid = String(actor?.uuid ?? "").trim();
   const snapshot = options?.[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION]?.[actorUuid];
   if (!snapshot) return true;
-  return snapshot.dead !== hasDestroyedCriticalLimb(actor)
+  return snapshot.dead !== (isActorHealthDepleted(actor) || hasDestroyedCriticalLimb(actor))
     || snapshot.unconscious !== isActorConsciousnessDepleted(actor);
 }
 
 function getActorDerivedHealthRecovery(actor, changes = {}, options = {}) {
+  if (!isConsciousnessRulesEnabled(actor)) return 0;
   if (
     !isDerivedVitalStatusUpdateRelevant(changes)
     || hasUpdatePath(changes, "system.resources.health.value")
@@ -3114,6 +3364,7 @@ function getActorDerivedHealthRecovery(actor, changes = {}, options = {}) {
 }
 
 function recoverConsciousnessFromDerivedHealth(actor, restoredHealth = 0, options = {}) {
+  if (!isConsciousnessRulesEnabled(actor)) return undefined;
   const actorUuid = String(actor?.uuid ?? "").trim();
   if (!actorUuid) return undefined;
   const snapshot = options?.[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION]?.[actorUuid];
@@ -3598,6 +3849,11 @@ function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
 
 function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
+  if (isIndependentHealthModelActive(actor)) {
+    const health = createIndependentHealthState(actor.system?.resources?.health);
+    health.value = health.max;
+    Object.assign(updates, buildIndependentHealthUpdate(health));
+  }
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     if (getConstructPartSlotForLimb(actor, key)) continue;
     const max = Math.max(0, toInteger(limb?.max));
@@ -3813,15 +4069,6 @@ function isTraumaCapUpdateRelevant(item, changes = {}, options = {}) {
     || updateTouchesPath(changes, "system.thresholdPercent");
 }
 
-function isConstructPartDestroyed(item) {
-  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) return false;
-  const condition = getConditionFunction(item);
-  const max = Math.max(0, toInteger(condition.max));
-  if (max <= 0) return false;
-  const value = Math.max(0, Math.min(max, toInteger(condition.value)));
-  return value <= 0;
-}
-
 function normalizeLimbLossEffects(value = []) {
   const effects = Array.isArray(value) ? value : Object.values(value ?? {});
   return effects
@@ -3958,16 +4205,51 @@ function isHealingBlocked(actor) {
   return isActorDead(actor);
 }
 
+function getIndependentHealthRules(actor) {
+  if (!globalThis.game?.settings) return null;
+  const runtimeSettings = getPreparedRuntimeSettings();
+  return usesIndependentHealthModel(actor, runtimeSettings)
+    ? runtimeSettings.rulesProfile
+    : null;
+}
+
+function isIndependentHealthModelActive(actor) {
+  return Boolean(getIndependentHealthRules(actor));
+}
+
+function isConsciousnessRulesEnabled(actor = null) {
+  if (!globalThis.game?.settings) {
+    return !actor || Boolean(actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]);
+  }
+  const profile = getActiveRulesProfile();
+  if (profile?.disableConsciousness) return false;
+  return !actor || Boolean(actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]);
+}
+
+function isActorHealthDepleted(actor) {
+  if (!isIndependentHealthModelActive(actor)) return false;
+  const health = actor?.system?.resources?.health;
+  return Boolean(health) && toInteger(health.value) <= toInteger(health.min);
+}
+
 function isActorDead(actor) {
-  return Boolean(actor?.statuses?.has?.(STATUS_EFFECTS.dead) || hasDestroyedCriticalLimb(actor));
+  return Boolean(
+    actor?.statuses?.has?.(STATUS_EFFECTS.dead)
+    || isActorHealthDepleted(actor)
+    || hasDestroyedCriticalLimb(actor)
+  );
 }
 
 async function synchronizeActorVitalStatuses(actor) {
   if (!actor?.toggleStatusEffect) return;
-  const preparedRecoveryTarget = toInteger(
-    actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.recoveryTarget
-  );
-  if (preparedRecoveryTarget !== toInteger(actor.system?.combat?.consciousnessRecoveryTarget)) {
+  const consciousnessEnabled = isConsciousnessRulesEnabled(actor);
+  const preparedRecoveryTarget = consciousnessEnabled
+    ? toInteger(actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.recoveryTarget)
+    : 0;
+  if (
+    consciousnessEnabled
+    && preparedRecoveryTarget !== toInteger(actor.system?.combat?.consciousnessRecoveryTarget)
+  ) {
     await actor.update({
       [CONSCIOUSNESS_RECOVERY_TARGET_PATH]: preparedRecoveryTarget
     }, {
@@ -3975,8 +4257,8 @@ async function synchronizeActorVitalStatuses(actor) {
       falloutMawConsciousnessStateSync: true
     });
   }
-  const dead = hasDestroyedCriticalLimb(actor);
-  const unconscious = !dead && isActorConsciousnessDepleted(actor);
+  const dead = isActorHealthDepleted(actor) || hasDestroyedCriticalLimb(actor);
+  const unconscious = consciousnessEnabled && !dead && isActorConsciousnessDepleted(actor);
   if (dead) {
     await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.dead);
     await setActorStatus(actor, STATUS_EFFECTS.unconscious, false, { animate: false });
@@ -3998,7 +4280,7 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
   chainRef = null,
   damageHubOperationRef = getCurrentDamageHubOperationRef()
 } = {}) {
-  if (!actor || !shockCheck || isActorConsciousnessDepleted(actor) || isActorDead(actor)) return undefined;
+  if (!isConsciousnessRulesEnabled(actor) || !actor || !shockCheck || isActorConsciousnessDepleted(actor) || isActorDead(actor)) return undefined;
   const limitedUseOperationId = createLimbShockLimitedUseOperationId(actor, shockCheck, damageHubOperationRef);
   if (shockCheck.difficulty <= 0) {
     await commitLimbShockActiveUse(shockCheck, limitedUseOperationId);
@@ -4025,6 +4307,7 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
 }
 
 async function queueOrPerformNegativeLimbShockCheck(actor, shockCheck = null, deferredShockChecks = null, reason = "") {
+  if (!isConsciousnessRulesEnabled(actor)) return undefined;
   if (!Array.isArray(deferredShockChecks)) return performNegativeLimbShockCheck(actor, shockCheck);
   if (!actor || !shockCheck || isActorConsciousnessDepleted(actor) || isActorDead(actor)) return undefined;
   if (shockCheck.difficulty <= 0) {
@@ -4060,7 +4343,7 @@ async function resolveDeferredShockChecks(entries = [], {
     try {
       for (const entry of queued) {
         const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
-        if (!actor || isActorConsciousnessDepleted(actor) || isActorDead(actor)) continue;
+        if (!isConsciousnessRulesEnabled(actor) || !actor || isActorConsciousnessDepleted(actor) || isActorDead(actor)) continue;
         const shockCheck = entry.shockCheck;
         const limitedUseOperationId = createLimbShockLimitedUseOperationId(actor, shockCheck, damageHubOperationRef);
         const outcome = await requestSkillCheck({
@@ -4166,17 +4449,19 @@ function getNegativeLimbShockRequester(actor, shockCheck = {}) {
 }
 
 export function isActorConsciousnessDepleted(actor) {
+  if (!isConsciousnessRulesEnabled(actor)) return false;
   return isConsciousnessUnconscious(actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]);
 }
 
 async function applyShockConsciousnessResult(actor, resultKey = "") {
-  if (!actor || isActorDead(actor)) return false;
+  if (!isConsciousnessRulesEnabled(actor) || !actor || isActorDead(actor)) return false;
   const resource = actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
   const nextValue = calculateShockConsciousnessValue(resource, resultKey);
   return updateActorConsciousnessValue(actor, nextValue);
 }
 
 function mergeConsciousnessRecoveryUpdate(updateData, actor, restoredHealth = 0) {
+  if (!isConsciousnessRulesEnabled(actor)) return false;
   const resource = actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
   if (!resource || roundDamageAmount(restoredHealth) <= 0) return false;
 
@@ -4192,6 +4477,7 @@ function mergeConsciousnessRecoveryUpdate(updateData, actor, restoredHealth = 0)
 }
 
 function mergeConsciousnessValueUpdate(updateData, actor, requestedValue = 0) {
+  if (!isConsciousnessRulesEnabled(actor)) return false;
   const resource = actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
   const pendingRecoveryTarget = hasUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH)
     ? getUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH)
@@ -5933,6 +6219,7 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
 }
 
 async function distributeManualHealthValueUpdate(actor, changes = {}) {
+  if (isIndependentHealthModelActive(actor)) return false;
   const healthValuePath = "system.resources.health.value";
   if (!hasUpdatePath(changes, healthValuePath)) return false;
 
@@ -5973,6 +6260,20 @@ async function distributeManualHealthValueUpdate(actor, changes = {}) {
   return true;
 }
 
+function normalizeIndependentHealthValueUpdate(actor, changes = {}) {
+  if (!isIndependentHealthModelActive(actor)) return false;
+  const valuePath = "system.resources.health.value";
+  if (!hasUpdatePath(changes, valuePath)) return false;
+  const health = createIndependentHealthState(actor.system?.resources?.health);
+  health.value = Math.min(
+    health.max,
+    Math.max(health.min, toInteger(getUpdatePath(changes, valuePath)))
+  );
+  setUpdatePath(changes, valuePath, health.value);
+  setUpdatePath(changes, "system.resources.health.spent", Math.max(0, health.max - health.value));
+  return true;
+}
+
 function registerConsciousnessHooks() {
   if (consciousnessHooksRegistered) return;
   consciousnessHooksRegistered = true;
@@ -6008,7 +6309,9 @@ function registerConsciousnessHooks() {
   Hooks.on(`${SYSTEM_ID}.preparedActorsRefreshed`, actors => {
     if (!consciousnessStatusSynchronizationReady) return;
     for (const actor of actors ?? []) {
-      if (canApplyDamageLocally(actor)) void queueActorDamageStatusSync(actor);
+      if (canApplyDamageLocally(actor) && actorNeedsStartupVitalStatusSync(actor)) {
+        void queueActorDamageStatusSync(actor);
+      }
     }
   });
   Hooks.on(`${SYSTEM_ID}.consciousnessDocumentMigrated`, actor => {
@@ -6020,7 +6323,11 @@ function registerConsciousnessHooks() {
     if (!consciousnessStatusSynchronizationReady) return;
     for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
       const actor = token?.actor;
-      if (["character", "construct"].includes(actor?.type) && canApplyDamageLocally(actor)) {
+      if (
+        ["character", "construct"].includes(actor?.type)
+        && canApplyDamageLocally(actor)
+        && actorNeedsStartupVitalStatusSync(actor)
+      ) {
         void queueActorDamageStatusSync(actor);
       }
     }
@@ -6048,12 +6355,16 @@ function activeEffectMayAffectConsciousness(effect) {
     INCAPACITATING_DODGE_OVERRIDE_STATUSES.has(String(statusId ?? "").trim())
   ))) return true;
 
+  const consciousnessEnabled = isConsciousnessRulesEnabled(getActiveEffectActor(effect));
   return Array.from(effect?.system?.changes ?? []).some(change => {
     const key = String(change?.key ?? "").trim();
-    return key.startsWith(`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.`)
+    return key.startsWith("system.resources.health.")
       || key.startsWith("system.limbs.")
+      || (consciousnessEnabled && (
+        key.startsWith(`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.`)
       || key.startsWith("system.characteristics.")
-      || key.startsWith("system.skills.");
+      || key.startsWith("system.skills.")
+      ));
   });
 }
 
@@ -6069,43 +6380,99 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
 
   const updateData = {};
   let actualHealthDelta = 0;
+  let prosthesisConditionDelta = 0;
   const limbStates = new Map();
   const damageAccumulation = new Map();
+  const destructionCandidates = new Set();
   const shockChecks = [];
+  const independentHealthRules = getIndependentHealthRules(actor);
+  const independentHealthState = independentHealthRules
+    ? createIndependentHealthState(actor.system?.resources?.health)
+    : null;
 
   for (const entry of normalizedEntries) {
     const traumaDamageTypeKey = getTraumaDamageTypeKey(entry.damageTypeKey);
     const installedProsthesis = entry.limbKey && (entry.scope === SCOPE_LIMB || entry.scope === SCOPE_HEALTH_AND_LIMB)
       ? getInstalledProsthesis(actor, entry.limbKey)
       : null;
-    const result = installedProsthesis
-      ? await calculateProsthesisLimbDamage(actor, entry.limbKey, entry.amount, {
+    if (
+      entry.limbKey
+      && (entry.scope === SCOPE_LIMB || entry.scope === SCOPE_HEALTH_AND_LIMB)
+      && !installedProsthesis
+      && !isLimbPhysicallyMissing(actor, entry.limbKey)
+    ) destructionCandidates.add(entry.limbKey);
+    let result;
+    let independentHealthDelta = 0;
+    if (independentHealthRules && installedProsthesis) {
+      result = await calculateProsthesisLimbDamage(actor, entry.limbKey, entry.amount, {
         prosthesis: installedProsthesis,
-        damageType: entry.damageType,
-        damageTypeKey: entry.damageTypeKey,
-        traumaDamageTypeKey,
-        limbStates,
-        damageAccumulation
-      })
-      : entry.limbKey && (entry.scope === SCOPE_LIMB || entry.scope === SCOPE_HEALTH_AND_LIMB)
-        ? await calculateTargetedLimbDamage(actor, entry.limbKey, entry.amount, {
-        damageType: entry.damageType,
-        damageTypeKey: entry.damageTypeKey,
-        traumaDamageTypeKey,
-        limbStates,
-        damageAccumulation
-      })
-      : await calculateEvenLimbDamage(actor, entry.amount, {
+        limbDamageMultiplier: getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey),
         damageType: entry.damageType,
         damageTypeKey: entry.damageTypeKey,
         traumaDamageTypeKey,
         limbStates,
         damageAccumulation
       });
-    actualHealthDelta += result.healthDelta;
-    entry.actualHealthDelta = Math.max(0, Number(result.healthDelta) || 0);
+      independentHealthDelta = applyIndependentHealthChange(
+        independentHealthState,
+        result.healthDelta,
+        MODE_DAMAGE
+      );
+    } else if (independentHealthRules) {
+      independentHealthDelta = applyIndependentHealthChange(
+        independentHealthState,
+        entry.amount,
+        MODE_DAMAGE
+      );
+      result = entry.limbKey && (entry.scope === SCOPE_LIMB || entry.scope === SCOPE_HEALTH_AND_LIMB)
+        ? calculateIndependentOrganicLimbDamage(actor, entry.limbKey, independentHealthDelta, {
+          profileMultiplier: independentHealthRules.limbDamageFromLostHealthMultiplier,
+          limbDamageMultiplier: getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey),
+          damageType: entry.damageType,
+          damageTypeKey: entry.damageTypeKey,
+          traumaDamageTypeKey,
+          limbStates,
+          damageAccumulation
+        })
+        : createLimbMutationResult(limbStates, damageAccumulation);
+    } else {
+      result = installedProsthesis
+        ? await calculateProsthesisLimbDamage(actor, entry.limbKey, entry.amount, {
+          prosthesis: installedProsthesis,
+          limbDamageMultiplier: getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey),
+          damageType: entry.damageType,
+          damageTypeKey: entry.damageTypeKey,
+          traumaDamageTypeKey,
+          limbStates,
+          damageAccumulation
+        })
+        : entry.limbKey && (entry.scope === SCOPE_LIMB || entry.scope === SCOPE_HEALTH_AND_LIMB)
+          ? await calculateTargetedLimbDamage(actor, entry.limbKey, entry.amount, {
+            limbDamageMultiplier: getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey),
+            damageType: entry.damageType,
+            damageTypeKey: entry.damageTypeKey,
+            traumaDamageTypeKey,
+            limbStates,
+            damageAccumulation
+          })
+          : await calculateEvenLimbDamage(actor, entry.amount, {
+          damageType: entry.damageType,
+          damageTypeKey: entry.damageTypeKey,
+          traumaDamageTypeKey,
+          limbStates,
+          damageAccumulation
+        });
+    }
+    const entryHealthDelta = independentHealthRules ? independentHealthDelta : result.healthDelta;
+    if (installedProsthesis) prosthesisConditionDelta += Math.max(0, Number(result.limbDelta) || 0);
+    actualHealthDelta += entryHealthDelta;
+    entry.actualHealthDelta = Math.max(0, Number(entryHealthDelta) || 0);
     entry.actualLimbDelta = Math.max(0, Number(result.limbDelta) || 0);
     if (result.shockCheck) shockChecks.push(result.shockCheck);
+  }
+
+  if (independentHealthRules && actualHealthDelta > 0) {
+    Object.assign(updateData, buildIndependentHealthUpdate(independentHealthState));
   }
 
   for (const [limbKey, state] of limbStates) {
@@ -6124,7 +6491,10 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
   if (actor?.type === "construct" && limbStates.size) {
     await syncConstructPartConditionValues(actor, limbStates);
   }
-  const destroyedLimbKeys = await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()));
+  for (const limbKey of limbStates.keys()) destructionCandidates.add(limbKey);
+  const destroyedLimbKeys = destructionCandidates.size
+    ? await applyDestroyedLimbConsequencesNow(actor, Array.from(destructionCandidates))
+    : new Set();
   const shockCheck = aggregateNegativeLimbShockChecks(actor, shockChecks);
   if (shockCheck) await queueOrPerformNegativeLimbShockCheck(actor, shockCheck, deferredShockChecks, "damage");
   const destroyedLimbShockCheck = aggregateNegativeLimbShockChecks(actor, buildDestroyedLimbShockChecks(actor, destroyedLimbKeys));
@@ -6132,15 +6502,16 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     await queueOrPerformNegativeLimbShockCheck(actor, destroyedLimbShockCheck, deferredShockChecks, "destroyedLimb");
   }
   await queueActorDamageStatusSync(actor);
-  const requestedHealthDamage = normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0);
-  const healthDeltasByType = buildBatchDamageNumberEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
+  const healthEntries = normalizedEntries;
+  const requestedHealthDamage = healthEntries.reduce((sum, entry) => sum + entry.amount, 0);
+  const healthDeltasByType = buildBatchDamageNumberEntries(healthEntries, actualHealthDelta, requestedHealthDamage);
   const resourceLimitEntries = buildBatchDamageNumberEntries(
-    normalizedEntries.filter(entry => entry.processDamageTypeSettings !== false),
+    healthEntries.filter(entry => entry.processDamageTypeSettings !== false),
     actualHealthDelta,
     requestedHealthDamage
   );
   const bleedingEntries = buildBatchBleedingEntries(
-    normalizedEntries.filter(entry => (
+    healthEntries.filter(entry => (
       entry.processDamageTypeSettings !== false
       && !isLimbTimedDamageBlocked(actor, entry.limbKey, entry.damageType, "bleeding")
     )),
@@ -6168,8 +6539,9 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
   createdTraumas.push(...await commitTriggeredTraumaPlans(actor, traumaPlans));
 
   const finishingBlowSource = selectBatchFinishingBlowSource(normalizedEntries);
-  const totalLimbDelta = Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0);
-  const sourceDamageEntries = buildBatchSourceDamageEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
+  const totalLimbDelta = prosthesisConditionDelta
+    + Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0);
+  const sourceDamageEntries = buildBatchSourceDamageEntries(healthEntries, actualHealthDelta, requestedHealthDamage);
   const applicationDeltas = normalizedEntries.map(entry => ({
     damageEventIndex: entry.damageEventIndex,
     healthDelta: Math.max(0, Number(entry.actualHealthDelta) || 0),
@@ -6649,31 +7021,86 @@ function calculateAggregateHealth(
   }, { min: 0, value: 0, max: 0 });
 }
 
+function getCurrentActorHealthValue(actor) {
+  if (isIndependentHealthModelActive(actor)) {
+    return createIndependentHealthState(actor?.system?.resources?.health).value;
+  }
+  return Math.max(0, Number(calculateAggregateHealth(actor).value) || 0);
+}
+
 function estimateDirectDamageApplication(actor, data = {}, damageType = null) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const effectiveAmount = Math.max(0, roundDamageAmount(data.amount));
+  const independentHealthRules = getIndependentHealthRules(actor);
+  if (independentHealthRules) {
+    const healthState = createIndependentHealthState(actor.system?.resources?.health);
+    const previousHealth = healthState.value;
+    const installedProsthesis = data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+      ? getInstalledProsthesis(actor, data.limbKey)
+      : null;
+    let result;
+    if (installedProsthesis) {
+      result = estimateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
+        prosthesis: installedProsthesis,
+        limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
+        damageType,
+        damageTypeKey: data.damageTypeKey
+      });
+      applyIndependentHealthChange(
+        healthState,
+        result.healthDelta,
+        MODE_DAMAGE
+      );
+    } else {
+      const lostHealth = applyIndependentHealthChange(
+        healthState,
+        effectiveAmount,
+        MODE_DAMAGE
+      );
+      result = data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+        ? calculateIndependentOrganicLimbDamage(actor, data.limbKey, lostHealth, {
+          profileMultiplier: independentHealthRules.limbDamageFromLostHealthMultiplier,
+          limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
+          damageType,
+          damageTypeKey: data.damageTypeKey
+        })
+        : createLimbMutationResult();
+    }
+    result.healthDelta = Math.max(0, previousHealth - healthState.value);
+    result.healthValue = healthState.value;
+    result.healthMin = healthState.min;
+    result.lethal = isDamageEstimateLethal(actor, result);
+    return result;
+  }
   const installedProsthesis = data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
     ? getInstalledProsthesis(actor, data.limbKey)
     : null;
   const result = installedProsthesis
     ? estimateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
       prosthesis: installedProsthesis,
+      limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
       damageType,
       damageTypeKey: data.damageTypeKey
     })
     : data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
-      ? estimateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey })
+      ? estimateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, {
+        limbDamageMultiplier: getWeaponLimbDamageMultiplier(data.source?.weaponData, data.limbKey),
+        damageType,
+        damageTypeKey: data.damageTypeKey
+      })
       : estimateEvenLimbDamage(actor, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey });
   result.lethal = isDamageEstimateLethal(actor, result);
   return result;
 }
 
 function estimateDamageEntriesBatch(actor, entries = []) {
+  if (getIndependentHealthRules(actor)) return estimateIndependentDamageEntriesBatch(actor, entries);
   const limbStates = new Map();
   const damageAccumulation = new Map();
   const brokenProsthesisLimbKeys = new Set();
   const directProsthesisDamage = new Map();
   const directProsthesisHealthDamage = new Map();
+  const directProsthesisConditionDamage = new Map();
   let healthDelta = 0;
 
   for (const entry of entries) {
@@ -6682,16 +7109,19 @@ function estimateDamageEntriesBatch(actor, entries = []) {
       ? getInstalledProsthesis(actor, entry.limbKey)
       : null;
     if (installedProsthesis) {
-      const accumulated = (directProsthesisDamage.get(installedProsthesis.id) ?? 0) + roundDamageAmount(entry.amount);
+      const accumulated = (directProsthesisDamage.get(installedProsthesis.id) ?? 0)
+        + roundDamageAmount(entry.amount * getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey));
       directProsthesisDamage.set(installedProsthesis.id, accumulated);
       const estimate = estimateProsthesisConditionDamage(installedProsthesis, accumulated);
       if (estimate.next <= 0 && isCriticalLimb(actor, entry.limbKey)) brokenProsthesisLimbKeys.add(entry.limbKey);
       directProsthesisHealthDamage.set(installedProsthesis.id, estimate.healthDelta);
+      directProsthesisConditionDamage.set(installedProsthesis.id, estimate.conditionDelta);
       continue;
     }
 
     const result = entry.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
       ? estimateTargetedLimbDamage(actor, entry.limbKey, entry.amount, {
+        limbDamageMultiplier: getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey),
         damageType: entry.damageType,
         damageTypeKey: entry.damageTypeKey,
         limbStates,
@@ -6710,7 +7140,69 @@ function estimateDamageEntriesBatch(actor, entries = []) {
   const result = createLimbMutationResult(limbStates, damageAccumulation, {
     healthDelta: healthDelta + Array.from(directProsthesisHealthDamage.values()).reduce((sum, value) => sum + value, 0),
     limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0)
+      + Array.from(directProsthesisConditionDamage.values()).reduce((sum, value) => sum + value, 0)
   });
+  result.brokenProsthesisLimbKeys = [...brokenProsthesisLimbKeys];
+  result.lethal = isDamageEstimateLethal(actor, result);
+  return result;
+}
+
+function estimateIndependentDamageEntriesBatch(actor, entries = []) {
+  const rules = getIndependentHealthRules(actor);
+  const limbStates = new Map();
+  const damageAccumulation = new Map();
+  const brokenProsthesisLimbKeys = new Set();
+  const directProsthesisDamage = new Map();
+  const directProsthesisHealthDamage = new Map();
+  const directProsthesisConditionDamage = new Map();
+  const healthState = createIndependentHealthState(actor.system?.resources?.health);
+  const previousHealth = healthState.value;
+
+  for (const entry of entries) {
+    const scope = normalizeScope(entry.scope, entry.limbKey);
+    const installedProsthesis = entry.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+      ? getInstalledProsthesis(actor, entry.limbKey)
+      : null;
+    if (installedProsthesis) {
+      const accumulated = (directProsthesisDamage.get(installedProsthesis.id) ?? 0)
+        + roundDamageAmount(entry.amount * getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey));
+      directProsthesisDamage.set(installedProsthesis.id, accumulated);
+      const estimate = estimateProsthesisConditionDamage(installedProsthesis, accumulated);
+      if (estimate.next <= 0 && isCriticalLimb(actor, entry.limbKey)) brokenProsthesisLimbKeys.add(entry.limbKey);
+      const previousIntegratedDamage = directProsthesisHealthDamage.get(installedProsthesis.id) ?? 0;
+      directProsthesisHealthDamage.set(installedProsthesis.id, estimate.healthDelta);
+      directProsthesisConditionDamage.set(installedProsthesis.id, estimate.conditionDelta);
+      applyIndependentHealthChange(
+        healthState,
+        Math.max(0, estimate.healthDelta - previousIntegratedDamage),
+        MODE_DAMAGE
+      );
+      continue;
+    }
+
+    const lostHealth = applyIndependentHealthChange(
+      healthState,
+      entry.amount,
+      MODE_DAMAGE
+    );
+    if (!entry.limbKey || (scope !== SCOPE_LIMB && scope !== SCOPE_HEALTH_AND_LIMB)) continue;
+    calculateIndependentOrganicLimbDamage(actor, entry.limbKey, lostHealth, {
+      profileMultiplier: rules.limbDamageFromLostHealthMultiplier,
+      limbDamageMultiplier: getWeaponLimbDamageMultiplier(entry.source?.weaponData, entry.limbKey),
+      damageType: entry.damageType,
+      damageTypeKey: entry.damageTypeKey,
+      limbStates,
+      damageAccumulation
+    });
+  }
+
+  const result = createLimbMutationResult(limbStates, damageAccumulation, {
+    healthDelta: Math.max(0, previousHealth - healthState.value),
+    limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0)
+      + Array.from(directProsthesisConditionDamage.values()).reduce((sum, value) => sum + value, 0)
+  });
+  result.healthValue = healthState.value;
+  result.healthMin = healthState.min;
   result.brokenProsthesisLimbKeys = [...brokenProsthesisLimbKeys];
   result.lethal = isDamageEstimateLethal(actor, result);
   return result;
@@ -6735,6 +7227,11 @@ async function preventLethalDamageIfApplicable(actor, estimate = {}, context = {
 
 function isDamageEstimateLethal(actor, estimate = {}) {
   if (estimate?.lethal === true) return true;
+  if (
+    isIndependentHealthModelActive(actor)
+    && Number.isFinite(Number(estimate?.healthValue))
+    && toInteger(estimate.healthValue) <= toInteger(estimate.healthMin)
+  ) return true;
   let combatSettings = null;
   for (const [limbKey, state] of estimate?.limbStates ?? []) {
     if (!isCriticalLimb(actor, limbKey)) continue;
@@ -6777,6 +7274,7 @@ function synchronizePreparedAggregateHealthResource(
   actor,
   context = buildActorLimbHealthContext(actor)
 ) {
+  if (isIndependentHealthModelActive(actor)) return;
   const health = actor?.system?.resources?.health;
   if (!health) return;
   const aggregate = calculateAggregateHealth(actor, context);
@@ -6903,8 +7401,8 @@ async function calculateEvenLimbDamage(actor, amount = 0, { damageType = null, d
   });
 }
 
-async function calculateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthesis = null, damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
-  const damage = roundDamageAmount(amount);
+async function calculateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthesis = null, limbDamageMultiplier = 1, damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+  const damage = roundDamageAmount(amount * limbDamageMultiplier);
   if (!prosthesis || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
 
   const result = await applyProsthesisConditionDamage(actor, prosthesis, damage);
@@ -6916,8 +7414,56 @@ async function calculateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { 
   return mutationResult;
 }
 
-function estimateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthesis = null, damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey) } = {}) {
-  const damage = roundDamageAmount(amount);
+function calculateIndependentOrganicLimbDamage(actor, limbKey = "", lostHealth = 0, {
+  profileMultiplier = 0,
+  limbDamageMultiplier = 1,
+  damageType = null,
+  damageTypeKey = "",
+  traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey),
+  limbStates = new Map(),
+  damageAccumulation = new Map()
+} = {}) {
+  const limb = actor?.system?.limbs?.[limbKey];
+  if (!limb || isLimbPhysicallyMissing(actor, limbKey)) {
+    return createLimbMutationResult(limbStates, damageAccumulation);
+  }
+  const anatomicalMultiplier = Math.max(0, toOptionalFiniteNumber(limb.damageMultiplier) ?? 1);
+  const damage = roundDamageAmount(calculateIndependentLimbDamage(
+    lostHealth,
+    actor.system?.resources?.health?.max,
+    profileMultiplier
+  ) * anatomicalMultiplier * limbDamageMultiplier);
+  if (damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
+
+  const previousTotal = Array.from(limbStates.values())
+    .reduce((sum, state) => sum + Math.max(0, Number(state?.totalDelta) || 0), 0);
+  const previousValue = getLimbStateValue(actor, limbKey, limbStates);
+  const applied = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
+    damageType,
+    damageTypeKey,
+    traumaDamageTypeKey,
+    limbStates,
+    damageAccumulation
+  });
+  const state = limbStates.get(limbKey);
+  const currentTotal = Array.from(limbStates.values())
+    .reduce((sum, entry) => sum + Math.max(0, Number(entry?.totalDelta) || 0), 0);
+  const result = createLimbMutationResult(limbStates, damageAccumulation, {
+    healthDelta: 0,
+    limbDelta: Math.max(0, currentTotal - previousTotal)
+  });
+  result.shockCheck = createLimbShockCheck(
+    actor,
+    limbKey,
+    result.limbDelta,
+    state?.nextValue,
+    previousValue
+  );
+  return result;
+}
+
+function estimateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthesis = null, limbDamageMultiplier = 1, damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey) } = {}) {
+  const damage = roundDamageAmount(amount * limbDamageMultiplier);
   const limbStates = new Map();
   const damageAccumulation = new Map();
   if (!prosthesis || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
@@ -6945,13 +7491,20 @@ function estimateEvenLimbDamage(actor, amount = 0, { damageType = null, damageTy
   });
 }
 
-function estimateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+function estimateTargetedLimbDamage(actor, limbKey = "", amount = 0, {
+  limbDamageMultiplier = 1,
+  damageType = null,
+  damageTypeKey = "",
+  traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey),
+  limbStates = new Map(),
+  damageAccumulation = new Map()
+} = {}) {
   const limb = actor?.system?.limbs?.[limbKey];
-  const damage = roundDamageAmount(amount);
+  const damage = roundDamageAmount(amount * limbDamageMultiplier);
   if (!limb || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
   if (isLimbPhysicallyMissing(actor, limbKey)) return createLimbMutationResult(limbStates, damageAccumulation);
 
-  const currentValue = getLimbStateValue(actor, limbKey, limbStates, context);
+  const currentValue = getLimbStateValue(actor, limbKey, limbStates);
   if (currentValue <= toInteger(limb.min)) return createLimbMutationResult(limbStates, damageAccumulation);
   if (currentValue < 0) {
     const limbResult = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
@@ -7000,9 +7553,16 @@ function estimateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTyp
   });
 }
 
-async function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+async function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, {
+  limbDamageMultiplier = 1,
+  damageType = null,
+  damageTypeKey = "",
+  traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey),
+  limbStates = new Map(),
+  damageAccumulation = new Map()
+} = {}) {
   const limb = actor?.system?.limbs?.[limbKey];
-  const damage = roundDamageAmount(amount);
+  const damage = roundDamageAmount(amount * limbDamageMultiplier);
   if (!limb || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
   if (isLimbPhysicallyMissing(actor, limbKey)) return createLimbMutationResult(limbStates, damageAccumulation);
 
@@ -7069,6 +7629,7 @@ async function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { da
 }
 
 function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
+  if (!isConsciousnessRulesEnabled(actor)) return null;
   const shockDamage = Math.max(0, roundDamageAmount(damage));
   if (shockDamage <= 0) return null;
   const damageHubOperationRef = String(getCurrentDamageHubOperationRef() ?? "").trim();
@@ -7871,11 +8432,21 @@ function getDamageRequestConditionItem(actor, data = {}) {
   return item;
 }
 
+function getDamageMitigationWearResistance(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) return 0;
+  return Math.max(0, toInteger(getDamageMitigationFunction(item).wearResistance));
+}
+
+function getConditionWearPacketId(source = {}) {
+  return String(source?.conditionWearPacketId ?? "").trim();
+}
+
 function estimateItemConditionDamage(actor, data = {}) {
   const item = getDamageRequestConditionItem(actor, data);
   if (!item) return 0;
   const current = Math.max(0, toInteger(getConditionFunction(item).value));
-  return Math.min(current, roundDamageAmount(data.amount));
+  const amount = Math.max(0, roundDamageAmount(data.amount) - getDamageMitigationWearResistance(item));
+  return Math.min(current, amount);
 }
 
 function getDamageApplicationWorldTime(source = {}) {
@@ -8107,67 +8678,119 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
     options.damageType,
     options.includeEquipmentConditionDamage
   );
+  const itemMitigationTotalsProvided = options.itemMitigationTotals
+    && typeof options.itemMitigationTotals === "object";
+  const equipmentSourcesProvided = Array.isArray(options.equipmentSources);
+  const equipmentSnapshot = (
+    (options.itemOnlyMitigation && !itemMitigationTotalsProvided)
+    || (includeEquipmentConditionDamage && !equipmentSourcesProvided)
+  )
+    ? buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey, limbKey)
+    : null;
   const equipmentSources = includeEquipmentConditionDamage
-    ? Array.isArray(options.equipmentSources)
+    ? equipmentSourcesProvided
       ? options.equipmentSources
-      : getEquipmentConditionDamageSources(actor, damageTypeKey, limbKey)
+      : equipmentSnapshot.sources
     : [];
   const itemWear = new Map();
   const defenseSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.defense);
   const resistanceSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.resistance);
-  const itemMitigationTotals = options.itemMitigationTotals;
+  const defenseEquipmentMitigation = sumEquipmentMitigationSources(defenseSources);
+  const resistanceEquipmentMitigation = sumEquipmentMitigationSources(resistanceSources);
+  const itemMitigationTotals = itemMitigationTotalsProvided
+    ? options.itemMitigationTotals
+    : equipmentSnapshot?.totals;
+  const percentageMitigation = options.damageMitigationCalculation === "percentage";
   const preparedDefense = options.itemOnlyMitigation
-    ? itemMitigationTotals && Object.hasOwn(itemMitigationTotals, DAMAGE_MITIGATION_MODES.defense)
-      ? Math.max(0, Number(itemMitigationTotals[DAMAGE_MITIGATION_MODES.defense]) || 0)
-      : getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.defense)
-    : Math.max(0, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
+    ? Number(itemMitigationTotals?.[DAMAGE_MITIGATION_MODES.defense]) || 0
+    : Number(actor.getDamageDefense?.(damageTypeKey, limbKey)) || 0;
   const preparedResistance = options.itemOnlyMitigation
-    ? itemMitigationTotals && Object.hasOwn(itemMitigationTotals, DAMAGE_MITIGATION_MODES.resistance)
-      ? Math.max(0, Number(itemMitigationTotals[DAMAGE_MITIGATION_MODES.resistance]) || 0)
-      : getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.resistance)
-    : Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
+    ? Number(itemMitigationTotals?.[DAMAGE_MITIGATION_MODES.resistance]) || 0
+    : Number(actor.getDamageResistance?.(damageTypeKey, limbKey)) || 0;
   const mitigationContext = getDamageMitigationChanceContext(actor, source, options);
-  const contextual = options.itemOnlyMitigation ? {} : getContextualAbilityChangeValues(actor, [{
-    id: "defense",
-    key: `system.damageDefenseBonuses.${limbKey}.${damageTypeKey}`,
-    alternateKeys: [
-      "system.damageDefenseBonuses.all.all",
-      `system.damageDefenseBonuses.all.${damageTypeKey}`,
-      `system.damageDefenseBonuses.${limbKey}.all`
-    ],
-    baseValue: preparedDefense
-  }, {
-    id: "resistance",
-    key: `system.damageResistanceBonuses.${limbKey}.${damageTypeKey}`,
-    alternateKeys: [
-      "system.damageResistanceBonuses.all.all",
-      `system.damageResistanceBonuses.all.${damageTypeKey}`,
-      `system.damageResistanceBonuses.${limbKey}.all`
-    ],
-    baseValue: preparedResistance
-  }], mitigationContext);
-  const rawDefense = Math.max(0, Number(contextual.defense ?? preparedDefense) || 0);
-  const defensePenetration = Math.min(rawDefense, mitigationPenetration);
-  const defense = Math.max(0, rawDefense - defensePenetration);
+  let contextual = {};
+  if (!options.itemOnlyMitigation) {
+    const defenseChange = {
+      key: `system.damageDefenseBonuses.${limbKey}.${damageTypeKey}`,
+      alternateKeys: [
+        "system.damageDefenseBonuses.all.all",
+        `system.damageDefenseBonuses.all.${damageTypeKey}`,
+        `system.damageDefenseBonuses.${limbKey}.all`
+      ]
+    };
+    const resistanceChange = {
+      key: `system.damageResistanceBonuses.${limbKey}.${damageTypeKey}`,
+      alternateKeys: [
+        "system.damageResistanceBonuses.all.all",
+        `system.damageResistanceBonuses.all.${damageTypeKey}`,
+        `system.damageResistanceBonuses.${limbKey}.all`
+      ]
+    };
+    const changes = [
+      { id: "defense", ...defenseChange, baseValue: preparedDefense },
+      { id: "resistance", ...resistanceChange, baseValue: preparedResistance }
+    ];
+    if (defenseEquipmentMitigation > 0) changes.push({
+      id: "defenseWithoutEquipment",
+      ...defenseChange,
+      baseValue: preparedDefense - defenseEquipmentMitigation
+    });
+    if (resistanceEquipmentMitigation > 0) changes.push({
+      id: "resistanceWithoutEquipment",
+      ...resistanceChange,
+      baseValue: preparedResistance - resistanceEquipmentMitigation
+    });
+    contextual = getContextualAbilityChangeValues(actor, changes, mitigationContext);
+  }
+  const contextualDefense = Number(contextual.defense ?? preparedDefense) || 0;
+  const rawDefense = percentageMitigation ? contextualDefense : Math.max(0, contextualDefense);
+  const contextualDefenseWithoutEquipment = Number(
+    contextual.defenseWithoutEquipment ?? preparedDefense - defenseEquipmentMitigation
+  ) || 0;
+  const rawDefenseWithoutEquipment = percentageMitigation
+    ? contextualDefenseWithoutEquipment
+    : Math.max(0, contextualDefenseWithoutEquipment);
+  const defensePenetration = Math.min(Math.max(0, rawDefense), mitigationPenetration);
+  const defense = rawDefense - defensePenetration;
   let remaining = incomingDamage;
-  const defenseProtected = Math.min(remaining, rawDefense);
-  const defenseBlocked = Math.min(remaining, defense);
+  const defenseBlocked = calculateDamageMitigationReduction(remaining, defense, percentageMitigation);
+  const defenseEquipmentContribution = calculateEquipmentMitigationContribution({
+    amount: remaining,
+    rawMitigation: rawDefense,
+    rawMitigationWithoutEquipment: rawDefenseWithoutEquipment,
+    penetration: mitigationPenetration,
+    percentageMitigation
+  });
   addEquipmentProtectionWear(itemWear, defenseSources, {
     incoming: incomingDamage,
-    protectedAmount: defenseProtected,
-    blocked: defenseBlocked
+    protectedAmount: defenseEquipmentContribution.protected,
+    blocked: defenseEquipmentContribution.blocked
   });
   remaining = Math.max(0, remaining - defenseBlocked);
-  const rawResistance = Math.max(0, Number(contextual.resistance ?? preparedResistance) || 0);
+  const contextualResistance = Number(contextual.resistance ?? preparedResistance) || 0;
+  const rawResistance = percentageMitigation ? contextualResistance : Math.max(0, contextualResistance);
+  const contextualResistanceWithoutEquipment = Number(
+    contextual.resistanceWithoutEquipment ?? preparedResistance - resistanceEquipmentMitigation
+  ) || 0;
+  const rawResistanceWithoutEquipment = percentageMitigation
+    ? contextualResistanceWithoutEquipment
+    : Math.max(0, contextualResistanceWithoutEquipment);
   const resistancePenetration = Math.max(0, mitigationPenetration - defensePenetration);
-  const resistance = Math.max(0, rawResistance - resistancePenetration);
-  const spentPenetration = defensePenetration + Math.min(rawResistance, resistancePenetration);
-  const resistanceProtected = Math.min(remaining, rawResistance);
-  const resistanceBlocked = Math.min(remaining, resistance);
+  const resistancePenetrationSpent = Math.min(Math.max(0, rawResistance), resistancePenetration);
+  const resistance = rawResistance - resistancePenetrationSpent;
+  const spentPenetration = defensePenetration + resistancePenetrationSpent;
+  const resistanceBlocked = calculateDamageMitigationReduction(remaining, resistance, percentageMitigation);
+  const resistanceEquipmentContribution = calculateEquipmentMitigationContribution({
+    amount: remaining,
+    rawMitigation: rawResistance,
+    rawMitigationWithoutEquipment: rawResistanceWithoutEquipment,
+    penetration: resistancePenetration,
+    percentageMitigation
+  });
   addEquipmentProtectionWear(itemWear, resistanceSources, {
     incoming: remaining,
-    protectedAmount: resistanceProtected,
-    blocked: resistanceBlocked
+    protectedAmount: resistanceEquipmentContribution.protected,
+    blocked: resistanceEquipmentContribution.blocked
   });
   remaining = Math.max(0, remaining - resistanceBlocked);
   const finalAmount = remaining;
@@ -8192,7 +8815,8 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
         incoming: incomingDamage,
         final: finalAmount,
         penetration: mitigationPenetration,
-        state: options.equipmentConditionDamageState
+        state: options.equipmentConditionDamageState,
+        packetId: getConditionWearPacketId(source)
       })
       : []
   };
@@ -8227,52 +8851,41 @@ function getDamageMitigationChanceContext(actor, source = {}, options = {}) {
   };
 }
 
-function getItemDamageMitigationTotal(actor, damageTypeKey = "", limbKey = "", mode = DAMAGE_MITIGATION_MODES.defense) {
-  if (!actor || !damageTypeKey || !limbKey) return 0;
-  let total = 0;
-  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
-    if (item.type !== "gear" || !item.system?.equipped) continue;
-    if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
-
-    const mitigation = getDamageMitigationFunction(item);
-    if (String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense) !== mode) continue;
-    const entry = mitigation.entries?.[limbKey]?.[damageTypeKey];
-    const baseValue = toInteger(entry?.value);
-    if (baseValue <= 0) continue;
-
-    const weakening = getConditionWeakeningData(item);
-    total += Math.max(0, Math.floor(baseValue * (weakening.active ? weakening.ratio : 1)));
-  }
-  return total;
+function calculatePercentageDamageReduction(amount, percentage) {
+  const normalizedPercentage = Math.min(100, Number(percentage) || 0);
+  const magnitude = Math.floor(amount * Math.abs(normalizedPercentage) / 100);
+  return normalizedPercentage < 0 ? -magnitude : magnitude;
 }
 
-function getEquipmentConditionDamageSources(actor, damageTypeKey = "", limbKey = "") {
-  if (!actor || !damageTypeKey || !limbKey) return [];
+function calculateDamageMitigationReduction(amount, mitigation, percentageMitigation = false) {
+  return percentageMitigation
+    ? calculatePercentageDamageReduction(amount, mitigation)
+    : Math.min(amount, Math.max(0, mitigation));
+}
 
-  const sources = [];
-  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
-    if (item.type !== "gear" || !item.system?.equipped) continue;
-    if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation) || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+function sumEquipmentMitigationSources(sources = []) {
+  return sources.reduce((sum, source) => sum + Math.max(0, toInteger(source.mitigation)), 0);
+}
 
-    const mitigation = getDamageMitigationFunction(item);
-    const entry = mitigation.entries?.[limbKey]?.[damageTypeKey];
-    const baseValue = toInteger(entry?.value);
-    if (baseValue <= 0) continue;
-
-    const weakening = getConditionWeakeningData(item);
-    const weakeningRatio = weakening.active ? weakening.ratio : 1;
-    const value = Math.floor(baseValue * weakeningRatio);
-    if (value <= 0) continue;
-
-    sources.push({
-      item,
-      itemId: item.id,
-      mode: String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense),
-      mitigation: value
-    });
-  }
-
-  return sources;
+function calculateEquipmentMitigationContribution({
+  amount = 0,
+  rawMitigation = 0,
+  rawMitigationWithoutEquipment = 0,
+  penetration = 0,
+  percentageMitigation = false
+} = {}) {
+  const protectedBeforePenetration = Math.max(0,
+    calculateDamageMitigationReduction(amount, rawMitigation, percentageMitigation)
+    - calculateDamageMitigationReduction(amount, rawMitigationWithoutEquipment, percentageMitigation)
+  );
+  const effectiveMitigation = rawMitigation - Math.min(Math.max(0, rawMitigation), penetration);
+  const effectiveWithoutEquipment = rawMitigationWithoutEquipment
+    - Math.min(Math.max(0, rawMitigationWithoutEquipment), penetration);
+  const blocked = Math.max(0,
+    calculateDamageMitigationReduction(amount, effectiveMitigation, percentageMitigation)
+    - calculateDamageMitigationReduction(amount, effectiveWithoutEquipment, percentageMitigation)
+  );
+  return { protected: Math.max(protectedBeforePenetration, blocked), blocked };
 }
 
 function addEquipmentProtectionWear(itemWear, sources = [], { incoming = 0, protectedAmount = 0, blocked = 0 } = {}) {
@@ -8505,7 +9118,7 @@ function isResistanceOverheatEffect(effect) {
   return data?.kind === RESISTANCE_OVERHEAT_EFFECT_KIND;
 }
 
-function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damageType = null, damageTypeKey = "", incoming = 0, final = 0, penetration = 0, state = null } = {}) {
+function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damageType = null, damageTypeKey = "", incoming = 0, final = 0, penetration = 0, state = null, packetId = "" } = {}) {
   const settings = damageType?.settings?.equipmentConditionDamage;
   if (!settings?.enabled || !itemWear.size) return [];
 
@@ -8538,7 +9151,12 @@ function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damage
       continue;
     }
 
-    const applied = reserveEquipmentConditionDamage(wear.item, amount, state);
+    const applied = state
+      ? reserveEquipmentConditionDamagePacket(wear.item, amount, packetId, state)
+      : reserveEquipmentConditionDamage(
+        wear.item,
+        amount - getDamageMitigationWearResistance(wear.item)
+      );
     if (applied > 0) results.push({ itemId: wear.itemId, amount: applied });
   }
   return results;
@@ -8548,8 +9166,26 @@ function createEquipmentConditionDamageState(actor) {
   return {
     actor,
     entries: new Map(),
-    totals: new Map()
+    totals: new Map(),
+    packets: new Map(),
+    nextPacketIndex: 0
   };
+}
+
+function reserveEquipmentConditionDamagePacket(item, amount, packetId = "", state = null) {
+  if (!state) return 0;
+  const id = String(packetId ?? "").trim() || `request:${state.nextPacketIndex++}`;
+  const key = `${item.id}:${id}`;
+  const packet = state.packets.get(key) ?? { raw: 0, applied: 0 };
+  packet.raw += Math.max(0, Number(amount) || 0);
+  const requested = Math.max(
+    0,
+    Math.floor(packet.raw - getDamageMitigationWearResistance(item)) - packet.applied
+  );
+  const applied = reserveEquipmentConditionDamage(item, requested, state);
+  packet.applied += applied;
+  state.packets.set(key, packet);
+  return applied;
 }
 
 function getEquipmentConditionDamageStateEntries(state = null) {
@@ -8754,10 +9390,7 @@ function estimateProsthesisConditionDamage(prosthesis, amount = 0) {
     current,
     next,
     conditionDelta: Math.max(0, current - next),
-    healthDelta: Math.max(
-      0,
-      toIntegratedProsthesisHealthValue(current, integration) - toIntegratedProsthesisHealthValue(next, integration)
-    )
+    healthDelta: calculateIntegratedProsthesisHealthLoss(current, next, integration)
   };
 }
 
@@ -8935,7 +9568,7 @@ function applyLimbDamageMultiplier(actor, amount, limbKey = "") {
   if (!incomingDamage || !limbKey) {
     return roundDamageAmount(incomingDamage);
   }
-  const multiplier = Math.max(0, Number(actor.system?.limbs?.[limbKey]?.damageMultiplier) || 1);
+  const multiplier = Math.max(0, toOptionalFiniteNumber(actor.system?.limbs?.[limbKey]?.damageMultiplier) ?? 1);
   return roundDamageAmount(incomingDamage * multiplier);
 }
 

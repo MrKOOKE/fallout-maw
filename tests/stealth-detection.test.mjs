@@ -529,7 +529,7 @@ test("one noise level reaches every adjacent hex but not the second ring", () =>
   );
 });
 
-test("local previews exclude hidden observers for players but retain them for GMs", () => {
+test("local previews use the same actor-specific observer gate for players and GMs", () => {
   installRectangleMock();
   globalThis.canvas = createLinearCanvas({ cells: 4, cellSize: 100 });
   globalThis.canvas.visibility = { tokenVision: false };
@@ -562,11 +562,10 @@ test("local previews exclude hidden observers for players but retain them for GM
   );
 
   globalThis.game.user.isGM = true;
-  globalThis.canvas.visibility.tokenVision = true;
   assert.deepEqual(
     getStealthObserverZones(hiddenToken, { visibleOnly: true, settings })
       .map(zone => zone.observerToken.id),
-    ["visible-observer", "gm-hidden-observer"]
+    ["visible-observer"]
   );
 });
 

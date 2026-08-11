@@ -2,6 +2,8 @@ import { normalizeActorDevelopment } from "./storage.mjs";
 import { evaluateSkillFormulas } from "../formulas/index.mjs";
 import { isSkillAdvancementMultiplierTargetApplicable } from "./skill-multiplier-effects.mjs";
 
+export const FIXED_SIGNATURE_SKILL_MULTIPLIER = 2;
+
 export function calculateRemainingDevelopmentPoints(development = {}) {
   const points = development?.points ?? {};
   return {
@@ -37,6 +39,12 @@ export function getSkillPointMultiplierBreakdown(
   multiplierChanges = {},
   { signature = false } = {}
 ) {
+  if (advancementSettings?.mode === "fixed") {
+    return {
+      value: 1,
+      parts: [{ kind: "base", label: "База", operation: "add", amount: 1 }]
+    };
+  }
   const effectiveSignature = Boolean(signature) && multiplierChanges?.signatureSkillsDisabled !== true;
   const entry = advancementSettings?.entries?.[skillKey] ?? {};
   const base = Number(entry?.base) || 0;
@@ -87,6 +95,7 @@ export function calculateSkillDevelopmentBonus(skillKey, characteristics = {}, a
     { signature }
   );
   if (!signature) return investedValue;
+  if (advancementSettings?.mode === "fixed") return investedValue * FIXED_SIGNATURE_SKILL_MULTIPLIER;
 
   const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
   const signatureFlatBonus = Number(advancementSettings?.signatureFlatBonus) || 0;
@@ -118,9 +127,51 @@ export function resolveSkillAdvancementMultiplierChanges(
   multiplierChanges = {}
 ) {
   const normalized = normalizeActorDevelopment(development, [], skillSettings);
-  const baseChanges = (Array.isArray(multiplierChanges?.changes) ? multiplierChanges.changes : [])
+  const fixed = advancementSettings?.mode === "fixed";
+  if (fixed) {
+    const fixedState = {
+      ...multiplierChanges,
+      changes: [],
+      versatileDevelopmentRules: [],
+      signatureSkillsDisabled: false
+    };
+    const developmentBonuses = {};
+    const pureValues = {};
+    for (const skill of skillSettings) {
+      const skillKey = String(skill?.key ?? "").trim();
+      if (!skillKey) continue;
+      const developmentBonus = calculateSkillDevelopmentBonus(
+        skillKey,
+        characteristics,
+        advancementSettings,
+        normalized.skills?.[skillKey],
+        fixedState
+      );
+      developmentBonuses[skillKey] = developmentBonus;
+      pureValues[skillKey] = getPureSkillValue(skillBases?.[skillKey], developmentBonus);
+    }
+    return {
+      ...fixedState,
+      versatileDevelopment: {
+        active: false,
+        highestPureValue: Math.max(0, ...Object.values(pureValues)),
+        baselinePureValues: pureValues,
+        statesBySkill: {}
+      },
+      developmentBonuses,
+      pureValues
+    };
+  }
+
+  const sourceChanges = Array.isArray(multiplierChanges?.changes) ? multiplierChanges.changes : [];
+  const baseChanges = sourceChanges
     .filter(change => !String(change?.key ?? "").startsWith("fallout-maw.fixed.versatileDevelopment."));
-  const baseState = { ...multiplierChanges, changes: baseChanges, versatileDevelopmentRules: [] };
+  const baseState = {
+    ...multiplierChanges,
+    changes: baseChanges,
+    versatileDevelopmentRules: [],
+    signatureSkillsDisabled: multiplierChanges?.signatureSkillsDisabled === true
+  };
   const rules = Array.isArray(multiplierChanges?.versatileDevelopmentRules)
     ? multiplierChanges.versatileDevelopmentRules.filter(rule => Number(rule?.developmentMultiplierBonus) > 0)
     : [];
@@ -230,6 +281,7 @@ export function resolveSkillAdvancementMultiplierChanges(
     ...multiplierChanges,
     changes,
     versatileDevelopmentRules: rules,
+    signatureSkillsDisabled: multiplierChanges?.signatureSkillsDisabled === true,
     versatileDevelopment: {
       active: rules.length > 0,
       highestPureValue,

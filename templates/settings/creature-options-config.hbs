@@ -107,10 +107,18 @@
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.TraitPoints"}}</span>
             <input type="number" name="race.baseParameters.traitPoints" value="{{baseParameters.traitPoints}}" min="0">
           </label>
+          {{#if weaponProficienciesEnabled}}
           <label class="fallout-maw-stacked-field">
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ProficiencyPoints"}}</span>
             <input type="number" name="race.baseParameters.proficiencyPoints" value="{{baseParameters.proficiencyPoints}}" min="0">
           </label>
+          {{/if}}
+          {{#if raceHealthEnabled}}
+          <label class="fallout-maw-stacked-field">
+            <span>Формула здоровья</span>
+            <input type="text" name="race.baseParameters.healthFormula" value="{{baseParameters.healthFormula}}" data-formula-autocomplete="all" placeholder="20 + str + con * 2">
+          </label>
+          {{/if}}
           <label class="fallout-maw-stacked-field">
             <span>{{localize "FALLOUTMAW.Common.Load"}}</span>
             <input type="text" name="race.baseParameters.loadFormula" value="{{baseParameters.loadFormula}}" placeholder="20 + 10*str">
@@ -127,6 +135,12 @@
           <button type="button" data-creature-section-toggle aria-expanded="{{sections.development.ariaExpanded}}"><i class="fa-solid {{sections.development.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Development"}}</span></button>
         </header>
         <div class="fallout-maw-list-grid two-columns">
+          {{#if raceHealthEnabled}}
+          <label>
+            <span>Здоровье за уровень</span>
+            <input type="text" name="race.progression.healthPerLevel" value="{{selectedRace.progression.healthPerLevel}}" data-formula-autocomplete="characteristics">
+          </label>
+          {{/if}}
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel"}}</span>
             <input type="text" name="race.progression.skillPointsPerLevel" value="{{selectedRace.progression.skillPointsPerLevel}}" data-formula-autocomplete="characteristics">
@@ -135,10 +149,12 @@
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel"}}</span>
             <input type="text" name="race.progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}" data-formula-autocomplete="characteristics">
           </label>
+          {{#if weaponProficienciesEnabled}}
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ProficiencyPointsPerLevel"}}</span>
             <input type="text" name="race.progression.proficiencyPointsPerLevel" value="{{selectedRace.progression.proficiencyPointsPerLevel}}" data-formula-autocomplete="characteristics">
           </label>
+          {{/if}}
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentThreshold"}}</span>
             <input type="number" name="race.organismDevelopment.threshold" value="{{#if selectedRace.organismDevelopment.threshold}}{{selectedRace.organismDevelopment.threshold}}{{/if}}" min="0.01" step="0.01" placeholder="{{localize "FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentThresholdEmpty"}}">
@@ -159,10 +175,10 @@
             <span>{{localize "FALLOUTMAW.Common.Health"}}</span>
             <input type="text" name="race.regeneration.formula" value="{{regeneration.formula}}" data-formula-autocomplete="all">
           </label>
-          <label>
+          {{#if hasEnergyResource}}<label>
             <span>{{localize "FALLOUTMAW.Common.Energy"}}</span>
             <input type="text" name="race.regeneration.energyFormula" value="{{regeneration.energyFormula}}" data-formula-autocomplete="all">
-          </label>
+          </label>{{/if}}
         </div>
       </section>
 

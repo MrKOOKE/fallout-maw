@@ -62,6 +62,25 @@ test("damage source properties fill missing types while weapon properties keep p
   assert.equal(properties[0].attackPower.perLevel.damagePercent, 10);
 });
 
+test("damage source additional proficiencies extend rather than replace weapon proficiencies", () => {
+  const properties = mergeDamageSourceSpecialProperties({
+    specialProperties: [{
+      type: "additionalProficiencies",
+      proficiencyKeys: ["pistol", "rifle"]
+    }]
+  }, {
+    specialProperties: [{
+      type: "additionalProficiencies",
+      proficiencyKeys: ["rifle", "energy"]
+    }]
+  });
+
+  assert.deepEqual(properties, [{
+    type: "additionalProficiencies",
+    proficiencyKeys: ["pistol", "rifle", "energy"]
+  }]);
+});
+
 test("damage source animation fallback and noise modifier are wired through schema, editor, runtime, and tooltip", () => {
   assert.match(modelSource, /noiseLevel: new NumberField\(\{ required: true, integer: true, initial: 0 \}\)/);
   assert.match(itemSheetTemplate, /name="system\.functions\.damageSource\.noiseLevel"/);

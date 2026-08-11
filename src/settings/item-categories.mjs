@@ -13,10 +13,26 @@ export function normalizeItemCategorySettings(settings) {
     const label = String(raw?.label ?? raw?.name ?? raw ?? "").trim();
     if (!label || used.has(label)) continue;
     used.add(label);
-    categories.push({ label });
+    categories.push({
+      label,
+      subcategories: normalizeSubcategories(raw?.subcategories)
+    });
   }
 
   return { categories };
+}
+
+function normalizeSubcategories(value) {
+  const source = Array.isArray(value) ? value : [];
+  const used = new Set();
+  const subcategories = [];
+  for (const raw of source) {
+    const label = String(raw?.label ?? raw?.name ?? raw ?? "").trim();
+    if (!label || used.has(label)) continue;
+    used.add(label);
+    subcategories.push({ label });
+  }
+  return subcategories;
 }
 
 function normalizeCategoryInput(settings) {

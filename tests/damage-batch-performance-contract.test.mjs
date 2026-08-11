@@ -50,7 +50,10 @@ test("damage batch preparation remains synchronous and snapshot-local", () => {
   assert.doesNotMatch(preparation, /\bawait\b/);
   assert.match(preparation, /getDamageBatchProsthesisContext\(/);
   assert.match(preparation, /getDamageBatchMitigationEquipmentSnapshot\(/);
-  assert.match(preparation, /preparationContext\s*\n\s*}\);/);
+  assert.match(
+    preparation,
+    /preparationContext,\s*\n\s*processEquipmentConditionDamage\s*\n\s*}\);/
+  );
 });
 
 test("batch feedback waits for document commits, bulk flushers, chat, and resolved events", () => {

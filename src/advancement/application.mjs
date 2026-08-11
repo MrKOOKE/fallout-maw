@@ -3,6 +3,7 @@ import {
   calculatePureSkillDevelopmentValue,
   calculateRemainingDevelopmentPoints,
   cloneActorDevelopment,
+  FIXED_SIGNATURE_SKILL_MULTIPLIER,
   getSkillPointMultiplierBreakdown,
   resolveSkillAdvancementMultiplierChanges
 } from "./index.mjs";
@@ -12,6 +13,7 @@ import {
   getCreatureRaceSummaries,
   getAbilityCatalog,
   getLevelSettings,
+  getPreparedRuntimeSettings,
   getProficiencySettings,
   getSkillAdvancementSettings,
   getSkillDevelopmentCostSettings,
@@ -50,12 +52,14 @@ import { escapeHtml } from "../utils/dom.mjs";
 import { prepareIndicatorEntry as prepareDisplayIndicatorEntry } from "../utils/actor-display-data.mjs";
 import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
+import { calculateLevelHealthBonus, usesIndependentHealthModel } from "../combat/independent-health.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const ADVANCEMENT_COMMIT_FLAG = "advancementCommit";
 const ADVANCEMENT_UPDATE_SOURCE_OPTION = "falloutMawAdvancementApplicationId";
 const ADVANCEMENT_PAGES = ["development", "abilities", "proficiencies"];
+const ADVANCEMENT_PAGES_WITHOUT_PROFICIENCIES = ["development", "abilities"];
 const REPEAT_INITIAL_DELAY_MS = 180;
 const REPEAT_INTERVAL_MS = 45;
 
@@ -234,6 +238,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const canLevelUp = (this.#draft.level < maxLevel) && (this.#gmMode || (currentExperience >= nextThreshold));
     const pointDisplays = this.#preparePointDisplays(remaining);
     const pageIndex = this.#getPageIndex();
+    const raceHealthEnabled = usesIndependentHealthModel(this.actor, getPreparedRuntimeSettings());
+    const hasProficiencies = getProficiencySettings().length > 0;
 
     return {
       ...(await super._prepareContext(options)),
@@ -245,6 +251,15 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       experienceBarStyle: `width: ${experiencePercent.toFixed(2)}%;`,
       experienceCurrent: currentExperience,
       experienceNext: nextThreshold,
+      raceHealthEnabled,
+      healthFromLevel: raceHealthEnabled
+        ? calculateLevelHealthBonus(
+          this.actor.system?.progression?.healthPerLevel,
+          cleanCharacteristics,
+          characteristicSettings,
+          this.#draft.level
+        )
+        : 0,
       skillPointsPerLevel: evaluateProgressionFormula(
         this.actor.system?.progression?.skillPointsPerLevel,
         cleanCharacteristics,
@@ -257,12 +272,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         characteristicSettings,
         DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
       ),
-      proficiencyPointsPerLevel: evaluateProgressionFormula(
-        this.actor.system?.progression?.proficiencyPointsPerLevel,
-        cleanCharacteristics,
-        characteristicSettings,
-        DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
-      ),
+      proficiencyPointsPerLevel: hasProficiencies
+        ? evaluateProgressionFormula(
+          this.actor.system?.progression?.proficiencyPointsPerLevel,
+          cleanCharacteristics,
+          characteristicSettings,
+          DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+        )
+        : 0,
       characteristicPointsDisplay: pointDisplays.characteristics,
       skillPointsDisplay: pointDisplays.skills,
       signatureSkillPointsDisplay: signatureSkillsDisabled ? "Недоступно" : pointDisplays.signatureSkills,
@@ -270,12 +287,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       traitPointsDisplay: pointDisplays.traits,
       researchPointsDisplay: pointDisplays.researches,
       proficiencyPointsDisplay: pointDisplays.proficiencies,
+      hasProficiencies,
       page: this.#page,
       isDevelopmentPage: this.#page === "development",
       isProficienciesPage: this.#page === "proficiencies",
       isAbilitiesPage: this.#page === "abilities",
       isFirstPage: pageIndex <= 0,
-      isLastPage: pageIndex >= (ADVANCEMENT_PAGES.length - 1),
+      isLastPage: pageIndex >= (this.#getPages().length - 1),
       characteristics: characteristicSettings.map(characteristic => {
         const floorPoints = toInteger(this.#floor.development.characteristics?.[characteristic.key]);
         const currentPoints = toInteger(this.#draft.development.characteristics?.[characteristic.key]);
@@ -371,7 +389,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       isProficienciesPage: true,
       isAbilitiesPage: false,
       isFirstPage: pageIndex <= 0,
-      isLastPage: pageIndex >= (ADVANCEMENT_PAGES.length - 1),
+      isLastPage: pageIndex >= (this.#getPages().length - 1),
       proficiencyPointsDisplay: pointDisplays.proficiencies,
       proficiencies: getProficiencySettings().map(proficiency => this.#prepareProficiencyEntry(proficiency, remaining))
     };
@@ -412,7 +430,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       isProficienciesPage: false,
       isAbilitiesPage: true,
       isFirstPage: pageIndex <= 0,
-      isLastPage: pageIndex >= (ADVANCEMENT_PAGES.length - 1),
+      isLastPage: pageIndex >= (this.#getPages().length - 1),
       traitPointsDisplay: pointDisplays.traits,
       researchPointsDisplay: pointDisplays.researches,
       abilityCategories,
@@ -553,13 +571,25 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!this.#gmMode && toInteger(this.#draft.development.experience) < nextThreshold) return;
 
     this.#draft.level += 1;
+    const raceHealthEnabled = usesIndependentHealthModel(this.actor, getPreparedRuntimeSettings());
+    const characteristicSettings = raceHealthEnabled || !this.#gmMode ? getCharacteristicSettings() : [];
+    const cleanCharacteristics = characteristicSettings.length
+      ? this.#getCleanCharacteristics(characteristicSettings)
+      : {};
+    if (raceHealthEnabled) {
+      this.#draft.development.health = calculateLevelHealthBonus(
+        this.actor.system?.progression?.healthPerLevel,
+        cleanCharacteristics,
+        characteristicSettings,
+        this.#draft.level
+      );
+      this.#draft.development.healthInitialized = true;
+    }
     if (this.#gmMode) {
       await this.#applyDraftToActor();
       return this.forceRender();
     }
 
-    const characteristicSettings = getCharacteristicSettings();
-    const cleanCharacteristics = this.#getCleanCharacteristics(characteristicSettings);
     this.#draft.development.points.skills += evaluateProgressionFormula(
       this.actor.system?.progression?.skillPointsPerLevel,
       cleanCharacteristics,
@@ -572,12 +602,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       characteristicSettings,
       DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
     );
-    this.#draft.development.points.proficiencies += evaluateProgressionFormula(
-      this.actor.system?.progression?.proficiencyPointsPerLevel,
-      cleanCharacteristics,
-      characteristicSettings,
-      DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
-    );
+    if (getProficiencySettings().length) {
+      this.#draft.development.points.proficiencies += evaluateProgressionFormula(
+        this.actor.system?.progression?.proficiencyPointsPerLevel,
+        cleanCharacteristics,
+        characteristicSettings,
+        DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+      );
+    }
     await this.#applyDraftToActor();
     return this.forceRender();
   }
@@ -945,6 +977,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       if (delta < 0 && this.#getPreviewCharacteristicValue(key) <= 0) return false;
       this.#draft.characteristics[key] = toInteger(this.#draft.characteristics[key]) + delta;
       this.#invalidateSkillAdvancementMultiplierChanges();
+      this.#refreshHealthDevelopment();
       if (persist) await this.#applyDraftToActor();
       return true;
     }
@@ -956,6 +989,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       this.#draft.development.characteristics[key] = toInteger(this.#draft.development.characteristics[key]) + 1;
       this.#draft.development.points.characteristics = available - 1;
       this.#invalidateSkillAdvancementMultiplierChanges();
+      this.#refreshHealthDevelopment();
       if (persist) await this.#applyDraftToActor();
       return true;
     }
@@ -967,8 +1001,21 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#draft.development.characteristics[key] = currentPoints - 1;
     this.#draft.development.points.characteristics = Math.max(0, toInteger(this.#draft.development.points.characteristics)) + 1;
     this.#invalidateSkillAdvancementMultiplierChanges();
+    this.#refreshHealthDevelopment();
     if (persist) await this.#applyDraftToActor();
     return true;
+  }
+
+  #refreshHealthDevelopment() {
+    if (!usesIndependentHealthModel(this.actor, getPreparedRuntimeSettings())) return;
+    const characteristicSettings = getCharacteristicSettings();
+    this.#draft.development.health = calculateLevelHealthBonus(
+      this.actor.system?.progression?.healthPerLevel,
+      this.#getCleanCharacteristics(characteristicSettings),
+      characteristicSettings,
+      this.#draft.level
+    );
+    this.#draft.development.healthInitialized = true;
   }
 
   async #changeSkill(key, delta, { persist = true } = {}) {
@@ -1016,14 +1063,21 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     await this.#stopRepeat({ flush: true });
     this.#syncDraftFromForm();
     const currentIndex = this.#getPageIndex();
-    const nextIndex = Math.max(0, Math.min(ADVANCEMENT_PAGES.length - 1, currentIndex + offset));
-    this.#page = ADVANCEMENT_PAGES[nextIndex];
+    const pages = this.#getPages();
+    const nextIndex = Math.max(0, Math.min(pages.length - 1, currentIndex + offset));
+    this.#page = pages[nextIndex];
     return this.forceRender();
   }
 
   #getPageIndex() {
-    const index = ADVANCEMENT_PAGES.indexOf(this.#page);
+    const index = this.#getPages().indexOf(this.#page);
     return index >= 0 ? index : 0;
+  }
+
+  #getPages() {
+    return getProficiencySettings().length
+      ? ADVANCEMENT_PAGES
+      : ADVANCEMENT_PAGES_WITHOUT_PROFICIENCIES;
   }
 
   static #onNextPage(event) {
@@ -2113,14 +2167,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         multiplierChanges,
         signature
       }),
-      multiplierLabel: formatSkillDevelopmentMultiplier({
-        skill,
-        characteristics,
-        characteristicSettings,
-        advancementSettings,
-        multiplierChanges,
-        signature
-      }),
+      multiplierLabel: advancementSettings.mode === "fixed"
+        ? ""
+        : formatSkillDevelopmentMultiplier({
+          skill,
+          characteristics,
+          characteristicSettings,
+          advancementSettings,
+          multiplierChanges,
+          signature
+        }),
       nextThreshold: getNextSkillDevelopmentCostThreshold(pureValue, developmentCostSettings),
       remainingSkillPoints: remaining.skills
     });
@@ -2458,6 +2514,14 @@ function renderSkillCostTooltipHTML({
 } = {}) {
   const canPay = toInteger(remainingSkillPoints) >= toInteger(cost);
   const paymentClass = canPay ? "met" : "unmet";
+  const multiplierSection = multiplierLabel
+    ? `
+        <div class="function-row">
+          <span>Множитель</span>
+          <strong class="fallout-maw-skill-cost-tooltip-multiplier">${escapeHtml(multiplierLabel)}</strong>
+        </div>
+      `
+    : "";
   const nextThresholdSection = nextThreshold
     ? `
       <div class="function-row">
@@ -2504,10 +2568,7 @@ function renderSkillCostTooltipHTML({
           <span>Прирост</span>
           <strong>+${escapeHtml(formatFixedDecimal(gain, 1))}</strong>
         </div>
-        <div class="function-row">
-          <span>Множитель</span>
-          <strong class="fallout-maw-skill-cost-tooltip-multiplier">${escapeHtml(multiplierLabel)}</strong>
-        </div>
+        ${multiplierSection}
         ${nextThresholdSection}
       </div>
     </section>
@@ -2550,7 +2611,9 @@ function formatSkillDevelopmentMultiplier({
     return `${part.label}: ${formatCompactDecimal(part.amount)}`;
   });
   if (effectiveSignature) {
-    const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
+    const signatureMultiplier = advancementSettings?.mode === "fixed"
+      ? FIXED_SIGNATURE_SKILL_MULTIPLIER
+      : Number(advancementSettings?.signatureMultiplier) || 0;
     parts.push(`Коронный навык: ×${formatCompactDecimal(signatureMultiplier)}`);
   }
   return parts.join("\n");
@@ -2605,7 +2668,9 @@ function calculateSkillDevelopmentGain({
   );
   if (!effectiveSignature) return baseMultiplier;
 
-  const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
+  const signatureMultiplier = advancementSettings?.mode === "fixed"
+    ? FIXED_SIGNATURE_SKILL_MULTIPLIER
+    : Number(advancementSettings?.signatureMultiplier) || 0;
   return baseMultiplier * signatureMultiplier;
 }
 

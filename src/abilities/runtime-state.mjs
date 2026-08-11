@@ -10,6 +10,7 @@ import {
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 
 export const ABILITY_FUNCTION_COOLDOWN_FLAG_KEY = "abilityFunctionCooldown";
 export const ABILITY_ITEM_USE_COUNTERS_FLAG_KEY = "abilityItemUseCounters";
@@ -17,6 +18,7 @@ export const ACTION_BLOCK_EFFECT_KEY_PREFIX = "system.blocks.actions.";
 export const ATTACKING_WEAPON_ACTION_KEYS = ABILITY_ATTACKING_WEAPON_ACTION_KEYS;
 
 export function hasActorFixedAbilityFunction(actor, fixedKey = "") {
+  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return false;
   const key = String(fixedKey ?? "").trim();
   if (!actor || !key) return false;
   return (actor.items ?? []).some(item => (
@@ -65,6 +67,7 @@ export function getActorAtRandomActionPointCostReduction(actor, actionKey = "") 
 }
 
 export function getActorAtRandomActionPointCostSources(actor, actionKey = "") {
+  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return [];
   if (!isAttackingWeaponAction(actionKey)) return [];
   const sources = [];
   for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {

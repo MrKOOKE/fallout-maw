@@ -1,12 +1,25 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { ABILITY_FIXED_FUNCTION_KEYS } from "../settings/abilities.mjs";
 import { hasActorFixedAbilityFunction } from "./runtime-state.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 
 const DANGER_SENSE_SOCKET = `system.${SYSTEM_ID}`;
 const DANGER_SENSE_SOCKET_SCOPE = "fallout-maw.dangerSense";
 const DANGER_SENSE_WARNING = "Чутье: рядом есть опасность.";
+let dangerSenseSocketRegistered = false;
+let dangerSenseSocketLifecycleRegistered = false;
 
 export function registerDangerSenseSocket() {
+  if (!dangerSenseSocketLifecycleRegistered) {
+    dangerSenseSocketLifecycleRegistered = true;
+    Hooks.on(`${SYSTEM_ID}.settingsPresetApplied`, ensureDangerSenseSocket);
+  }
+  ensureDangerSenseSocket();
+}
+
+function ensureDangerSenseSocket() {
+  if (dangerSenseSocketRegistered || getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return;
+  dangerSenseSocketRegistered = true;
   game.socket.on(DANGER_SENSE_SOCKET, handleDangerSenseSocketMessage);
 }
 
@@ -36,6 +49,7 @@ export function notifyDangerSenseWarning(actor) {
 }
 
 function handleDangerSenseSocketMessage(message = {}) {
+  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return;
   if (message?.scope !== DANGER_SENSE_SOCKET_SCOPE) return;
   if (message.action !== "warning") return;
   if (message.targetUserId !== game.user?.id) return;

@@ -50,9 +50,13 @@ export const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
   pending: "pending",
   hitAllConeTargets: "hitAllConeTargets",
   concentratedPelletImpact: "concentratedPelletImpact",
+  impactConditionWear: "impactConditionWear",
+  limbDamageMultipliers: "limbDamageMultipliers",
   attackPower: "attackPower",
-  criticalDamage: "criticalDamage"
+  criticalDamage: "criticalDamage",
+  additionalProficiencies: "additionalProficiencies"
 });
+const WEAPON_LIMB_DAMAGE_MULTIPLIERS_BY_DATA = new WeakMap();
 
 const BROKEN_ITEM_FUNCTION_EXCEPTIONS = new Set([
   ITEM_FUNCTIONS.condition,
@@ -283,9 +287,22 @@ export function createDefaultWeaponSpecialPropertyData(type = "", source = {}) {
       criticalDamage: normalizeWeaponCriticalDamageData(current.criticalDamage)
     };
   }
+  if (propertyType === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies) {
+    return {
+      type: propertyType,
+      proficiencyKeys: normalizeWeaponAdditionalProficiencyKeys(current.proficiencyKeys)
+    };
+  }
+  if (propertyType === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers) {
+    return {
+      type: propertyType,
+      limbDamageMultipliers: normalizeWeaponLimbDamageMultipliers(current.limbDamageMultipliers)
+    };
+  }
   if (
     propertyType === WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets
     || propertyType === WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact
+    || propertyType === WEAPON_SPECIAL_PROPERTIES.impactConditionWear
   ) return { type: propertyType };
   return { type: WEAPON_SPECIAL_PROPERTIES.pending };
 }
@@ -308,6 +325,16 @@ export function normalizeWeaponSpecialProperty(entry = null) {
       entry.criticalDamage ?? entry.critical ?? {}
     );
   }
+  if (normalized.type === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies) {
+    normalized.proficiencyKeys = normalizeWeaponAdditionalProficiencyKeys(
+      entry.proficiencyKeys ?? entry.proficiencies ?? []
+    );
+  }
+  if (normalized.type === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers) {
+    normalized.limbDamageMultipliers = normalizeWeaponLimbDamageMultipliers(
+      entry.limbDamageMultipliers ?? entry.limbMultipliers ?? {}
+    );
+  }
   return normalized;
 }
 
@@ -315,9 +342,88 @@ export function normalizeWeaponSpecialPropertyType(type = "") {
   const key = String(type ?? "").trim();
   if (key === WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets) return key;
   if (key === WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact) return key;
+  if (key === WEAPON_SPECIAL_PROPERTIES.impactConditionWear) return key;
+  if (key === WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers) return key;
   if (key === WEAPON_SPECIAL_PROPERTIES.attackPower) return key;
   if (key === WEAPON_SPECIAL_PROPERTIES.criticalDamage) return key;
+  if (key === WEAPON_SPECIAL_PROPERTIES.additionalProficiencies) return key;
   return WEAPON_SPECIAL_PROPERTIES.pending;
+}
+
+export function normalizeWeaponLimbDamageMultipliers(values = {}) {
+  if (!values || typeof values !== "object" || Array.isArray(values)) return {};
+  const normalized = {};
+  for (const [rawKey, rawValue] of Object.entries(values)) {
+    const key = String(rawKey ?? "").trim();
+    const value = Number(rawValue);
+    if (key && Number.isFinite(value)) normalized[key] = Math.max(0, value);
+  }
+  return normalized;
+}
+
+export function getWeaponLimbDamageMultiplier(weaponData = {}, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  const properties = weaponData?.specialProperties;
+  if (!key || !properties || typeof properties !== "object") return 1;
+  let multipliers = WEAPON_LIMB_DAMAGE_MULTIPLIERS_BY_DATA.get(weaponData);
+  if (multipliers === undefined) {
+    multipliers = findWeaponLimbDamageMultipliers(properties);
+    WEAPON_LIMB_DAMAGE_MULTIPLIERS_BY_DATA.set(weaponData, multipliers);
+  }
+  if (!multipliers || !Object.hasOwn(multipliers, key)) return 1;
+  const value = Number(multipliers[key]);
+  return Number.isFinite(value) ? Math.max(0, value) : 1;
+}
+
+function findWeaponLimbDamageMultipliers(properties) {
+  if (Array.isArray(properties)) {
+    for (const property of properties) {
+      const multipliers = getWeaponLimbDamageMultipliersProperty(property);
+      if (multipliers) return multipliers;
+    }
+    return null;
+  }
+  for (const key in properties) {
+    if (!Object.hasOwn(properties, key)) continue;
+    const multipliers = getWeaponLimbDamageMultipliersProperty(properties[key]);
+    if (multipliers) return multipliers;
+  }
+  return null;
+}
+
+function getWeaponLimbDamageMultipliersProperty(property) {
+  if (!property || typeof property !== "object") return null;
+  const type = String(property.type ?? property.property ?? property.key ?? "").trim();
+  if (type !== WEAPON_SPECIAL_PROPERTIES.limbDamageMultipliers) return null;
+  const multipliers = property.limbDamageMultipliers ?? property.limbMultipliers;
+  return multipliers && typeof multipliers === "object" && !Array.isArray(multipliers)
+    ? multipliers
+    : null;
+}
+
+export function normalizeWeaponAdditionalProficiencyKeys(values = []) {
+  const source = Array.isArray(values) ? values : Object.values(values ?? {});
+  const seen = new Set();
+  return source
+    .map(value => String(value ?? "").trim())
+    .filter(key => key && !seen.has(key) && seen.add(key));
+}
+
+export function getWeaponAdditionalProficiencyKeys(weaponData = {}) {
+  const keys = [];
+  for (const property of normalizeWeaponSpecialProperties(weaponData?.specialProperties)) {
+    if (property.type !== WEAPON_SPECIAL_PROPERTIES.additionalProficiencies) continue;
+    keys.push(...property.proficiencyKeys);
+  }
+  return normalizeWeaponAdditionalProficiencyKeys(keys);
+}
+
+export function getConfiguredWeaponProficiencyKeys(weaponData = {}) {
+  return normalizeWeaponAdditionalProficiencyKeys([
+    weaponData?.proficiencyKey,
+    ...(Array.isArray(weaponData?.proficiencyKeys) ? weaponData.proficiencyKeys : []),
+    ...getWeaponAdditionalProficiencyKeys(weaponData)
+  ]);
 }
 
 export function getWeaponSpecialPropertyType(entry = null) {

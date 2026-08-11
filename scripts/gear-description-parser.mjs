@@ -1563,7 +1563,7 @@ function parseConstructPartDamageMitigation(flatText = "") {
   const pattern = new RegExp(`Сопротивление:\\s*([+-]?\\d+(?:[.,]\\d+)?)\\s*-\\s*(${labels})`, "giu");
   const entries = {};
   for (const match of String(flatText ?? "").matchAll(pattern)) {
-    const value = Math.max(0, parseInteger(match[1]));
+    const value = parseInteger(match[1]);
     if (!value) continue;
     const damageTypeKeys = resolveConstructPartMitigationDamageKeys(match[2]);
     for (const damageTypeKey of damageTypeKeys) {
@@ -1840,7 +1840,7 @@ function buildWeaponResourceCosts(flatText = "", {
 }
 
 function parseCaliber(flatText) {
-  return String(matchField(flatText, /Калибр:\s*([^]+?)(?=Тип\s+боеприпаса:|Редкость:|Мин\.|Сложность|Состояние:|Потеря|Максимальная|$)/i) ?? "").trim();
+  return String(matchField(flatText, /Калибр:\s*([^]+?)(?=Тип\s+боеприпаса:|Редкость:|Мин\.|Сложность|Состояние:|Потеря|Максимальная|Урон:|Дробь:|Конечная\s+ширина|$)/i) ?? "").trim();
 }
 
 function parseDamageDistribution(flatText) {

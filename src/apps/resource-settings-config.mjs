@@ -10,6 +10,7 @@ import { format, localize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
+import { getActiveRulesProfile, isActiveRulesResourceRequired } from "../settings/rules-profiles.mjs";
 
 const RESOURCE_FORMULA_VARIABLES = Object.freeze([
   Object.freeze({ key: "limbs", abbr: "limbs", label: "Все части тела" }),
@@ -56,8 +57,11 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       resources: this.resources.map(resource => ({
         ...resource,
-        locked: isFixedResourceKey(resource.key),
-        formulaLocked: resource.key === "consciousness"
+        health: resource.key === "health",
+        locked: isFixedResourceKey(resource.key) && isActiveRulesResourceRequired(resource.key),
+        raceFormulaAvailable: resource.key === "health" && getActiveRulesProfile().healthFormulaSource === "race",
+        raceFormulaSelected: resource.key === "health" && resource.formulaSource === "race",
+        formulaLocked: resource.key === "consciousness" || (resource.key === "health" && resource.formulaSource === "race")
       }))
     };
   }
@@ -70,6 +74,12 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
       variables: RESOURCE_FORMULA_VARIABLES
     });
     activateSettingsReorder(this.element, "[data-resource-row]");
+    this.element?.querySelectorAll?.("[data-field='formulaSource']")?.forEach(select => {
+      select.addEventListener("change", () => {
+        const formula = select.closest("[data-resource-row]")?.querySelector?.("[data-field='formula']");
+        if (formula) formula.disabled = select.value === "race";
+      });
+    });
   }
 
   async _processFormData(_event, _form, _formData) {
@@ -102,7 +112,8 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     if (index < 0) return undefined;
 
     this.resources = this.#readResourcesFromForm();
-    if (isFixedResourceKey(this.resources[index]?.key)) return undefined;
+    const key = this.resources[index]?.key;
+    if (isFixedResourceKey(key) && isActiveRulesResourceRequired(key)) return undefined;
     this.resources.splice(index, 1);
     return this.forceRender();
   }
@@ -115,6 +126,9 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
       abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
       formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0",
+      ...(row.querySelector("[data-field='formulaSource']")
+        ? { formulaSource: row.querySelector("[data-field='formulaSource']")?.value ?? "formula" }
+        : {}),
       color: row.querySelector("[data-field='color']")?.value?.trim() ?? "#8f8456"
     }));
   }
@@ -162,6 +176,7 @@ function validateFormulaSettings(settings, validationPrefix) {
     keys.add(key);
     abbreviations.add(abbr);
 
+    if (setting.key === "health" && setting.formulaSource === "race") continue;
     try {
       validateFormula(setting.formula, { allowSkills: true, characteristics, skills, variables });
     } catch (error) {

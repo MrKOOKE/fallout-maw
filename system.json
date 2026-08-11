@@ -74,23 +74,30 @@
   "packs": [
     {
       "name": "fallout-mav-items",
-      "label": "\u041f\u0440\u0435\u0434\u043c\u0435\u0442\u044b",
+      "label": "Предметы",
       "system": "fallout-maw",
       "path": "packs/fallout-mav-items",
       "type": "Item"
     },
     {
       "name": "fallout-mav-actors",
-      "label": "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
+      "label": "Персонажи",
       "system": "fallout-maw",
       "path": "packs/fallout-mav-actors",
       "type": "Actor"
     },
     {
       "name": "fallout-mav-scenes",
-      "label": "\u041a\u0430\u0440\u0442\u044b",
+      "label": "Карты",
       "path": "packs/fallout-mav-scenes",
       "type": "Scene"
+    },
+    {
+      "name": "fallout-mav-journals",
+      "label": "Журналы",
+      "system": "fallout-maw",
+      "path": "packs/fallout-mav-journals",
+      "type": "JournalEntry"
     }
   ],
   "packFolders": [
@@ -101,7 +108,8 @@
       "packs": [
         "fallout-mav-items",
         "fallout-mav-actors",
-        "fallout-mav-scenes"
+        "fallout-mav-scenes",
+        "fallout-mav-journals"
       ]
     }
   ],
@@ -115,5 +123,8 @@
   "primaryTokenAttribute": "resources.health",
   "secondaryTokenAttribute": "resources.dodge",
   "media": [],
-  "readme": "README.md"
+  "readme": "README.md",
+  "url": "https://github.com/MrKOOKE/fallout-maw",
+  "manifest": "https://drive.usercontent.google.com/download?id=1GB0gGVkLHMsba9FRRS7kCafhTXJml65E&export=download&confirm=t",
+  "download": "https://drive.usercontent.google.com/download?id=1OpJhiigJW0BUtnVELLSkrPl2fsBNwlR8&export=download&confirm=t"
 }

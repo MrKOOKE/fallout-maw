@@ -18,9 +18,11 @@ import {
   getPreparedRuntimeSettings,
   getRaceNeedSettings
 } from "../../settings/accessors.mjs";
+import { calculateLevelHealthBonus, usesIndependentHealthModel } from "../../combat/independent-health.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../../constants.mjs";
 import {
   DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
+  DEFAULT_HEALTH_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_DEVELOPMENT_LIMIT,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
@@ -63,6 +65,7 @@ import {
 } from "../../combat/consciousness.mjs";
 
 const REACTION_RESOURCE_KEY = "reactionPoints";
+const EMPTY_SKILL_ADVANCEMENT_CHANGES = Object.freeze({});
 import { toInteger } from "../../utils/numbers.mjs";
 import { composePreparedSkillValue } from "../../utils/skill-value.mjs";
 
@@ -196,6 +199,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         { required: true, initial: {}, persisted: false }
       ),
       progression: new SchemaField({
+        healthPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_HEALTH_PER_LEVEL_FORMULA }),
         skillPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA }),
         researchPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA }),
         proficiencyPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA })
@@ -220,6 +224,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       damageTypeSettings,
       currencySettings,
       resourceSettings,
+      rulesProfile,
       proficiencySettings,
       skillAdvancementSettings,
       creatureOptions
@@ -298,6 +303,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       : getRaceNeedSettings(race);
     prepareActorInventorySize(this.inventory, race);
     if (race?.progression) {
+      this.progression.healthPerLevel = String(race.progression.healthPerLevel ?? DEFAULT_HEALTH_PER_LEVEL_FORMULA);
       this.progression.skillPointsPerLevel = String(race.progression.skillPointsPerLevel ?? DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA);
       this.progression.researchPointsPerLevel = String(race.progression.researchPointsPerLevel ?? DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA);
       this.progression.proficiencyPointsPerLevel = String(race.progression.proficiencyPointsPerLevel ?? DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA);
@@ -316,15 +322,19 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skillAdvancementSettings,
       this.development,
       cleanSkillBases,
-      getSkillAdvancementMultiplierChanges(this.parent, skillSettings)
+      skillAdvancementSettings.mode === "fixed"
+        ? EMPTY_SKILL_ADVANCEMENT_CHANGES
+        : getSkillAdvancementMultiplierChanges(this.parent, skillSettings)
     );
-    const skillBonuses = calculateSkillDevelopmentBonuses(
-      skillSettings,
-      this.characteristics,
-      skillAdvancementSettings,
-      this.development,
-      skillAdvancementMultiplierChanges
-    );
+    const skillBonuses = skillAdvancementSettings.mode === "fixed"
+      ? skillAdvancementMultiplierChanges.developmentBonuses
+      : calculateSkillDevelopmentBonuses(
+        skillSettings,
+        this.characteristics,
+        skillAdvancementSettings,
+        this.development,
+        skillAdvancementMultiplierChanges
+      );
     replaceObjectContents(this.skills, normalizeSkillMap(
       this.skills,
       skillSettings,
@@ -354,16 +364,31 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     );
 
     const limbResourceFormulaVariables = buildLimbResourceFormulaVariables(this.limbs);
+    const usesIndependentHealth = usesIndependentHealthModel(this.parent, { rulesProfile, resourceSettings });
+    const evaluatedResourceSettings = usesIndependentHealth
+      ? resourceSettings.map(setting => setting.key === "health"
+        ? { ...setting, formula: String(race?.baseParameters?.healthFormula ?? "0") }
+        : setting)
+      : resourceSettings;
     const resourceMaximums = isConstruct
       ? buildConstructResourceMaximums(resourceSettings, limbResourceFormulaVariables)
       : evaluateResourceSettings(
-        resourceSettings,
+        evaluatedResourceSettings,
         characteristicSettings,
         skillSettings,
         this.characteristics,
         skillValues,
         limbResourceFormulaVariables
       );
+    if (usesIndependentHealth) {
+      this.development.health = calculateLevelHealthBonus(
+        this.progression.healthPerLevel,
+        cleanCharacteristics,
+        characteristicSettings,
+        this.attributes.level
+      );
+      resourceMaximums.health = Math.max(0, toInteger(resourceMaximums.health) + toInteger(this.development.health));
+    }
     const reactionResource = {
       ...(sourceResources?.[REACTION_RESOURCE_KEY] ?? {}),
       bonus: sourceResources?.[REACTION_RESOURCE_KEY]?.bonus
@@ -375,7 +400,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       consciousnessRecoveryTarget: this.combat.consciousnessRecoveryTarget
     }));
     ensureReactionResource(this.resources, reactionResource);
-    synchronizeAggregateHealthResource(this.resources, this.limbs);
+    if (!usesIndependentHealth) synchronizeAggregateHealthResource(this.resources, this.limbs);
 
     const needMaximums = evaluateNeedSettings(
       needSettings,
@@ -699,6 +724,8 @@ function developmentField() {
   return new SchemaField({
     initialized: new BooleanField({ required: true, initial: false }),
     experience: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    health: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    healthInitialized: new BooleanField({ required: true, initial: false }),
     points: new SchemaField({
       characteristics: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       signatureSkills: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),

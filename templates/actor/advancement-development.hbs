@@ -34,6 +34,12 @@
       </div>
 
       <div class="fallout-maw-advancement-hero-side">
+        {{#if raceHealthEnabled}}
+        <div class="fallout-maw-advancement-side-stat">
+          <span>Здоровье от уровня</span>
+          <strong>{{healthFromLevel}}</strong>
+        </div>
+        {{/if}}
         <div class="fallout-maw-advancement-side-stat">
           <span>{{localize "FALLOUTMAW.Actor.SkillPointsPerLevel"}}</span>
           <strong>{{skillPointsPerLevel}}</strong>
@@ -42,10 +48,12 @@
           <span>{{localize "FALLOUTMAW.Actor.ResearchPointsPerLevel"}}</span>
           <strong>{{researchPointsPerLevel}}</strong>
         </div>
+        {{#if hasProficiencies}}
         <div class="fallout-maw-advancement-side-stat">
           <span>{{localize "FALLOUTMAW.Actor.ProficiencyPointsPerLevel"}}</span>
           <strong>{{proficiencyPointsPerLevel}}</strong>
         </div>
+        {{/if}}
         <button type="button" class="fallout-maw-advancement-action-button fallout-maw-advancement-reset-button" data-action="resetDevelopment">
           <i class="fa-solid fa-rotate-left"></i>
           {{localize "FALLOUTMAW.Advancement.Reset"}}

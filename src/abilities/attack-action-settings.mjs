@@ -4,8 +4,10 @@ const ATTACK_ACTION_TARGETING_MODES = new Set(["cone", "selectedTargets", "area"
 const ATTACK_ACTION_SPECIAL_PROPERTY_TYPES = new Set([
   "pending",
   "hitAllConeTargets",
+  "limbDamageMultipliers",
   "attackPower",
-  "criticalDamage"
+  "criticalDamage",
+  "additionalProficiencies"
 ]);
 
 export const ATTACK_ACTION_TRIAL_SUBJECTS = Object.freeze({
@@ -298,11 +300,38 @@ function normalizeSpecialProperty(value = {}) {
       criticalDamage: normalizeCriticalDamage(source.criticalDamage ?? source.critical)
     };
   }
+  if (type === "additionalProficiencies") {
+    return {
+      type,
+      proficiencyKeys: normalizeUniqueTextList(
+        source.proficiencyKeys ?? source.proficiencies
+      )
+    };
+  }
+  if (type === "limbDamageMultipliers") {
+    return {
+      type,
+      limbDamageMultipliers: normalizeLimbDamageMultipliers(
+        source.limbDamageMultipliers ?? source.limbMultipliers
+      )
+    };
+  }
   if (type !== "attackPower") return { type };
   return {
     type,
     attackPower: normalizeAttackPower(source.attackPower ?? source.power)
   };
+}
+
+function normalizeLimbDamageMultipliers(value = {}) {
+  if (!isRecord(value)) return {};
+  const result = {};
+  for (const [rawKey, rawValue] of Object.entries(value)) {
+    const key = normalizeText(rawKey);
+    const multiplier = Number(rawValue);
+    if (key && Number.isFinite(multiplier)) result[key] = Math.max(0, multiplier);
+  }
+  return result;
 }
 
 function normalizeCriticalDamage(value = {}) {
@@ -372,6 +401,13 @@ function normalizeFormula(value, fallback = "0") {
 
 function normalizeText(value, fallback = "") {
   return String(value ?? "").trim() || fallback;
+}
+
+function normalizeUniqueTextList(value = []) {
+  const seen = new Set();
+  return toRows(value)
+    .map(entry => normalizeText(entry))
+    .filter(entry => entry && !seen.has(entry) && seen.add(entry));
 }
 
 function normalizeBoolean(value, fallback = false) {

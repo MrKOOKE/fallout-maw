@@ -22,8 +22,33 @@ const {
 } = await import("../src/settings/abilities.mjs");
 const {
   migrateAbilityDamageConstructs,
-  migrateAbilityTrialBranches
+  migrateAbilityTrialBranches,
+  migrateItemData
 } = await import("../src/migrations/documents.mjs");
+
+test("Item source migration preserves additional weapon proficiencies", () => {
+  const source = {
+    type: "gear",
+    system: {
+      functions: {
+        weapon: {
+          enabled: true,
+          specialProperties: [{
+            type: "additionalProficiencies",
+            proficiencyKeys: ["rifle", "pistol"]
+          }]
+        }
+      }
+    }
+  };
+
+  migrateItemData(source);
+
+  assert.deepEqual(source.system.functions.weapon.specialProperties, [{
+    type: "additionalProficiencies",
+    proficiencyKeys: ["rifle", "pistol"]
+  }]);
+});
 
 function legacyTrial(id = "trial") {
   return {

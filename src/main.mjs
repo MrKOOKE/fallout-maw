@@ -59,6 +59,7 @@ import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerCampHooks, registerCampSocket } from "./apps/camp-window.mjs";
 import { registerDynamicLightingHooks } from "./time/dynamic-lighting.mjs";
+import { registerActorFactionConfigHooks } from "./apps/faction-settings-config.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
 import { registerButcheringConfigHooks } from "./apps/butchering-config.mjs";
 import { registerHackingHooks, registerHackingSocket } from "./apps/hacking-dialog.mjs";
@@ -217,6 +218,7 @@ Hooks.once("init", () => {
   registerWorldTimeControlHooks();
   registerDynamicLightingHooks();
   registerCampHooks();
+  registerActorFactionConfigHooks();
   registerPersonalGeneratorHooks();
   registerButcheringConfigHooks();
   registerHackingHooks();

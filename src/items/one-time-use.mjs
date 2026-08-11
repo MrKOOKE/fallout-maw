@@ -107,7 +107,9 @@ export function remapOneTimeUseChangeKey(key = "") {
   let normalized = String(key ?? "").trim();
   if (!normalized) return "";
 
+  const configuredSkills = new Set(getSkillSettings().map(skill => skill.key));
   for (const [legacyKey, nextKey] of Object.entries(LEGACY_SKILL_KEY_REMAPS)) {
+    if (configuredSkills.has(legacyKey)) continue;
     normalized = normalized.replaceAll(`system.skills.${legacyKey}.`, `system.skills.${nextKey}.`);
   }
   return normalized;

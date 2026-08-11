@@ -127,3 +127,68 @@ test("disabled equipment wear does not scan Items before mitigation", () => {
   assert.equal(result.amount, 3);
   assert.deepEqual(result.equipmentConditionDamage, []);
 });
+
+test("percentage defense and resistance reduce the remaining damage in sequence", () => {
+  const result = calculateDamageMitigation({}, 100, "piercing", "torso", {}, {
+    damageMitigationCalculation: "percentage",
+    itemOnlyMitigation: true,
+    itemMitigationTotals: {
+      defense: 50,
+      resistance: 50
+    }
+  });
+
+  assert.equal(result.amount, 25);
+  assert.equal(result.penetrationSpent, 0);
+});
+
+test("percentage vulnerabilities increase the remaining damage in sequence", () => {
+  const result = calculateDamageMitigation({}, 100, "electric", "torso", {}, {
+    damageMitigationCalculation: "percentage",
+    itemOnlyMitigation: true,
+    itemMitigationTotals: {
+      defense: -50,
+      resistance: -50
+    }
+  });
+
+  assert.equal(result.amount, 225);
+  assert.equal(result.penetrationSpent, 0);
+});
+
+test("installed construct parts use their canonical mitigation entry and condition source", () => {
+  const part = {
+    id: "arm-slot",
+    type: "gear",
+    system: {
+      equipped: false,
+      placement: { mode: "constructPart", limbKey: "arm-slot" },
+      functions: {
+        constructPart: { enabled: true },
+        condition: { enabled: true, value: 100, max: 100, weakeningThreshold: 20 },
+        damageMitigation: {
+          enabled: true,
+          mode: "resistance",
+          entries: {
+            constructPart: {
+              electric: { value: 40 }
+            }
+          }
+        }
+      }
+    }
+  };
+  const items = [part];
+  items.contents = items;
+  const actor = { items };
+
+  const snapshot = getDamageBatchMitigationEquipmentSnapshot(
+    createDamageBatchPreparationContext(actor),
+    actor,
+    "electric",
+    "constructPart:arm-slot"
+  );
+
+  assert.deepEqual(snapshot.totals, { defense: 0, resistance: 40 });
+  assert.deepEqual(snapshot.sources.map(entry => entry.itemId), ["arm-slot"]);
+});

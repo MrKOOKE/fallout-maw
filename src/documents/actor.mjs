@@ -41,6 +41,7 @@ import {
   prepareActorDamageUpdate,
   requestDamageApplication
 } from "../combat/damage-hub.mjs";
+import { calculateLevelHealthBonus, usesIndependentHealthModel } from "../combat/independent-health.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 import { getInstalledConstructPartForLimb } from "../utils/construct-parts.mjs";
 import {
@@ -127,7 +128,7 @@ export class FalloutMaWActor extends Actor {
       if (this.type === "character") applyCreatureRaceDefaults(this);
       else clearCreatureSelection(this);
       applyNewActorResourceDefaults(this);
-    }
+    } else applyNewActorHealthDevelopmentDefault(this);
     return undefined;
   }
 
@@ -248,7 +249,9 @@ export class FalloutMaWActor extends Actor {
       clampActorLimbValuesToCurrentCaps(this, limbHealthContext);
     }
 
-    prepareIntegratedProsthesisHealth(this, limbHealthContext);
+    if (!usesIndependentHealthModel(this, getPreparedRuntimeSettings())) {
+      prepareAggregateHealthWithIntegratedProstheses(this, limbHealthContext);
+    }
     prepareActorLoadData(this);
   }
 
@@ -383,6 +386,7 @@ export class FalloutMaWActor extends Actor {
   } = {}) {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
+    const proficiencySettings = getProficiencySettings();
     const race = getCreatureOptions().races.find(entry => entry.id === this.system?.creature?.raceId);
     const normalizedLevel = Math.max(1, toInteger(level));
 
@@ -392,6 +396,15 @@ export class FalloutMaWActor extends Actor {
         toInteger(race?.characteristics?.[characteristic.key] ?? this.system?.characteristics?.[characteristic.key])
       ])
     );
+    const raceHealthEnabled = usesIndependentHealthModel(this, getPreparedRuntimeSettings());
+    const healthDevelopment = raceHealthEnabled
+      ? calculateLevelHealthBonus(
+        race?.progression?.healthPerLevel ?? this.system?.progression?.healthPerLevel,
+        characteristics,
+        characteristicSettings,
+        normalizedLevel
+      )
+      : 0;
     const skillPointsPerLevel = evaluateProgressionFormula(
       race?.progression?.skillPointsPerLevel ?? this.system?.progression?.skillPointsPerLevel,
       characteristics,
@@ -404,37 +417,64 @@ export class FalloutMaWActor extends Actor {
       characteristicSettings,
       DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
     );
-    const proficiencyPointsPerLevel = evaluateProgressionFormula(
-      race?.progression?.proficiencyPointsPerLevel ?? this.system?.progression?.proficiencyPointsPerLevel,
-      characteristics,
-      characteristicSettings,
-      DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
-    );
+    const proficiencyPointsPerLevel = proficiencySettings.length
+      ? evaluateProgressionFormula(
+        race?.progression?.proficiencyPointsPerLevel ?? this.system?.progression?.proficiencyPointsPerLevel,
+        characteristics,
+        characteristicSettings,
+        DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+      )
+      : 0;
 
-    const development = cloneActorDevelopment({}, characteristicSettings, skillSettings, getProficiencySettings());
+    const development = cloneActorDevelopment(proficiencySettings.length ? {} : {
+      points: { proficiencies: this.system?.development?.points?.proficiencies },
+      proficiencies: this.system?.development?.proficiencies
+    }, characteristicSettings, skillSettings, proficiencySettings);
     development.initialized = true;
     development.experience = Math.max(0, toInteger(experience));
+    development.health = healthDevelopment;
+    development.healthInitialized = raceHealthEnabled;
     development.points.characteristics = Math.max(0, toInteger(race?.baseParameters?.characteristicDistributionPoints));
     development.points.signatureSkills = Math.max(0, toInteger(race?.baseParameters?.signatureSkillPoints));
     development.points.traits = Math.max(0, toInteger(race?.baseParameters?.traitPoints));
     development.points.skills = skillPointsPerLevel * Math.max(0, normalizedLevel - 1);
     development.points.researches = researchPointsPerLevel * Math.max(0, normalizedLevel - 1);
-    development.points.proficiencies = Math.max(0, toInteger(race?.baseParameters?.proficiencyPoints))
-      + (proficiencyPointsPerLevel * Math.max(0, normalizedLevel - 1));
+    if (proficiencySettings.length) {
+      development.points.proficiencies = Math.max(0, toInteger(race?.baseParameters?.proficiencyPoints))
+        + (proficiencyPointsPerLevel * Math.max(0, normalizedLevel - 1));
+    }
 
-    const proficiencies = resetProficiencyMap(this.system?.proficiencies, getProficiencySettings());
+    const proficiencies = resetProficiencyMap(this.system?.proficiencies, proficiencySettings);
 
     return { characteristics, development, proficiencies };
   }
 
   async ensureDevelopmentInitialized() {
     const development = this.getDevelopment();
-    if (development.initialized) return development;
+    const needsHealthInitialization = usesIndependentHealthModel(this, getPreparedRuntimeSettings())
+      && !development.healthInitialized;
+    if (development.initialized && !needsHealthInitialization) return development;
+
+    if (development.initialized) {
+      const initialized = {
+        ...development,
+        healthInitialized: true
+      };
+      await this.update({
+        "system.development.health": initialized.health,
+        "system.development.healthInitialized": true
+      });
+      return initialized;
+    }
 
     const initialized = this.prepareDevelopmentResetData({
       level: this.system?.attributes?.level,
       experience: development.experience
     }).development;
+    if (needsHealthInitialization) {
+      initialized.health = development.health;
+      initialized.healthInitialized = true;
+    }
 
     await this.update({ "system.development": initialized });
     return initialized;
@@ -573,6 +613,13 @@ function applyCreatureRaceDefaults(actor) {
 }
 
 function applyNewActorResourceDefaults(actor) {
+  if (
+    actor.type === "character"
+    && usesIndependentHealthModel(actor, getPreparedRuntimeSettings())
+  ) {
+    const reset = actor.prepareDevelopmentResetData({ level: 1, experience: 0 });
+    actor.updateSource({ system: { development: reset.development } });
+  }
   actor.system?.prepareDerivedData?.();
 
   actor.updateSource({
@@ -630,6 +677,26 @@ function prepareActorLoadData(actor) {
   const load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
   actor.system.load = load;
   setCachedActorLoadPreparation(actor, signature, runtimeSettings, load);
+}
+
+function applyNewActorHealthDevelopmentDefault(actor) {
+  if (
+    actor.type !== "character"
+    || actor._source?.system?.development?.healthInitialized === true
+    || !usesIndependentHealthModel(actor, getPreparedRuntimeSettings())
+  ) return;
+  const development = actor.prepareDevelopmentResetData({
+    level: actor.system?.attributes?.level,
+    experience: actor.system?.development?.experience
+  }).development;
+  actor.updateSource({
+    system: {
+      development: {
+        health: development.health,
+        healthInitialized: true
+      }
+    }
+  });
 }
 
 function prepareTokenActiveEffectChange(actor, change, { formulaStage, getFormulaData }) {
@@ -832,7 +899,7 @@ function resetProficiencyMap(proficiencies = {}, proficiencySettings = []) {
   );
 }
 
-function prepareIntegratedProsthesisHealth(
+function prepareAggregateHealthWithIntegratedProstheses(
   actor,
   context = buildActorLimbHealthContext(actor)
 ) {

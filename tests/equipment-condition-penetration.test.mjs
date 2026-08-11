@@ -171,6 +171,108 @@ test("penetration wear can reduce equipment to zero and suppress its protection"
   assert.equal(hasItemFunction(armor, ITEM_FUNCTIONS.damageMitigation), false);
 });
 
+test("batch item-condition preview shares remaining condition and applies wear resistance per packet", async () => {
+  const { estimateDamageApplicationsBatch } = await import("../src/combat/damage-hub.mjs");
+  const item = {
+    id: "armor",
+    type: "gear",
+    system: {
+      functions: {
+        condition: { enabled: true, value: 25, max: 25 },
+        damageMitigation: { enabled: true, wearResistance: 10 }
+      }
+    }
+  };
+  const actor = {
+    items: {
+      get: id => id === item.id ? item : null
+    }
+  };
+  const requests = Array.from({ length: 3 }, () => ({
+    actor,
+    itemId: item.id,
+    scope: "itemCondition",
+    amount: 20
+  }));
+
+  const estimate = estimateDamageApplicationsBatch(actor, requests);
+  assert.equal(estimate.itemConditionDamage, 25);
+  assert.equal(estimate.partDamage, 25);
+});
+
+test("wear resistance applies once to damage-type fragments of one impact", async () => {
+  const { estimateDamageApplicationsBatch } = await import("../src/combat/damage-hub.mjs");
+  const item = {
+    id: "armor",
+    type: "gear",
+    system: {
+      functions: {
+        condition: { enabled: true, value: 100, max: 100 },
+        damageMitigation: { enabled: true, wearResistance: 10 }
+      }
+    }
+  };
+  const actor = { items: { get: id => id === item.id ? item : null } };
+  const requests = ["fire", "piercing"].map(damageTypeKey => ({
+    actor,
+    itemId: item.id,
+    scope: "itemCondition",
+    amount: 10,
+    damageTypeKey,
+    source: { conditionWearPacketId: "pellet-1" }
+  }));
+
+  const estimate = estimateDamageApplicationsBatch(actor, requests);
+  assert.equal(estimate.itemConditionDamage, 10);
+});
+
+test("equipment wear uses only the protection contributed by equipment", async () => {
+  const { calculateDamageMitigation } = await import("../src/combat/damage-hub.mjs");
+  const armor = {
+    id: "armor",
+    type: "gear",
+    system: {
+      equipped: true,
+      functions: {
+        condition: { enabled: true, value: 100, max: 100, weakeningThreshold: 20 },
+        damageMitigation: {
+          enabled: true,
+          mode: "defense",
+          entries: { torso: { piercing: { value: 50 } } }
+        }
+      }
+    }
+  };
+  const items = [armor];
+  items.contents = items;
+  const actor = {
+    items,
+    effects: [],
+    allApplicableEffects: () => [],
+    getDamageDefense: () => 100,
+    getDamageResistance: () => 0
+  };
+  const contextualAbilitySnapshots = new Map([[actor, {
+    actor,
+    itemSources: [],
+    itemContextualOrder: 0,
+    lateAuraEffects: [],
+    effectSnapshot: null
+  }]]);
+  const result = calculateDamageMitigation(actor, 100, "piercing", "torso", {}, {
+    damageType: {
+      settings: {
+        equipmentConditionDamage: { enabled: true, formula: "protected" }
+      }
+    },
+    includeEquipmentConditionDamage: true,
+    contextualAbilitySnapshots
+  });
+
+  assert.equal(result.amount, 0);
+  assert.deepEqual(result.equipmentConditionDamage, [{ itemId: "armor", amount: 50 }]);
+});
+
 function mergeValues(target, source) {
   for (const [key, value] of Object.entries(source ?? {})) {
     if (

@@ -1,4 +1,5 @@
 import { getCreatureOptions } from "../settings/accessors.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { DEFAULT_FACTION_NAME, getActorFactionBelongs } from "../settings/factions.mjs";
 import {
@@ -33,6 +34,7 @@ import {
 } from "../utils/attack-distance.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getConfiguredWeaponProficiencyKeys } from "../utils/item-functions.mjs";
 import {
   createActorEffectSnapshot,
   getActorApplicableEffects
@@ -120,7 +122,10 @@ export function getAbilityAcquisitionChanges(itemOrData) {
 }
 
 export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) {
-  if (!actor) return { changes: [], versatileDevelopmentRules: [], signatureSkillsDisabled: false };
+  const rulesProfile = getActiveRulesProfile();
+  if (!actor || rulesProfile.skillAdvancementMode === "fixed" || rulesProfile.fixedAbilityFunctionsEnabled === false) {
+    return { changes: [], versatileDevelopmentRules: [], signatureSkillsDisabled: false };
+  }
   const skillKeys = new Set((skillSettings ?? []).map(skill => String(skill?.key ?? "").trim()).filter(Boolean));
   const changes = [];
   const versatileDevelopmentRules = [];
@@ -328,9 +333,12 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
   }
 
   if (condition.type === ABILITY_CONDITION_TYPES.weaponProficiency) {
+    if (getActiveRulesProfile().weaponProficienciesEnabled === false) return true;
     const accepted = new Set(condition?.proficiencyKeys ?? []);
-    const weaponProficiencyKey = String(context?.weaponData?.proficiencyKey ?? "").trim();
-    return Boolean(accepted.size && weaponProficiencyKey && accepted.has(weaponProficiencyKey));
+    return Boolean(
+      accepted.size
+      && getConfiguredWeaponProficiencyKeys(context?.weaponData).some(key => accepted.has(key))
+    );
   }
 
   if (condition.type === ABILITY_CONDITION_TYPES.cooldown) {
@@ -483,6 +491,7 @@ function isWeaponContextConditionResolved(actor, condition = {}, context = {}) {
     return Boolean(getContextSkillKey(context));
   }
   if (condition?.type === ABILITY_CONDITION_TYPES.weaponProficiency) {
+    if (getActiveRulesProfile().weaponProficienciesEnabled === false) return true;
     return Boolean(context?.weaponData && Object.hasOwn(context.weaponData, "proficiencyKey"));
   }
   return true;

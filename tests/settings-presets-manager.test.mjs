@@ -60,6 +60,7 @@ function installFoundryMock({ storedIds = [], values = {}, modifyBatch } = {}) {
   const user = { id: "gm", isGM: true, active: true };
   globalThis.game = {
     system: { id: "fallout-maw", version: "0.2.0" },
+    modules: new Map(),
     world: { id: "test-world", title: "Test World" },
     user,
     users: {
@@ -204,6 +205,31 @@ test("managed setting schema is stored as a compact fingerprint", () => {
 
   assert.match(signature, /^\d+:[0-9a-f]{16}$/);
   assert.ok(signature.length < 64);
+});
+
+test("active modules may declare lazily fetched settings presets in their manifests", async () => {
+  installFoundryMock();
+  const preset = makePreset("module-preset", "Module preset", [entry("fallout-maw.alpha", true)]);
+  game.modules = new Map([["example-module", {
+    id: "example-module",
+    active: true,
+    flags: {
+      "fallout-maw": {
+        settingsPresets: [{ id: "module-preset", path: "presets/module-preset.json" }]
+      }
+    }
+  }]]);
+  const fetched = [];
+  globalThis.fetch = async url => {
+    fetched.push(String(url));
+    return { ok: true, json: async () => preset };
+  };
+
+  const documents = await SETTINGS_PRESET_TESTING.readModulePresetDocuments();
+
+  assert.equal(documents.get("module-preset")?.moduleId, "example-module");
+  assert.equal(documents.get("module-preset")?.preset.revision, preset.revision);
+  assert.deepEqual(fetched, ["modules/example-module/presets/module-preset.json"]);
 });
 
 test("both bundled seeds are valid and initially carry the same portable snapshot", () => {
@@ -1323,6 +1349,9 @@ test("a missing newly managed Setting document forces a full startup apply", asy
   assert.equal(materialize.length, 1);
   assert.ok(materialize.flatMap(operation => operation.data ?? [])
     .some(document => document.key === "fallout-maw.beta"));
+  const materializedBeta = materialize.flatMap(operation => operation.data ?? [])
+    .find(document => document.key === "fallout-maw.beta");
+  assert.deepEqual(JSON.parse(materializedBeta.value), { code: "main" });
   assert.ok(materialize.every(operation => operation.noHook === true));
   assert.equal(applied.length, 1);
   assert.ok(applied[0].updates.some(update => update._id === "doc-fallout-maw.beta"));

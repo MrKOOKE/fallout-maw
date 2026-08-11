@@ -207,6 +207,23 @@ test("resource normalization always restores the fixed consciousness definition"
   assert.equal(settings.filter(entry => entry.key === "consciousness").length, 1);
 });
 
+test("a module rules profile may explicitly omit consciousness", () => {
+  const settings = normalizeResourceSettings([{
+    key: "health",
+    abbr: "hea",
+    label: "Health",
+    formula: "20 + str + con * 2",
+    formulaSource: "race",
+    color: "#c64b44"
+  }], {
+    optionalFixedResourceKeys: ["consciousness"],
+    healthFormulaSource: "race"
+  });
+
+  assert.equal(settings.some(entry => entry.key === "consciousness"), false);
+  assert.equal(settings.find(entry => entry.key === "health").formulaSource, "race");
+});
+
 test("legacy hidden shock state preserves accumulated recovery for the visible resource", () => {
   const source = {
     type: "character",

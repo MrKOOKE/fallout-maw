@@ -69,11 +69,12 @@ test("disabled individual values remain stored but gameplay falls back to the ba
 });
 
 test("settings UI and all weapon previews use proficiency-specific influence", async () => {
-  const [template, actorSheet, actionHud, attackController] = await Promise.all([
+  const [template, actorSheet, actionHud, attackController, weaponProficiencies] = await Promise.all([
     readFile(new URL("../templates/settings/proficiency-settings-config.hbs", import.meta.url), "utf8"),
     readFile(new URL("../src/sheets/actor-sheet.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/apps/token-action-hud.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../src/combat/weapon-attack-controller.mjs", import.meta.url), "utf8")
+    readFile(new URL("../src/combat/weapon-attack-controller.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/utils/weapon-proficiencies.mjs", import.meta.url), "utf8")
   ]);
 
   assert.match(template, /<details[^>]+data-proficiency-row/);
@@ -82,6 +83,7 @@ test("settings UI and all weapon previews use proficiency-specific influence", a
     assert.match(template, new RegExp(`data-individual-influence-field="${key}"`));
   }
   for (const source of [actorSheet, actionHud, attackController]) {
-    assert.match(source, /getProficiencyInfluenceSettings\(proficiency\)/);
+    assert.match(source, /weapon-proficiencies\.mjs/);
   }
+  assert.match(weaponProficiencies, /getInfluenceSettings:\s*getProficiencyInfluenceSettings/);
 });

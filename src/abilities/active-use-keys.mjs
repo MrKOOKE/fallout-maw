@@ -39,6 +39,8 @@ import {
 } from "../combat/damage-barriers.mjs";
 import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 import { isNeedChangeModifierEffectKey } from "../needs/need-change-effect-keys.mjs";
+import { getConfiguredWeaponProficiencyKeys } from "../utils/item-functions.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -195,7 +197,9 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     if (isCriticalSuccessContext(context)) keys.add(CRITICAL_DAMAGE_PERCENT_EFFECT_KEY);
   }
   const skillKey = String(weaponData?.skillKey ?? "").trim();
-  const proficiencyKey = String(weaponData?.proficiencyKey ?? "").trim();
+  const proficiencyKeys = includeCheck && getActiveRulesProfile().weaponProficienciesEnabled !== false
+    ? getConfiguredWeaponProficiencyKeys(weaponData)
+    : [];
   if (includeCheck && skillKey) {
     for (const skillUseKey of getSkillCheckActiveUseKeys(skillKey, {
       ...context,
@@ -203,7 +207,11 @@ export function getWeaponActionActiveUseKeys(context = {}) {
       weaponActionKey: actionKey
     })) keys.add(skillUseKey);
   }
-  if (includeCheck && proficiencyKey) keys.add(`system.proficiencies.${proficiencyKey}.bonus`);
+  if (includeCheck) {
+    for (const proficiencyKey of proficiencyKeys) {
+      keys.add(`system.proficiencies.${proficiencyKey}.bonus`);
+    }
+  }
 
   if (includeCheck && ATTACKING_WEAPON_ACTION_KEYS.has(actionKey)) {
     keys.add(ALL_COMBAT_ADVANTAGE_EFFECT_KEY);
@@ -307,7 +315,8 @@ export function isActiveUseEffectKey(key = "") {
     || isNeedChangeModifierEffectKey(sourcePath)
     || SKILL_CHANGE_KEY_PATTERN.test(sourcePath)
     || isSkillCheckActionEffectKey(sourcePath)
-    || PROFICIENCY_BONUS_KEY_PATTERN.test(sourcePath)
+    || (PROFICIENCY_BONUS_KEY_PATTERN.test(sourcePath)
+      && getActiveRulesProfile().weaponProficienciesEnabled !== false)
     || ACTION_COST_KEY_PATTERN.test(sourcePath)
     || ACTION_PENETRATION_KEY_PATTERN.test(sourcePath)
     || COMBAT_ACTION_EDGE_KEY_PATTERN.test(sourcePath)

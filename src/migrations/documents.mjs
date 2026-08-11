@@ -363,7 +363,9 @@ function migrateWeaponSpecialProperty(property) {
   if (typeof property === "string") return { type: migrateWeaponSpecialPropertyType(property) };
   if (!property || typeof property !== "object") return { type: "pending" };
   const type = migrateWeaponSpecialPropertyType(property.type ?? property.property ?? property.key);
-  if (type === "attackPower") return { ...property, type };
+  if (["attackPower", "criticalDamage", "additionalProficiencies", "impactConditionWear", "limbDamageMultipliers"].includes(type)) {
+    return { ...property, type };
+  }
   return { type };
 }
 
@@ -371,6 +373,10 @@ function migrateWeaponSpecialPropertyType(type) {
   const key = String(type ?? "").trim();
   if (key === "hitAllConeTargets") return key;
   if (key === "concentratedPelletImpact") return key;
+  if (key === "impactConditionWear") return key;
+  if (key === "limbDamageMultipliers") return key;
   if (key === "attackPower") return key;
+  if (key === "criticalDamage") return key;
+  if (key === "additionalProficiencies") return key;
   return "pending";
 }

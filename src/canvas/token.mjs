@@ -10,7 +10,8 @@ import {
 import { parseDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
-import { getDamageTypeSettings, getResourceSettings } from "../settings/accessors.mjs";
+import { usesIndependentHealthModel } from "../combat/independent-health.mjs";
+import { getDamageTypeSettings, getPreparedRuntimeSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_AURA_MODES,
   ABILITY_CONDITION_TYPES,
@@ -452,6 +453,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   _drawHealthBar(index, bar, data) {
     const actor = this.actor;
+    if (usesIndependentHealthModel(actor, getPreparedRuntimeSettings())) return super._drawBar(index, bar, data);
     const maxInfo = calculateHealthBarMaximums(actor, data);
     if (maxInfo.totalMax <= 0) return super._drawBar(index, bar, data);
 

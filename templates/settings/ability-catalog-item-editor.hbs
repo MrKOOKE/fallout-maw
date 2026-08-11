@@ -1352,6 +1352,7 @@
       <fieldset class="fallout-maw-fieldset">
         <legend>Основные параметры</legend>
         <div class="fallout-maw-list-grid three-columns">
+          {{#if @root.weaponProficienciesEnabled}}
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponType"}}</span>
             <select data-field="attack.proficiencyKey">
@@ -1360,6 +1361,7 @@
               {{/each}}
             </select>
           </label>
+          {{/if}}
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponDamage"}}</span>
             <input type="text" data-field="attack.damage" value="{{attackActionSettings.damage}}" data-formula-autocomplete="all">
@@ -1790,6 +1792,22 @@
             </select>
             <button type="button" class="fallout-maw-icon-button" data-action="deleteAttackSpecialProperty" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
+          {{#if isAdditionalProficiencies}}
+          <div class="fallout-maw-panel-header subsection">
+            <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialAdditionalProficiencies"}}</h4>
+            <button type="button" data-action="addAttackAdditionalProficiency"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddAdditionalProficiency"}}</button>
+          </div>
+          <div class="fallout-maw-settings-table fallout-maw-weapon-additional-proficiencies">
+            {{#each additionalProficiencyRows}}
+            <div class="fallout-maw-settings-row" data-attack-additional-proficiency-row data-index="{{index}}">
+              <select data-field="attack.specialProperty.additionalProficiency">
+                {{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}
+              </select>
+              <button type="button" class="fallout-maw-icon-button" data-action="deleteAttackAdditionalProficiency" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            {{else}}<p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoAdditionalProficiencies"}}</p>{{/each}}
+          </div>
+          {{/if}}
           {{#if isAttackPower}}
           <div class="fallout-maw-panel-header subsection">
             <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialAttackPower"}}</h4>

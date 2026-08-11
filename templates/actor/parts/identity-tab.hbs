@@ -143,6 +143,7 @@
     </div>
   </section>
 
+  {{#if proficiencies.length}}
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Proficiencies"}}</h2>
     <div class="fallout-maw-resource-grid">
@@ -162,6 +163,7 @@
       {{/each}}
     </div>
   </section>
+  {{/if}}
 
   {{#if freeEdit}}
   <section class="fallout-maw-panel">
