@@ -30,7 +30,7 @@ import {
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
-import { createToolFunctionKey, getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import { createToolFunctionKey, createToolResourceValueUpdate, getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, getToolResourceState, hasItemFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
@@ -701,7 +701,7 @@ function prepareMedicalInstruments(actor, toolKey) {
   return getActorItemsByType(actor, "gear")
     .filter(item => hasItemFunction(item, functionKey))
     .map(item => {
-      const data = getToolFunction(item, toolKey);
+      const data = getEffectiveMedicineToolFunction(item, toolKey);
       const skillKey = String(data.skillKey ?? "");
       const skillValue = toInteger(data.skillValue);
       const skillLabel = skillKey ? (skillLabels.get(skillKey) ?? skillKey) : "";
@@ -714,8 +714,8 @@ function prepareMedicalInstruments(actor, toolKey) {
         toolKey,
         toolLabel,
         toolClass: String(data.toolClass ?? "D"),
-        supplyValue: toInteger(data.supply?.value),
-        supplyMax: toInteger(data.supply?.max),
+        supplyValue: data.resource.value,
+        supplyMax: data.resource.max,
         skillValue,
         skillLabel,
         actorSkillValue,
@@ -724,6 +724,20 @@ function prepareMedicalInstruments(actor, toolKey) {
         requirementMet
       };
     });
+}
+
+function getEffectiveMedicineToolFunction(item, toolKey) {
+  const normalizedToolKey = String(toolKey ?? "").trim();
+  const tool = getToolFunction(item, normalizedToolKey);
+  const resource = getToolResourceState(item, { ...tool, toolKey: normalizedToolKey });
+  return {
+    ...tool,
+    toolKey: normalizedToolKey,
+    resourceMode: resource.mode,
+    resource,
+    resourceValue: resource.available ? resource.value : 0,
+    resourceMax: resource.max
+  };
 }
 
 function hasMassTreatmentTargets(targetContext) {
@@ -2312,7 +2326,7 @@ async function runTreatmentChecks({
     return {
       entries: [],
       spentCharges: 0,
-      remainingCharges: toInteger(tool.supply?.value),
+      remainingCharges: toInteger(tool.resourceValue),
       finalProgress: initialProgress,
       halted: false,
       reason: getMedicineSkillThresholdMessage(skillResolution, treatment?.name)
@@ -2322,7 +2336,7 @@ async function runTreatmentChecks({
   const missingProgress = Math.max(0, maxProgress - initialProgress);
   const totalChecks = Math.max(1, Math.ceil(missingProgress / progressPerCheck));
   let currentProgress = initialProgress;
-  let availableCharges = toInteger(tool.supply?.value);
+  let availableCharges = toInteger(tool.resourceValue);
   let spentCharges = 0;
   const entries = [];
   const targetActor = targetToken?.actor ?? (String(targetContext?.actorUuid ?? "")
@@ -2436,7 +2450,7 @@ function validateInstrumentForTreatment(actor, treatment, tool) {
     return { ok: false, message: treatment.unavailableReason || "Эту цель сейчас нельзя лечить." };
   }
   if (!tool?.enabled) return { ok: false, message: "Инструмент не подходит для лечения." };
-  if (toInteger(tool.supply?.value) <= 0) return { ok: false, message: "У инструмента нет запаса." };
+  if (toInteger(tool.resourceValue) <= 0) return { ok: false, message: "Ресурс инструмента исчерпан." };
 
   const requiredClass = String(treatment.healingToolClass ?? "D");
   const toolClass = String(tool.toolClass ?? "D");
@@ -2733,7 +2747,7 @@ function buildMedicineTreatmentStateSnapshot({
   toolKey = ""
 } = {}) {
   const instrument = sourceActor?.items?.get?.(String(instrumentId ?? "")) ?? null;
-  const supply = getToolFunction(instrument, String(toolKey ?? "").trim())?.supply?.value;
+  const supply = getEffectiveMedicineToolFunction(instrument, toolKey)?.resourceValue;
   if (treatmentType === "limb") {
     const limb = targetActor?.system?.limbs?.[String(treatmentId ?? "")];
     return {
@@ -2820,7 +2834,7 @@ async function resolveTreatmentOnAuthorityOperation({
     throw new Error("цель или исправный инструмент лечения не найдены");
   }
 
-  const tool = getToolFunction(instrument, normalizedToolKey);
+  const tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
   const validation = validateInstrumentForTreatment(sourceActor, treatment, tool);
   if (!validation.ok) throw new Error(validation.message);
 
@@ -2891,7 +2905,7 @@ async function resolveTreatmentOnAuthorityOperation({
     expectedProgress: initialProgress,
     finalProgress,
     completed,
-    expectedSupply: toInteger(tool.supply?.value),
+    expectedSupply: toInteger(tool.resourceValue),
     remainingSupply: result.remainingCharges,
     expectedMedicineMode: medicineMode,
     chainRef
@@ -2977,8 +2991,8 @@ async function commitTreatmentToActors({
 }) {
   const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
   const normalizedToolKey = String(toolKey ?? "").trim();
-  const tool = getToolFunction(instrument, normalizedToolKey);
-  const currentSupply = Math.max(0, toInteger(tool?.supply?.value));
+  const tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
+  const currentSupply = Math.max(0, toInteger(tool?.resourceValue));
   const expected = Math.max(0, toInteger(expectedSupply));
   const remaining = Math.max(0, toInteger(remainingSupply));
   if (
@@ -3030,9 +3044,7 @@ async function commitTreatmentToActors({
       )
     );
   }
-  const instrumentUpdate = {
-    [`system.functions.tools.${normalizedToolKey}.supply.value`]: remaining
-  };
+  const instrumentUpdate = createToolResourceValueUpdate(instrument, tool, remaining);
   if (treatmentType === "limb") {
     await executeAtomicActorItemUpdates([
       ...treatmentCommit.targetPlan.actorUpdates.map(updates => ({

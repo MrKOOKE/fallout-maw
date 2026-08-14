@@ -45,6 +45,35 @@
           </button>
         </header>
 
+        <div class="fallout-maw-butchering-tool-requirement">
+          <label class="fallout-maw-checkbox-cell">
+            <input type="checkbox" data-stage-tool-enabled {{#if tool.enabled}}checked{{/if}}>
+            <span>Требуется инструмент</span>
+          </label>
+          <div class="fallout-maw-butchering-tool-fields" data-stage-tool-fields {{#unless tool.enabled}}hidden{{/unless}}>
+            <label>
+              <span>Тип инструмента</span>
+              <select data-stage-tool-key>
+                {{#each toolOptions}}
+                <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label>
+              <span>Класс</span>
+              <select data-stage-tool-class>
+                {{#each toolClassOptions}}
+                <option value="{{key}}" {{#if selected}}selected{{/if}}>{{key}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label>
+              <span>Расход запаса</span>
+              <input type="number" data-stage-tool-cost value="{{tool.supplyCost}}" min="1" step="1">
+            </label>
+          </div>
+        </div>
+
         <div class="fallout-maw-butchering-outcomes">
           {{#each outcomes}}
           <section class="fallout-maw-butchering-outcome fallout-maw-butchering-dropzone" data-butchering-drop data-outcome-key="{{key}}">

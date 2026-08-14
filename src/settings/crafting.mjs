@@ -1,6 +1,7 @@
 export const CRAFTING_RESOLUTION_MODES = Object.freeze({
   skillChecks: "skillChecks",
-  skillThreshold: "skillThreshold"
+  skillThreshold: "skillThreshold",
+  guaranteed: "guaranteed"
 });
 
 export const DEFAULT_CRAFTING_SETTINGS = Object.freeze({
@@ -16,6 +17,9 @@ export const DEFAULT_CRAFTING_SETTINGS = Object.freeze({
   }),
   medicine: Object.freeze({
     mode: CRAFTING_RESOLUTION_MODES.skillChecks
+  }),
+  butchering: Object.freeze({
+    mode: CRAFTING_RESOLUTION_MODES.skillChecks
   })
 });
 
@@ -26,7 +30,8 @@ export function createDefaultCraftingSettings() {
   return {
     craft: { ...DEFAULT_CRAFTING_SETTINGS.craft },
     repair: { ...DEFAULT_CRAFTING_SETTINGS.repair },
-    medicine: { ...DEFAULT_CRAFTING_SETTINGS.medicine }
+    medicine: { ...DEFAULT_CRAFTING_SETTINGS.medicine },
+    butchering: { ...DEFAULT_CRAFTING_SETTINGS.butchering }
   };
 }
 
@@ -35,9 +40,12 @@ export function normalizeCraftingSettings(value = {}) {
   const craft = source.craft && typeof source.craft === "object" ? source.craft : {};
   const repair = source.repair && typeof source.repair === "object" ? source.repair : {};
   const medicine = source.medicine && typeof source.medicine === "object" ? source.medicine : {};
+  const butchering = source.butchering && typeof source.butchering === "object" ? source.butchering : {};
   return {
     craft: {
-      mode: normalizeResolutionMode(craft.mode, DEFAULT_CRAFTING_SETTINGS.craft.mode),
+      mode: normalizeResolutionMode(craft.mode, DEFAULT_CRAFTING_SETTINGS.craft.mode, {
+        allowGuaranteed: false
+      }),
       failureRefundPercent: clampPercent(
         craft.failureRefundPercent,
         DEFAULT_CRAFTING_SETTINGS.craft.failureRefundPercent
@@ -48,7 +56,9 @@ export function normalizeCraftingSettings(value = {}) {
       )
     },
     repair: {
-      mode: normalizeResolutionMode(repair.mode, DEFAULT_CRAFTING_SETTINGS.repair.mode),
+      mode: normalizeResolutionMode(repair.mode, DEFAULT_CRAFTING_SETTINGS.repair.mode, {
+        allowGuaranteed: false
+      }),
       failureToolCostIncreasePercent: clampInteger(
         repair.failureToolCostIncreasePercent,
         0,
@@ -63,13 +73,22 @@ export function normalizeCraftingSettings(value = {}) {
       )
     },
     medicine: {
-      mode: normalizeResolutionMode(medicine.mode, DEFAULT_CRAFTING_SETTINGS.medicine.mode)
+      mode: normalizeResolutionMode(medicine.mode, DEFAULT_CRAFTING_SETTINGS.medicine.mode, {
+        allowGuaranteed: false
+      })
+    },
+    butchering: {
+      mode: normalizeResolutionMode(butchering.mode, DEFAULT_CRAFTING_SETTINGS.butchering.mode)
     }
   };
 }
 
 export function isSkillThresholdMode(mode) {
   return mode === CRAFTING_RESOLUTION_MODES.skillThreshold;
+}
+
+export function isGuaranteedResolutionMode(mode) {
+  return mode === CRAFTING_RESOLUTION_MODES.guaranteed;
 }
 
 export function getCraftFailureRefundPercent(settings = DEFAULT_CRAFTING_SETTINGS, resultKeys = []) {
@@ -97,8 +116,10 @@ export function getRepairToolCostMultiplier(settings = DEFAULT_CRAFTING_SETTINGS
   return 1 + (increasePercent / 100);
 }
 
-function normalizeResolutionMode(value, fallback) {
-  return VALID_RESOLUTION_MODES.has(value) ? value : fallback;
+function normalizeResolutionMode(value, fallback, { allowGuaranteed = true } = {}) {
+  if (!VALID_RESOLUTION_MODES.has(value)) return fallback;
+  if (!allowGuaranteed && value === CRAFTING_RESOLUTION_MODES.guaranteed) return fallback;
+  return value;
 }
 
 function clampPercent(value, fallback) {

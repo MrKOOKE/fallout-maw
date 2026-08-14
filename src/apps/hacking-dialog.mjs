@@ -1,7 +1,7 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getToolSettings } from "../settings/accessors.mjs";
-import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
+import { getEnabledToolFunctions, getToolResourceState } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
@@ -487,7 +487,8 @@ async function applyHackingResultLocked({
   const toolItem = hackerActor.items?.get(toolItemId);
   const toolFunction = getEnabledToolFunctions(toolItem)
     .find(tool => String(tool.toolKey ?? "") === method.toolKey);
-  const currentSupply = Math.max(0, toInteger(toolFunction?.supply?.value));
+  const toolResource = toolFunction?.resource ?? getToolResourceState(toolItem, toolFunction);
+  const currentSupply = toolResource.available ? toolResource.value : 0;
   if (!toolItem || !toolFunction || currentSupply < method.toolCost) {
     throw new Error("Запаса инструмента недостаточно для попытки.");
   }
@@ -506,7 +507,7 @@ async function applyHackingResultLocked({
       };
   const toolUpdate = {
     _id: toolItem.id,
-    [`system.functions.tools.${method.toolKey}.supply.value`]: remainingSupply
+    [toolResource.updatePath]: remainingSupply
   };
   if (isWallHackingTarget(target)) {
     await commitWallHackingBatch([{
@@ -526,6 +527,7 @@ async function applyHackingResultLocked({
       target,
       toolItem,
       toolKey: method.toolKey,
+      toolResourcePath: toolResource.updatePath,
       previousSupply: currentSupply,
       appliedSupply: remainingSupply,
       previousDoorState,
@@ -611,7 +613,7 @@ async function recoverWallHackingBatch(state) {
       parent: state.hackerActor,
       updates: [{
         _id: state.toolItem.id,
-        [`system.functions.tools.${state.toolKey}.supply.value`]: state.previousSupply
+        [state.toolResourcePath]: state.previousSupply
       }],
       render: false,
       falloutMawHackingRecovery: true
@@ -672,7 +674,8 @@ function assertCompleteHackingBatch(results, expectedLength) {
 function getHackingToolSupply(item, toolKey) {
   const tool = getEnabledToolFunctions(item)
     .find(entry => String(entry.toolKey ?? "") === String(toolKey ?? ""));
-  return Math.max(0, toInteger(tool?.supply?.value));
+  const resource = tool?.resource ?? getToolResourceState(item, tool);
+  return resource.available ? resource.value : 0;
 }
 
 function hackingMethodsEqual(left, right) {
@@ -687,8 +690,9 @@ function getHackingToolCandidates(actor, methods) {
     return tools.flatMap(item => getEnabledToolFunctions(item)
       .filter(tool => String(tool.toolKey ?? "") === method.toolKey)
       .map(tool => {
-        const supplyMax = Math.max(0, toInteger(tool.supply?.max));
-        const supplyValue = Math.max(0, Math.min(supplyMax || Number.MAX_SAFE_INTEGER, toInteger(tool.supply?.value)));
+        const resource = tool.resource ?? getToolResourceState(item, tool);
+        const supplyMax = resource.max;
+        const supplyValue = resource.available ? resource.value : 0;
         return {
           candidateKey: `${method.id}:${item.id}`,
           methodId: method.id,
@@ -698,6 +702,7 @@ function getHackingToolCandidates(actor, methods) {
           itemId: item.id,
           name: item.name,
           toolClass: normalizeToolClass(tool.toolClass),
+          resourceMode: resource.mode,
           supplyValue,
           supplyMax
         };

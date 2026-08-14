@@ -3,7 +3,7 @@
     <header class="fallout-maw-panel-header">
       <div>
         <h2>Режимы</h2>
-        <p class="hint">В режиме «Навык как порог» бросок не выполняется: значение навыка должно быть не ниже сложности.</p>
+        <p class="hint">В режиме «Навык как порог» бросок не выполняется: значение навыка должно быть не ниже сложности. Для разделки также доступен гарантированный успех.</p>
       </div>
       <div class="fallout-maw-button-row">
         <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
@@ -31,6 +31,14 @@
         <span>Медицина</span>
         <select name="medicine.mode" data-crafting-mode="medicine">
           {{#each medicineModeChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Разделка</span>
+        <select name="butchering.mode" data-crafting-mode="butchering">
+          {{#each butcheringModeChoices}}
           <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>

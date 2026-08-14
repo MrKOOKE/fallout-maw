@@ -85,7 +85,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
-import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
+import { getEnabledToolFunctions, getToolResourceState } from "../utils/item-functions.mjs";
 import {
   getConstructPartSlots,
   getInstalledConstructPartForSlot,
@@ -453,9 +453,15 @@ function getCraftLinksLite(item, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CR
   return normalizeCraftLinksForNodes(Array.from(getCraftRecipeData(item, mode, recipeId)?.links ?? []), nodes);
 }
 
-function getCraftMaterialRequirementNodes(nodes = [], links = [], mode = CRAFT_MODE_CREATE, { randomize = false } = {}) {
+function getCraftMaterialRequirementNodes(nodes = [], links = [], mode = CRAFT_MODE_CREATE, {
+  actor = null,
+  index = null,
+  randomize = false
+} = {}) {
   if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) return nodes.filter(node => node.root);
-  return getCraftBlockLimitedNodes(nodes, {
+  return getCraftMaterialBlockLimitedNodes(nodes, {
+    actor,
+    index,
     randomize,
     excludeNodeIds: getCraftFailureOutputNodeIds(nodes, links, mode)
   });
@@ -3284,7 +3290,7 @@ function getCraftRepeatLimit(actor, requirements = [], toolRequirements = [], to
     const selectedId = String(normalizedSelections[requirement.key] ?? requirement?.selectedInstrument?.id ?? "");
     const selected = getActorCraftToolCandidates(actor, requirement).find(candidate => candidate.id === selectedId) ?? null;
     if (!selected) return 0;
-    const supplyKey = `${selected.id}:${toolKey}`;
+    const supplyKey = selected.supplyKey;
     const group = toolGroups.get(supplyKey) ?? {
       quantity: 0,
       supply: Math.max(0, toInteger(selected.supplyValue))
@@ -3552,10 +3558,11 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
       selected.supplyValue -= spend;
       remaining -= spend;
       supplyByItemTool.set(selected.supplyKey, selected.supplyValue);
-      if (selected.supplyValue <= 0) depletedItemIds.add(selected.item.id);
-      else {
+      if (selected.supplyValue <= 0 && selected.deletesItemOnDepletion) {
+        depletedItemIds.add(selected.item.id);
+      } else {
         const update = updatesByItemId.get(selected.item.id) ?? { _id: selected.item.id };
-        update[`system.functions.tools.${selected.toolKey}.supply.value`] = selected.supplyValue;
+        update[selected.resourcePath] = selected.supplyValue;
         updatesByItemId.set(selected.item.id, update);
       }
     }
@@ -3586,10 +3593,11 @@ function getActorCraftToolCandidates(actor, requirement = {}, supplyByItemTool =
     .flatMap(item => getEnabledToolFunctions(item)
       .filter(tool => String(tool.toolKey ?? "") === toolKey && isToolClassAccepted(tool.toolClass, requiredClass))
       .map(tool => {
-        const supplyKey = `${item.id}:${toolKey}`;
+        const resource = tool.resource ?? getToolResourceState(item, tool);
+        const supplyKey = `${item.id}:${resource.updatePath}`;
         const supplyValue = supplyByItemTool.has(supplyKey)
           ? supplyByItemTool.get(supplyKey)
-          : Math.max(0, toInteger(tool.supply?.value));
+          : (resource.available ? resource.value : 0);
         return {
           id: item.id,
           item,
@@ -3597,6 +3605,9 @@ function getActorCraftToolCandidates(actor, requirement = {}, supplyByItemTool =
           img: normalizeImagePath(item.img || FALLBACK_ICON),
           toolKey,
           supplyKey,
+          resourceMode: resource.mode,
+          resourcePath: resource.updatePath,
+          deletesItemOnDepletion: resource.deletesItemOnDepletion,
           toolClass: normalizeToolClass(tool.toolClass),
           supplyValue
         };
@@ -4119,7 +4130,11 @@ function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelec
   const links = getCraftLinks(recipe, mode, recipeId);
   const requirements = mode === CRAFT_MODE_DISASSEMBLY
     ? getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode), { includeRoot: true })
-    : getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode, { randomize: randomizeBlocks }));
+    : getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode, {
+      actor,
+      index,
+      randomize: randomizeBlocks
+    }));
   const toolRequirements = getCraftToolRequirements(nodes, { index, actor });
   const outputs = mode === CRAFT_MODE_DISASSEMBLY ? getCraftOutputs(nodes, { randomize: randomizeBlocks }) : [];
   const requirementByNodeId = new Map(requirements.flatMap(requirement => requirement.nodeIds.map(nodeId => [nodeId, requirement])));
@@ -4645,6 +4660,69 @@ function getCraftBlockLimitedNodes(nodes = [], { toolsOnly = false, randomize = 
   return output;
 }
 
+function getCraftMaterialBlockLimitedNodes(nodes = [], {
+  actor = null,
+  index = null,
+  randomize = false,
+  excludeNodeIds = new Set()
+} = {}) {
+  const output = [];
+  const groupedIds = new Set();
+  const excluded = excludeNodeIds instanceof Set ? excludeNodeIds : new Set(excludeNodeIds ?? []);
+  for (const [blockId, blockNodes] of groupCraftNodesByBlock(nodes).entries()) {
+    groupedIds.add(blockId);
+    const candidates = blockNodes
+      .filter(node => !excluded.has(node.id))
+      .filter(node => !isCraftNodeToolRequirement(node));
+    const limit = normalizeCraftBlockLimit(getCraftBlockLimit(blockNodes));
+    const selected = Number.isInteger(limit) && limit > 0
+      ? selectAvailableCraftMaterialBlockNodes(candidates, limit, { actor, index, randomize })
+      : candidates;
+    output.push(...selected);
+  }
+  for (const node of nodes) {
+    const blockId = String(node.blockId ?? "");
+    if (blockId && groupedIds.has(blockId)) continue;
+    if (excluded.has(node.id) || isCraftNodeToolRequirement(node)) continue;
+    output.push(node);
+  }
+  return output;
+}
+
+function selectAvailableCraftMaterialBlockNodes(nodes = [], limit = 1, {
+  actor = null,
+  index = null,
+  randomize = false
+} = {}) {
+  const count = Math.min(nodes.length, Math.max(1, toInteger(limit) || 1));
+  if (count >= nodes.length) return [...nodes];
+  if (!actor && !index) return selectCraftBlockVariantNodes(nodes, count, { randomize });
+
+  const scored = nodes.map((node, order) => {
+    const requirements = getCraftRequirements([node]);
+    const requirement = requirements[0] ?? null;
+    const ownedByRequirement = index
+      ? getActorOwnedCraftRequirementsFromIndex(index, requirements)
+      : getActorOwnedCraftRequirements(actor, requirements);
+    const owned = requirement ? Math.max(0, toInteger(ownedByRequirement.get(requirement.key))) : 0;
+    const quantity = requirement ? Math.max(1, toInteger(requirement.quantity) || 1) : 1;
+    return {
+      node,
+      order,
+      available: owned >= quantity ? 1 : 0,
+      batches: Math.floor(owned / quantity),
+      owned
+    };
+  });
+  scored.sort((left, right) => (
+    right.available - left.available
+    || right.batches - left.batches
+    || right.owned - left.owned
+    || left.order - right.order
+  ));
+  return scored.slice(0, count).map(entry => entry.node);
+}
+
 function selectCraftBlockVariantNodes(nodes = [], limit = 1, { randomize = false } = {}) {
   const count = Math.min(nodes.length, Math.max(1, toInteger(limit) || 1));
   if (count >= nodes.length) return [...nodes];
@@ -4774,10 +4852,11 @@ function getIndexedActorCraftToolCandidates(index = null, requirement = {}, supp
     .flatMap(entry => (entry.tools ?? [])
       .filter(tool => String(tool.toolKey ?? "") === toolKey && isToolClassAccepted(tool.toolClass, requiredClass))
       .map(tool => {
-        const supplyKey = `${entry.item.id}:${toolKey}`;
+        const resource = tool.resource ?? getToolResourceState(entry.item, tool);
+        const supplyKey = `${entry.item.id}:${resource.updatePath}`;
         const supplyValue = supplyByItemTool.has(supplyKey)
           ? supplyByItemTool.get(supplyKey)
-          : Math.max(0, toInteger(tool.supply?.value));
+          : (resource.available ? resource.value : 0);
         return {
           id: entry.item.id,
           item: entry.item,
@@ -4785,6 +4864,9 @@ function getIndexedActorCraftToolCandidates(index = null, requirement = {}, supp
           img: normalizeImagePath(entry.item.img || FALLBACK_ICON),
           toolKey,
           supplyKey,
+          resourceMode: resource.mode,
+          resourcePath: resource.updatePath,
+          deletesItemOnDepletion: resource.deletesItemOnDepletion,
           toolClass: normalizeToolClass(tool.toolClass),
           supplyValue
         };
@@ -6284,10 +6366,10 @@ function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, ava
   const recipeId = recipe?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID;
   const nodes = getCraftNodesWithRoot(recipe, mode, recipeId);
   const links = getCraftLinks(recipe, mode, recipeId);
+  const index = availability ?? createCraftAvailabilityIndex(actor);
   const requirements = mode === CRAFT_MODE_DISASSEMBLY
     ? getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode), { includeRoot: true })
-    : getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode));
-  const index = availability ?? createCraftAvailabilityIndex(actor);
+    : getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode, { actor, index }));
   const toolRequirements = getCraftToolRequirements(nodes, { index });
   const ownedByRequirement = getActorOwnedCraftRequirementsFromIndex(index, requirements);
   const toolAvailability = createCraftToolRequirementAvailabilityPlan(index, toolRequirements);

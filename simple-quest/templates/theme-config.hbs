@@ -1,0 +1,9 @@
+<form action="">
+    <p style="height: 5rem;display: flex;align-content: center;flex-wrap: wrap;">{{localize
+        "simple-quest.theme-config.info"}}</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; overflow: hidden;">
+        {{#each themes}}
+        <button type="button" data-theme="{{this.id}}">{{this.label}}</button>
+        {{/each}}
+    </div>
+</form>

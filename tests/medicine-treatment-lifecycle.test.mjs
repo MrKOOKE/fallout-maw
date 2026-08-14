@@ -263,5 +263,5 @@ test("blocked healing exits before checks and is revalidated before the atomic c
     /executeInventoryMutation\s*\(|system\.functions\.tools\.[^\s]*supply\.value/,
     "treatment checks must not spend the medical tool before the guarded commit"
   );
-  assert.match(commit, /system\.functions\.tools\.\$\{normalizedToolKey\}\.supply\.value/);
+  assert.match(commit, /createToolResourceValueUpdate\(instrument, tool, remaining\)/);
 });

@@ -101,7 +101,7 @@ test("limb health and medical-tool supply commit as one optimistic inventory mut
   assert.match(healingUpdate, /system\.limbs\.\$\{key\}\.damageAccumulation/);
   assert.match(healingUpdate, /mergeConsciousnessRecoveryUpdate\(/);
   assert.match(commit, /currentSupply\s*!==\s*expected/);
-  assert.match(commit, /system\.functions\.tools\.\$\{normalizedToolKey\}\.supply\.value/);
+  assert.match(commit, /createToolResourceValueUpdate\(instrument, tool, remaining\)/);
   assert.equal((commit.match(/executeInventoryMutation\(/g) ?? []).length, 1);
   assert.match(commit, /falloutMawSkipDamageStatusSync:\s*true/);
   assert.match(commit, /falloutMawLimbCapSync:\s*true/);

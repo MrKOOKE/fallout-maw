@@ -1,0 +1,140 @@
+<div id="sq-timeline">
+
+    <main>
+        <section>
+            <div class="timeline-left" style="height: {{height}}px;">
+                {{#each eventsData.left as |event|}}
+
+                <div class="timeline-event {{#if event.hidden}}secret{{/if}} {{#if event.flipped}}flipped{{/if}}"
+                    style="--era-color: {{event.color}}; top: {{event.top}}px;" data-uuid="{{event.uuid}}">
+                    <div class="timeline-border-wrapper">
+                        <header class="{{#if event.content}}{{#if ../showContentToggle}}has-content{{/if}}{{/if}}"
+                            style="background-image: url('{{event.banner}}');">
+                            <div class="background-overlay"></div>
+                            <span class="event-era" data-uuid="{{event.eraUuid}}">{{event.era}}</span>
+                            <h1 class="era-name">{{event.name}}</h1>
+                            {{#if event.label}}<span>{{event.label}}</span>{{/if}}
+                            <span>{{event.year}}{{#if event.yearEnd}} {{{../YEAR_SEPARATOR}}}
+                                {{event.yearEnd}}{{/if}}</span>
+                            {{#if event.content}}
+                            {{#if ../showContentToggle}}
+                            <div class="content-collapse">
+                                <i class="fa-duotone fa-ellipsis"></i>
+                            </div>
+                            {{/if}}
+                            {{/if}}
+                        </header>
+                        <div class="timeline-content {{#if ../collapsed}}collapsed{{/if}}"
+                            style="{{#unless event.content}}display: none;{{/unless}}">
+                            {{{event.content}}}
+                        </div>
+                    </div>
+                </div>
+
+                {{/each}}
+
+
+
+            </div>
+            <div class="timeline-center" style="background: linear-gradient({{erasCssGradient}});height: {{height}}px;">
+                {{#each erasData as |era|}}
+                <div class="timeline-era" style="--era-color: {{era.color}}; top: {{era.top}}px;"
+                    data-uuid="{{era.uuid}}">
+                    <header class="{{#if era.content}}{{#if ../showContentToggle}}has-content{{/if}}{{/if}}"
+                        style="background-image: url('{{era.banner}}');">
+                        <div class="background-overlay"></div>
+                        <h1 class="era-name">{{era.name}}</h1>
+                        {{#if era.label}}<span>{{era.label}}</span>{{/if}}
+                        <span>{{era.start}} {{{../YEAR_SEPARATOR}}} {{era.end}}</span>
+                        {{#if era.content}}
+                        {{#if ../showContentToggle}}
+                        <div class="content-collapse">
+                            <i class="fa-duotone fa-ellipsis"></i>
+                        </div>
+                        {{/if}}
+                        {{/if}}
+                    </header>
+                    <div class="timeline-content {{#if ../collapsed}}collapsed{{/if}}"
+                        style="{{#unless era.content}}display: none;{{/unless}}">
+                        {{{era.content}}}
+                    </div>
+                </div>
+
+                {{/each}}
+                {{#each eventsData.left as |event|}}
+                {{#if event.duration}}
+                <div class="timeline-event-duration" style="height: {{event.duration}}px;top: {{event.top}}px;"></div>
+                {{/if}}
+                <div class="event-dot {{#if event.icon}}icon{{/if}}"
+                    style="background-image: url('{{event.icon}}'); top: {{event.top}}px;"></div>
+                {{/each}}
+                {{#each eventsData.right as |event|}}
+                <div class="event-dot {{#if event.icon}}icon{{/if}}"
+                    style="background-image: url('{{event.icon}}'); top: {{event.top}}px;"></div>
+                {{/each}}
+
+                {{#each eventsData.right as |event|}}
+                {{#if event.duration}}
+                <div class="timeline-event-duration" style="height: {{event.duration}}px;top: {{event.top}}px;"></div>
+                {{/if}}
+                <div class="event-dot {{#if event.icon}}icon{{/if}}"
+                    style="background-image: url('{{event.icon}}'); top: {{event.top}}px;"></div>
+                {{/each}}
+                {{#each eventsData.right as |event|}}
+                <div class="event-dot {{#if event.icon}}icon{{/if}}"
+                    style="background-image: url('{{event.icon}}'); top: {{event.top}}px;"></div>
+                {{/each}}
+                <div class="timeline-bar-shadow" style="background: linear-gradient({{erasCssGradient}});"></div>
+            </div>
+            <div class="timeline-right" style="height: {{height}}px;">
+
+
+                {{#each eventsData.right as |event|}}
+
+                <div class="timeline-event {{#if event.hidden}}secret{{/if}} {{#if event.flipped}}flipped{{/if}}"
+                    style="--era-color: {{event.color}};top: {{event.top}}px;" data-uuid="{{event.uuid}}">
+                    <div class="timeline-border-wrapper">
+                        <header class="{{#if event.content}}{{#if ../showContentToggle}}has-content{{/if}}{{/if}}"
+                            style="background-image: url('{{event.banner}}');">
+                            <div class="background-overlay"></div>
+                            <span class="event-era" data-uuid="{{event.eraUuid}}">{{event.era}}</span>
+                            <h1 class="era-name">{{event.name}}</h1>
+                            {{#if event.label}}<span>{{event.label}}</span>{{/if}}
+                            <span>{{event.year}}{{#if event.yearEnd}} {{{../YEAR_SEPARATOR}}}
+                                {{event.yearEnd}}{{/if}}</span>
+                            {{#if event.content}}
+                            {{#if ../showContentToggle}}
+                            <div class="content-collapse">
+                                <i class="fa-duotone fa-ellipsis"></i>
+                            </div>
+                            {{/if}}
+                            {{/if}}
+                        </header>
+                        <div class="timeline-content {{#if ../collapsed}}collapsed{{/if}}"
+                            style="{{#unless event.content}}display: none;{{/unless}}">
+                            {{{event.content}}}
+                        </div>
+                    </div>
+                </div>
+
+                {{/each}}
+
+            </div>
+            <nav id="timeline-nav" {{#unless isGM}} style="display: none;" {{/unless}}>
+                <i id="add-timeline" class="fa-duotone fa-hourglass"></i>
+            </nav>
+        </section>
+    </main>
+
+
+    <div class="timeline-scrollbar" style="background: linear-gradient({{erasCssGradient}});">
+        <div class="timeline-scrollbar-box-shadow" style="background: linear-gradient({{erasCssGradient}});"></div>
+        {{#each scrollbarDots as |dot|}}
+
+        <div class="timeline-scrollbar-dot" style="top: {{dot.top}}%; --era-color: {{dot.color}};"
+            data-uuid="{{dot.uuid}}"></div>
+
+        {{/each}}
+    </div>
+
+</div>

@@ -18541,6 +18541,30 @@ label.checkbox.fallout-maw-ability-change-choice {
   gap: 0.2rem;
 }
 
+.fallout-maw-butchering-tool-requirement {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin: 0 0 0.65rem;
+}
+
+.fallout-maw-butchering-tool-fields {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(14rem, 1fr) 6rem 8rem;
+}
+
+.fallout-maw-butchering-tool-fields[hidden] {
+  display: none;
+}
+
+.fallout-maw-butchering-tool-fields label {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .fallout-maw-butchering-outcomes {
   display: grid;
   gap: 0.55rem;
@@ -18635,6 +18659,11 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 @media (max-width: 1000px) {
   .fallout-maw-butchering-config-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-butchering-tool-requirement,
+  .fallout-maw-butchering-tool-fields {
     grid-template-columns: 1fr;
   }
 }

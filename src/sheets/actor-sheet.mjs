@@ -159,6 +159,7 @@ import {
   getModuleFunction,
   getProsthesisFunction,
   getToolFunction,
+  getToolResourceState,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import {
@@ -8646,9 +8647,10 @@ function buildToolTooltipSections(item) {
     .filter(tool => tools?.[tool.key]?.enabled)
     .map(tool => {
       const data = getToolFunction(item, tool.key);
+      const resource = getToolResourceState(item, { ...data, toolKey: tool.key });
       const rows = [
         ["Класс", String(data.toolClass ?? "D")],
-        ["Запас", `${toInteger(data.supply?.value)} / ${toInteger(data.supply?.max)}`],
+        [resource.mode === "condition" ? "Состояние" : "Запас", `${resource.value} / ${resource.max}`],
         ["Навык", `${getSkillLabel(data.skillKey)} ${toInteger(data.skillValue)}`]
       ];
       return renderTooltipFunctionSection(tool.label ?? tool.key, rows);

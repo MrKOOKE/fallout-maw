@@ -1,0 +1,143 @@
+<form action="submit">
+
+    <div class="form-group">
+        <label for="title">{{localize "Name"}}</label>
+        <input type="text" name="title" id="title" value="{{title}}" placeholder="{{localize " Name"}}">
+    </div>
+
+    <div class="form-group">
+        <label for="label">{{localize "simple-quest.timeline-config.label"}}</label>
+        <input type="text" name="label" id="label" value="{{label}}">
+        <p class="notes">{{localize "simple-quest.timeline-config.labelNote"}}</p>
+    </div>
+
+    <div class="form-group">
+        <label for="banner">{{localize "simple-quest.timeline-config.banner"}}</label>
+        <div class="form-fields">
+            <input type="text" name="banner" id="banner" value="{{banner}}" placeholder="path/to/image.jpg">
+            {{filePicker type="imagevideo" target="banner"}}
+        </div>
+    </div>
+
+
+    <div class="form-group">
+        <label for="description">{{localize "simple-quest.timeline-config.description"}}</label>
+        <button type="button" id="edit-contents"><i class="fa-duotone fa-feather"></i> {{localize
+            "simple-quest.timeline-config.description"}}</button>
+    </div>
+
+    <fieldset class="event-fieldset">
+        <legend>{{localize "simple-quest.timeline-config.event"}}</legend>
+
+
+        <div class="form-group">
+            <label for="">{{localize "simple-quest.timeline-config.hidden"}}</label>
+            <input type="checkbox" name="hidden" id="hidden" {{#if hidden}}checked{{/if}}>
+        </div>
+
+        <div class="form-group">
+            <label for="year">{{localize "simple-quest.timeline-config.year"}}</label>
+            <input type="number" name="year" id="year" value="{{year}}" placeholder="">
+        </div>
+
+        <div class="form-group">
+            <label for="duration">{{localize "simple-quest.timeline-config.duration"}}</label>
+            <input type="number" name="duration" id="duration" value="{{duration}}" placeholder="">
+        </div>
+
+        <div class="form-group">
+            <label for="">{{localize "simple-quest.timeline-config.icon"}}</label>
+            <div class="form-fields">
+                <input type="text" name="icon" id="icon" value="{{icon}}" placeholder="path/to/image.jpg">
+                {{filePicker type="imagevideo" target="icon"}}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="flipped">{{localize "simple-quest.timeline-config.flipped"}}</label>
+            <input type="checkbox" name="flipped" id="flipped" {{#if flipped}}checked{{/if}}>
+        </div>
+
+        <div class="form-group">
+            <label for="offset">{{localize "simple-quest.timeline-config.offset"}}</label>
+            <input type="number" name="offset" id="offset" value="{{offset}}" placeholder="">
+        </div>
+
+    </fieldset>
+
+
+    <div class="era-event-switch">
+        <span class="{{#unless isEra}}selected{{/unless}}" data-type="event">{{localize
+            "simple-quest.timeline-config.event"}}</span>
+        <span class="{{#if isEra}}selected{{/if}}" data-type="era">{{localize
+            "simple-quest.timeline-config.era"}}</span>
+    </div>
+
+    <fieldset class="era-fieldset">
+        <legend>{{localize "simple-quest.timeline-config.era"}}</legend>
+        <div class="form-group">
+            <label for="eraStart">{{localize "simple-quest.timeline-config.eraStart"}}</label>
+            <input type="number" name="eraStart" id="eraStart" value="{{eraStart}}" placeholder="">
+        </div>
+        <div class="form-group">
+            <label for="eraEnd">{{localize "simple-quest.timeline-config.eraEnd"}}</label>
+            <input type="number" name="eraEnd" id="eraEnd" value="{{eraEnd}}" placeholder="">
+        </div>
+        <div class="form-group">
+            <label for="color">{{localize "TILE.Tint"}}</label>
+            <color-picker name="color" value="{{color}}"></color-picker>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>{{localize "simple-quest.timeline-config.general"}}</legend>
+        <p class="notes">{{localize "simple-quest.timeline-config.generalNote"}}</p>
+        <div class="form-group">
+            <label for="negativeAbb">{{localize "simple-quest.timeline-config.negativeAbb"}}</label>
+            <input type="text" name="negativeAbb" value="{{negativeAbb}}" placeholder="">
+        </div>
+        <div class="form-group">
+            <label for="showMinus">{{localize "simple-quest.timeline-config.showMinus"}}</label>
+            <input type="checkbox" name="showMinus" id="showMinus" {{#if showMinus}}checked{{/if}}>
+        </div>
+
+        <div class="form-group">
+            <label for="positiveAbb">{{localize "simple-quest.timeline-config.positiveAbb"}}</label>
+            <input type="text" name="positiveAbb" value="{{positiveAbb}}" placeholder="">
+        </div>
+
+        <div class="form-group">
+            <label for="timeScale">{{localize "simple-quest.timeline-config.timeScale"}}</label>
+            <input type="number" name="timeScale" value="{{timeScale}}" placeholder="">
+        </div>
+
+        <div class="form-group">
+            <label for="dynamicTimeScale">{{localize "simple-quest.timeline-config.dynamicTimeScale"}}</label>
+            <input type="checkbox" name="dynamicTimeScale" id="dynamicTimeScale" {{#if dynamicTimeScale}}checked{{/if}}>
+            <p class="notes">{{localize "simple-quest.timeline-config.dynamicTimeScaleNote"}}</p>
+        </div>
+
+        <div class="form-group">
+            <label for="content">{{localize "simple-quest.timeline-config.content"}}</label>
+            <select name="content">
+                {{selectOptions contentChoices selected=content localize=true}}
+            </select>
+        </div>
+
+    </fieldset>
+
+    <div class="form-group">
+        <label for="ignoreDataValidation">{{localize "simple-quest.timeline-config.ignoreDataValidation"}}</label>
+        <input type="checkbox" name="ignoreDataValidation" id="ignoreDataValidation" {{#if
+            ignoreDataValidation}}checked{{/if}}>
+        <p class="notes">{{localize "simple-quest.timeline-config.ignoreDataValidationNote"}}</p>
+    </div>
+
+    <footer class="flexrow">
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> {{localize
+            "Save"}}</button>
+
+        <button type="button" id="delete"><i class="fa-solid fa-trash"></i> {{localize "Delete"}}</button>
+
+    </footer>
+</form>

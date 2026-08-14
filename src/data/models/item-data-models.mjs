@@ -1380,6 +1380,7 @@ function toolFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     useAsItem: new BooleanField({ required: true, initial: false }),
+    consumptionMode: new StringField({ required: true, blank: false, choices: ["supply", "condition"], initial: "supply" }),
     toolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
     supply: new SchemaField({
       value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),

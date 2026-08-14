@@ -1,0 +1,284 @@
+{
+  "schema": 1,
+  "sourcePack": "Flat Shaded Low Poly Flintlock Weapons by TheTeaGuns",
+  "sourcePage": "https://theteaguns.itch.io/flat-shaded-low-poly-flintlock-weapons",
+  "rules": {
+    "projectAssetsUnderLost": true,
+    "weaponCropsFromDownloadedPack": true
+  },
+  "entries": [
+    {
+      "kind": "weapon",
+      "key": "hand-cannon",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/hand-cannon.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "ec31a4b338d01c2869554e8f854c076743ada8c2116d24d4df3a1515d2829278"
+    },
+    {
+      "kind": "weapon",
+      "key": "lever-handgonne",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/lever-handgonne.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "4b4ea1c578c4227b9dad051f1f5de7329cca490c55681d4bb8883f44541a45c8"
+    },
+    {
+      "kind": "weapon",
+      "key": "matchlock-hackbut",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/matchlock-hackbut.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "b8f3c8ab9ffec6fcd2557167fa13f815856b5465497ea629491792fddbef8f3b"
+    },
+    {
+      "kind": "weapon",
+      "key": "doppelhaken",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/doppelhaken.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "d5ee88a2a9e797da23f57c8a634f366c6f0f6aab9d45734df19c74c771a2e4f5"
+    },
+    {
+      "kind": "weapon",
+      "key": "matchlock-arquebus",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/matchlock-arquebus.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "9cb1fd53668db4ee9d09dbf75755d9f7f738a354a3d661ed591afcc46a7688ee"
+    },
+    {
+      "kind": "weapon",
+      "key": "spring-serpentine-arquebus",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/spring-serpentine-arquebus.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "3add3779b5006784cd774f6f065064eeb752538c7b1665f765759083914c8b17"
+    },
+    {
+      "kind": "weapon",
+      "key": "caliver",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/caliver.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "aed52f4b53689a67af2254d49a0c1b5c02972254ba3332f85273159a264e222d"
+    },
+    {
+      "kind": "weapon",
+      "key": "matchlock-musket",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/matchlock-musket.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "4dd074e4e5e98a041906b6147141642ec8989842d791137363b9deff20f7b7b3"
+    },
+    {
+      "kind": "weapon",
+      "key": "matchlock-musketoon",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/matchlock-musketoon.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "d7df71a196ecf1cbe3b7a2126e72acb37ffdd21d99b18f9ededd9070ae671afb"
+    },
+    {
+      "kind": "weapon",
+      "key": "wheellock-arquebus",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/wheellock-arquebus.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "91c0c06c1471e7daf6060ae448be64f5418eb773d6996204bc4206be7ca4634b"
+    },
+    {
+      "kind": "weapon",
+      "key": "wheellock-carbine",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/wheellock-carbine.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "91bed20cb92cebf87c5b244b58e4721091595aa3ef5219be4071590cbb31b670"
+    },
+    {
+      "kind": "weapon",
+      "key": "petronel",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/petronel.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "e18b1e108dd183581e68dfe826ba67cfbbb2c37fe30b9fccb5bac25cb8dceea0"
+    },
+    {
+      "kind": "weapon",
+      "key": "reitars-pistol",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/reitars-pistol.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "37faceba9e600752672071fc02d5b991970576578bec5589ef9ae1c2c43cf445"
+    },
+    {
+      "kind": "weapon",
+      "key": "blunderbuss",
+      "destination": "systems/fallout-maw/LOST/items/weapons/firearms/blunderbuss.webp",
+      "source": "C:/Users/1/AppData/Local/FoundryVTT/Data/_codex_tmp_setting_audit/internet_firearm_packs/theteaguns-flintlock/PreviewImage.png",
+      "sha256": "3d08a85c5ded5c283cc0f0993ca7e0d7ae3d355a1f1b69804a466c205df72eaa"
+    },
+    {
+      "kind": "ammunition",
+      "key": "stone-ball",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/stone-ball.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "49ade32fcc0f6b2c11ce9e30b5cea98567d77d34e7b2a9e44bc732bf8180333a"
+    },
+    {
+      "kind": "ammunition",
+      "key": "iron-ball",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/iron-ball.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "9f4cb95cd195e2d7297fcbfbc32d0cd90290ab867b2c93e0bb176ecf7b36dbb1"
+    },
+    {
+      "kind": "ammunition",
+      "key": "lead-ball",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/lead-ball.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "c71db998e9cc507a74c251ab8d71756a7d1447e277f8237a48dcc71d8354b9d9"
+    },
+    {
+      "kind": "ammunition",
+      "key": "caliver-ball",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/caliver-ball.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "6c8a94728823b104ffb61e418eaa8bc8d05af42a462cf9016d3bf194e30ba31b"
+    },
+    {
+      "kind": "ammunition",
+      "key": "musket-ball",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/musket-ball.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "118a0421afa2091124370047231395c21ab8821bbe9959dc09222eea6b4ad365"
+    },
+    {
+      "kind": "ammunition",
+      "key": "pistol-ball",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/pistol-ball.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "6edafb902fd95e8759efeb2e5733cc184bb1a1aa8fa65469ee3214c5b729b606"
+    },
+    {
+      "kind": "ammunition",
+      "key": "shot",
+      "destination": "systems/fallout-maw/LOST/items/ammunition/firearms/shot.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "dcaf0ce2eeeeffd981cbeda0e756d6e08cf2f935b0e17ceef5baf8e78bb169ad"
+    },
+    {
+      "kind": "material",
+      "key": "sulfur",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/sulfur.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "f419ac343e5557847b6d8b33ccc244830ad72991e926aa634f5762254d06d00d"
+    },
+    {
+      "kind": "material",
+      "key": "saltpeter-earth",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/saltpeter-earth.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "01ffe2143db85f68c79d70738338e5a41ef255c24dde747702e8601dfb3f97af"
+    },
+    {
+      "kind": "material",
+      "key": "refined-sulfur",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/refined-sulfur.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "6f1435c706d9578e93c7fe32a855f9c99cdb5a50cefc40571a8612c133b9aa03"
+    },
+    {
+      "kind": "material",
+      "key": "saltpeter",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/saltpeter.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "193525a6ca7cf521b57429a317bb8f90287c9c4a2aad044a876e19207d0ef657"
+    },
+    {
+      "kind": "material",
+      "key": "meal-powder",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/meal-powder.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "fd2877552ae2956f434fd4f9c5489509766551557bc8ee66abea8c183e31af18"
+    },
+    {
+      "kind": "material",
+      "key": "corned-powder",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/corned-powder.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "5e2becd886501824581fb01253545abd7bc130773a1f4bbfcb46637c26edca0e"
+    },
+    {
+      "kind": "material",
+      "key": "glazed-powder",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/glazed-powder.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "2cc47d2949e61899041c3cbc901592e5b89f41eb3fd1fcf65090311870bbb568"
+    },
+    {
+      "kind": "component",
+      "key": "handgonne-barrel",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/handgonne-barrel.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "99eee025f0247a574931c50e191a5b70cfc6666e417e349dea4f2e2437d0ce97"
+    },
+    {
+      "kind": "component",
+      "key": "hackbut-barrel",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/hackbut-barrel.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "99eee025f0247a574931c50e191a5b70cfc6666e417e349dea4f2e2437d0ce97"
+    },
+    {
+      "kind": "component",
+      "key": "arquebus-barrel",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/arquebus-barrel.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "99eee025f0247a574931c50e191a5b70cfc6666e417e349dea4f2e2437d0ce97"
+    },
+    {
+      "kind": "component",
+      "key": "musket-barrel",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/musket-barrel.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "a612f0be87849f2cd106064ce04e0a5ff1ef82018ce0a8003bc4931e7a9a0bfd"
+    },
+    {
+      "kind": "component",
+      "key": "arquebus-stock",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/arquebus-stock.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "7fe1189fba6e3d7a948fa3558de5292a8de004a9d0f544f337f6ce8e75a10107"
+    },
+    {
+      "kind": "component",
+      "key": "musket-stock",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/musket-stock.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "7fe1189fba6e3d7a948fa3558de5292a8de004a9d0f544f337f6ce8e75a10107"
+    },
+    {
+      "kind": "component",
+      "key": "match-serpentine",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/match-serpentine.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "389b161e2e1ec3a3c0f86d1a55ca5d11999e3aa35297fe31b42493f786beb52a"
+    },
+    {
+      "kind": "component",
+      "key": "spring-lock",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/spring-lock.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "389b161e2e1ec3a3c0f86d1a55ca5d11999e3aa35297fe31b42493f786beb52a"
+    },
+    {
+      "kind": "component",
+      "key": "wheel-lock",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/wheel-lock.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "7ae11a107c37e44f9ee20c36685a487291c01231bf5611b3ce1b42ac4cea8e04"
+    },
+    {
+      "kind": "component",
+      "key": "ramrod",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/ramrod.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "5c48cfd2f82bb6ccfa79254cb6708e2867f07a05b0ac22fc3b8bf7f702418d70"
+    },
+    {
+      "kind": "component",
+      "key": "musket-rest",
+      "destination": "systems/fallout-maw/LOST/items/materials/gunmaking/musket-rest.webp",
+      "source": "generated-from-pack-palette",
+      "sha256": "79a4b66532244183399a07d76660b7784168ae41bb43ea27175268fed8babf49"
+    }
+  ]
+}

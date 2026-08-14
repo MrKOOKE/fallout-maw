@@ -1,0 +1,9 @@
+export const MODULE_ID = "simple-quest";
+export const SYSTEM_ID = "fallout-maw";
+export const FLAG_SCOPE = SYSTEM_ID;
+export const FLAG_ROOT = "simpleQuest";
+export const FLAG_PATH = `flags.${FLAG_SCOPE}.${FLAG_ROOT}`;
+export const SYSTEM_PATH = `systems/${SYSTEM_ID}/${MODULE_ID}`;
+export const SYSTEM_STORAGE_PATH = `systems/${SYSTEM_ID}/storage/${MODULE_ID}`;
+export const SOCKET_CHANNEL = `system.${SYSTEM_ID}`;
+export const SOCKET_SCOPE = `${SYSTEM_ID}.simpleQuest`;

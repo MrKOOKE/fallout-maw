@@ -5,5 +5,7 @@ npm-debug.log*
 Library-animation/
 audio/
 assets/
+!/simple-quest/assets/
+!/simple-quest/assets/**
 packs/
 /scripts/

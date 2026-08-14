@@ -9,7 +9,7 @@ import { normalizeImagePath, prepareInventoryContext } from "../utils/actor-disp
 import { getItemQuantity, isContainerItem } from "../utils/inventory-containers.mjs";
 import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { getCreatureOptions, getToolSettings } from "../settings/accessors.mjs";
-import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getToolResourceState, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
@@ -3526,8 +3526,9 @@ function getTrapDisarmToolCandidates(actor, disarm = {}) {
     .flatMap(item => getEnabledToolFunctions(item)
       .filter(tool => String(tool.toolKey ?? "") === requiredToolKey)
       .map(tool => {
-        const supplyMax = Math.max(0, toInteger(tool.supply?.max));
-        const supplyValue = Math.max(0, Math.min(supplyMax || Number.MAX_SAFE_INTEGER, toInteger(tool.supply?.value)));
+        const resource = tool.resource ?? getToolResourceState(item, tool);
+        const supplyMax = resource.max;
+        const supplyValue = resource.available ? resource.value : 0;
         return {
           item,
           itemId: item.id,
@@ -3535,6 +3536,7 @@ function getTrapDisarmToolCandidates(actor, disarm = {}) {
           img: item.img,
           toolKey: String(tool.toolKey ?? ""),
           toolClass: normalizeToolClass(tool.toolClass),
+          resourceMode: resource.mode,
           supplyValue,
           supplyMax
         };

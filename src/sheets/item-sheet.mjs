@@ -29,6 +29,7 @@ import {
   createDefaultWeaponSpecialPropertyData,
   getProsthesisFunction,
   getSelectedToolFunctionKey,
+  getToolResourceState,
   getToolKeyFromFunctionKey,
   getWeaponSpecialPropertyType,
   normalizeWeaponAdditionalProficiencyKeys,
@@ -36,6 +37,7 @@ import {
   normalizeWeaponSpecialProperties,
   normalizeWeaponAttackPowerData,
   normalizeWeaponCriticalDamageData,
+  normalizeToolResourceMode,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
@@ -11905,7 +11907,7 @@ function calculateCraftItemCost(item) {
     const toolFunction = getCraftNodeToolFunction(node);
     if (isCraftNodeToolRequirement(node, toolFunction)) {
       toolCount += 1;
-      const maximumSupply = Math.max(0, toInteger(toolFunction.supply?.max));
+      const maximumSupply = getToolResourceState(source, toolFunction).max;
       if (maximumSupply <= 0) {
         invalidToolSupplyCount += 1;
         continue;
@@ -13530,6 +13532,8 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
   const data = functions?.[selectedTool.key] ?? {};
   const skillKey = String(data.skillKey ?? "");
   const toolClass = String(data.toolClass ?? "D");
+  const resourceMode = normalizeToolResourceMode(data.consumptionMode);
+  const resource = getToolResourceState(item, { ...data, toolKey: selectedTool.key });
 
   return [selectedTool].map(tool => {
     return {
@@ -13537,6 +13541,16 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
       functionKey: ITEM_FUNCTIONS.tool,
       enabled: hasItemFunction(item, ITEM_FUNCTIONS.tool, { ignoreBroken: true }),
       useAsItem: Boolean(data.useAsItem),
+      resourceMode,
+      usesSupplyResource: resourceMode === "supply",
+      usesConditionResource: resourceMode === "condition",
+      resourceChoices: [
+        { value: "supply", label: "Запас инструмента", selected: resourceMode === "supply" },
+        { value: "condition", label: "Состояние предмета", selected: resourceMode === "condition" }
+      ],
+      conditionResourceConfigured: resource.configured,
+      conditionResourceValue: resource.value,
+      conditionResourceMax: resource.max,
       toolClass,
       toolChoices: toolSettings.map(choice => ({
         value: choice.key,
@@ -13881,6 +13895,7 @@ function createToolFunctionSelectionUpdate(item, toolKey = "", { enabled = true,
   const update = {
     [`system.functions.tools.${key}.enabled`]: Boolean(enabled),
     [`system.functions.tools.${key}.useAsItem`]: Boolean(item.system?.functions?.tools?.[key]?.useAsItem),
+    [`system.functions.tools.${key}.consumptionMode`]: normalizeToolResourceMode(sourceData.consumptionMode),
     [`system.functions.tools.${key}.toolClass`]: String(sourceData.toolClass ?? "D") || "D",
     [`system.functions.tools.${key}.supply.value`]: Math.max(0, toInteger(sourceData.supply?.value)),
     [`system.functions.tools.${key}.supply.max`]: Math.max(0, toInteger(sourceData.supply?.max)),

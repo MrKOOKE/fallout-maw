@@ -1,5 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getCurrencySettings, getItemCategorySettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCraftingSettings, getCreatureOptions, getCurrencySettings, getItemCategorySettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { isGuaranteedResolutionMode, isSkillThresholdMode } from "../settings/crafting.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import {
@@ -97,6 +98,7 @@ import {
   getDamageSourceFunction,
   getEnergyConsumerFunction,
   getEnabledToolFunctions,
+  getToolResourceState,
   hasItemFunction,
   ITEM_FUNCTIONS
 } from "../utils/item-functions.mjs";
@@ -164,6 +166,7 @@ const TRADE_OFFER_MAX_ROWS = 60;
 const PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH = `flags.${SYSTEM_ID}.inventory.personalTradeSettlements`;
 const PERSONAL_TRADE_SETTLEMENT_LEDGER_LIMIT = 50;
 const PERSONAL_TRADE_REJECTION_FEEDBACK_MS = 1000;
+const BUTCHERING_TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 function getFixedTradeOfferGridColumns() {
   return TRADE_OFFER_DEFAULT_COLUMNS;
@@ -4653,6 +4656,72 @@ async function performActorButchering(payload = {}, requesterUserId = "") {
   const rewardDocuments = await resolveButcheringRewardDocuments(config);
   const worstCaseRewards = selectWorstCaseButcheringRewards(config, rewardDocuments);
   createButcheringInventoryPlan(searchedActor, worstCaseRewards);
+  assertButcheringToolsAvailable(searcherActor, config.stages);
+
+  const resolution = await resolveButcheringStages({
+    searcherActor,
+    searchedActor,
+    config,
+    requesterUserId
+  });
+
+  const rewards = [];
+  for (const [index, stage] of config.stages.entries()) {
+    const outcomeKey = String(resolution[index]?.outcomeKey ?? "failure");
+    for (const reward of stage.outcomes?.[outcomeKey] ?? []) {
+      const document = rewardDocuments.get(reward.uuid);
+      if (!document) throw new Error(`Предмет награды «${reward.name}» недоступен.`);
+      rewards.push({
+        itemData: document.toObject(),
+        quantity: randomButcheringRewardQuantity(reward)
+      });
+    }
+  }
+
+  const toolPlan = createButcheringToolSpendPlan(searcherActor, config.stages);
+  if (!toolPlan.valid) throw new Error(toolPlan.message);
+  const plan = createButcheringInventoryPlan(searchedActor, rewards);
+  await applyButcheringInventoryPlan({
+    searchedActor,
+    searcherActor,
+    rewardPlan: plan,
+    toolPlan,
+    config
+  });
+  return {
+    ok: true,
+    stages: resolution.map(result => result.resultKey),
+    rewards: rewards.length,
+    toolsSpent: toolPlan.spent
+  };
+}
+
+async function resolveButcheringStages({
+  searcherActor,
+  searchedActor,
+  config,
+  requesterUserId = ""
+} = {}) {
+  const mode = getCraftingSettings().butchering.mode;
+  if (isGuaranteedResolutionMode(mode)) {
+    return config.stages.map(() => ({
+      outcomeKey: "success",
+      resultKey: "guaranteed"
+    }));
+  }
+
+  if (isSkillThresholdMode(mode)) {
+    const skillValue = Math.max(0, toInteger(searcherActor?.system?.skills?.[config.skillKey]?.value));
+    for (const stage of config.stages) {
+      if (skillValue >= stage.difficulty) continue;
+      const skillLabel = getSkillSettings().find(skill => skill.key === config.skillKey)?.label ?? config.skillKey;
+      throw new Error(`Для разделки нужно ${stage.difficulty} ${skillLabel} (сейчас ${skillValue}).`);
+    }
+    return config.stages.map(() => ({
+      outcomeKey: "success",
+      resultKey: "skillThreshold"
+    }));
+  }
 
   const batch = await requestSkillCheckBatch({
     actor: searcherActor,
@@ -4671,27 +4740,10 @@ async function performActorButchering(payload = {}, requesterUserId = "") {
   if (!batch || batch.outcomes?.length !== config.stages.length) {
     throw new Error("Не удалось выполнить проверки разделки.");
   }
-
-  const rewards = [];
-  for (const [index, stage] of config.stages.entries()) {
-    const outcomeKey = String(batch.outcomes[index]?.result?.key ?? "failure");
-    for (const reward of stage.outcomes?.[outcomeKey] ?? []) {
-      const document = rewardDocuments.get(reward.uuid);
-      if (!document) throw new Error(`Предмет награды «${reward.name}» недоступен.`);
-      rewards.push({
-        itemData: document.toObject(),
-        quantity: randomButcheringRewardQuantity(reward)
-      });
-    }
-  }
-
-  const plan = createButcheringInventoryPlan(searchedActor, rewards);
-  await applyButcheringInventoryPlan(searchedActor, plan, config);
-  return {
-    ok: true,
-    stages: batch.outcomes.map(outcome => outcome.result?.key ?? "failure"),
-    rewards: rewards.length
-  };
+  return batch.outcomes.map(outcome => {
+    const resultKey = String(outcome.result?.key ?? "failure");
+    return { outcomeKey: resultKey, resultKey };
+  });
 }
 
 function canStartActorButchering(actor) {
@@ -5207,6 +5259,119 @@ function randomButcheringRewardQuantity(reward = {}) {
   return lower + Math.floor(Math.random() * ((upper - lower) + 1));
 }
 
+function assertButcheringToolsAvailable(actor, stages = []) {
+  const plan = createButcheringToolSpendPlan(actor, stages);
+  if (!plan.valid) throw new Error(plan.message);
+  return plan;
+}
+
+function createButcheringToolSpendPlan(actor, stages = []) {
+  const supplyByItemTool = new Map();
+  const updatesByItemId = new Map();
+  const depletedItemIds = new Set();
+  let spent = 0;
+
+  for (const stage of stages ?? []) {
+    const requirement = stage?.tool ?? {};
+    if (requirement.enabled !== true) continue;
+    const toolKey = String(requirement.toolKey ?? "").trim();
+    const requiredClass = normalizeButcheringToolClass(requirement.toolClass);
+    const supplyCost = Math.max(1, toInteger(requirement.supplyCost) || 1);
+    const candidates = getButcheringToolCandidates(actor, {
+      toolKey,
+      toolClass: requiredClass,
+      supplyCost
+    }, supplyByItemTool, depletedItemIds);
+    const selected = candidates.find(candidate => candidate.supplyValue >= supplyCost) ?? null;
+    if (!selected) {
+      const label = (getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey) || "Инструмент";
+      return {
+        valid: false,
+        message: `${stage.name}: нужен инструмент «${label}» класса ${requiredClass} или выше с ресурсом не менее ${supplyCost}.`,
+        updates: [],
+        deletes: [],
+        spent: 0
+      };
+    }
+
+    const remaining = selected.supplyValue - supplyCost;
+    supplyByItemTool.set(selected.supplyKey, remaining);
+    spent += supplyCost;
+    if (remaining <= 0 && selected.deletesItemOnDepletion) {
+      depletedItemIds.add(selected.item.id);
+      updatesByItemId.delete(selected.item.id);
+      continue;
+    }
+    const update = updatesByItemId.get(selected.item.id) ?? { _id: selected.item.id };
+    update[selected.resourcePath] = remaining;
+    updatesByItemId.set(selected.item.id, update);
+  }
+
+  return {
+    valid: true,
+    message: "",
+    updates: Array.from(updatesByItemId.entries())
+      .filter(([itemId]) => !depletedItemIds.has(itemId))
+      .map(([, update]) => update),
+    deletes: Array.from(depletedItemIds),
+    spent
+  };
+}
+
+function getButcheringToolCandidates(
+  actor,
+  requirement = {},
+  supplyByItemTool = new Map(),
+  depletedItemIds = new Set()
+) {
+  const requiredClass = normalizeButcheringToolClass(requirement.toolClass);
+  const requiredRank = getButcheringToolClassRank(requiredClass);
+  const toolKey = String(requirement.toolKey ?? "").trim();
+  const supplyCost = Math.max(1, toInteger(requirement.supplyCost) || 1);
+  return (actor?.items?.contents ?? [])
+    .filter(item => !isNaturalRaceItem(item))
+    .filter(item => !depletedItemIds.has(item.id))
+    .flatMap(item => getEnabledToolFunctions(item)
+      .filter(tool => !tool.useAsItem)
+      .filter(tool => String(tool.toolKey ?? "").trim() === toolKey)
+      .filter(tool => getButcheringToolClassRank(tool.toolClass) >= requiredRank)
+      .map(tool => {
+        const resource = tool.resource ?? getToolResourceState(item, tool);
+        const supplyKey = `${item.id}:${resource.updatePath}`;
+        const supplyValue = supplyByItemTool.has(supplyKey)
+          ? supplyByItemTool.get(supplyKey)
+          : (resource.available ? resource.value : 0);
+        return {
+          item,
+          toolKey,
+          toolClass: normalizeButcheringToolClass(tool.toolClass),
+          supplyKey,
+          resourcePath: resource.updatePath,
+          resourceMode: resource.mode,
+          deletesItemOnDepletion: resource.deletesItemOnDepletion,
+          supplyValue
+        };
+      }))
+    .filter(candidate => candidate.supplyValue > 0)
+    .sort((left, right) => (
+      Number(right.supplyValue >= supplyCost) - Number(left.supplyValue >= supplyCost)
+      || (getButcheringToolClassRank(left.toolClass) - requiredRank)
+        - (getButcheringToolClassRank(right.toolClass) - requiredRank)
+      || left.supplyValue - right.supplyValue
+      || String(left.item?.name ?? "").localeCompare(String(right.item?.name ?? ""), game.i18n.lang)
+      || String(left.item?.id ?? "").localeCompare(String(right.item?.id ?? ""), game.i18n.lang)
+    ));
+}
+
+function normalizeButcheringToolClass(value) {
+  const normalized = String(value ?? "D").trim().toUpperCase();
+  return Object.hasOwn(BUTCHERING_TOOL_CLASS_RANK, normalized) ? normalized : "D";
+}
+
+function getButcheringToolClassRank(value) {
+  return BUTCHERING_TOOL_CLASS_RANK[normalizeButcheringToolClass(value)];
+}
+
 function createButcheringInventoryPlan(actor, rewards = []) {
   const legacyContainers = actor.items.contents.filter(item => item.getFlag?.(SYSTEM_ID, BUTCHERING_CONTAINER_FLAG) === true);
   const legacyContainerIds = new Set(legacyContainers.map(item => item.id));
@@ -5368,17 +5533,33 @@ function createButcheringRollbackUpdates(actor, updates = []) {
   }).filter(Boolean);
 }
 
-async function applyButcheringInventoryPlan(actor, plan, config) {
-  await executeInventoryMutation({
-    actor,
-    updates: plan.updates,
-    creates: plan.creates,
-    deletes: plan.deletes
-  }, { reason: "butchering-complete", render: false });
-  await actor.setFlag(SYSTEM_ID, "butchering", {
+async function applyButcheringInventoryPlan({
+  searchedActor,
+  searcherActor,
+  rewardPlan,
+  toolPlan,
+  config
+} = {}) {
+  const completedConfig = {
     ...config,
     completed: true
-  });
+  };
+  await executeInventoryMutation([
+    {
+      actor: searchedActor,
+      updates: rewardPlan.updates,
+      creates: rewardPlan.creates,
+      deletes: rewardPlan.deletes,
+      actorUpdates: [{
+        [`flags.${SYSTEM_ID}.butchering`]: completedConfig
+      }]
+    },
+    {
+      actor: searcherActor,
+      updates: toolPlan.updates,
+      deletes: toolPlan.deletes
+    }
+  ], { reason: "butchering-complete", render: false });
 }
 
 async function performSearchInventoryTransfer(payload = {}, requesterUserId = "") {
@@ -7515,12 +7696,16 @@ function getItemTradeConditionPriceMultiplier(itemOrSystem = null) {
 function getItemTradeToolSupplyPriceMultiplier(itemOrSystem = null) {
   const toolFunctions = getEnabledToolFunctions(itemOrSystem);
   if (!toolFunctions.length) return 1;
-  const ratios = toolFunctions.map(tool => {
-    const max = Math.max(0, toInteger(tool.supply?.max));
+  const ratios = toolFunctions
+    .map(tool => tool.resource ?? getToolResourceState(itemOrSystem, tool))
+    .filter(resource => resource.mode === "supply")
+    .map(resource => {
+    const max = resource.max;
     if (max <= 0) return 0;
-    const value = Math.max(0, Math.min(max, toInteger(tool.supply?.value)));
+    const value = resource.value;
     return value / max;
   });
+  if (!ratios.length) return 1;
   return Math.max(0, Math.min(...ratios));
 }
 

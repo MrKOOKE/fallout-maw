@@ -1,0 +1,39 @@
+{
+  "title": "Simple Quest",
+  "description": "Mange Quests, Lore, Personal Notes, Achievements. Visualize your world Timeline and create Maps with waypoints RPG style! Customize the theme to your liking!",
+  "id": "simple-quest",
+  "version": "4.0.2",
+  "authors": [
+    {
+      "name": "theripper93",
+      "email": "tsplab@gmail.com",
+      "url": "https://www.patreon.com/theripper93"
+    }
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "languages/en.json"
+    }
+  ],
+  "esmodules": [
+    "index.js"
+  ],
+  "styles": [
+    "styles/module.css"
+  ],
+  "packs": [],
+  "url": "https://www.patreon.com/theripper93",
+  "manifest": "https://r2.foundryvtt.com/packages-public/simple-quest/module.json",
+  "relationships": {
+    "requires": []
+  },
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14"
+  },
+  "socket": true,
+  "persistentStorage": true,
+  "protected": true
+}

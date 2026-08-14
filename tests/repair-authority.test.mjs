@@ -62,7 +62,8 @@ test("repair commit revalidates both live leaves before one exact atomic update"
   const commit = sliceFunction("commitRepairToActors");
 
   assert.match(commit, /getConditionFunction\(targetItem\)\.value/);
-  assert.match(commit, /getToolFunction\(instrument, instrumentToolKey\)\.supply\?\.value/);
+  assert.match(commit, /getEffectiveRepairToolFunction\(instrument, instrumentToolKey\)/);
+  assert.match(commit, /createToolResourceValueUpdate\(instrument, liveTool, remainingSupply\)/);
   assert.match(commit, /currentCondition !== Math\.max\(0, toInteger\(expectedCondition\)\)/);
   assert.match(commit, /currentSupply !== Math\.max\(0, toInteger\(expectedSupply\)\)/);
   assert.match(commit, /hasItemFunction\(instrument, createToolFunctionKey\(instrumentToolKey\)\)/);

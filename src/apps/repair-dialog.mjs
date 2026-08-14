@@ -12,8 +12,10 @@ import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   ITEM_FUNCTIONS,
   createToolFunctionKey,
+  createToolResourceValueUpdate,
   getConditionFunction,
   getToolFunction,
+  getToolResourceState,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -311,6 +313,7 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
           && hasItemFunction(item, createToolFunctionKey(toolKey))
         ))
         .map(([toolKey, data]) => {
+          const resource = getToolResourceState(item, { ...data, toolKey });
           const skillKey = String(data.skillKey ?? "");
           const skillValue = toInteger(data.skillValue);
           const skillLabel = skillKey ? (skills.find(skill => skill.key === skillKey)?.label ?? skillKey) : "";
@@ -325,8 +328,9 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
             toolKey,
             toolLabel,
             toolClass: String(data.toolClass ?? "D"),
-            supplyValue: toInteger(data.supply?.value),
-            supplyMax: toInteger(data.supply?.max),
+            supplyValue: resource.available ? resource.value : 0,
+            supplyMax: resource.max,
+            resourceMode: resource.mode,
             skillValue,
             skillLabel,
             actorSkillValue,
@@ -611,7 +615,7 @@ async function runRepairChecks({
   const craftingSettings = getCraftingSettings();
   const thresholdMode = isSkillThresholdMode(craftingSettings.repair.mode);
   let currentValue = initialValue;
-  let availableCharges = toInteger(tool.supply?.value);
+  let availableCharges = toInteger(tool.resourceValue);
   let spentCharges = 0;
   const entries = [];
 
@@ -707,7 +711,7 @@ async function runRepairChecks({
 
 function validateInstrumentForRepair(actor, method, tool) {
   if (!tool?.enabled) return { ok: false, message: "Инструмент не подходит для ремонта." };
-  if (toInteger(tool.supply?.value) <= 0) return { ok: false, message: "У инструмента нет запаса." };
+  if (toInteger(tool.resourceValue) <= 0) return { ok: false, message: "Ресурс инструмента исчерпан." };
 
   const requiredClass = String(method.toolClass ?? "D");
   const toolClass = String(tool.toolClass ?? "D");
@@ -916,13 +920,13 @@ async function resolveRepairOnAuthorityOperation({
     || instrument.type !== "gear"
     || !hasItemFunction(instrument, createToolFunctionKey(method.toolKey))
   ) throw new Error("инструмент ремонта не найден или сломан");
-  const tool = getToolFunction(instrument, method.toolKey);
+  const tool = getEffectiveRepairToolFunction(instrument, method.toolKey);
   const validation = validateInstrumentForRepair(sourceActor, method, tool);
   if (!validation.ok) throw new Error(validation.message);
 
   const maxValue = Math.max(1, toInteger(condition.max));
   const initialValue = Math.min(maxValue, Math.max(0, toInteger(condition.value)));
-  const initialSupply = Math.max(0, toInteger(tool.supply?.value));
+  const initialSupply = Math.max(0, toInteger(tool.resourceValue));
   const expectedInputFingerprint = createRepairInputFingerprint({
     sourceActor,
     targetItem: item,
@@ -1037,7 +1041,8 @@ async function commitRepairToActors({
     throw createRepairStaleError("Правила, требования или навык ремонта изменились во время проверок.");
   }
   const currentCondition = Math.max(0, toInteger(getConditionFunction(targetItem).value));
-  const currentSupply = Math.max(0, toInteger(getToolFunction(instrument, instrumentToolKey).supply?.value));
+  const liveTool = getEffectiveRepairToolFunction(instrument, instrumentToolKey);
+  const currentSupply = Math.max(0, toInteger(liveTool.resourceValue));
   if (currentCondition !== Math.max(0, toInteger(expectedCondition))) {
     throw createRepairStaleError("Состояние ремонтируемого предмета изменилось во время проверок.");
   }
@@ -1046,10 +1051,11 @@ async function commitRepairToActors({
   }
   if (toInteger(finalValue) < currentCondition) throw new Error("Ремонт не может уменьшать состояние предмета.");
   if (toInteger(remainingSupply) >= currentSupply) throw new Error("Ремонт должен расходовать запас инструмента.");
+  if (targetItem === instrument && liveTool.resource?.mode === "condition") {
+    throw new Error("Предмет не может ремонтировать себя ценой собственного состояния.");
+  }
   const conditionUpdate = { "system.functions.condition.value": Math.max(0, toInteger(finalValue)) };
-  const supplyUpdate = {
-    [`system.functions.tools.${instrumentToolKey}.supply.value`]: Math.max(0, toInteger(remainingSupply))
-  };
+  const supplyUpdate = createToolResourceValueUpdate(instrument, liveTool, remainingSupply);
   const updates = targetItem === instrument
     ? [{ document: targetItem, updates: { ...conditionUpdate, ...supplyUpdate } }]
     : [
@@ -1073,6 +1079,7 @@ function createRepairInputFingerprint({
   const methods = normalizeRecoveryMethods(condition.recoveryMethods, contextToolKey);
   const method = methods[Math.max(0, toInteger(methodIndex))] ?? null;
   const tool = getToolFunction(instrument, method?.toolKey);
+  const toolResource = getToolResourceState(instrument, { ...tool, toolKey: method?.toolKey });
   const toolSkillKey = String(tool?.skillKey ?? "");
   const repairSettings = getCraftingSettings().repair ?? {};
   return JSON.stringify({
@@ -1085,6 +1092,7 @@ function createRepairInputFingerprint({
     } : null,
     tool: {
       enabled: Boolean(tool?.enabled),
+      resourceMode: toolResource.mode,
       toolClass: normalizeToolClass(tool?.toolClass),
       skillKey: toolSkillKey,
       skillValue: Math.max(0, toInteger(tool?.skillValue))
@@ -1128,14 +1136,28 @@ function createRepairReceipt(args = {}, values = {}) {
 }
 
 function snapshotRepairInstrument(item, toolKey) {
-  const tool = getToolFunction(item, toolKey);
+  const tool = getEffectiveRepairToolFunction(item, toolKey);
   return {
     id: String(item?.id ?? ""),
     name: String(item?.name ?? ""),
     toolKey: String(toolKey ?? ""),
     toolClass: String(tool?.toolClass ?? "D"),
-    supplyValue: Math.max(0, toInteger(tool?.supply?.value)),
-    supplyMax: Math.max(0, toInteger(tool?.supply?.max))
+    supplyValue: Math.max(0, toInteger(tool?.resourceValue)),
+    supplyMax: Math.max(0, toInteger(tool?.resourceMax))
+  };
+}
+
+function getEffectiveRepairToolFunction(item, toolKey) {
+  const normalizedToolKey = String(toolKey ?? "").trim();
+  const tool = getToolFunction(item, normalizedToolKey);
+  const resource = getToolResourceState(item, { ...tool, toolKey: normalizedToolKey });
+  return {
+    ...tool,
+    toolKey: normalizedToolKey,
+    resourceMode: resource.mode,
+    resource,
+    resourceValue: resource.available ? resource.value : 0,
+    resourceMax: resource.max
   };
 }
 
@@ -1373,7 +1395,10 @@ function buildRepairStateSnapshot({ sourceActor, targetActor, itemId, instrument
   const tools = instrument?.system?.functions?.tools ?? {};
   return {
     condition: item ? Math.max(0, toInteger(condition.value)) : null,
-    supplies: Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, Math.max(0, toInteger(value?.supply?.value))]))
+    supplies: Object.fromEntries(Object.entries(tools).map(([key, value]) => {
+      const resource = getToolResourceState(instrument, { ...value, toolKey: key });
+      return [key, resource.available ? resource.value : 0];
+    }))
   };
 }
 

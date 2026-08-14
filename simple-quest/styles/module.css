@@ -1,0 +1,1910 @@
+.simple-quest-counter.reputation-container {
+  display: flex;
+  gap: 0.2em;
+  width: -moz-min-content;
+  width: min-content;
+  max-width: 100%;
+}
+.simple-quest-counter.reputation-container:has(.is-fontawesome) {
+  flex-wrap: wrap;
+  width: auto;
+}
+.simple-quest-counter.reputation-container:has(.reputation-bar) {
+  width: 100%;
+  border: 1px solid;
+  position: relative;
+  align-items: center;
+  box-shadow: 0 0 5px black inset;
+}
+.simple-quest-counter.reputation-container .reputation-bar-text {
+  position: absolute;
+  pointer-events: none;
+  text-shadow: 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px, 0 0 1px;
+  font-weight: bold;
+  padding: 0 0.3rem;
+}
+.simple-quest-counter.reputation-container .reputation-bar-text.overlay-text {
+  text-shadow: none;
+  filter: invert(1);
+}
+.simple-quest-counter.reputation-container .reputation-bar {
+  height: 1.5em;
+  pointer-events: none;
+  border-right: 1px solid;
+  box-shadow: 0 0 5px black inset;
+}
+.simple-quest-counter.reputation-container .reputation-point {
+  height: 1em;
+  width: 1.3em;
+  font-size: 1em;
+  pointer-events: none;
+  border: 1px solid;
+  box-shadow: 0 0 1px, 0 0 3px black inset;
+  border-radius: 4px;
+}
+.simple-quest-counter.reputation-container .reputation-point::before, .simple-quest-counter.reputation-container .reputation-point::after {
+  color: var(--reputation-color);
+}
+.simple-quest-counter.reputation-container .reputation-point.is-fontawesome {
+  border: none;
+  box-shadow: none;
+  text-shadow: 0 0 1px black;
+}
+.simple-quest-counter.reputation-container .reputation-point.is-fontawesome:not(.active) {
+  opacity: 0.2;
+}
+
+:root {
+  --simple-quest-background: #1b130deb;
+  --simple-quest-background-color: #1b130deb;
+  --simple-quest-hidden-color: #ff00ff;
+  --simple-quest-failed-color: #ff0000;
+  --simple-quest-font-size: 2rem;
+  --simple-quest-font-family: "Times New Roman";
+  --simple-quest-header-font-family: "Times New Roman";
+  --simple-quest-text-0: #f5deb3;
+  --simple-quest-text-1: #f5deb3;
+  --simple-quest-text-2: #f5deb3;
+  --simple-quest-text-3: #f5deb3;
+  --simple-quest-text-4: #f5deb3;
+  --simple-quest-notification-creature: #4bae55c4;
+  --simple-quest-notification-magic: #694baec4;
+  --simple-quest-notification-item: #ae4b4bc4;
+  --simple-quest-notification-event: #ae854bc4;
+  --simple-quest-notification-time: #4bae9fc4;
+  --simple-quest-notification-npc: #94ae4bc4;
+  --simple-quest-notification-location: #4b6aaec4;
+  --simple-quest-invert: 0;
+}
+
+.mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.simple-quest-hide-folder {
+  display: none !important;
+}
+
+#simple-quest-theme-config {
+  z-index: 9999 !important;
+}
+
+.chat-message:has(.simple-quest-message),
+.simple-quest-welcome-screen,
+#simple-quest-marker-config,
+#timeline-config,
+.simple-quest-dialog,
+#tab-config,
+#simple-quest-theme-config {
+  background: var(--simple-quest-background) !important;
+  color: var(--simple-quest-text-1) !important;
+  font-family: var(--simple-quest-font-family), serif;
+}
+.chat-message:has(.simple-quest-message).simple-quest-welcome-maps .dialog-content,
+.simple-quest-welcome-screen.simple-quest-welcome-maps .dialog-content,
+#simple-quest-marker-config.simple-quest-welcome-maps .dialog-content,
+#timeline-config.simple-quest-welcome-maps .dialog-content,
+.simple-quest-dialog.simple-quest-welcome-maps .dialog-content,
+#tab-config.simple-quest-welcome-maps .dialog-content,
+#simple-quest-theme-config.simple-quest-welcome-maps .dialog-content {
+  text-align: left;
+  line-height: calc(var(--simple-quest-font-size) * 2.5);
+}
+.chat-message:has(.simple-quest-message) .era-event-switch,
+.simple-quest-welcome-screen .era-event-switch,
+#simple-quest-marker-config .era-event-switch,
+#timeline-config .era-event-switch,
+.simple-quest-dialog .era-event-switch,
+#tab-config .era-event-switch,
+#simple-quest-theme-config .era-event-switch {
+  padding: 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.chat-message:has(.simple-quest-message) .era-event-switch span,
+.simple-quest-welcome-screen .era-event-switch span,
+#simple-quest-marker-config .era-event-switch span,
+#timeline-config .era-event-switch span,
+.simple-quest-dialog .era-event-switch span,
+#tab-config .era-event-switch span,
+#simple-quest-theme-config .era-event-switch span {
+  padding: 0.5rem 1rem;
+  font-size: large;
+  background-color: var(--simple-quest-background-color);
+  border: 1px solid var(--simple-quest-text-4);
+  cursor: pointer;
+  pointer-events: all;
+  width: 20%;
+  border-radius: 5px;
+  transition: all 0.3s;
+}
+.chat-message:has(.simple-quest-message) .era-event-switch span:first-child,
+.simple-quest-welcome-screen .era-event-switch span:first-child,
+#simple-quest-marker-config .era-event-switch span:first-child,
+#timeline-config .era-event-switch span:first-child,
+.simple-quest-dialog .era-event-switch span:first-child,
+#tab-config .era-event-switch span:first-child,
+#simple-quest-theme-config .era-event-switch span:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.chat-message:has(.simple-quest-message) .era-event-switch span:last-child,
+.simple-quest-welcome-screen .era-event-switch span:last-child,
+#simple-quest-marker-config .era-event-switch span:last-child,
+#timeline-config .era-event-switch span:last-child,
+.simple-quest-dialog .era-event-switch span:last-child,
+#tab-config .era-event-switch span:last-child,
+#simple-quest-theme-config .era-event-switch span:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.chat-message:has(.simple-quest-message) .era-event-switch span.selected,
+.simple-quest-welcome-screen .era-event-switch span.selected,
+#simple-quest-marker-config .era-event-switch span.selected,
+#timeline-config .era-event-switch span.selected,
+.simple-quest-dialog .era-event-switch span.selected,
+#tab-config .era-event-switch span.selected,
+#simple-quest-theme-config .era-event-switch span.selected {
+  background-color: var(--simple-quest-text-4);
+  color: var(--simple-quest-background-color);
+}
+.chat-message:has(.simple-quest-message) .era-event-switch span:hover,
+.simple-quest-welcome-screen .era-event-switch span:hover,
+#simple-quest-marker-config .era-event-switch span:hover,
+#timeline-config .era-event-switch span:hover,
+.simple-quest-dialog .era-event-switch span:hover,
+#tab-config .era-event-switch span:hover,
+#simple-quest-theme-config .era-event-switch span:hover {
+  filter: brightness(1.3);
+}
+.chat-message:has(.simple-quest-message).page-template-dialog .window-content .dialog-content,
+.simple-quest-welcome-screen.page-template-dialog .window-content .dialog-content,
+#simple-quest-marker-config.page-template-dialog .window-content .dialog-content,
+#timeline-config.page-template-dialog .window-content .dialog-content,
+.simple-quest-dialog.page-template-dialog .window-content .dialog-content,
+#tab-config.page-template-dialog .window-content .dialog-content,
+#simple-quest-theme-config.page-template-dialog .window-content .dialog-content {
+  text-align: left;
+  font-size: 1rem;
+}
+.chat-message:has(.simple-quest-message).page-template-dialog .dialog-buttons,
+.simple-quest-welcome-screen.page-template-dialog .dialog-buttons,
+#simple-quest-marker-config.page-template-dialog .dialog-buttons,
+#timeline-config.page-template-dialog .dialog-buttons,
+.simple-quest-dialog.page-template-dialog .dialog-buttons,
+#tab-config.page-template-dialog .dialog-buttons,
+#simple-quest-theme-config.page-template-dialog .dialog-buttons {
+  gap: 0.3rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.chat-message:has(.simple-quest-message).page-template-dialog .dialog-buttons button,
+.simple-quest-welcome-screen.page-template-dialog .dialog-buttons button,
+#simple-quest-marker-config.page-template-dialog .dialog-buttons button,
+#timeline-config.page-template-dialog .dialog-buttons button,
+.simple-quest-dialog.page-template-dialog .dialog-buttons button,
+#tab-config.page-template-dialog .dialog-buttons button,
+#simple-quest-theme-config.page-template-dialog .dialog-buttons button {
+  background: transparent;
+  color: var(--simple-quest-text-1);
+  border-color: var(--simple-quest-text-4);
+  text-align: left;
+}
+.chat-message:has(.simple-quest-message).page-template-dialog .dialog-buttons button:hover, .chat-message:has(.simple-quest-message).page-template-dialog .dialog-buttons button:focus,
+.simple-quest-welcome-screen.page-template-dialog .dialog-buttons button:hover,
+.simple-quest-welcome-screen.page-template-dialog .dialog-buttons button:focus,
+#simple-quest-marker-config.page-template-dialog .dialog-buttons button:hover,
+#simple-quest-marker-config.page-template-dialog .dialog-buttons button:focus,
+#timeline-config.page-template-dialog .dialog-buttons button:hover,
+#timeline-config.page-template-dialog .dialog-buttons button:focus,
+.simple-quest-dialog.page-template-dialog .dialog-buttons button:hover,
+.simple-quest-dialog.page-template-dialog .dialog-buttons button:focus,
+#tab-config.page-template-dialog .dialog-buttons button:hover,
+#tab-config.page-template-dialog .dialog-buttons button:focus,
+#simple-quest-theme-config.page-template-dialog .dialog-buttons button:hover,
+#simple-quest-theme-config.page-template-dialog .dialog-buttons button:focus {
+  box-shadow: 0 0 5px var(--simple-quest-text-4);
+}
+.chat-message:has(.simple-quest-message) h1,
+.chat-message:has(.simple-quest-message) h2,
+.chat-message:has(.simple-quest-message) h3,
+.chat-message:has(.simple-quest-message) h4,
+.chat-message:has(.simple-quest-message) h5,
+.chat-message:has(.simple-quest-message) h6,
+.simple-quest-welcome-screen h1,
+.simple-quest-welcome-screen h2,
+.simple-quest-welcome-screen h3,
+.simple-quest-welcome-screen h4,
+.simple-quest-welcome-screen h5,
+.simple-quest-welcome-screen h6,
+#simple-quest-marker-config h1,
+#simple-quest-marker-config h2,
+#simple-quest-marker-config h3,
+#simple-quest-marker-config h4,
+#simple-quest-marker-config h5,
+#simple-quest-marker-config h6,
+#timeline-config h1,
+#timeline-config h2,
+#timeline-config h3,
+#timeline-config h4,
+#timeline-config h5,
+#timeline-config h6,
+.simple-quest-dialog h1,
+.simple-quest-dialog h2,
+.simple-quest-dialog h3,
+.simple-quest-dialog h4,
+.simple-quest-dialog h5,
+.simple-quest-dialog h6,
+#tab-config h1,
+#tab-config h2,
+#tab-config h3,
+#tab-config h4,
+#tab-config h5,
+#tab-config h6,
+#simple-quest-theme-config h1,
+#simple-quest-theme-config h2,
+#simple-quest-theme-config h3,
+#simple-quest-theme-config h4,
+#simple-quest-theme-config h5,
+#simple-quest-theme-config h6 {
+  border: none;
+}
+.chat-message:has(.simple-quest-message) h2,
+.simple-quest-welcome-screen h2,
+#simple-quest-marker-config h2,
+#timeline-config h2,
+.simple-quest-dialog h2,
+#tab-config h2,
+#simple-quest-theme-config h2 {
+  text-align: center;
+}
+.chat-message:has(.simple-quest-message) hr,
+.simple-quest-welcome-screen hr,
+#simple-quest-marker-config hr,
+#timeline-config hr,
+.simple-quest-dialog hr,
+#tab-config hr,
+#simple-quest-theme-config hr {
+  border-color: var(--simple-quest-text-4);
+}
+.chat-message:has(.simple-quest-message) button,
+.simple-quest-welcome-screen button,
+#simple-quest-marker-config button,
+#timeline-config button,
+.simple-quest-dialog button,
+#tab-config button,
+#simple-quest-theme-config button {
+  background: transparent;
+  color: var(--simple-quest-text-1);
+  border-color: var(--simple-quest-text-4);
+}
+.chat-message:has(.simple-quest-message) button:hover, .chat-message:has(.simple-quest-message) button:focus,
+.simple-quest-welcome-screen button:hover,
+.simple-quest-welcome-screen button:focus,
+#simple-quest-marker-config button:hover,
+#simple-quest-marker-config button:focus,
+#timeline-config button:hover,
+#timeline-config button:focus,
+.simple-quest-dialog button:hover,
+.simple-quest-dialog button:focus,
+#tab-config button:hover,
+#tab-config button:focus,
+#simple-quest-theme-config button:hover,
+#simple-quest-theme-config button:focus {
+  box-shadow: 0 0 5px var(--simple-quest-text-4);
+}
+.chat-message:has(.simple-quest-message) header,
+.simple-quest-welcome-screen header,
+#simple-quest-marker-config header,
+#timeline-config header,
+.simple-quest-dialog header,
+#tab-config header,
+#simple-quest-theme-config header {
+  color: var(--simple-quest-text-2);
+  opacity: 0.3;
+}
+.chat-message:has(.simple-quest-message) .window-content,
+.simple-quest-welcome-screen .window-content,
+#simple-quest-marker-config .window-content,
+#timeline-config .window-content,
+.simple-quest-dialog .window-content,
+#tab-config .window-content,
+#simple-quest-theme-config .window-content {
+  background: var(--simple-quest-background);
+  color: var(--simple-quest-text-1);
+  text-align: center;
+}
+.chat-message:has(.simple-quest-message) .window-content .hotkey,
+.simple-quest-welcome-screen .window-content .hotkey,
+#simple-quest-marker-config .window-content .hotkey,
+#timeline-config .window-content .hotkey,
+.simple-quest-dialog .window-content .hotkey,
+#tab-config .window-content .hotkey,
+#simple-quest-theme-config .window-content .hotkey {
+  background: var(--simple-quest-text-1);
+  color: var(--simple-quest-background);
+  padding: 0.1rem 0.5rem;
+  border-radius: 5px;
+  border: 1px solid var(--simple-quest-text-4);
+}
+.chat-message:has(.simple-quest-message) .window-content .dialog-content,
+.simple-quest-welcome-screen .window-content .dialog-content,
+#simple-quest-marker-config .window-content .dialog-content,
+#timeline-config .window-content .dialog-content,
+.simple-quest-dialog .window-content .dialog-content,
+#tab-config .window-content .dialog-content,
+#simple-quest-theme-config .window-content .dialog-content {
+  padding: 1rem;
+  font-size: 1.5rem;
+}
+
+.simple-quest-time:hover {
+  text-shadow: none;
+  cursor: default;
+}
+
+#simple-quest-notification-container {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  font-size: var(--simple-quest-font-size);
+  padding: calc(var(--simple-quest-font-size) * 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--simple-quest-font-size) * 0.5);
+  pointer-events: none;
+}
+#simple-quest-notification-container .simple-quest-notification {
+  background: var(--simple-quest-background);
+  color: var(--simple-quest-text-1);
+  border: 1px solid var(--simple-quest-text-4);
+  box-shadow: 0 0 5px var(--simple-quest-text-4);
+  padding: 0rem var(--simple-quest-font-size);
+  border-radius: 5px;
+  height: calc(var(--simple-quest-font-size) * 2.5);
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  pointer-events: all;
+  font-family: var(--simple-quest-font-family), serif;
+}
+#simple-quest-notification-container .simple-quest-notification .simple-quest-notification-quest-name {
+  font-weight: bold;
+  padding: 0 0.5ch;
+}
+#simple-quest-notification-container .simple-quest-notification i {
+  pointer-events: none;
+  left: 100%;
+  color: var(--simple-quest-text-4);
+  text-shadow: 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 5px var(--simple-quest-text-1), 0 0 7px var(--simple-quest-text-1), 0 0 10px var(--simple-quest-text-1), 0 0 15px var(--simple-quest-text-1);
+  filter: saturate(2) brightness(1.5);
+  transform: rotate(10deg) scale(1.5);
+  margin-right: var(--simple-quest-font-size);
+}
+
+#timeline-config label,
+#timeline-config p {
+  text-align: left;
+}
+
+#simple-quest-marker-config,
+#timeline-config,
+#tab-config {
+  font-family: var(--simple-quest-font-family), serif;
+}
+#simple-quest-marker-config fieldset,
+#timeline-config fieldset,
+#tab-config fieldset {
+  border: 1px solid;
+  border-radius: 5px;
+  margin-bottom: 0.3rem;
+}
+#simple-quest-marker-config .quest-icons,
+#timeline-config .quest-icons,
+#tab-config .quest-icons {
+  padding: 0.3rem 0;
+  gap: 0.3rem;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+}
+#simple-quest-marker-config .quest-icons i,
+#timeline-config .quest-icons i,
+#tab-config .quest-icons i {
+  font-size: 1.5rem;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+#simple-quest-marker-config .quest-icons i:hover,
+#timeline-config .quest-icons i:hover,
+#tab-config .quest-icons i:hover {
+  filter: drop-shadow(0 0 3px var(--simple-quest-text-4));
+  cursor: pointer;
+}
+#simple-quest-marker-config input,
+#simple-quest-marker-config textarea,
+#simple-quest-marker-config select,
+#timeline-config input,
+#timeline-config textarea,
+#timeline-config select,
+#tab-config input,
+#tab-config textarea,
+#tab-config select {
+  background: var(--simple-quest-background);
+  color: var(--simple-quest-text-1);
+  border: 1px solid var(--simple-quest-text-4);
+  box-shadow: 0 0 5px var(--simple-quest-text-4);
+  padding: 0.3rem;
+  border-radius: 5px;
+}
+#simple-quest-marker-config input option,
+#simple-quest-marker-config textarea option,
+#simple-quest-marker-config select option,
+#timeline-config input option,
+#timeline-config textarea option,
+#timeline-config select option,
+#tab-config input option,
+#tab-config textarea option,
+#tab-config select option {
+  background: var(--simple-quest-background);
+}
+
+#tooltip.simple-quest-marker-tooltip,
+.locked-tooltip.simple-quest-marker-tooltip {
+  background: var(--simple-quest-background);
+  color: var(--simple-quest-text-1);
+  border: 1px solid var(--simple-quest-text-4);
+  box-shadow: 0 0 5px var(--simple-quest-text-4);
+  padding: 0.5rem;
+  border-radius: 5px;
+  font-family: var(--simple-quest-font-family), serif;
+}
+#tooltip.simple-quest-marker-tooltip p,
+.locked-tooltip.simple-quest-marker-tooltip p {
+  filter: brightness(0.75);
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.notification.lore, .notification.creature, .notification.npc, .notification.location, .notification.magic, .notification.item, .notification.event, .notification.time {
+  display: block;
+}
+.notification.lore {
+  background: var(--simple-quest-background);
+  border: 1px solid var(--simple-quest-text-4);
+}
+.notification.lore::before {
+  content: "\f5db";
+}
+.notification.creature {
+  background: var(--simple-quest-notification-creature);
+  border: 1px solid var(--simple-quest-notification-creature);
+}
+.notification.creature::before {
+  content: "\f6d5";
+}
+.notification.npc {
+  background: var(--simple-quest-notification-npc);
+  border: 1px solid var(--simple-quest-notification-npc);
+}
+.notification.npc::before {
+  content: "\f007";
+}
+.notification.location {
+  background: var(--simple-quest-notification-location);
+  border: 1px solid var(--simple-quest-notification-location);
+}
+.notification.location::before {
+  content: "\f3c5";
+}
+.notification.magic {
+  background: var(--simple-quest-notification-magic);
+  border: 1px solid var(--simple-quest-notification-magic);
+}
+.notification.magic::before {
+  content: "\e2ca";
+}
+.notification.item {
+  background: var(--simple-quest-notification-item);
+  border: 1px solid var(--simple-quest-notification-item);
+}
+.notification.item::before {
+  content: "\f3a5";
+}
+.notification.event {
+  background: var(--simple-quest-notification-event);
+  border: 1px solid var(--simple-quest-notification-event);
+}
+.notification.event::before {
+  content: "\f0ac";
+}
+.notification.time {
+  background: var(--simple-quest-notification-time);
+  border: 1px solid var(--simple-quest-notification-time);
+}
+.notification.time::before {
+  content: "\f254";
+}
+
+.parchment-note-1 {
+  -o-border-image: url("../assets/parchment1.webp");
+     border-image: url("../assets/parchment1.webp");
+}
+
+.parchment-note-2 {
+  -o-border-image: url("../assets/parchment2.webp");
+     border-image: url("../assets/parchment2.webp");
+}
+
+.parchment-note-3 {
+  -o-border-image: url("../assets/parchment3.webp");
+     border-image: url("../assets/parchment3.webp");
+}
+
+.parchment-note-4 {
+  -o-border-image: url("../assets/parchment4.webp");
+     border-image: url("../assets/parchment4.webp");
+}
+
+.parchment-book-1 {
+  -o-border-image: url("../assets/book1.webp");
+     border-image: url("../assets/book1.webp");
+}
+
+.parchment-book-2 {
+  -o-border-image: url("../assets/book2.webp");
+     border-image: url("../assets/book2.webp");
+}
+
+.parchment-note-1,
+.parchment-note-2,
+.parchment-note-3,
+.parchment-note-4,
+.parchment-book-1,
+.parchment-book-2 {
+  filter: sepia(0.6);
+  border-width: 3rem;
+  border-style: solid;
+  border-image-slice: 20% fill;
+  color: var(--color-text-dark-primary);
+}
+
+.parchment-scroll-1 {
+  border-width: 3rem;
+  border-style: solid;
+  -o-border-image: url("../assets/scroll1.webp");
+     border-image: url("../assets/scroll1.webp");
+  border-image-slice: 20% fill;
+  color: var(--color-text-dark-primary);
+}
+
+p.initial::first-letter {
+  initial-letter: 3;
+  margin-right: 0.3ch;
+  text-align: center;
+}
+
+.simple-quest-content-link,
+.simple-quest-ttm {
+  background: #DDD;
+  padding: 1px 4px;
+  border: 1px solid var(--color-border-dark-tertiary);
+  border-radius: 2px;
+  white-space: nowrap;
+  word-break: break-all;
+}
+.simple-quest-content-link i,
+.simple-quest-ttm i {
+  color: var(--color-text-dark-inactive);
+  margin-right: 0.25em;
+  pointer-events: none;
+}
+
+.simple-quest-pointer-tooltip,
+.simple-quest-ruler-anchor {
+  color: var(--simple-quest-text-1);
+  font-family: var(--simple-quest-font-family), serif;
+  text-shadow: 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 5px var(--simple-quest-background);
+}
+
+.chat-message:has(#simple-quest-image-override).chat-message:has(#simple-quest-image-override) img {
+  padding: 38px 38px 0px 0px;
+  background-image: url("../assets/icons/exclamation2.webp");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 0px;
+  height: 0px;
+}
+
+#simple-quest-ttm {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  z-index: 1;
+  transition: all 0.3s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7098039216);
+  -webkit-backdrop-filter: blur(5px);
+          backdrop-filter: blur(5px);
+}
+#simple-quest-ttm img,
+#simple-quest-ttm video {
+  pointer-events: none;
+  border: none;
+}
+#simple-quest-ttm.minimized {
+  width: 50px;
+  height: 50px;
+  margin: 10px;
+  border-radius: 50%;
+  z-index: 1000;
+  overflow: hidden;
+  box-shadow: 0 0 5px black;
+  border: 2px solid var(--simple-quest-text-4);
+  top: 50px;
+}
+#simple-quest-ttm.minimized h1 {
+  display: none;
+}
+#simple-quest-ttm.minimized img,
+#simple-quest-ttm.minimized video {
+  width: 100%;
+  height: 100%;
+  -o-object-fit: cover;
+     object-fit: cover;
+}
+#simple-quest-ttm h1 {
+  position: absolute;
+  bottom: 10vh;
+  color: var(--simple-quest-text-1);
+  font-size: 5vw;
+  font-family: var(--simple-quest-font-family), serif;
+  text-shadow: 0 0 5px var(--simple-quest-background-color), 0 0 5px var(--simple-quest-background-color), 0 0 5px var(--simple-quest-background-color), 0 0 5px var(--simple-quest-background-color), 0 0 5px var(--simple-quest-background-color);
+  border: none;
+}
+
+#interface:has(#sidebar.collapsed) #simple-quest-ttm:not(.minimized) {
+  width: 100%;
+}
+
+#simple-quest {
+  background: var(--simple-quest-background);
+  -webkit-backdrop-filter: blur(5px);
+          backdrop-filter: blur(5px);
+  color: var(--simple-quest-text-1);
+  filter: invert(var(--simple-quest-invert));
+  font-family: var(--simple-quest-font-family);
+  height: 100%;
+  transition: color 0.2s ease-in-out, background 0.2s ease-in-out;
+}
+#simple-quest #sq-timeline {
+  --timeline-event-spacing: 30%;
+  --timeline-bar-middle-width: 30px;
+  --timeline-event-dot-border: calc(var(--timeline-bar-middle-width) / 3);
+  height: 100%;
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#simple-quest #sq-timeline .timeline-scrollbar {
+  width: 5.5px;
+  height: 100%;
+  position: absolute;
+  right: 0;
+  z-index: -5;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+#simple-quest #sq-timeline .timeline-scrollbar .timeline-scrollbar-dot {
+  position: absolute;
+  border: 2px solid black;
+  border-radius: 50%;
+  pointer-events: all;
+}
+#simple-quest #sq-timeline .timeline-scrollbar .timeline-scrollbar-box-shadow {
+  height: 100%;
+  width: 100%;
+  filter: blur(2px);
+}
+#simple-quest #sq-timeline main {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+}
+#simple-quest #sq-timeline main section {
+  height: 100%;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 10fr var(--timeline-bar-middle-width) 10fr;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  padding-top: 10px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+#simple-quest #sq-timeline main section > div {
+  height: 100%;
+}
+#simple-quest #sq-timeline main section .timeline-event-duration {
+  width: calc(var(--timeline-event-dot-border) * 0.5);
+  background-color: var(--simple-quest-background-color);
+  border-radius: calc(var(--timeline-event-dot-border) * 0.8);
+  box-shadow: 0 0 5px var(--simple-quest-background-color);
+  position: absolute;
+  pointer-events: none;
+}
+#simple-quest #sq-timeline main section .event-dot {
+  position: absolute;
+  width: var(--timeline-event-dot-border);
+  height: var(--timeline-event-dot-border);
+  background-color: var(--simple-quest-background-color);
+  border-radius: 50%;
+  box-shadow: 0 0 5px var(--simple-quest-background-color);
+  transform: translateY(-50%);
+}
+#simple-quest #sq-timeline main section .event-dot.icon {
+  width: var(--timeline-bar-middle-width);
+  border: none;
+  height: var(--timeline-bar-middle-width);
+  border-radius: 0;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  box-shadow: none;
+  background-color: transparent;
+  filter: drop-shadow(0 0 3px black);
+  top: calc(-1 * var(--timeline-bar-middle-width) / 2);
+  transform: translateY(-50%) scale(2);
+}
+#simple-quest #sq-timeline main section .timeline-left {
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}
+#simple-quest #sq-timeline main section .timeline-left .event-dot {
+  right: calc(-1 * (var(--timeline-bar-middle-width) / 2 + var(--timeline-event-dot-border)));
+}
+#simple-quest #sq-timeline main section .timeline-left .event-dot.icon {
+  right: calc(-1 * (var(--timeline-bar-middle-width)));
+}
+#simple-quest #sq-timeline main section .timeline-left .timeline-event {
+  right: 0;
+  padding-right: var(--timeline-event-spacing);
+}
+#simple-quest #sq-timeline main section .timeline-right {
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}
+#simple-quest #sq-timeline main section .timeline-right .event-dot {
+  left: calc(-1 * (var(--timeline-bar-middle-width) / 2 + var(--timeline-event-dot-border)));
+}
+#simple-quest #sq-timeline main section .timeline-right .event-dot.icon {
+  left: calc(-1 * (var(--timeline-bar-middle-width)));
+}
+#simple-quest #sq-timeline main section .timeline-right .timeline-event {
+  left: 0;
+  padding-left: var(--timeline-event-spacing);
+}
+#simple-quest #sq-timeline main section .timeline-center {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  z-index: 4;
+  pointer-events: none;
+}
+#simple-quest #sq-timeline main section .timeline-center .timeline-bar-shadow {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(1.01);
+  opacity: 0.5;
+  filter: blur(5px);
+  z-index: -1;
+}
+#simple-quest #sq-timeline nav {
+  position: absolute;
+  bottom: 0;
+  background-color: var(--simple-quest-background-color);
+  border: 1px solid;
+  border-radius: 5px;
+  justify-self: center;
+  z-index: 9;
+}
+#simple-quest #sq-timeline nav i {
+  cursor: pointer;
+}
+#simple-quest #sq-timeline .timeline-era {
+  border: 1px solid var(--simple-quest-background-color);
+  transform: translateY(-50%);
+  z-index: 1;
+  min-width: 300px;
+}
+#simple-quest #sq-timeline .timeline-era .era-name {
+  white-space: nowrap;
+}
+#simple-quest #sq-timeline .timeline-event {
+  width: 100%;
+}
+#simple-quest #sq-timeline .timeline-event .timeline-border-wrapper {
+  width: 100%;
+}
+#simple-quest #sq-timeline .timeline-era,
+#simple-quest #sq-timeline .timeline-event {
+  position: absolute;
+  background-color: var(--simple-quest-background-color);
+  pointer-events: all;
+}
+#simple-quest #sq-timeline .timeline-era.on-top,
+#simple-quest #sq-timeline .timeline-event.on-top {
+  z-index: 10;
+}
+#simple-quest #sq-timeline .timeline-era .timeline-config-icon,
+#simple-quest #sq-timeline .timeline-event .timeline-config-icon {
+  top: 0;
+  right: 0;
+  position: absolute;
+  padding: 0.3rem;
+  opacity: 0;
+  cursor: pointer;
+  pointer-events: all;
+  z-index: 999;
+  transition: opacity 0.3s ease-in-out;
+}
+#simple-quest #sq-timeline .timeline-era.secret .timeline-border-wrapper,
+#simple-quest #sq-timeline .timeline-event.secret .timeline-border-wrapper {
+  outline: 2px solid var(--simple-quest-hidden-color);
+}
+#simple-quest #sq-timeline .timeline-era:has(.timeline-border-wrapper),
+#simple-quest #sq-timeline .timeline-event:has(.timeline-border-wrapper) {
+  background-color: transparent;
+  border-top: 2px solid var(--era-color);
+}
+#simple-quest #sq-timeline .timeline-era:first-child,
+#simple-quest #sq-timeline .timeline-event:first-child {
+  transform: translateY(0);
+}
+#simple-quest #sq-timeline .timeline-era.flipped,
+#simple-quest #sq-timeline .timeline-event.flipped {
+  transform: translateY(-100%);
+}
+#simple-quest #sq-timeline .timeline-era.flipped:has(.timeline-border-wrapper),
+#simple-quest #sq-timeline .timeline-event.flipped:has(.timeline-border-wrapper) {
+  border-bottom: 2px solid var(--era-color);
+  border-top: none;
+}
+#simple-quest #sq-timeline .timeline-era .timeline-border-wrapper,
+#simple-quest #sq-timeline .timeline-event .timeline-border-wrapper {
+  background-color: var(--simple-quest-background-color);
+}
+#simple-quest #sq-timeline .timeline-era .timeline-content,
+#simple-quest #sq-timeline .timeline-event .timeline-content {
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  max-height: 20vh;
+  overflow: auto;
+}
+#simple-quest #sq-timeline .timeline-era .timeline-content.collapsed,
+#simple-quest #sq-timeline .timeline-event .timeline-content.collapsed {
+  display: none;
+}
+#simple-quest #sq-timeline .timeline-era header,
+#simple-quest #sq-timeline .timeline-event header {
+  padding: 0.5rem 1rem;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  position: relative;
+}
+#simple-quest #sq-timeline .timeline-era header:hover .timeline-config-icon,
+#simple-quest #sq-timeline .timeline-event header:hover .timeline-config-icon {
+  opacity: 1;
+}
+#simple-quest #sq-timeline .timeline-era header .era-name,
+#simple-quest #sq-timeline .timeline-era header span,
+#simple-quest #sq-timeline .timeline-event header .era-name,
+#simple-quest #sq-timeline .timeline-event header span {
+  pointer-events: none;
+}
+#simple-quest #sq-timeline .timeline-era header.has-content,
+#simple-quest #sq-timeline .timeline-event header.has-content {
+  padding-bottom: 1.2rem;
+}
+#simple-quest #sq-timeline .timeline-era header .content-collapse,
+#simple-quest #sq-timeline .timeline-event header .content-collapse {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--simple-quest-background-color);
+  cursor: pointer;
+  pointer-events: all;
+  position: absolute;
+  width: 100%;
+  transform: translateX(-1rem);
+  bottom: 0;
+  transition: filter 0.3s ease-in-out;
+}
+#simple-quest #sq-timeline .timeline-era header .content-collapse:hover,
+#simple-quest #sq-timeline .timeline-event header .content-collapse:hover {
+  filter: brightness(1.3);
+}
+#simple-quest #sq-timeline .timeline-era header .background-overlay,
+#simple-quest #sq-timeline .timeline-event header .background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--simple-quest-background-color);
+  opacity: 0.5;
+  pointer-events: none;
+}
+#simple-quest #sq-timeline .timeline-era header .era-name,
+#simple-quest #sq-timeline .timeline-event header .era-name {
+  text-align: center;
+}
+#simple-quest #sq-timeline .timeline-era header .era-name::after,
+#simple-quest #sq-timeline .timeline-event header .era-name::after {
+  display: none;
+}
+#simple-quest #sq-timeline .timeline-era header span,
+#simple-quest #sq-timeline .timeline-event header span {
+  width: 100%;
+  display: block;
+  text-align: center;
+  font-size: small;
+  opacity: 0.7;
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  align-items: center;
+}
+#simple-quest #sq-timeline .timeline-era header span.event-era,
+#simple-quest #sq-timeline .timeline-event header span.event-era {
+  pointer-events: all;
+  cursor: pointer;
+}
+#simple-quest .achievements-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 1rem;
+}
+#simple-quest .achievements-wrapper .achievement-item {
+  --achievement-color: var(--simple-quest-text-4);
+  position: relative;
+  min-width: 500px;
+  max-width: 500px;
+  height: -moz-fit-content;
+  height: fit-content;
+  background-color: var(--simple-quest-background-color);
+  padding: 1rem;
+  border: 1px solid var(--achievement-color);
+  border-radius: 5px;
+}
+#simple-quest .achievements-wrapper .achievement-item #delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  cursor: pointer;
+  opacity: 0.2;
+  transition: all 0.2s ease-in-out;
+}
+#simple-quest .achievements-wrapper .achievement-item #delete:hover {
+  opacity: 1;
+}
+#simple-quest .achievements-wrapper .achievement-item.awarded {
+  box-shadow: 0 0 5px var(--achievement-color), inset 0 0 10px var(--achievement-color);
+}
+#simple-quest .achievements-wrapper .achievement-item.awarded header > img {
+  border: 1px solid var(--achievement-color);
+  box-shadow: 0 0 5px var(--achievement-color);
+}
+#simple-quest .achievements-wrapper .achievement-item header {
+  display: flex;
+  gap: 0.5rem;
+}
+#simple-quest .achievements-wrapper .achievement-item header img {
+  width: 100px;
+  height: 100px;
+  -o-object-fit: cover;
+     object-fit: cover;
+}
+#simple-quest .achievements-wrapper .achievement-item header .header-contents {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+#simple-quest .achievements-wrapper .achievement-item header .header-contents h1 {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership .user-image-wrapper {
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership .user-image-wrapper:not(.owner):not(.observer) {
+  border-color: var(--simple-quest-hidden-color);
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership .user-image-wrapper:not(.owner):not(.observer) img {
+  filter: grayscale(1);
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership .user-image-wrapper.observer:not(.owner) img {
+  filter: grayscale(1);
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership .user-image-wrapper.owner {
+  border-color: var(--achievement-color);
+  box-shadow: 0 0 5px var(--achievement-color);
+}
+#simple-quest .achievements-wrapper .achievement-item header .user-ownership .user-image-wrapper img {
+  height: 100%;
+  width: 100%;
+  -o-object-fit: cover;
+     object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid var(--achievement-color);
+}
+#simple-quest .achievements-wrapper .achievement-item .achievements-content p:last-of-type {
+  margin-bottom: 0;
+}
+#simple-quest #context-menu {
+  position: relative;
+  background: transparent;
+  border-color: var(--simple-quest-text-color);
+  color: var(--simple-quest-text-color);
+  padding: calc(var(--simple-quest-font-size) * 0.1);
+  font-size: calc(var(--simple-quest-font-size) * 0.7);
+  text-shadow: none;
+}
+#simple-quest #context-menu .context-item:hover {
+  color: var(--simple-quest-text-color);
+  text-shadow: 0 0 5px;
+}
+#simple-quest #move {
+  background: transparent;
+  width: unset;
+}
+#simple-quest #history {
+  gap: 1rem;
+  padding: 0.3rem;
+  align-items: center;
+  border-bottom: 1px solid;
+  flex-wrap: nowrap;
+  overflow: auto;
+}
+#simple-quest #history .history-item,
+#simple-quest #history i {
+  flex: 0;
+  white-space: nowrap;
+  font-size: calc(var(--simple-quest-font-size) * 0.7);
+}
+#simple-quest #history .history-item {
+  padding: 0.2rem;
+  transition: all 0.2s ease-in-out;
+}
+#simple-quest #history .history-item:hover {
+  text-shadow: 0 0 5px var(--simple-quest-text-1);
+  cursor: pointer;
+}
+#simple-quest .simple-quest-map-image.prevent-icon-interaction .simple-quest-marker {
+  pointer-events: none;
+}
+#simple-quest.prevent-auto-hide .quest-checkbox.secret.secret {
+  opacity: 1;
+}
+#simple-quest .prevent-auto-hide .quest-checkbox.secret.secret {
+  opacity: 1;
+}
+#simple-quest .simple-quest-image-journal {
+  max-height: 90%;
+  height: 90%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+#simple-quest .simple-quest-image-journal img {
+  height: 80%;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+#simple-quest section.secret:not(.revealed) {
+  color: var(--simple-quest-hidden-color);
+}
+#simple-quest .quest-contents {
+  height: 100%;
+}
+#simple-quest .quest-contents img {
+  cursor: pointer;
+}
+#simple-quest .quest-contents.journal-page-content {
+  font-family: var(--simple-quest-font-family);
+}
+#simple-quest .search-highlight {
+  position: relative;
+}
+#simple-quest .search-highlight::after {
+  content: "";
+  position: absolute;
+  background-color: var(--simple-quest-text-1);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.2;
+  border-radius: 5px;
+  pointer-events: none;
+}
+#simple-quest .global-search-results {
+  background: var(--simple-quest-background);
+  padding: 1rem;
+  border: 1px solid var(--simple-quest-text-1);
+  z-index: 1;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-left: -3rem;
+  margin-top: -1rem;
+}
+#simple-quest .global-search-results li {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  position: relative;
+}
+#simple-quest .global-search-results li::after {
+  content: "";
+  position: absolute;
+  background-color: var(--simple-quest-text-1);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: all 0.2s ease-in-out;
+  border-radius: 5px;
+}
+#simple-quest .global-search-results li:hover::after {
+  opacity: 0.2;
+}
+#simple-quest .global-search-results li .highlight {
+  position: relative;
+}
+#simple-quest .global-search-results li .highlight::after {
+  content: "";
+  background-color: var(--simple-quest-text-1);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+}
+#simple-quest li.completed {
+  text-decoration: line-through;
+}
+#simple-quest .hide-completed li.completed:not(.sub-quest) {
+  display: none;
+}
+#simple-quest .notification {
+  display: block;
+}
+#simple-quest img,
+#simple-quest .simple-quest-map-image,
+#simple-quest .notification,
+#simple-quest .parchment-note-1,
+#simple-quest .parchment-note-2,
+#simple-quest .parchment-note-3,
+#simple-quest .parchment-note-4,
+#simple-quest .parchment-book-1,
+#simple-quest .parchment-book-2,
+#simple-quest .parchment-scroll-1 {
+  filter: invert(var(--simple-quest-invert));
+}
+#simple-quest h1,
+#simple-quest h2,
+#simple-quest h3,
+#simple-quest h4,
+#simple-quest h5,
+#simple-quest h6,
+#simple-quest .item {
+  font-family: var(--simple-quest-header-font-family), serif;
+  font-weight: bold;
+}
+#simple-quest .not-match {
+  display: none;
+}
+#simple-quest .windowed {
+  height: 100%;
+  max-height: 100%;
+}
+#simple-quest .windowed .content {
+  padding: calc(var(--simple-quest-font-size) * 2.5) calc(var(--simple-quest-font-size) * 2.5);
+}
+#simple-quest .window-content {
+  background: transparent;
+  padding: 0;
+  color: var(--simple-quest-text-1);
+}
+#simple-quest .content-link,
+#simple-quest .simple-quest-content-link {
+  background: transparent;
+  background: transparent;
+  border: none;
+  text-decoration: underline;
+  color: var(--simple-quest-text-3);
+  filter: saturate(0.7);
+  transition: all 0.2s ease-in-out;
+}
+#simple-quest .content-link i,
+#simple-quest .simple-quest-content-link i {
+  color: var(--simple-quest-text-3);
+}
+#simple-quest .content-link:hover,
+#simple-quest .simple-quest-content-link:hover {
+  filter: saturate(1);
+  text-shadow: none;
+}
+#simple-quest input:not([type=range]),
+#simple-quest textarea {
+  background: transparent;
+  color: var(--simple-quest-text-1);
+  border: 1px solid var(--simple-quest-text-1);
+  border-radius: 0;
+  padding: 0.3rem;
+}
+#simple-quest input:not([type=range]):focus, #simple-quest input:not([type=range]):active,
+#simple-quest textarea:focus,
+#simple-quest textarea:active {
+  box-shadow: 0 0 5px var(--simple-quest-text-4);
+}
+#simple-quest input[type=text],
+#simple-quest input[type=search] {
+  height: calc(var(--simple-quest-font-size) * 1.3);
+  opacity: 0.3;
+  transition: all 0.2s ease-in-out;
+}
+#simple-quest input[type=text]:focus, #simple-quest input[type=text]:active,
+#simple-quest input[type=search]:focus,
+#simple-quest input[type=search]:active {
+  opacity: 1;
+}
+#simple-quest .simple-quest-marker {
+  z-index: 1;
+  text-shadow: 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 5px black;
+}
+#simple-quest .simple-quest-marker video {
+  filter: drop-shadow(0 0 2px black);
+  width: calc(var(--simple-quest-font-size) * 1.3);
+  height: calc(var(--simple-quest-font-size) * 1.3);
+}
+#simple-quest .simple-quest-marker i {
+  width: var(--simple-quest-font-size);
+  height: var(--simple-quest-font-size);
+  text-align: center;
+}
+#simple-quest .simple-quest-marker i.marker-image {
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 2px black);
+  width: calc(var(--simple-quest-font-size) * 1.3);
+  height: calc(var(--simple-quest-font-size) * 1.3);
+}
+#simple-quest .simple-quest-marker i.emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+}
+#simple-quest #windowed-mode {
+  position: absolute;
+  top: 0;
+  right: 0;
+  cursor: pointer;
+  font-size: calc(var(--simple-quest-font-size) * 1.5);
+  margin: var(--simple-quest-font-size);
+  border-radius: 50%;
+  background-color: var(--simple-quest-text-1);
+  width: calc(var(--simple-quest-font-size) * 2);
+  height: calc(var(--simple-quest-font-size) * 2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: all 0.2s ease-in-out;
+  transform: translateY(-200%);
+  color: var(--simple-quest-background-color);
+}
+#simple-quest #windowed-mode:hover {
+  opacity: 1 !important;
+  transform: translateY(0);
+}
+#simple-quest .sheet-tabs:hover #windowed-mode {
+  opacity: 0.1;
+  transform: translateY(0);
+}
+#simple-quest option {
+  background: var(--simple-quest-background);
+}
+#simple-quest details.quest-category > summary {
+  list-style-type: none;
+  filter: brightness(1.2);
+  font-size: calc(var(--simple-quest-font-size) * 1.2);
+}
+#simple-quest details.quest-category > summary:hover .add-quest {
+  opacity: 0.2;
+}
+#simple-quest details.quest-category > summary .add-quest {
+  transition: all 0.3s ease-in-out;
+  opacity: 0;
+  cursor: pointer;
+  font-size: var(--simple-quest-font-size);
+}
+#simple-quest details.quest-category > summary .add-quest:hover {
+  opacity: 1;
+  text-shadow: 0 0 5px var(--simple-quest-text-1);
+}
+#simple-quest .quest-selected,
+#simple-quest .quest-header,
+#simple-quest .map-selected {
+  filter: brightness(1.2);
+}
+#simple-quest .quest-selected.secret::after,
+#simple-quest .quest-header.secret::after,
+#simple-quest .map-selected.secret::after {
+  background: radial-gradient(ellipse at 0%, var(--simple-quest-hidden-color) 0%, transparent 70%, transparent 100%);
+}
+#simple-quest .quest-selected::after,
+#simple-quest .quest-header::after,
+#simple-quest .map-selected::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  opacity: 0;
+  top: 85%;
+  width: 100%;
+  height: 15%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 0%, var(--simple-quest-text-1) 0%, transparent 70%, transparent 100%);
+  opacity: 0.35;
+  border-radius: 50%;
+}
+#simple-quest .quest-selected:has(nav)::after,
+#simple-quest .quest-header:has(nav)::after,
+#simple-quest .map-selected:has(nav)::after {
+  display: none;
+}
+#simple-quest details.quest-category > summary:before {
+  font-family: var(--font-awesome);
+  content: "\f0d7";
+  position: absolute;
+  left: -2rem;
+  height: 100%;
+  transition: all 0.2s ease-in-out;
+  transform: rotate(-90deg);
+}
+#simple-quest details.quest-category[open] > summary:before {
+  transform: rotate(0deg);
+}
+#simple-quest h1,
+#simple-quest h2,
+#simple-quest h3,
+#simple-quest h4,
+#simple-quest h5,
+#simple-quest h6 {
+  color: var(--simple-quest-text-0);
+  border-color: inherit;
+  position: relative;
+  border: none;
+}
+#simple-quest h1::after,
+#simple-quest h2::after,
+#simple-quest h3::after,
+#simple-quest h4::after,
+#simple-quest h5::after,
+#simple-quest h6::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  opacity: 0;
+  top: 85%;
+  width: 100%;
+  height: 15%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 0%, var(--simple-quest-text-0) 0%, transparent 70%, transparent 100%);
+  opacity: 0.35;
+  border-radius: 50%;
+}
+#simple-quest ::-webkit-scrollbar-thumb {
+  background: var(--simple-quest-text-1);
+  border: none;
+  border-radius: 0;
+}
+#simple-quest ::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+#simple-quest input[type=range] {
+  width: 20%;
+}
+#simple-quest input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  background-color: var(--simple-quest-text-2);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px thin black;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.568);
+}
+#simple-quest input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 5px;
+  cursor: pointer;
+  background: var(--simple-quest-text-3);
+  border: none;
+  filter: brightness(0.8);
+}
+#simple-quest nav.tabs,
+#simple-quest nav#timeline-nav {
+  font-size: calc(var(--simple-quest-font-size) * 1.5);
+  padding: var(--simple-quest-font-size);
+  height: calc(var(--simple-quest-font-size) * 3.5);
+  border-bottom: 1px solid var(--simple-quest-text-1);
+}
+#simple-quest nav.tabs:has(a > i),
+#simple-quest nav#timeline-nav:has(a > i) {
+  height: calc(var(--simple-quest-font-size) * 4.5);
+}
+#simple-quest nav.tabs a,
+#simple-quest nav#timeline-nav a {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  color: var(--simple-quest-text-1);
+}
+#simple-quest nav.tabs a i,
+#simple-quest nav#timeline-nav a i {
+  font-size: calc(var(--simple-quest-font-size) * 2.5);
+}
+#simple-quest nav.tabs a::after,
+#simple-quest nav#timeline-nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  opacity: 0;
+  top: 85%;
+  width: 200%;
+  height: 15%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, var(--simple-quest-text-1) 0%, transparent 70%, transparent 100%);
+  opacity: 0;
+  transform: translateX(-25%);
+  transition: all 0.2s ease-in-out;
+}
+#simple-quest nav.tabs a:hover,
+#simple-quest nav.tabs a.active,
+#simple-quest nav#timeline-nav a:hover,
+#simple-quest nav#timeline-nav a.active {
+  text-shadow: 0 0 3px var(--simple-quest-text-1);
+  color: var(--simple-quest-text-1);
+}
+#simple-quest nav.tabs a:hover::after,
+#simple-quest nav.tabs a.active::after,
+#simple-quest nav#timeline-nav a:hover::after,
+#simple-quest nav#timeline-nav a.active::after {
+  opacity: 0.35;
+}
+#simple-quest .quest-category-summary.selected-deleteme::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  opacity: 0;
+  top: 85%;
+  width: 100%;
+  height: 15%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 0%, var(--simple-quest-text-1) 0%, transparent 70%, transparent 100%);
+  opacity: 0.15;
+  border-radius: 50%;
+}
+#simple-quest .map-item {
+  filter: brightness(1.2);
+  font-size: calc(var(--simple-quest-font-size) * 1.2);
+}
+#simple-quest .map-item:hover {
+  text-shadow: 0 0 5px;
+}
+#simple-quest .map-item .quest-checkbox.secret {
+  left: calc(var(--simple-quest-font-size) * -1.5);
+  width: calc(var(--simple-quest-font-size) * 1.5);
+  height: calc(var(--simple-quest-font-size) * 1.5);
+}
+#simple-quest .quest-item,
+#simple-quest .timeline-item {
+  cursor: pointer;
+  margin: calc(var(--simple-quest-font-size) * 0.3) 0;
+}
+#simple-quest .quest-item.is-era,
+#simple-quest .timeline-item.is-era {
+  filter: brightness(1.2) !important;
+  font-size: calc(var(--simple-quest-font-size) * 1.5);
+}
+#simple-quest .quest-item.has-details,
+#simple-quest .timeline-item.has-details {
+  pointer-events: none;
+}
+#simple-quest .quest-item .multi-quest,
+#simple-quest .timeline-item .multi-quest {
+  pointer-events: none;
+}
+#simple-quest .quest-item .multi-quest summary,
+#simple-quest .timeline-item .multi-quest summary {
+  pointer-events: all;
+}
+#simple-quest .quest-item .multi-quest summary::marker,
+#simple-quest .timeline-item .multi-quest summary::marker {
+  font-size: calc(var(--simple-quest-font-size) * 0.75);
+}
+#simple-quest .quest-item .multi-quest ul,
+#simple-quest .timeline-item .multi-quest ul {
+  padding: 0 var(--simple-quest-font-size);
+  margin-top: 0;
+}
+#simple-quest .quest-item .multi-quest li,
+#simple-quest .timeline-item .multi-quest li {
+  pointer-events: all;
+  filter: brightness(0.8);
+  font-size: calc(var(--simple-quest-font-size) * 0.85);
+}
+#simple-quest .quest-item .multi-quest li:hover,
+#simple-quest .timeline-item .multi-quest li:hover {
+  text-shadow: 0 0 5px;
+}
+#simple-quest .quest-item summary:hover,
+#simple-quest .timeline-item summary:hover {
+  text-shadow: 0 0 5px;
+}
+#simple-quest .quest-item.no-details:hover,
+#simple-quest .timeline-item.no-details:hover {
+  text-shadow: 0 0 5px;
+}
+#simple-quest .quest-item .quest-checkbox.secret,
+#simple-quest .timeline-item .quest-checkbox.secret {
+  left: calc(var(--simple-quest-font-size) * -1.5);
+}
+#simple-quest .journal-toc {
+  cursor: pointer;
+}
+#simple-quest .journal-toc:hover {
+  text-shadow: 0 0 5px;
+}
+#simple-quest .journal-container,
+#simple-quest .journal-toc-list {
+  overflow: auto;
+}
+#simple-quest .journal-toc-list {
+  padding-top: 3rem;
+}
+#simple-quest .personal-journal-list {
+  position: relative;
+}
+#simple-quest .unread-quest {
+  position: absolute;
+  pointer-events: none;
+  left: 100%;
+  color: var(--simple-quest-text-4);
+  text-shadow: 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 2px black, 0 0 5px var(--simple-quest-text-1), 0 0 7px var(--simple-quest-text-1), 0 0 10px var(--simple-quest-text-1), 0 0 15px var(--simple-quest-text-1);
+  filter: saturate(2) brightness(2.5);
+  transform: rotate(10deg);
+}
+#simple-quest .sub-quest .quest-checkbox {
+  width: calc(var(--simple-quest-font-size) * 1);
+  height: calc(var(--simple-quest-font-size) * 1);
+}
+#simple-quest .sub-quest .quest-checkbox.secret {
+  left: calc(var(--simple-quest-font-size) * -1);
+}
+#simple-quest .quest-checkbox {
+  position: absolute;
+  left: calc(var(--simple-quest-font-size) * -1.5);
+  transform: scale(0.7);
+  width: calc(var(--simple-quest-font-size) * 1.25);
+  height: calc(var(--simple-quest-font-size) * 1.25);
+  border: 2px solid var(--simple-quest-text-1);
+  display: flex;
+  cursor: pointer;
+  pointer-events: all;
+}
+#simple-quest .quest-checkbox.failed {
+  border-color: var(--simple-quest-failed-color);
+}
+#simple-quest .quest-checkbox.failed .quest-checkbox-marker {
+  background: var(--simple-quest-failed-color);
+}
+#simple-quest .quest-checkbox.secret {
+  opacity: 0;
+  left: calc(var(--simple-quest-font-size) * -2.5);
+  border-color: var(--simple-quest-hidden-color);
+  transition: opacity 0.2s ease-in-out;
+  font-size: 1.2rem;
+  color: var(--simple-quest-background-color);
+}
+#simple-quest .quest-checkbox.secret:hover {
+  opacity: 1;
+}
+#simple-quest .quest-checkbox.secret .quest-checkbox-marker {
+  background: var(--simple-quest-hidden-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#simple-quest .quest-checkbox .quest-checkbox-marker {
+  margin: auto;
+  width: 80%;
+  height: 80%;
+  filter: contrast(0.8);
+  background: var(--simple-quest-text-1);
+  pointer-events: none;
+  transition: transform 0.1s ease-in-out;
+  transform: scale(0);
+}
+#simple-quest .quest-checkbox.checked .quest-checkbox-marker {
+  transform: scale(1);
+}
+#simple-quest .quest-checkbox:hover .quest-checkbox-marker {
+  transform: scale(1);
+}
+#simple-quest li {
+  position: relative;
+}
+#simple-quest li.checked {
+  text-decoration: line-through;
+  filter: brightness(0.5);
+}
+#simple-quest li.secret {
+  color: var(--simple-quest-hidden-color);
+}
+#simple-quest li.failed {
+  color: var(--simple-quest-failed-color);
+}
+#simple-quest .content {
+  font-size: var(--simple-quest-font-size);
+  padding: calc(var(--simple-quest-font-size) * 2.5) calc(var(--simple-quest-font-size) * 6);
+  max-height: calc(100% - var(--simple-quest-font-size) * 3.5);
+  height: calc(100% - var(--simple-quest-font-size) * 3.5);
+  position: relative;
+  max-width: 100%;
+}
+#simple-quest .content .tab {
+  height: 100%;
+  position: relative;
+  overflow-y: auto;
+}
+#simple-quest ul,
+#simple-quest ol {
+  list-style: none;
+}
+#simple-quest .tab[data-tab=lore] .quest-details ul,
+#simple-quest .tab[data-tab=lore] .quest-details ol,
+#simple-quest .tab[data-tab=my-journal] .quest-details ul,
+#simple-quest .tab[data-tab=my-journal] .quest-details ol,
+#simple-quest .tab[data-tab=party-journal] .quest-details ul,
+#simple-quest .tab[data-tab=party-journal] .quest-details ol,
+#simple-quest .journal-container ul,
+#simple-quest .journal-container ol,
+#simple-quest .simple-quest-modal ul,
+#simple-quest .simple-quest-modal ol {
+  list-style: revert;
+}
+#simple-quest .tab[data-tab=timeline] .quest-list {
+  padding-left: 0;
+}
+#simple-quest .tab[data-tab=timeline] .quest-list ul {
+  padding-left: 0;
+}
+#simple-quest .tab[data-tab=timeline] .quest-list ul .timeline-item:not(.is-era) {
+  margin-left: calc(var(--simple-quest-font-size) * 1.5);
+}
+#simple-quest #edit-my-journal,
+#simple-quest #edit-shared-journal {
+  position: sticky;
+  left: 100vw;
+  padding-right: 2rem;
+  top: 1rem;
+  cursor: pointer;
+  z-index: 1;
+}
+#simple-quest .simple-quest-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  height: 100%;
+  padding-bottom: 2rem;
+  gap: 1rem;
+}
+#simple-quest .simple-quest-grid.compact {
+  grid-template-columns: 1fr 4fr;
+}
+#simple-quest .simple-quest-grid.hidden-list {
+  grid-template-columns: 1fr;
+}
+#simple-quest .simple-quest-grid .map-controls i {
+  cursor: pointer;
+  overflow: visible;
+}
+#simple-quest .simple-quest-grid .map-controls i:hover {
+  text-shadow: 0 0 5px var(--simple-quest-text-1);
+}
+#simple-quest .simple-quest-grid .quest-controls,
+#simple-quest .simple-quest-grid .quest-list-controls,
+#simple-quest .simple-quest-grid .map-controls {
+  position: absolute;
+  width: calc(100% - 2rem);
+  right: 2rem;
+  top: 0.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+#simple-quest .simple-quest-grid .quest-controls #add-category,
+#simple-quest .simple-quest-grid .quest-controls #add-map,
+#simple-quest .simple-quest-grid .quest-controls #add-lore-category,
+#simple-quest .simple-quest-grid .quest-list-controls #add-category,
+#simple-quest .simple-quest-grid .quest-list-controls #add-map,
+#simple-quest .simple-quest-grid .quest-list-controls #add-lore-category,
+#simple-quest .simple-quest-grid .map-controls #add-category,
+#simple-quest .simple-quest-grid .map-controls #add-map,
+#simple-quest .simple-quest-grid .map-controls #add-lore-category {
+  position: relative;
+}
+#simple-quest .simple-quest-grid .quest-controls #add-category .fa-plus,
+#simple-quest .simple-quest-grid .quest-controls #add-map .fa-plus,
+#simple-quest .simple-quest-grid .quest-controls #add-lore-category .fa-plus,
+#simple-quest .simple-quest-grid .quest-list-controls #add-category .fa-plus,
+#simple-quest .simple-quest-grid .quest-list-controls #add-map .fa-plus,
+#simple-quest .simple-quest-grid .quest-list-controls #add-lore-category .fa-plus,
+#simple-quest .simple-quest-grid .map-controls #add-category .fa-plus,
+#simple-quest .simple-quest-grid .map-controls #add-map .fa-plus,
+#simple-quest .simple-quest-grid .map-controls #add-lore-category .fa-plus {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: calc(var(--simple-quest-font-size) * 0.45);
+  color: var(--simple-quest-background-color);
+  background: var(--simple-quest-text-1);
+  border: calc(var(--simple-quest-font-size) * 0.06) solid;
+  padding: 2px;
+  border-radius: 50%;
+  opacity: 1;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--simple-quest-font-size) * 0.65);
+  height: calc(var(--simple-quest-font-size) * 0.65);
+}
+#simple-quest .simple-quest-grid .quest-controls.simple-quest-hidden,
+#simple-quest .simple-quest-grid .quest-list-controls.simple-quest-hidden,
+#simple-quest .simple-quest-grid .map-controls.simple-quest-hidden {
+  display: none;
+}
+#simple-quest .simple-quest-grid .quest-controls .quest-control,
+#simple-quest .simple-quest-grid .quest-list-controls .quest-control,
+#simple-quest .simple-quest-grid .map-controls .quest-control {
+  cursor: pointer;
+  overflow: visible;
+}
+#simple-quest .simple-quest-grid .quest-controls .quest-control:hover,
+#simple-quest .simple-quest-grid .quest-list-controls .quest-control:hover,
+#simple-quest .simple-quest-grid .map-controls .quest-control:hover {
+  text-shadow: 0 0 5px var(--simple-quest-text-1);
+}
+#simple-quest .simple-quest-grid #move {
+  height: var(--simple-quest-font-size);
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--simple-quest-text-1);
+}
+#simple-quest .simple-quest-grid .quest-list,
+#simple-quest .simple-quest-grid .maps-list,
+#simple-quest .simple-quest-grid .journal-toc-list {
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+#simple-quest .simple-quest-grid .quest-list,
+#simple-quest .simple-quest-grid .quest-details,
+#simple-quest .simple-quest-grid .maps-list,
+#simple-quest .simple-quest-grid .map-details {
+  position: relative;
+  overflow-y: auto;
+  height: 100%;
+  max-height: 100%;
+  padding: 3rem;
+}
+#simple-quest .simple-quest-grid .quest-list.map-details,
+#simple-quest .simple-quest-grid .quest-details.map-details,
+#simple-quest .simple-quest-grid .maps-list.map-details,
+#simple-quest .simple-quest-grid .map-details.map-details {
+  padding: 0;
+}
+#simple-quest .font-controls {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  padding: 1rem;
+  font-size: xx-large;
+  opacity: 0.4;
+  transition: all 0.2s ease-in-out;
+}
+#simple-quest .font-controls:hover {
+  opacity: 1;
+}
+#simple-quest .font-controls i {
+  cursor: pointer;
+}
+#simple-quest .font-controls i:hover {
+  text-shadow: 0 0 5px var(--simple-quest-text-1);
+}
+#simple-quest .font-controls #font-size-decrease {
+  font-size: large;
+}
+#simple-quest .simple-quest-modal {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  z-index: 10;
+  position: absolute;
+  padding: 2rem 15%;
+  background: var(--simple-quest-background);
+  -webkit-backdrop-filter: blur(5px);
+          backdrop-filter: blur(5px);
+  overflow: auto;
+  cursor: default;
+}/*# sourceMappingURL=module.css.map */

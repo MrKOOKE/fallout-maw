@@ -1,5 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getSkillSettings } from "../settings/accessors.mjs";
+import { getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { TOOL_CLASS_CHOICES } from "../settings/tools.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
@@ -35,8 +36,11 @@ export function getButcheringConfig(actor) {
 }
 
 export function normalizeButcheringConfig(config = {}) {
-  const skillKeys = new Set(getSkillSettings().map(skill => String(skill.key ?? "")).filter(Boolean));
-  const fallbackSkillKey = getSkillSettings()[0]?.key ?? "";
+  const skills = getSkillSettings();
+  const skillKeys = new Set(skills.map(skill => String(skill.key ?? "")).filter(Boolean));
+  const fallbackSkillKey = skills.find(skill => skill.key === "naturalist")?.key
+    ?? skills[0]?.key
+    ?? "";
   const requestedSkillKey = String(config?.skillKey ?? "");
   const stages = normalizeArray(config?.stages).map((stage, index) => normalizeButcheringStage(stage, index));
   return {
@@ -117,6 +121,7 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
     this.#actor = this.#actorUuid ? await fromUuid(this.#actorUuid) : null;
     this.#config = normalizeButcheringConfig(this.#config);
     const skillSettings = getSkillSettings();
+    const toolSettings = getToolSettings();
     return {
       ...(await super._prepareContext(options)),
       actor: this.#actor,
@@ -125,6 +130,15 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
         stages: this.#config.stages.map((stage, index) => ({
           ...stage,
           displayIndex: index + 1,
+          toolOptions: toolSettings.map(tool => ({
+            key: tool.key,
+            label: tool.label,
+            selected: tool.key === stage.tool.toolKey
+          })),
+          toolClassOptions: TOOL_CLASS_CHOICES.map(toolClass => ({
+            key: toolClass,
+            selected: toolClass === stage.tool.toolClass
+          })),
           outcomes: BUTCHERING_OUTCOMES.map(outcome => ({
             ...outcome,
             rewards: stage.outcomes[outcome.key] ?? []
@@ -143,6 +157,10 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this._dragDrop.bind(this.element);
+    for (const checkbox of this.element?.querySelectorAll?.("[data-stage-tool-enabled]") ?? []) {
+      checkbox.addEventListener("change", () => this.#syncToolRequirementFields());
+    }
+    this.#syncToolRequirementFields();
     requestAnimationFrame(() => {
       const scroller = this.#getScrollElement();
       if (!scroller) return;
@@ -197,6 +215,12 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
         id: String(stageElement.dataset.stageId ?? existing.id),
         name: stageElement.querySelector("[data-stage-name]")?.value ?? existing.name,
         difficulty: stageElement.querySelector("[data-stage-difficulty]")?.value ?? existing.difficulty,
+        tool: {
+          enabled: stageElement.querySelector("[data-stage-tool-enabled]")?.checked === true,
+          toolKey: stageElement.querySelector("[data-stage-tool-key]")?.value ?? existing.tool.toolKey,
+          toolClass: stageElement.querySelector("[data-stage-tool-class]")?.value ?? existing.tool.toolClass,
+          supplyCost: stageElement.querySelector("[data-stage-tool-cost]")?.value ?? existing.tool.supplyCost
+        },
         outcomes
       }, index);
     });
@@ -275,6 +299,15 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
       ?? this.element?.closest?.(".window-content")
       ?? this.element;
   }
+
+  #syncToolRequirementFields() {
+    for (const stage of this.element?.querySelectorAll?.("[data-butchering-stage]") ?? []) {
+      const enabled = stage.querySelector("[data-stage-tool-enabled]")?.checked === true;
+      const fields = stage.querySelector("[data-stage-tool-fields]");
+      if (fields) fields.hidden = !enabled;
+      for (const input of fields?.querySelectorAll?.("input, select") ?? []) input.disabled = !enabled;
+    }
+  }
 }
 
 function getActorFromDirectoryEntry(app, li) {
@@ -284,10 +317,20 @@ function getActorFromDirectoryEntry(app, li) {
 }
 
 function createButcheringStage(index = 0) {
+  const toolSettings = getToolSettings();
+  const defaultToolKey = toolSettings.find(tool => tool.key === "butchery")?.key
+    ?? toolSettings[0]?.key
+    ?? "";
   return normalizeButcheringStage({
     id: foundry.utils.randomID(),
     name: `Этап ${index + 1}`,
     difficulty: 60,
+    tool: {
+      enabled: false,
+      toolKey: defaultToolKey,
+      toolClass: "D",
+      supplyCost: 1
+    },
     outcomes: {}
   }, index);
 }
@@ -303,7 +346,26 @@ function normalizeButcheringStage(stage = {}, index = 0) {
     id: String(stage?.id ?? "").trim() || foundry.utils.randomID(),
     name: String(stage?.name ?? "").trim() || `Этап ${index + 1}`,
     difficulty: Math.max(0, toInteger(stage?.difficulty ?? 60)),
+    tool: normalizeButcheringToolRequirement(stage?.tool),
     outcomes
+  };
+}
+
+function normalizeButcheringToolRequirement(tool = {}) {
+  const toolSettings = getToolSettings();
+  const configuredToolKey = String(tool?.toolKey ?? "").trim();
+  const fallbackToolKey = toolSettings.find(entry => entry.key === "butchery")?.key
+    ?? toolSettings[0]?.key
+    ?? "";
+  const toolKey = toolSettings.some(entry => entry.key === configuredToolKey)
+    ? configuredToolKey
+    : fallbackToolKey;
+  const configuredClass = String(tool?.toolClass ?? "D").trim().toUpperCase();
+  return {
+    enabled: tool?.enabled === true && Boolean(toolKey),
+    toolKey,
+    toolClass: TOOL_CLASS_CHOICES.includes(configuredClass) ? configuredClass : "D",
+    supplyCost: Math.max(1, toInteger(tool?.supplyCost ?? tool?.amount ?? 1) || 1)
   };
 }
 

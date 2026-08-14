@@ -1,0 +1,19 @@
+<form action="">
+    <div class="form-group-stacked">
+        <div class="checkbox-label">
+            <span>{{localize "JOURNAL.ShowTo"}}</span>
+            <label class="checkbox">
+                {{localize "OWNERSHIP.AllPlayers"}}
+                <input type="checkbox" name="allPlayers" checked>
+            </label>
+        </div>
+        <div class="form-fields">
+            {{#each users as |user|}}
+                <label class="checkbox">
+                    {{user.name}}
+                    <input type="checkbox" name="players" value="{{user.id}}" checked disabled>
+                </label>
+            {{/each}}
+        </div>
+    </div>
+</form>

@@ -14,17 +14,29 @@
     }
   ],
   "esmodules": [
-    "src/main.mjs"
+    "src/main.mjs",
+    "simple-quest/scripts/main.js"
   ],
   "styles": [
     "styles/fallout-maw.css",
-    "styles/combat-carousel.css"
+    "styles/combat-carousel.css",
+    "simple-quest/styles/module.css"
   ],
   "languages": [
     {
       "lang": "en",
       "name": "English",
       "path": "lang/en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/simple-quest.en.json"
+    },
+    {
+      "lang": "ru",
+      "name": "Русский",
+      "path": "lang/simple-quest.ru.json"
     },
     {
       "lang": "ru",

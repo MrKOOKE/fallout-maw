@@ -23,6 +23,10 @@ export const ITEM_FUNCTIONS = {
   tool: "tool",
   toolPrefix: "tool:"
 };
+export const TOOL_RESOURCE_MODES = Object.freeze({
+  supply: "supply",
+  condition: "condition"
+});
 export const FIXED_GEAR_FUNCTION_KEYS = Object.freeze([
   ITEM_FUNCTIONS.actorContainer,
   ITEM_FUNCTIONS.container,
@@ -705,6 +709,53 @@ export function getToolFunction(itemOrSystem = null, toolKey = "") {
   return getItemSystem(itemOrSystem).functions?.tools?.[toolKey] ?? {};
 }
 
+/**
+ * Resolve the resource spent by a tool function. Documents created before the
+ * resource-mode field existed keep using their private tool supply.
+ */
+export function normalizeToolResourceMode(value = TOOL_RESOURCE_MODES.supply) {
+  return value === TOOL_RESOURCE_MODES.condition
+    ? TOOL_RESOURCE_MODES.condition
+    : TOOL_RESOURCE_MODES.supply;
+}
+
+export function getToolResourceState(itemOrSystem = null, toolOrKey = "") {
+  const system = getItemSystem(itemOrSystem);
+  const toolKey = typeof toolOrKey === "string"
+    ? String(toolOrKey ?? "").trim()
+    : String(toolOrKey?.toolKey ?? "").trim();
+  const tool = typeof toolOrKey === "string"
+    ? system.functions?.tools?.[toolKey] ?? {}
+    : toolOrKey ?? {};
+  const mode = normalizeToolResourceMode(tool.consumptionMode);
+  const source = mode === TOOL_RESOURCE_MODES.condition
+    ? system.functions?.[ITEM_FUNCTIONS.condition] ?? {}
+    : tool.supply ?? {};
+  const max = Math.max(0, Math.trunc(Number(source.max) || 0));
+  const rawValue = Math.max(0, Math.trunc(Number(source.value) || 0));
+  const value = max > 0 ? Math.min(max, rawValue) : rawValue;
+  const configured = mode !== TOOL_RESOURCE_MODES.condition || Boolean(source.enabled);
+  return {
+    mode,
+    toolKey,
+    value,
+    max,
+    configured,
+    available: configured && value > 0,
+    updatePath: mode === TOOL_RESOURCE_MODES.condition
+      ? "system.functions.condition.value"
+      : `system.functions.tools.${toolKey}.supply.value`,
+    deletesItemOnDepletion: mode === TOOL_RESOURCE_MODES.supply
+  };
+}
+
+export function createToolResourceValueUpdate(itemOrSystem = null, toolOrKey = "", value = 0) {
+  const resource = getToolResourceState(itemOrSystem, toolOrKey);
+  return {
+    [resource.updatePath]: Math.max(0, Math.trunc(Number(value) || 0))
+  };
+}
+
 export function getEnabledToolFunctions(itemOrSystem = null) {
   const system = getItemSystem(itemOrSystem);
   if (isItemBrokenByCondition(system)) return [];
@@ -713,12 +764,16 @@ export function getEnabledToolFunctions(itemOrSystem = null) {
 
   const selectedKey = getSelectedToolFunctionKey(system);
   if ((hasUnifiedToolFunction(system) || hasLegacyToolFunction(system)) && selectedKey) {
-    return [{ ...(tools[selectedKey] ?? {}), enabled: true, toolKey: selectedKey }];
+    const tool = { ...(tools[selectedKey] ?? {}), enabled: true, toolKey: selectedKey };
+    return [{ ...tool, consumptionMode: normalizeToolResourceMode(tool.consumptionMode), resource: getToolResourceState(system, tool) }];
   }
 
   return Object.entries(tools)
     .filter(([, data]) => data?.enabled)
-    .map(([toolKey, data]) => ({ ...data, toolKey }));
+    .map(([toolKey, data]) => {
+      const tool = { ...data, toolKey };
+      return { ...tool, consumptionMode: normalizeToolResourceMode(tool.consumptionMode), resource: getToolResourceState(system, tool) };
+    });
 }
 
 export function getSelectedToolFunctionKey(itemOrSystem = null) {

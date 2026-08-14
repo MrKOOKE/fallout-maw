@@ -6876,6 +6876,15 @@
           {{/each}}
         </select>
       </label>
+      <label>
+        <span>Расходуемый ресурс</span>
+        <select name="system.functions.tools.{{key}}.consumptionMode">
+          {{#each resourceChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{#if usesSupplyResource}}
       <label class="fallout-maw-split-number-field">
         <span>Запас</span>
         <div>
@@ -6884,6 +6893,15 @@
           <input type="number" name="system.functions.tools.{{key}}.supply.max" value="{{supplyMax}}" min="0" step="1">
         </div>
       </label>
+      {{else}}
+      <label>
+        <span>Состояние как запас</span>
+        <strong>{{conditionResourceValue}} / {{conditionResourceMax}}</strong>
+        {{#unless conditionResourceConfigured}}
+        <small>Добавьте и включите функцию «Состояние».</small>
+        {{/unless}}
+      </label>
+      {{/if}}
       <label>
         <span>Порог для использования</span>
         <input type="number" name="system.functions.tools.{{key}}.skillValue" value="{{skillValue}}" min="0" step="1">

@@ -41,6 +41,7 @@ export class CraftingSettingsConfig extends FalloutMaWFormApplicationV2 {
       craftModeChoices: createModeChoices(this.settings.craft.mode),
       repairModeChoices: createModeChoices(this.settings.repair.mode),
       medicineModeChoices: createModeChoices(this.settings.medicine.mode),
+      butcheringModeChoices: createModeChoices(this.settings.butchering.mode, { allowGuaranteed: true }),
       craftSkillChecks: this.settings.craft.mode === CRAFTING_RESOLUTION_MODES.skillChecks,
       repairSkillChecks: this.settings.repair.mode === CRAFTING_RESOLUTION_MODES.skillChecks
     };
@@ -70,8 +71,8 @@ export class CraftingSettingsConfig extends FalloutMaWFormApplicationV2 {
   }
 }
 
-function createModeChoices(activeMode) {
-  return [
+function createModeChoices(activeMode, { allowGuaranteed = false } = {}) {
+  const choices = [
     {
       key: CRAFTING_RESOLUTION_MODES.skillChecks,
       label: "Проверки навыков",
@@ -83,4 +84,12 @@ function createModeChoices(activeMode) {
       selected: activeMode === CRAFTING_RESOLUTION_MODES.skillThreshold
     }
   ];
+  if (allowGuaranteed) {
+    choices.push({
+      key: CRAFTING_RESOLUTION_MODES.guaranteed,
+      label: "Гарантированный результат",
+      selected: activeMode === CRAFTING_RESOLUTION_MODES.guaranteed
+    });
+  }
+  return choices;
 }
