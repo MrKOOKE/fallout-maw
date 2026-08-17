@@ -5,7 +5,6 @@ import {
   hasActorContainer
 } from "../utils/actor-containers.mjs";
 import { TRAVEL_GROUP_FLAG } from "./constants.mjs";
-import { evaluateTravelSpeed } from "./travel-speed.mjs";
 
 export function isTravelGroupCarrierActor(actor = null) {
   return Boolean(actor?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId);
@@ -45,12 +44,12 @@ export function normalizeTravelGroupUnit(unit = {}) {
   };
 }
 
-export async function resolveTravelGroupUnitActor(unit = {}) {
-  return resolveTravelActorReference(unit.actorUuid, unit.tokenData, unit.actorName);
+export async function resolveTravelGroupUnitActor(unit = {}, options = {}) {
+  return resolveTravelActorReference(unit.actorUuid, unit.tokenData, unit.actorName, options);
 }
 
-export async function resolveTravelPassengerActor(passenger = {}) {
-  return resolveTravelActorReference(passenger.actorUuid, passenger.tokenData, passenger.actorName);
+export async function resolveTravelPassengerActor(passenger = {}, options = {}) {
+  return resolveTravelActorReference(passenger.actorUuid, passenger.tokenData, passenger.actorName, options);
 }
 
 export function getTravelUnitPassengers(unit = {}, unitActor = null) {
@@ -66,7 +65,7 @@ export function getTravelPassengerChildren(passenger = {}, actor = null) {
     : getActorContainerFlag(actor).passengers;
 }
 
-export async function resolveTravelGroupParticipants(carrierActor = null) {
+export async function resolveTravelGroupParticipants(carrierActor = null, { allowNameFallback = true } = {}) {
   const participants = [];
   const visited = new Set();
 
@@ -78,13 +77,13 @@ export async function resolveTravelGroupParticipants(carrierActor = null) {
     return true;
   };
   const visitPassenger = async passenger => {
-    const actor = await resolveTravelPassengerActor(passenger).catch(() => null);
+    const actor = await resolveTravelPassengerActor(passenger, { allowNameFallback }).catch(() => null);
     if (!add(actor, passenger?.actorUuid)) return;
     for (const nested of getTravelPassengerChildren(passenger, actor)) await visitPassenger(nested);
   };
 
   for (const unit of getTravelGroupUnits(carrierActor)) {
-    const actor = await resolveTravelGroupUnitActor(unit).catch(() => null);
+    const actor = await resolveTravelGroupUnitActor(unit, { allowNameFallback }).catch(() => null);
     add(actor, unit.actorUuid);
     for (const passenger of getTravelUnitPassengers(unit, actor)) await visitPassenger(passenger);
   }
@@ -106,6 +105,7 @@ export function isTravelVehicleUnit(unit = {}, actor = null) {
 }
 
 export async function calculateTravelGroupSpeed(actor = null) {
+  const { evaluateTravelSpeed } = await import("./travel-speed.mjs");
   const group = getTravelGroupData(actor) ?? {};
   const speeds = [];
   for (const unit of getTravelGroupUnits(actor)) {
@@ -119,7 +119,9 @@ export async function calculateTravelGroupSpeed(actor = null) {
   return Math.min(...speeds);
 }
 
-async function resolveTravelActorReference(actorUuid = "", tokenData = null, actorName = "") {
+async function resolveTravelActorReference(actorUuid = "", tokenData = null, actorName = "", {
+  allowNameFallback = true
+} = {}) {
   const actorId = String(tokenData?.actorId ?? "").trim();
   if (actorId) {
     const actor = game.actors?.get(actorId);
@@ -134,6 +136,7 @@ async function resolveTravelActorReference(actorUuid = "", tokenData = null, act
     const actor = await (globalThis.fromUuid ?? foundry.utils.fromUuid)?.(uuid);
     if (actor) return actor;
   }
+  if (!allowNameFallback) return null;
   const name = String(actorName ?? tokenData?.name ?? "").trim();
   if (!name) return null;
   const matches = (game.actors?.contents ?? []).filter(actor => actor.name === name);

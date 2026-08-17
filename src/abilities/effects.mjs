@@ -78,6 +78,8 @@ import {
   activeEffectChangesEqual,
   canonicalizeActiveEffectChanges
 } from "../utils/active-effect-source.mjs";
+import { getActiveSceneWorldTimeActors } from "../time/world-time-actor-index.mjs";
+import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "./deus-ex-machina-progress-runtime.mjs";
 import {
   ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
@@ -131,6 +133,7 @@ let auraStateSyncRequested = false;
 let environmentConditionIndexInitialized = false;
 
 export function registerAbilityEffectHooks() {
+  registerQueuedWorldTimeProcessor(syncTimeOfDayConditionEffects, { priority: -25 });
   registerBulkOperationFlusher(flushDeferredAbilityEffectSyncs);
   Hooks.on("createActor", actor => {
     queueActorAbilityEffectSync(actor, {}, { aura: true });
@@ -338,7 +341,6 @@ export function registerAbilityEffectHooks() {
     actorIlluminationLevelCache.clear();
     queueIlluminationConditionEffectSync();
   });
-  Hooks.on("updateWorldTime", syncTimeOfDayConditionEffects);
   Hooks.on("createCombat", () => queueAuraStateSync());
   Hooks.on("updateCombat", () => queueAuraStateSync());
   Hooks.on("deleteCombat", () => queueAuraStateSync());
@@ -389,13 +391,15 @@ function queueAuraDependentStateSync(tokenDocument, { syncMovingActor = false } 
   queueAuraStateSync();
 }
 
-function syncTimeOfDayConditionEffects(worldTime, deltaTime) {
+async function syncTimeOfDayConditionEffects(worldTime, deltaTime) {
   if (!game.ready || !game.user?.isActiveGM) return;
   const current = Number(worldTime) || 0;
   const previous = current - (Number(deltaTime) || 0);
   if (getWorldTimeMinuteOfDay(current) === getWorldTimeMinuteOfDay(previous)) return;
 
-  for (const { actor, context } of collectEnvironmentActorContexts()) {
+  const actors = new Map();
+  for (const actor of await getActiveSceneWorldTimeActors()) actors.set(actor.uuid, actor);
+  for (const { actor, context } of collectEnvironmentActorContexts({ actors })) {
     const conditions = getActorPassiveEnvironmentConditions(actor, ABILITY_CONDITION_TYPES.timeOfDay);
     if (!conditions.some(condition => (
       timeOfDayConditionApplies(condition, { worldTime: previous })
@@ -966,7 +970,7 @@ export async function syncAuraGeneratedEffects() {
     do {
       auraStateSyncRequested = false;
       const desired = buildDesiredAuraGeneratedEffects();
-      const actors = collectAuraEffectActors(desired);
+      const actors = await collectAuraEffectActors(desired);
       for (const actor of actors.values()) {
         await reconcileActorAuraGeneratedEffects(actor, desired.get(actor.uuid) ?? new Map());
       }
@@ -1417,14 +1421,10 @@ function buildAuraTriggerCostData(sourceActor, source, entry) {
   };
 }
 
-function collectAuraEffectActors(desired = new Map()) {
+async function collectAuraEffectActors(desired = new Map()) {
   const actors = new Map();
-  for (const actor of game.actors ?? []) {
-    const hasAuraDepletion = Object.values(getActorBarrierDepletions(actor))
-      .some(record => record?.kind === "aura");
-    if (hasAuraDepletion || actor?.effects?.some(effect => getAuraGeneratedEffectFlag(effect))) {
-      actors.set(actor.uuid, actor);
-    }
+  for (const actor of await getActiveSceneWorldTimeActors()) {
+    if (actorHasPersistedAuraState(actor)) actors.set(actor.uuid, actor);
   }
   for (const token of canvas?.tokens?.placeables ?? []) {
     const actor = token?.actor;
@@ -1438,6 +1438,12 @@ function collectAuraEffectActors(desired = new Map()) {
     ) actors.set(actor.uuid, actor);
   }
   return actors;
+}
+
+function actorHasPersistedAuraState(actor) {
+  return Object.values(getActorBarrierDepletions(actor))
+    .some(record => record?.kind === "aura")
+    || actor?.effects?.some(effect => getAuraGeneratedEffectFlag(effect));
 }
 
 async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {

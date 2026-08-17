@@ -81,6 +81,7 @@ function createCollection(contents) {
 function setWorld({ actors = [], scenes = [] } = {}) {
   game.actors = createCollection(actors);
   game.scenes = createCollection(scenes);
+  canvas.scene = null;
   actorRegistry.clear();
   for (const actor of actors) actorRegistry.set(actor.uuid, actor);
   for (const scene of scenes) {
@@ -541,7 +542,7 @@ test("periodic-to-nonperiodic behavior type transition reconciles its Scene", as
   });
 });
 
-test("world-time invalidation visits only Scenes which contain periodic damage behaviors", async () => {
+test("world-time invalidation visits only the active Scene", async () => {
   let unrelatedActorReads = 0;
   const behavior = createPeriodicBehavior("world-time");
   const region = createRegion("world-time-region", [behavior]);
@@ -565,6 +566,7 @@ test("world-time invalidation visits only Scenes which contain periodic damage b
     }]
   });
   setWorld({ actors: [target.actor], scenes: [periodicScene, unrelatedScene] });
+  canvas.scene = periodicScene;
   await primePeriodicScene(periodicScene, [target]);
   unrelatedActorReads = 0;
 

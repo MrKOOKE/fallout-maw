@@ -1,6 +1,5 @@
 import {
   getActorEventReactionSourceItems,
-  collectActiveSceneReactorActors,
   isActiveEventReactionGearItem
 } from "./event-reaction-scanner.mjs";
 import {
@@ -9,6 +8,7 @@ import {
 } from "./event-reaction-schema.mjs";
 import { ABILITY_FUNCTION_TYPES } from "../settings/abilities.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
+import { getActiveSceneWorldTimeActors } from "../time/world-time-actor-index.mjs";
 
 export const VISION_EVENT_REACTION_KEYS = Object.freeze([
   "fallout-maw.vision.target.gained",
@@ -48,6 +48,11 @@ export function actorUpdateInvalidatesEventReactionIndex(changes = {}) {
     || path === "system.creature.raceId"
     || path === "system.constructPartSlots"
     || path.startsWith("system.constructPartSlots.")
+    || path === "flags.fallout-maw.actorContainer"
+    || path.startsWith("flags.fallout-maw.actorContainer.passengers")
+    || path === "flags.fallout-maw.travelGroup"
+    || path.startsWith("flags.fallout-maw.travelGroup.units")
+    || path.startsWith("flags.fallout-maw.travelGroup.memberActorUuids")
     || /^system\.limbs\.[^.]+\.(?:max|maxBonus|missing)$/.test(path)
   ));
 }
@@ -111,7 +116,7 @@ export function collectEventReactionKeysFromItem(item = null) {
  * no event-reaction functions exist (functionChecks: 0 in production logs).
  */
 export function createEventReactionSubscriptionIndex({
-  getReactors = () => collectActiveSceneReactorActors(),
+  getReactors = () => getActiveSceneWorldTimeActors(),
   getItems = undefined,
   setTimer = globalThis.setTimeout,
   clearTimer = globalThis.clearTimeout,
@@ -143,11 +148,11 @@ export function createEventReactionSubscriptionIndex({
     if (rebuildPromise) return rebuildPromise;
     const rebuildRevision = invalidationRevision;
     let pendingRebuild;
-    pendingRebuild = Promise.resolve().then(() => {
+    pendingRebuild = Promise.resolve().then(async () => {
       const nextKeys = new Set();
       const nextActorsByKey = new Map();
       let nextTotal = 0;
-      for (const actor of getReactors() ?? []) {
+      for (const actor of await getReactors() ?? []) {
         const actorKeys = new Set();
         for (const item of getActorEventReactionSourceItems(actor, getItems ? { getItems } : {})) {
           for (const eventKey of collectEventReactionKeysFromItem(item)) {

@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
 import { FALLBACK_ICON, escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
@@ -30,8 +31,10 @@ const { DialogV2 } = foundry.applications.api;
 const EPSILON = 0.000001;
 const RESERVE_PERSISTENCE_STEP = 0.01;
 const energyConsumptionReserveCache = new Map();
+let energyConsumptionActorIndex = null;
 
 export function registerEnergyConsumptionHooks() {
+  energyConsumptionActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasActiveEnergyConsumption);
   registerQueuedWorldTimeProcessor(processEnergyConsumptionWorldTime, { priority: -15 });
   Hooks.on("updateActor", (_actor, changes) => {
     const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
@@ -238,8 +241,9 @@ async function processEnergyConsumptionWorldTime(_worldTime, deltaSeconds) {
   if (!isEnergyConsumptionWorldTimeAuthority()) return;
   const seconds = Number(deltaSeconds) || 0;
   if (seconds <= 0) return;
-  const actors = collectEnergyConsumptionActors();
-  for (const actor of actors) await processActorEnergyConsumptionWorldTime(actor, seconds);
+  for (const actor of await energyConsumptionActorIndex.values()) {
+    await processActorEnergyConsumptionWorldTime(actor, seconds);
+  }
 }
 
 export function isEnergyConsumptionWorldTimeAuthority(user = globalThis.game?.user) {
@@ -478,16 +482,14 @@ function isActiveEnergyConsumptionCarrier(actor = null, item = null, { activeIte
   return Boolean(item.system?.equipped) || ["equipment", "weapon", "constructPart"].includes(mode);
 }
 
-function collectEnergyConsumptionActors() {
-  const actors = new Map();
-  for (const actor of game.actors ?? []) {
-    if (["character", "construct"].includes(actor?.type)) actors.set(actor.uuid, actor);
-  }
-  for (const token of canvas?.tokens?.placeables ?? []) {
-    const actor = token?.actor;
-    if (["character", "construct"].includes(actor?.type)) actors.set(actor.uuid, actor);
-  }
-  return Array.from(actors.values());
+function actorHasActiveEnergyConsumption(actor) {
+  if (!["character", "construct"].includes(actor?.type)) return false;
+  const items = getActorItemsWithActiveHudModules(actor);
+  const activeItemIds = new Set(items.map(item => String(item?.id ?? "")).filter(Boolean));
+  return items.some(item => (
+    isActiveEnergyConsumptionCarrier(actor, item, { activeItemIds })
+    && getEnergyConsumptionConditions(item).some(condition => isEnergyConsumptionActive(item, condition.id))
+  ));
 }
 
 function formatNumberForDisplay(value) {

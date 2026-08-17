@@ -935,13 +935,12 @@ async function processLightSourceWorldTime(_worldTime, deltaSeconds) {
   const seconds = Number(deltaSeconds) || 0;
   if (seconds <= 0) return;
   const consumedSources = new Map();
-  for (const scene of game.scenes?.contents ?? []) {
-    await processSceneLightSourceWorldTime(scene, seconds, consumedSources);
-  }
+  await processSceneLightSourceWorldTime(globalThis.canvas?.scene, seconds, consumedSources);
 }
 
 async function processSceneLightSourceWorldTime(scene = null, deltaSeconds = 0, consumedSources = new Map()) {
   for (const tokenDocument of scene?.tokens?.contents ?? []) {
+    if (!getActiveLightSourceEntries(tokenDocument).length) continue;
     await runTokenLightSourceOperation(tokenDocument, freshToken => (
       processTokenLightSourceWorldTime(freshToken, deltaSeconds, consumedSources)
     ));

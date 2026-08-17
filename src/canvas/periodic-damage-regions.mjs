@@ -773,7 +773,8 @@ function onUpdatePeriodicDamageActor(actor) {
 }
 
 function onPeriodicDamageWorldTimeUpdate() {
-  requestPeriodicDamageSceneEffectSync(getPeriodicDamageScenes());
+  const scene = globalThis.canvas?.scene;
+  if (scene && sceneHasPeriodicDamageBehavior(scene)) requestPeriodicDamageSceneEffectSync([scene]);
 }
 
 function onPeriodicDamageUserConnection() {

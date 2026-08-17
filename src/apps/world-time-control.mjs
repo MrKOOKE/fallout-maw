@@ -72,9 +72,16 @@ function toggleWorldTimeControl() {
   return new WorldTimeControl().render({ force: true });
 }
 
-function rerenderWorldTimeControl() {
+function rerenderWorldTimeControl(worldTime) {
   const app = foundry.applications.instances.get(CONTROL_ID);
-  if (app?.rendered) void app.render({ force: true });
+  if (app?.rendered) {
+    const currentTime = app.element?.querySelector?.(".fallout-maw-world-time-current");
+    if (currentTime && Number.isFinite(Number(worldTime))) {
+      currentTime.textContent = formatWorldTime(Number(worldTime));
+    } else {
+      void app.render({ force: true });
+    }
+  }
   updateWorldTimeControlButtonState();
 }
 
@@ -157,7 +164,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
     const direction = Number(target.dataset.direction) || 1;
     const multiplier = Math.max(1, Number(target.dataset.multiplier) || 1);
     await advanceWorldTime(direction * multiplier * getSelectedUnitSeconds());
-    return this.forceRender();
+    return undefined;
   }
 
   #positionNearControl() {

@@ -9,9 +9,9 @@ import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import {
   applyRestTimeMultiplier,
   getActorTimeSegments,
-  isCampRestParticipant,
   isTimeMechanicsForced
 } from "../time/rest-context.mjs";
+import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveActorNeedChangeModifiers } from "./need-change-runtime.mjs";
 import { scaleNeedChangeExact } from "./need-change-scaling.mjs";
@@ -26,10 +26,19 @@ const NEED_REMAINDER_EPSILON = 0.000001;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const processingActors = new Set();
 const needAccumulationRemainderCache = new Map();
+let needActorIndex = null;
+let playerNeedActorIndex = null;
+let diseaseActorIndex = null;
+let diseaseImmunityActorIndex = null;
 
 export function registerNeedThresholdHooks() {
-  Hooks.on("updateActor", (actor, changes) => {
+  needActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasNeedAccumulationWork);
+  playerNeedActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasPlayerNeedAccumulationWork);
+  diseaseActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasDiseaseTimeWork);
+  diseaseImmunityActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasDiseaseImmunityTimeWork);
+  Hooks.on("updateActor", (actor, changes, options = {}) => {
     if (!game.user?.isActiveGM) return;
+    if (options.falloutMawNeedWorldTime) return;
     if (!foundry.utils.hasProperty(changes ?? {}, "system.needs")) return;
     void processActorNeedThresholds(actor);
   });
@@ -91,18 +100,20 @@ async function processDiseaseWorldTime(worldTime, deltaTime, options) {
   }
   const now = wt;
   const elapsedSeconds = dt;
-  for (const actor of getLoadedActors()) {
+  for (const actor of await collectNeedAccumulationActors()) {
     if (!actor?.isOwner) continue;
-    if (!getTimeNeedsPlayersOnly() || hasPlayerOwner(actor) || isCampRestParticipant(actor, options)) {
-      for (const segment of getActorTimeSegments(actor, elapsedSeconds, options)) {
-        await processActorNeedAccumulation(actor, segment.seconds, {
-          restMode: segment.restMode,
-          effects: segment.effects
-        });
-      }
+    let needsChanged = false;
+    for (const segment of getActorTimeSegments(actor, elapsedSeconds, options)) {
+      needsChanged = (await processActorNeedAccumulation(actor, segment.seconds, {
+        restMode: segment.restMode,
+        effects: segment.effects
+      })) || needsChanged;
     }
+    if (needsChanged) await processActorNeedThresholds(actor);
+  }
+  for (const actor of await diseaseActorIndex.values()) {
+    if (!actor?.isOwner) continue;
     await processActorDiseaseWorsening(actor, now);
-    await processActorNeedThresholds(actor);
   }
 }
 
@@ -149,7 +160,9 @@ async function processActorNeedAccumulation(actor, elapsedSeconds, { restMode = 
     rememberNeedAccumulationRemainders(actor, remainders);
   }
   if (Object.keys(updateData).length) updateData[`flags.${SYSTEM_ID}.${NEED_ACCUMULATION_REMAINDER_FLAG_KEY}`] = remainders;
-  if (Object.keys(updateData).length) await actor.update(updateData);
+  if (!Object.keys(updateData).length) return false;
+  await actor.update(updateData, { falloutMawNeedWorldTime: true });
+  return true;
 }
 
 function getNeedAccumulationRemainders(actor) {
@@ -192,7 +205,7 @@ async function preserveDiseaseTimedEffects(deltaTime) {
   const elapsed = Math.max(0, Number(deltaTime) || 0);
   if (!elapsed) return;
 
-  for (const actor of getLoadedActors()) {
+  for (const actor of await diseaseImmunityActorIndex.values()) {
     if (!actor?.isOwner) continue;
     for (const effect of Array.from(actor.effects ?? [])) {
       const data = effect.getFlag(SYSTEM_ID, DISEASE_IMMUNITY_FLAG_KEY);
@@ -539,10 +552,6 @@ function calculateDiseaseWorseningMultiplier(actor, needKey) {
   return Math.max(1, Math.floor(percent / 10) * 2);
 }
 
-function hasPlayerOwner(actor) {
-  return Array.from(game.users ?? []).some(user => !user.isGM && actor.testUserPermission(user, "OWNER"));
-}
-
 async function syncActorDiseaseWorseningMultipliers(actor) {
   const updates = [];
   for (const item of actor.items?.filter(entry => entry.type === "disease") ?? []) {
@@ -612,13 +621,53 @@ function hasDiseaseImmunity(actor, diseaseLevel) {
   });
 }
 
+async function collectNeedAccumulationActors() {
+  return getTimeNeedsPlayersOnly()
+    ? playerNeedActorIndex.values()
+    : needActorIndex.values();
+}
+
+function actorHasNeedResources(actor) {
+  return Boolean(actor && Object.keys(actor.system?.needs ?? {}).length);
+}
+
+function actorHasNeedAccumulationWork(actor) {
+  if (!actorHasNeedResources(actor)) return false;
+  return getActorNeedSettings(actor).some(need => {
+    const perHour = Number(need.settings?.accumulation?.perHour) || 0;
+    if (!perHour) return false;
+    const resource = actor.system.needs[need.key];
+    if (!resource) return false;
+    const minimum = toInteger(resource.min);
+    const maximum = Math.max(minimum, toInteger(resource.max));
+    const current = Math.min(maximum, Math.max(minimum, toInteger(resource.value)));
+    return perHour > 0 ? current < maximum : current > minimum;
+  });
+}
+
+function actorHasPlayerNeedAccumulationWork(actor) {
+  return actorHasNeedAccumulationWork(actor) && actor.hasPlayerOwner === true;
+}
+
+function actorHasDiseaseTimeWork(actor) {
+  return Boolean(actor?.items?.some(item => item?.type === "disease"));
+}
+
+function actorHasDiseaseImmunityTimeWork(actor) {
+  return Boolean(actor?.effects?.some(effect => (
+    !effect?.disabled && effect.getFlag?.(SYSTEM_ID, DISEASE_IMMUNITY_FLAG_KEY)
+  )));
+}
+
 function getLoadedActors() {
   const actors = new Map();
-  for (const actor of game.actors ?? []) actors.set(actor.uuid, actor);
-  for (const token of canvas?.tokens?.placeables ?? []) {
-    if (token.actor) actors.set(token.actor.uuid, token.actor);
+  for (const actor of game.actors?.contents ?? game.actors ?? []) {
+    if (actor?.uuid) actors.set(actor.uuid, actor);
   }
-  return Array.from(actors.values());
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    if (token?.actor?.uuid) actors.set(token.actor.uuid, token.actor);
+  }
+  return actors.values();
 }
 
 function prepareEffectChange(effect = {}) {

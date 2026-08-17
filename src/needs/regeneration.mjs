@@ -18,12 +18,15 @@ import {
   isRestModeTime,
   isTimeMechanicsForced
 } from "../time/rest-context.mjs";
+import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const REGENERATION_HOUR_SECONDS = 60 * 60;
+let regenerationActorIndex = null;
 
 export function registerRegenerationHooks() {
+  regenerationActorIndex ??= registerWorldTimeActorCandidateIndex(actorMayNeedRegeneration);
   registerQueuedWorldTimeProcessor(processRegenerationWorldTime, { priority: -10 });
 }
 
@@ -34,7 +37,7 @@ async function processRegenerationWorldTime(worldTime, deltaTime, options) {
   const tickCount = countCrossedHourTicks(worldTime, deltaTime);
   if (tickCount <= 0) return;
 
-  for (const actor of getLoadedActors()) {
+  for (const actor of await regenerationActorIndex.values()) {
     if (!actor?.isOwner) continue;
     const actorTickCount = getActorRegenerationTickCount(actor, worldTime, deltaTime, options, tickCount);
     if (actorTickCount > 0) await applyActorRegeneration(actor, actorTickCount);
@@ -224,11 +227,23 @@ function distributeRegeneration(entries, amount) {
   return { allocations, remaining };
 }
 
-function getLoadedActors() {
-  const actors = new Map();
-  for (const actor of game.actors ?? []) actors.set(actor.uuid, actor);
-  for (const token of canvas?.tokens?.placeables ?? []) {
-    if (token.actor) actors.set(token.actor.uuid, token.actor);
-  }
-  return Array.from(actors.values());
+function actorMayNeedRegeneration(actor) {
+  if (!actor) return false;
+  if (actor.items?.some(item => {
+    if (item?.type !== "trauma" && item?.type !== "disease") return false;
+    const maximum = Math.max(1, toInteger(item.system?.healingProgressMax));
+    return toInteger(item.system?.healingProgress) < maximum;
+  })) return true;
+
+  const health = actor.system?.resources?.health;
+  if (resourceIsBelowMaximum(health)) return true;
+  if (Object.values(actor.system?.limbs ?? {}).some(resourceIsBelowMaximum)) return true;
+  return resourceIsBelowMaximum(actor.system?.resources?.[ENERGY_RESOURCE_KEY]);
+}
+
+function resourceIsBelowMaximum(resource) {
+  if (!resource || typeof resource !== "object") return false;
+  const maximum = Number(resource.max);
+  const value = Number(resource.value);
+  return Number.isFinite(maximum) && Number.isFinite(value) && maximum > value;
 }

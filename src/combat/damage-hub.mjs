@@ -16,6 +16,7 @@ import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { withQueuedReactionOpportunityWave } from "./reaction-hub.mjs";
 import { advanceWorldTime, registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
   CONSTRUCT_PART_MITIGATION_LIMB_KEY,
@@ -216,6 +217,7 @@ const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "penetration"
 ]);
 let damageTimeHooksRegistered = false;
+let timedDamageActorIndex = null;
 let periodicHealingEffectHooksRegistered = false;
 let consciousnessHooksRegistered = false;
 let consciousnessStatusSynchronizationReady = false;
@@ -5389,6 +5391,7 @@ async function handleDamageSocketMessage(payload = {}) {
 
 function registerDamageTimeHooks() {
   if (damageTimeHooksRegistered) return;
+  timedDamageActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasTimedDamageTimeWork);
   Hooks.on("combatStart", combat => {
     if (!game.user?.isActiveGM) return;
     combatRoundWorldTimes.set(combat.id, Number(game.time?.worldTime) || 0);
@@ -5425,6 +5428,7 @@ function getRoundSeconds() {
 async function processTimedDamageEffects(worldTime, deltaTime) {
   const dt = Number(deltaTime) || 0;
   if (!game.user?.isActiveGM || dt <= 0) return;
+  if (!await hasTimedDamageWorldTimeWork()) return;
   return runDamageHubOperation(async () => {
     const clock = Number(game.time?.worldTime) || 0;
     let wt = Number(worldTime) || 0;
@@ -5437,6 +5441,14 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
   });
 }
 
+async function hasTimedDamageWorldTimeWork() {
+  const actors = await timedDamageActorIndex.values();
+  if (!actors.next().done) return true;
+  return (globalThis.canvas?.scene?.regions?.contents ?? []).some(region => (
+    (region.behaviors?.contents ?? []).some(behavior => behavior.type === REGION_DAMAGE_BEHAVIOR_TYPE)
+  ));
+}
+
 async function processTimedDamageEffectsNow(worldTime, deltaTime) {
   const elapsed = Number(deltaTime) || 0;
   if (getTimeMechanicsIgnored()) {
@@ -5447,7 +5459,7 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
   await processRegionPeriodicDamage(now, elapsed);
   const damageResults = [];
-  for (const actor of getLoadedActors()) {
+  for (const actor of await timedDamageActorIndex.values()) {
     if (!actor?.isOwner) continue;
     await queueActorDamageMutation(actor.uuid, async freshActor => {
       if (!freshActor?.isOwner) return;
@@ -5537,7 +5549,8 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
 async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
   const batches = [];
   const previousTime = Math.max(0, (Number(now) || 0) - Math.max(0, Number(deltaTime) || 0));
-  for (const scene of game.scenes?.contents ?? []) {
+  const scene = globalThis.canvas?.scene;
+  if (scene) {
     for (const region of scene.regions?.contents ?? []) {
       if (region.hidden) continue;
       for (const behavior of region.behaviors?.contents ?? []) {
@@ -5756,7 +5769,8 @@ async function preserveRegionPeriodicDamage(deltaTime) {
   const elapsed = Math.max(0, Number(deltaTime) || 0);
   if (!elapsed) return;
 
-  for (const scene of game.scenes?.contents ?? []) {
+  const scene = globalThis.canvas?.scene;
+  if (scene) {
     for (const region of scene.regions?.contents ?? []) {
       for (const behavior of region.behaviors?.contents ?? []) {
         if (behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;
@@ -5778,7 +5792,7 @@ async function preserveTimedDamageEffects(deltaTime) {
   const elapsed = Math.max(0, Number(deltaTime) || 0);
   if (!elapsed) return;
 
-  for (const actor of getLoadedActors()) {
+  for (const actor of await timedDamageActorIndex.values()) {
     if (!actor?.isOwner) continue;
     for (const effect of Array.from(actor.effects ?? [])) {
       if (effect.disabled) continue;
@@ -8110,15 +8124,13 @@ function normalizeDamageAccumulation(value = {}) {
   );
 }
 
-function getLoadedActors() {
-  const actors = new Map();
-  for (const actor of game.actors?.contents ?? []) {
-    if (actor?.uuid) actors.set(actor.uuid, actor);
-  }
-  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
-    if (token.actor?.uuid && !actors.has(token.actor.uuid)) actors.set(token.actor.uuid, token.actor);
-  }
-  return actors.values();
+function actorHasTimedDamageTimeWork(actor) {
+  return Boolean(actor?.effects?.some(effect => {
+    if (effect?.disabled) return false;
+    if (getDamageEffectChanges(effect).some(isDamageHubManagedTimedEffect)) return true;
+    if (getPeriodicHealingEffectChanges(effect).length) return true;
+    return isFlagManagedTimedEffect(effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY));
+  }));
 }
 
 function hasTimedEffectReachedEnd(effect, data = {}, now = 0) {
