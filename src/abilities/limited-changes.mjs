@@ -18,7 +18,9 @@ export function getSelectableAbilityChanges(changes = []) {
 
 export function getLimitedChangeConditions(conditions = []) {
   return (Array.isArray(conditions) ? conditions : Object.values(conditions ?? {}))
-    .filter(condition => condition?.type === "limitedChanges");
+    .filter(condition => (
+      condition?.type === "limitedChanges" || condition?.type === "selectedChanges"
+    ));
 }
 
 export function resolveLimitedChangeLimit(conditions = [], actor = null, {

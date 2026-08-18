@@ -1,4 +1,4 @@
-﻿import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
+import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
@@ -1362,6 +1362,19 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     chainRef: scope.chainRef,
     occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
   };
+  // Re-configuration application ("Изменить рекомендации"): re-pick a persistent
+  // selectedChanges subset and store it without applying effects to targets.
+  const selectedChangesRef = findSelectedChangesConditionRef(abilityItem);
+  if (selectedChangesRef) {
+    return useSelectedChangesApplication(scope, actor, abilityItem, abilityFunction, selectedChangesRef, {
+      application,
+      sourceEventParticipant,
+      occurrenceBase,
+      paymentContext,
+      activationCosts: sourceActivationCosts,
+      onInteractionCancelled
+    });
+  }
   if (activeApplicationFunctionHasRuntimeAura(abilityFunction) && durationSeconds <= 0) {
     ui.notifications.warn("Для ауры активного применения задайте длительность больше 0 секунд.");
     await runTerminalSystemEventWorkflow({
@@ -1504,6 +1517,143 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
   }
   if (used) await application?.render?.({ force: true });
   return used;
+}
+
+function findSelectedChangesConditionRef(abilityItem = null) {
+  const functions = abilityItem?.system?.functions ?? [];
+  for (let functionIndex = 0; functionIndex < functions.length; functionIndex += 1) {
+    const conditions = Array.isArray(functions[functionIndex]?.conditions)
+      ? functions[functionIndex].conditions
+      : [];
+    for (let conditionIndex = 0; conditionIndex < conditions.length; conditionIndex += 1) {
+      if (conditions[conditionIndex]?.type === ABILITY_CONDITION_TYPES.selectedChanges) {
+        return { functionIndex, conditionIndex, condition: conditions[conditionIndex] };
+      }
+    }
+  }
+  return null;
+}
+
+async function useSelectedChangesApplication(scope, actor, abilityItem, abilityFunction, selectionRef, {
+  application = null,
+  sourceEventParticipant = null,
+  occurrenceBase = "",
+  paymentContext = {},
+  activationCosts = [],
+  onInteractionCancelled = null
+} = {}) {
+  const emitTerminal = (data, { status, reason = "", value = false } = {}) => (
+    runTerminalSystemEventWorkflow({
+      scope,
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase,
+      participants: { source: sourceEventParticipant, target: null, related: [] },
+      resolvedData: ({ status: resolvedStatus }) => ({
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
+          activationCosts,
+          targetCount: 0,
+          ...data
+        }),
+        status: resolvedStatus
+      }),
+      forcedResult: { status, reason, value }
+    })
+  );
+
+  // 1. Re-pick the subset of the active-application function's changes.
+  let selection;
+  try {
+    selection = await resolveLimitedChangeSet({
+      changes: abilityFunction?.changes ?? [],
+      conditions: [selectionRef.condition],
+      actor,
+      evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+        fallback: 1,
+        minimum: 1,
+        context: "selected changes limit"
+      }),
+      choose: ({ changes, selectionIds, limit, actor: evaluationActor }) => requestLimitedChangeSelection({
+        abilityName: getAbilityDisplayName(abilityItem),
+        changes,
+        selectionIds,
+        limit,
+        evaluationActors: [evaluationActor]
+      })
+    });
+  } catch (error) {
+    console.warn("Fallout MaW | Selected-changes application failed", error);
+    await emitTerminal({}, { status: "failed", reason: "changeSelectionFailed" });
+    return false;
+  }
+  if (selection.cancelled) {
+    await emitTerminal({}, { status: "cancelled", reason: "changeSelectionCancelled" });
+    notifyAbilityInteractionCancelled(onInteractionCancelled, { reason: "changeSelectionCancelled" });
+    return false;
+  }
+  if (!selection.changes.length) {
+    await emitTerminal({}, { status: "failed", reason: "noSelectableChanges" });
+    return false;
+  }
+
+  // 2. Pay the activation cost.
+  let costPreflight;
+  try {
+    costPreflight = await quoteAbilityFunctionResourceCosts({
+      actor,
+      sourceItem: abilityItem,
+      abilityFunction,
+      costRows: activationCosts,
+      context: paymentContext
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Selected-changes cost preflight failed", error);
+    costPreflight = { ok: false, reason: "spendFailed", error };
+  }
+  if (!costPreflight.ok) {
+    notifyAbilityTriggerCostFailure(costPreflight);
+    await emitTerminal({}, { status: "failed", reason: "resourcePreflightFailed" });
+    return false;
+  }
+  const payment = await payAbilityFunctionResourceCosts({
+    actor,
+    sourceItem: abilityItem,
+    abilityFunction,
+    costRows: activationCosts,
+    expectedFingerprint: String(costPreflight?.fingerprint ?? ""),
+    context: paymentContext
+  });
+  if (!payment.ok) {
+    notifyAbilityTriggerCostFailure(payment);
+    await emitTerminal({}, { status: "failed", reason: "resourceSpendFailed" });
+    return false;
+  }
+
+  // 3. Persist the selected change keys on the selectedChanges condition.
+  const selectedKeys = selection.changes
+    .map(change => String(change?.key ?? "").trim())
+    .filter(Boolean);
+  try {
+    const functions = foundry.utils.deepClone(abilityItem.system?.functions ?? []);
+    const conditions = Array.isArray(functions[selectionRef.functionIndex]?.conditions)
+      ? functions[selectionRef.functionIndex].conditions
+      : [];
+    if (conditions[selectionRef.conditionIndex]) {
+      conditions[selectionRef.conditionIndex] = {
+        ...conditions[selectionRef.conditionIndex],
+        selectedKeys
+      };
+    }
+    await abilityItem.update({ "system.functions": functions }, scope.chainRef ? { chainRef: scope.chainRef } : {});
+    console.warn("fallout-maw | selectedChanges stored", JSON.stringify({ selectedKeys, functionIndex: selectionRef.functionIndex, conditionIndex: selectionRef.conditionIndex, after: abilityItem.system?.functions?.[selectionRef.functionIndex]?.conditions?.[selectionRef.conditionIndex]?.selectedKeys }));
+  } catch (error) {
+    console.error("Fallout MaW | Failed to persist selected changes", error);
+    await emitTerminal({}, { status: "failed", reason: "selectionPersistFailed" });
+    return false;
+  }
+
+  await emitTerminal({}, { status: "success", value: true });
+  await application?.render?.({ force: true });
+  return true;
 }
 
 function notifyAbilityInteractionCancelled(callback, context = {}) {

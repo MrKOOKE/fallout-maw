@@ -21,6 +21,7 @@ import { getEventReactionSubscriptions } from "./event-reaction-schema.mjs";
 import { createEventReactionProgressManager } from "./event-reaction-progress.mjs";
 import {
   hasLimitedEffectCopyCapacity,
+  isLimitedEffectCopyRefresh,
   releaseLimitedEffectCopyReservation,
   reserveLimitedEffectCopySlot
 } from "../abilities/limited-effect-copies.mjs";
@@ -244,14 +245,17 @@ export function createGenericEventReactionProvider({
       conditionIds: currentProgressConditionIds
     }))) return failedResult("progressNotReady");
     const hasEffectOutput = hasAbilityFunctionEventEffectOutput(abilityFunction);
+    const recipient = await resolveEventReactionRecipientActor(actor, abilityFunction, envelope, resolveUuid);
+    const refreshMode = isLimitedEffectCopyRefresh(abilityFunction);
     const existingEffectInstance = hasEffectOutput
-      ? hasEventReactionEffectInstance({ actor, sourceItem, abilityFunction, envelope })
+      ? hasEventReactionEffectInstance({ actor: recipient, sourceItem, abilityFunction, envelope })
       : false;
     if (
       hasEffectOutput
       && !existingEffectInstance
+      && !refreshMode
       && !hasLimitedEffectCopyCapacity({
-        recipientActor: actor,
+        recipientActor: recipient,
         sourceActor: actor,
         sourceItem,
         abilityFunction
@@ -267,9 +271,9 @@ export function createGenericEventReactionProvider({
         baseRows
       )
       : [];
-    const copyReservation = hasEffectOutput && !existingEffectInstance
+    const copyReservation = hasEffectOutput && !existingEffectInstance && !refreshMode
       ? reserveLimitedEffectCopySlot({
-        recipientActor: actor,
+        recipientActor: recipient,
         sourceActor: actor,
         sourceItem,
         abilityFunction
@@ -546,6 +550,21 @@ async function safeResolve(uuid, resolveUuid) {
   } catch (error) {
     return null;
   }
+}
+
+async function resolveEventReactionRecipientActor(reactor, abilityFunction, envelope, resolveUuid) {
+  const condition = getEventReactionSubscriptions(abilityFunction?.conditions ?? [])[0];
+  if (condition?.effectTarget !== "eventTarget") return reactor;
+  const target = envelope?.target;
+  const targetUuid = String(
+    target?.actorUuid
+    ?? target?.actor?.uuid
+    ?? target?.actor?.actorUuid
+    ?? ""
+  ).trim();
+  const reactorUuid = String(reactor?.uuid ?? "").trim();
+  if (!targetUuid || !reactorUuid || targetUuid === reactorUuid) return reactor;
+  return (await safeResolve(targetUuid, resolveUuid)) ?? reactor;
 }
 
 function normalizeConditionIds(value = []) {

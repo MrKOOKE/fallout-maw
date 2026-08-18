@@ -422,6 +422,11 @@
         "AddTrackingTarget": "Добавить",
         "NoTrackingTargets": "Цели не выбраны.",
         "EventSubject": "Субъект фильтра",
+        "EffectTarget": "Получатель эффекта",
+        "EffectTargets": {
+          "Reactor": "Реагирующий (владелец)",
+          "EventTarget": "Цель события"
+        },
         "Phase": "Фаза",
         "Roles": "Участники",
         "Unsupported": "не поддерживается",

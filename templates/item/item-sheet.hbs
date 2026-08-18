@@ -2494,6 +2494,12 @@
                   {{#each reactionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                 </select>
               </label>
+              <label class="fallout-maw-event-reaction-mode">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.EffectTarget"}}</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.effectTarget">
+                  {{#each effectTargetChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}
                 <label>
@@ -3087,6 +3093,17 @@
               </div>
               {{/if}}
               {{#if isLimitedChanges}}
+              <label>
+                <span>Выбрать изменений</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{changeLimit}}">
+              </label>
+              <label>
+                <span>Всего изменений</span>
+                <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+              {{#if isSelectedChanges}}
               <label>
                 <span>Выбрать изменений</span>
                 <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
@@ -3718,6 +3735,12 @@
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
                 <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.reactionMode" data-ability-event-reaction-mode>
                   {{#each reactionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </label>
+              <label class="fallout-maw-event-reaction-mode">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.EffectTarget"}}</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.effectTarget">
+                  {{#each effectTargetChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                 </select>
               </label>
               <div class="fallout-maw-event-reaction-event-field">

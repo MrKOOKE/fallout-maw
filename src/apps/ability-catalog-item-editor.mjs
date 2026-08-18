@@ -40,6 +40,7 @@ import {
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
   ABILITY_EVENT_REACTION_MODES,
+  ABILITY_EVENT_EFFECT_TARGETS,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
@@ -2919,6 +2920,7 @@ function readAbilityConditions(root) {
       },
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
+      effectTarget: row.querySelector("[data-field='conditionEffectTarget']")?.value ?? ABILITY_EVENT_EFFECT_TARGETS.reactor,
       chanceFormula: row.querySelector("[data-field='conditionChanceFormula']")?.value ?? "100",
       timeFrom: row.querySelector("[data-field='conditionTimeFrom']")?.value ?? "00:00",
       timeTo: row.querySelector("[data-field='conditionTimeTo']")?.value ?? "23:59",
@@ -4288,10 +4290,11 @@ function prepareConditionForDisplay(condition, {
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
   const isLimitedEffectCopies = type === ABILITY_CONDITION_TYPES.limitedEffectCopies;
+  const isSelectedChanges = type === ABILITY_CONDITION_TYPES.selectedChanges;
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
   const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies && !isSelectedChanges) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -4346,7 +4349,7 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isSelectedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isAccumulation,
@@ -4428,13 +4431,14 @@ function prepareConditionForDisplay(condition, {
     hasTrialConstructs: Boolean(constructs.length),
     isAura,
     isLimitedChanges,
+    isSelectedChanges,
     isLimitedEffectCopies,
     isLimitedUses,
     isCooldown,
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTrial && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTrial && !isUnsupportedEventCondition && !isLimitedChanges && !isSelectedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -4461,6 +4465,7 @@ function prepareConditionForDisplay(condition, {
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
     eventSubjectChoices: buildEventSubjectChoices(condition?.eventSubject),
+    effectTargetChoices: buildEffectTargetChoices(condition?.effectTarget),
     illuminationLevelChoices: buildIlluminationLevelChoices(condition?.illuminationLevel),
     healthTargetChoices: buildHealthTargetChoices(healthTarget),
     limbChoices: buildLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
@@ -4704,6 +4709,13 @@ function buildConditionTypeChoices(selected = "", {
       selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
     });
   }
+  if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.selectedChanges) {
+    choices.push({
+      value: ABILITY_CONDITION_TYPES.selectedChanges,
+      label: "Выбор изменений (постоянный)",
+      selected: selected === ABILITY_CONDITION_TYPES.selectedChanges
+    });
+  }
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedEffectCopies) {
     choices.push({
       value: ABILITY_CONDITION_TYPES.limitedEffectCopies,
@@ -4751,6 +4763,7 @@ function buildConditionTypeChoices(selected = "", {
       || choice.value === ABILITY_CONDITION_TYPES.triggerCost
       || choice.value === ABILITY_CONDITION_TYPES.duration
       || choice.value === ABILITY_CONDITION_TYPES.limitedEffectCopies
+      || choice.value === ABILITY_CONDITION_TYPES.selectedChanges
       || isEventReactionFilterType(choice.value)
       || choice.value === selected
     ))
@@ -4952,6 +4965,18 @@ function buildEventSubjectChoices(selected = ABILITY_EVENT_SUBJECTS.reactor) {
     [ABILITY_EVENT_SUBJECTS.eventTarget]: localizeEventReactionUi("EventSubjects.EventTarget", "Event target")
   };
   return Object.values(ABILITY_EVENT_SUBJECTS).map(value => ({
+    value,
+    label: labels[value] ?? value,
+    selected: value === selected
+  }));
+}
+
+function buildEffectTargetChoices(selected = ABILITY_EVENT_EFFECT_TARGETS.reactor) {
+  const labels = {
+    [ABILITY_EVENT_EFFECT_TARGETS.reactor]: localizeEventReactionUi("EffectTargets.Reactor", "Reactor"),
+    [ABILITY_EVENT_EFFECT_TARGETS.eventTarget]: localizeEventReactionUi("EffectTargets.EventTarget", "Event target")
+  };
+  return Object.values(ABILITY_EVENT_EFFECT_TARGETS).map(value => ({
     value,
     label: labels[value] ?? value,
     selected: value === selected

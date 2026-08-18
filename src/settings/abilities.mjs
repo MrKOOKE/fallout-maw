@@ -1,4 +1,4 @@
-﻿import { createDefaultSkillSettings, normalizeSkillSettings } from "../formulas/index.mjs";
+import { createDefaultSkillSettings, normalizeSkillSettings } from "../formulas/index.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   normalizeIlluminationLevel,
@@ -210,6 +210,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   trial: "trial",
   aura: "aura",
   limitedChanges: "limitedChanges",
+  selectedChanges: "selectedChanges",
   limitedEffectCopies: "limitedEffectCopies",
   limitedUses: "limitedUses",
   cooldown: "cooldown",
@@ -235,6 +236,12 @@ export const ABILITY_EVENT_TRACKING_TARGETS = Object.freeze(["owner", "ally", "e
 export const ABILITY_EVENT_SUBJECTS = Object.freeze({
   reactor: "reactor",
   eventSource: "eventSource",
+  eventTarget: "eventTarget"
+});
+
+/** Who receives an event-reaction effect: the ability owner or the event target. */
+export const ABILITY_EVENT_EFFECT_TARGETS = Object.freeze({
+  reactor: "reactor",
   eventTarget: "eventTarget"
 });
 
@@ -316,6 +323,27 @@ export function getAbilityAccumulationConditions(abilityFunction = {}) {
 export function isAccumulatingAbilityFunction(abilityFunction = {}) {
   return abilityFunction?.type === ABILITY_FUNCTION_TYPES.effectChanges
     && getAbilityAccumulationConditions(abilityFunction).length > 0;
+}
+
+export function getSelectedChangesCondition(abilityFunction = {}) {
+  return (Array.isArray(abilityFunction?.conditions)
+    ? abilityFunction.conditions
+    : Object.values(abilityFunction?.conditions ?? {}))
+    .find(condition => condition?.type === ABILITY_CONDITION_TYPES.selectedChanges) ?? null;
+}
+
+/** Filter a function's changes to the persistent selected subset (fail-closed when nothing selected). */
+export function filterFunctionChangesBySelection(changes = [], abilityFunction = {}) {
+  const condition = getSelectedChangesCondition(abilityFunction);
+  if (!condition) return changes;
+  const source = Array.isArray(changes) ? changes : Object.values(changes ?? {});
+  const selected = new Set((condition.selectedKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
+  if (!selected.size) return [];
+  return source.filter(change => {
+    const id = String(change?.id ?? "").trim();
+    const key = String(change?.key ?? "").trim();
+    return selected.has(id) || selected.has(key);
+  });
 }
 
 export function normalizeEventReactionMode(value = "", legacyAutoApply = false) {
@@ -1451,7 +1479,10 @@ export function normalizeAbilityCondition(value = {}) {
       trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets),
       skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey),
       expectedResultKeys: normalizeConditionKeyList(value?.expectedResultKeys, value?.expectedResultKey),
-      eventFilters: normalizeEventReactionDepthFilterMap(value?.eventFilters)
+      eventFilters: normalizeEventReactionDepthFilterMap(value?.eventFilters),
+      effectTarget: Object.values(ABILITY_EVENT_EFFECT_TARGETS).includes(value?.effectTarget)
+        ? value.effectTarget
+        : ABILITY_EVENT_EFFECT_TARGETS.reactor
     };
   }
 
@@ -1768,6 +1799,25 @@ export function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.selectedChanges) {
+    const rawLimit = value?.limit ?? value?.count ?? 1;
+    const legacyLimit = Math.max(1, toInteger(rawLimit));
+    const rawFormula = value?.limitFormula ?? value?.formula
+      ?? (typeof rawLimit === "string" && !Number.isFinite(Number(rawLimit)) ? rawLimit : String(legacyLimit));
+    return {
+      id,
+      groupId: "",
+      type,
+      limit: legacyLimit,
+      limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
+      // Persistent selection is stored on the condition itself; it never
+      // removes the unselected changes (unlike limitedChanges).
+      selectedKeys: Array.isArray(value?.selectedKeys)
+        ? value.selectedKeys.map(key => String(key ?? "").trim()).filter(Boolean)
+        : (typeof value?.selectedKeys === "string" && value.selectedKeys.trim() ? [value.selectedKeys.trim()] : [])
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.limitedEffectCopies) {
     const rawLimit = value?.limit ?? value?.count ?? 1;
     const legacyLimit = Math.max(1, toInteger(rawLimit));
@@ -1779,7 +1829,10 @@ export function normalizeAbilityCondition(value = {}) {
       groupId: "",
       type,
       limit: legacyLimit,
-      limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit))
+      limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
+      // Refresh re-arms the duration of an existing copy instead of failing
+      // or stacking once the copy limit is reached.
+      refresh: normalizeBoolean(value?.refresh, false)
     };
   }
 

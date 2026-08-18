@@ -3,6 +3,7 @@ import {
   ABILITY_ACCUMULATION_DURATION_POLICIES,
   ABILITY_ACCUMULATION_ROUNDING_MODES,
   ABILITY_CHANGE_VALUE_SOURCES,
+  filterFunctionChangesBySelection,
   getAbilityAccumulationConditions,
   getAbilityFunctionEffectDurationSeconds,
   getAbilitySourceId,
@@ -18,6 +19,8 @@ import {
 import {
   LIMITED_EFFECT_COPY_FLAG_KEY,
   buildLimitedEffectCopyFlag,
+  findLimitedEffectCopyToRefresh,
+  isLimitedEffectCopyRefresh,
   isLimitedEffectCopyReservationFor,
   releaseLimitedEffectCopyReservation,
   reserveLimitedEffectCopySlot
@@ -78,6 +81,11 @@ export function createEventReactionEffectManager({
     if (!reactorActorUuid || !itemUuid || !id || !rootId) {
       throw new Error("Event Reaction effect provenance is incomplete.");
     }
+    const recipient = await resolveEventReactionRecipient(reactor, abilityFunction, envelope, resolveActor);
+    const recipientActorUuid = String(recipient?.uuid ?? "").trim();
+    if (!recipientActorUuid) {
+      throw new Error("Event Reaction effect recipient Actor is unavailable.");
+    }
     const seconds = Math.max(0, Math.trunc(Number(
       durationSeconds ?? getAbilityFunctionEffectDurationSeconds(abilityFunction)
     ) || 0));
@@ -91,25 +99,28 @@ export function createEventReactionEffectManager({
     const scope = accumulating
       ? EVENT_REACTION_ACCUMULATOR_SCOPE
       : seconds > 0 ? "timed" : "root";
-    const identity = { reactorActorUuid, sourceItemUuid: itemUuid, functionId: id, rootId, scope };
-    const matching = getEffects(reactor).filter(effect => managedEffectMatches(effect, identity));
+    const identity = { recipientActorUuid, sourceItemUuid: itemUuid, functionId: id, rootId, scope };
+    const matching = getEffects(recipient).filter(effect => managedEffectMatches(effect, identity));
     const now = worldTime();
     const activeMatches = matching.filter(effect => !isEventReactionEffectExpired(effect, now));
-    const existing = activeMatches[0] ?? null;
+    let existing = activeMatches[0] ?? null;
+    if (!existing && isLimitedEffectCopyRefresh(abilityFunction)) {
+      existing = findLimitedEffectCopyToRefresh(recipient, sourceItem, abilityFunction);
+    }
     const obsoleteIds = matching
       .filter(effect => effect !== existing)
       .map(effect => String(effect?.id ?? effect?._id ?? "").trim())
       .filter(Boolean);
     if (obsoleteIds.length) {
-      await deleteEffects(reactor, obsoleteIds, {
+      await deleteEffects(recipient, obsoleteIds, {
         ...operationOptions,
         falloutMawEventReactionCleanup: true
       });
     }
 
     const preparedFunctionChanges = normalizeManagedChanges(await prepareChanges(
-      reactor,
-      changes ?? abilityFunction?.changes ?? []
+      recipient,
+      filterFunctionChangesBySelection(changes ?? abilityFunction?.changes ?? [], abilityFunction)
     ));
     const preparedBaseChanges = preparedFunctionChanges
       .filter(change => change?.valueSource !== ABILITY_CHANGE_VALUE_SOURCES.accumulation);
@@ -142,7 +153,7 @@ export function createEventReactionEffectManager({
       ];
     }
     const effectCopyContext = {
-      recipientActor: reactor,
+      recipientActor: recipient,
       sourceActor: reactor,
       sourceItem: sourceItem ?? { uuid: itemUuid },
       abilityFunction
@@ -168,6 +179,7 @@ export function createEventReactionEffectManager({
       : seconds;
     const effectData = buildEventReactionEffectData({
       reactor,
+      recipient,
       sourceItem,
       itemUuid,
       originUuid: getAbilityEffectOriginUuid(reactor, sourceItem, itemUuid),
@@ -190,11 +202,11 @@ export function createEventReactionEffectManager({
         }), operationOptions);
         effect ??= existing;
       } else {
-        const created = await createEffects(reactor, [effectData], operationOptions);
+        const created = await createEffects(recipient, [effectData], operationOptions);
         effect = Array.isArray(created) ? created[0] : created;
       }
       if (!effect) throw new Error("Event Reaction ActiveEffect was not created.");
-      if (scope === "root") trackRootEffect(rootId, reactorActorUuid, effect);
+      if (scope === "root") trackRootEffect(rootId, recipientActorUuid, effect);
       return effect;
     } finally {
       releaseLimitedEffectCopyReservation(reservation);
@@ -280,6 +292,7 @@ export function createEventReactionEffectManager({
 
 export function buildEventReactionEffectData({
   reactor = null,
+  recipient = null,
   sourceItem = null,
   itemUuid = "",
   originUuid = "",
@@ -309,6 +322,7 @@ export function buildEventReactionEffectData({
     functionId: id,
     functionData,
     reactorActorUuid: String(reactor?.uuid ?? ""),
+    recipientActorUuid: String(recipient?.uuid ?? reactor?.uuid ?? ""),
     scope: effectScope,
     durationSeconds: seconds,
     ...(effectScope === EVENT_REACTION_ACCUMULATOR_SCOPE && accumulators ? {
@@ -364,7 +378,7 @@ export function hasEventReactionEffectInstance({
     getAbilityFunctionEffectDurationSeconds(abilityFunction)
   ) || 0));
   const identity = {
-    reactorActorUuid: String(actor?.uuid ?? "").trim(),
+    recipientActorUuid: String(actor?.uuid ?? "").trim(),
     sourceItemUuid: String(sourceItem?.uuid ?? "").trim(),
     functionId: String(abilityFunction?.id ?? "").trim(),
     rootId: String(envelope?.rootId ?? envelope?.eventId ?? "").trim(),
@@ -384,7 +398,8 @@ export function isEventReactionManagedEffect(effect = null) {
 function managedEffectMatches(effect, identity) {
   const flag = getEventReactionEffectFlag(effect);
   if (!flag || flag.scope !== identity.scope) return false;
-  if (flag.reactorActorUuid !== identity.reactorActorUuid) return false;
+  const recipientActorUuid = String(flag.recipientActorUuid ?? flag.reactorActorUuid ?? "").trim();
+  if (recipientActorUuid !== identity.recipientActorUuid) return false;
   if (flag.sourceItemUuid !== identity.sourceItemUuid || flag.functionId !== identity.functionId) return false;
   return identity.scope === EVENT_REACTION_ACCUMULATOR_SCOPE
     || flag.rootId === identity.rootId;
@@ -407,7 +422,7 @@ function buildEventReactionEffectUpdate(data, { preserveDuration = false } = {})
 
 export function hasAbilityFunctionEventEffectOutput(abilityFunction = {}) {
   if (isAccumulatingAbilityFunction(abilityFunction)) return true;
-  return (abilityFunction?.changes ?? [])
+  return filterFunctionChangesBySelection(abilityFunction?.changes ?? [], abilityFunction)
     .some(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "");
 }
 
@@ -630,6 +645,27 @@ function normalizeManagedChanges(changes = []) {
   return (Array.isArray(changes) ? changes : Object.values(changes ?? {}))
     .filter(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "")
     .map(change => ({ ...change }));
+}
+
+async function resolveEventReactionRecipient(reactor = null, abilityFunction = {}, envelope = {}, resolveActor = null) {
+  const condition = (abilityFunction?.conditions ?? []).find(entry => entry?.type === "eventReaction");
+  if (condition?.effectTarget !== "eventTarget") return reactor;
+  const target = envelope?.target;
+  const targetUuid = String(
+    target?.actorUuid
+    ?? target?.actor?.uuid
+    ?? target?.actor?.actorUuid
+    ?? ""
+  ).trim();
+  const reactorUuid = String(reactor?.uuid ?? "").trim();
+  if (!targetUuid || !reactorUuid || targetUuid === reactorUuid) return reactor;
+  if (typeof resolveActor !== "function") return reactor;
+  try {
+    const resolved = await resolveActor(targetUuid);
+    return resolved ?? reactor;
+  } catch (_error) {
+    return reactor;
+  }
 }
 
 function defaultResolveActor(uuid) {

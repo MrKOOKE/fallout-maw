@@ -12,6 +12,7 @@ import {
   ABILITY_HEALTH_LIMB_ALL,
   ABILITY_HEALTH_TARGETS,
   ABILITY_POSTURE_SUBJECTS,
+  filterFunctionChangesBySelection,
   normalizeAbilityFunctions,
   normalizeVersatileDevelopmentSettings
 } from "../settings/abilities.mjs";
@@ -229,6 +230,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
       ABILITY_CONDITION_TYPES.triggerCost,
       ABILITY_CONDITION_TYPES.accumulation,
       ABILITY_CONDITION_TYPES.limitedChanges,
+      ABILITY_CONDITION_TYPES.selectedChanges,
       ABILITY_CONDITION_TYPES.limitedEffectCopies,
       ABILITY_CONDITION_TYPES.limitedUses
     ].includes(condition.type)) continue;
@@ -255,6 +257,7 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     ABILITY_CONDITION_TYPES.triggerCost,
     ABILITY_CONDITION_TYPES.accumulation,
     ABILITY_CONDITION_TYPES.limitedChanges,
+    ABILITY_CONDITION_TYPES.selectedChanges,
     ABILITY_CONDITION_TYPES.limitedEffectCopies,
     ABILITY_CONDITION_TYPES.limitedUses
   ].includes(condition.type)) return true;
@@ -389,9 +392,10 @@ export function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
     ? entry.changes ?? []
     : entry.penalties ?? [];
   const availableChanges = filterChangesForLimitedUses(selectedChanges, conditions);
-  if (!hasTriggerChance) return availableChanges;
-  if (context?.chanceActiveOnly) return availableChanges.filter(change => isActiveUseEffectKey(change?.key));
-  return availableChanges;
+  const selectionFilteredChanges = filterFunctionChangesBySelection(availableChanges, entry);
+  if (!hasTriggerChance) return selectionFilteredChanges;
+  if (context?.chanceActiveOnly) return selectionFilteredChanges.filter(change => isActiveUseEffectKey(change?.key));
+  return selectionFilteredChanges;
 }
 
 export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry = {}, condition = {}, context = {}) {

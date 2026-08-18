@@ -186,6 +186,39 @@ async function applyLimitedChangeSelectionsToGrant(itemData = {}, actor = null, 
     entry.changes = selection.changes;
   }
 
+  // selectedChanges keeps the full row set and only stores the chosen keys, so
+  // the owner picks the initial active subset immediately at grant time.
+  for (const entry of functions) {
+    const selectedConditions = (entry.conditions ?? [])
+      .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.selectedChanges);
+    for (const condition of selectedConditions) {
+      const selection = await resolveLimitedChangeSet({
+        changes: entry.changes ?? [],
+        conditions: [condition],
+        actor,
+        evaluateLimit: evaluateLimit ?? (formula => evaluateActorFormula(formula, actor, {
+          fallback: 1,
+          minimum: 1,
+          context: limitContext
+        })),
+        choose: chooseLimitedChanges ?? (({ changes, selectionIds, limit, actor: evaluationActor }) => (
+          requestLimitedChangeSelection({
+            abilityName: itemData.name,
+            changes,
+            selectionIds,
+            limit,
+            evaluationActors: [evaluationActor]
+          })
+        ))
+      });
+      if (selection.cancelled) return null;
+      condition.selectedKeys = selection.changes
+        .map(change => String(change?.key ?? "").trim())
+        .filter(Boolean);
+      changed = true;
+    }
+  }
+
   if (changed) itemData.system.functions = functions;
   return itemData;
 }

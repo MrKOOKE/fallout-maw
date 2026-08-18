@@ -411,7 +411,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "trial", "aura", "limitedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "trial", "aura", "limitedChanges", "selectedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     trialSubject: new StringField({
@@ -514,6 +514,18 @@ function abilityConditionField() {
       choices: ["reactor", "eventSource", "eventTarget"],
       initial: "reactor"
     }),
+    effectTarget: new StringField({
+      required: true,
+      blank: false,
+      choices: ["reactor", "eventTarget"],
+      initial: "reactor"
+    }),
+    selectedKeys: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      initial: ""
+    }), { required: true, initial: [] }),
+    refresh: new BooleanField({ required: true, initial: false }),
     chanceFormula: new StringField({ required: true, blank: true, initial: "100" }),
     timeFrom: new StringField({ required: true, blank: false, initial: "00:00" }),
     timeTo: new StringField({ required: true, blank: false, initial: "23:59" }),

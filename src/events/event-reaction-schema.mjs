@@ -76,7 +76,8 @@ export function getEventReactionSecondaryConditions(conditions = [], { warn = nu
       ABILITY_CONDITION_TYPES.duration,
       ABILITY_CONDITION_TYPES.triggerCost,
       ABILITY_CONDITION_TYPES.limitedEffectCopies,
-      ABILITY_CONDITION_TYPES.accumulation
+      ABILITY_CONDITION_TYPES.accumulation,
+      ABILITY_CONDITION_TYPES.selectedChanges
     ].includes(type)) continue;
     if (IGNORED_TYPES.has(type)) {
       warn?.({ type, condition, source, reason: "unsupportedEventReactionCondition" });

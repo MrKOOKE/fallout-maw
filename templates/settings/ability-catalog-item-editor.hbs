@@ -2341,6 +2341,12 @@
                   {{#each reactionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                 </select>
               </label>
+              <label class="fallout-maw-event-reaction-mode">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.EffectTarget"}}</span>
+                <select data-field="conditionEffectTarget">
+                  {{#each effectTargetChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}
                 <label>
@@ -2985,6 +2991,18 @@
               {{/if}}
 
               {{#if isLimitedChanges}}
+              <label>
+                <span>Выбрать изменений</span>
+                <input type="text" data-field="conditionLimitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
+                <input type="hidden" data-field="conditionLimitLegacy" value="{{changeLimit}}">
+              </label>
+              <label>
+                <span>Всего изменений</span>
+                <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+
+              {{#if isSelectedChanges}}
               <label>
                 <span>Выбрать изменений</span>
                 <input type="text" data-field="conditionLimitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">

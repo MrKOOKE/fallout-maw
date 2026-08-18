@@ -28,6 +28,21 @@ export function getLimitedEffectCopyConditions(conditions = []) {
     .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedEffectCopies);
 }
 
+export function isLimitedEffectCopyRefresh(abilityFunction = null) {
+  return getLimitedEffectCopyConditions(abilityFunction?.conditions ?? [])
+    .some(condition => condition?.refresh === true);
+}
+
+export function findLimitedEffectCopyToRefresh(recipientActor = null, sourceItem = null, abilityFunction = null) {
+  const identity = buildSourceFunctionIdentity(sourceItem, abilityFunction);
+  if (!identity || !recipientActor) return null;
+  return Array.from(recipientActor?.effects ?? []).find(effect => {
+    if (!effectCountsAsCopy(effect)) return false;
+    const effectIdentity = getManagedEffectSourceFunctionIdentity(effect, recipientActor);
+    return sourceFunctionIdentitiesMatch(identity, effectIdentity);
+  }) ?? null;
+}
+
 export function resolveLimitedEffectCopyLimit(conditions = [], actor = null, {
   evaluateLimit = formula => {
     const direct = Number(String(formula ?? "").trim());

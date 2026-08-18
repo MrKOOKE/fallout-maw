@@ -1786,6 +1786,7 @@ function hasRuntimeConditions(conditions = []) {
   return conditions.some(condition => (
     condition?.type
     && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
+    && condition.type !== ABILITY_CONDITION_TYPES.selectedChanges
     && condition.type !== ABILITY_CONDITION_TYPES.limitedEffectCopies
     && condition.type !== ABILITY_CONDITION_TYPES.limitedUses
     && condition.type !== ABILITY_CONDITION_TYPES.cooldown
