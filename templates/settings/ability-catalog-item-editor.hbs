@@ -1062,6 +1062,46 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedAnatomyStudySettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Изучение анатомии</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.anatomyStudy.energyCost" value="{{fixedAnatomyStudySettings.energyCost}}" min="0" step="1"></label>
+          <label><span>Стоимость, ОД</span><input type="number" data-field="fixed.anatomyStudy.actionPointCost" value="{{fixedAnatomyStudySettings.actionPointCost}}" min="0" step="1"></label>
+          <label><span>Максимальный объём памяти</span><input type="text" data-field="fixed.anatomyStudy.memoryFormula" value="{{fixedAnatomyStudySettings.memoryFormula}}" data-formula-autocomplete="all"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" data-field="fixed.anatomyStudy.overloadEnergyCost" value="{{fixedAnatomyStudySettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.anatomyStudy.overloadDurationAmount" value="{{fixedAnatomyStudySettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.anatomyStudy.overloadDurationUnit">
+                {{#each fixedAnatomyStudySettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Боевые бонусы</strong>
+          <label><span>Урон, %</span><input type="number" data-field="fixed.anatomyStudy.damagePercentBonus" value="{{fixedAnatomyStudySettings.damagePercentBonus}}" min="0" step="1"></label>
+          <label><span>Точность</span><input type="number" data-field="fixed.anatomyStudy.accuracyBonus" value="{{fixedAnatomyStudySettings.accuracyBonus}}" min="0" step="1"></label>
+          <label><span>Шанс на крит, %</span><input type="number" data-field="fixed.anatomyStudy.criticalChanceBonus" value="{{fixedAnatomyStudySettings.criticalChanceBonus}}" min="0" step="1"></label>
+          <label><span>Критический урон, %</span><input type="number" data-field="fixed.anatomyStudy.criticalDamagePercentBonus" value="{{fixedAnatomyStudySettings.criticalDamagePercentBonus}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Медицина</strong>
+          <label><span>Эффективность препаратов, %</span><input type="number" data-field="fixed.anatomyStudy.drugEffectivenessPercentBonus" value="{{fixedAnatomyStudySettings.drugEffectivenessPercentBonus}}" min="0" step="1"></label>
+          <label><span>Лечение здоровья, травм и болезней, %</span><input type="number" data-field="fixed.anatomyStudy.treatmentEffectivenessPercentBonus" value="{{fixedAnatomyStudySettings.treatmentEffectivenessPercentBonus}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

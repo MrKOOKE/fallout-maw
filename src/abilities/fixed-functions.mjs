@@ -31,6 +31,7 @@ import {
   normalizeFullForceSettings,
   normalizeGrapplingMasterSettings,
   normalizeGoodEnoughSettings,
+  normalizeAnatomyStudySettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -49,6 +50,18 @@ import {
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
+import { openAnatomyStudyApplication } from "../apps/anatomy-study.mjs";
+import {
+  ANATOMY_STUDY_BONUS_KEYS,
+  buildAnatomyStudyKnowledgeUpdate,
+  getActorAnatomyStudyRaceBonuses,
+  getActorRaceId,
+  getAnatomyStudyBonusDefinitions,
+  getAnatomyStudyFunctionState,
+  getAnatomyStudyMemoryCapacity,
+  getAnatomyStudyMemoryUsage,
+  isActorDeadForAnatomyStudy
+} from "./anatomy-study.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
 import { buildActiveApplicationCostPlanEntries } from "./active-application-costs.mjs";
 import {
@@ -609,6 +622,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.goodEnough,
       fixedSettings: normalizeGoodEnoughSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy,
+    label: "Изучение анатомии",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy,
+      fixedSettings: normalizeAnatomyStudySettings()
+    })
   })
 ]);
 
@@ -676,6 +698,7 @@ function registerFixedAbilityRuntimeHooks() {
     requestDoubleAttackDuplicate(context);
   }));
   Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
+    requestAnatomyStudyWeaponActionModifiers(context);
     requestFullForceWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
@@ -831,6 +854,14 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: getFixedFunctionStateKey(entry),
           label: "Следующая атака",
           value: findLethalAttackPreparationEffect(abilityItem.parent, abilityItem, entry) ? "Готова" : "Не подготовлена"
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
+        const knowledge = getAnatomyStudyFunctionState(abilityItem, entry);
+        return {
+          key: getFixedFunctionStateKey(entry),
+          label: "Память",
+          value: `${getAnatomyStudyMemoryUsage(knowledge)} / ${getAnatomyStudyMemoryCapacity(abilityItem.parent, entry.fixedSettings)}`
         };
       }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
@@ -1093,6 +1124,12 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
+    const used = await useAnatomyStudy(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(abilityFunction.fixedKey)) {
     const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -1100,6 +1137,102 @@ export async function useFixedAbilityFunctionItem({
   }
 
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
+  return true;
+}
+
+async function useAnatomyStudy(actor, abilityItem, abilityFunction) {
+  const settings = normalizeAnatomyStudySettings(abilityFunction.fixedSettings);
+  openAnatomyStudyApplication({
+    actor,
+    abilityItem,
+    abilityFunction,
+    sourceToken: getActorSceneToken(actor),
+    getActivationState: () => ({
+      energyCost: getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost),
+      actionPointCost: settings.actionPointCost,
+      overloadEnergyCost: settings.overloadEnergyCost,
+      overloadDurationLabel: formatDuration(settings.overloadDurationSeconds)
+    }),
+    onResearch: selection => completeAnatomyStudyResearch(actor, abilityItem, abilityFunction, selection),
+    onForget: selection => forgetAnatomyStudyKnowledge(actor, abilityItem, abilityFunction, selection)
+  });
+  return true;
+}
+
+async function completeAnatomyStudyResearch(actor, abilityItem, abilityFunction, {
+  targetActor = null,
+  raceId = "",
+  bonusKey = ""
+} = {}) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const targetRaceId = getActorRaceId(targetActor);
+  if (!actor?.isOwner || abilityItem?.parent?.uuid !== actor.uuid) return false;
+  if (!isActorDeadForAnatomyStudy(targetActor)) {
+    ui.notifications.warn(`${abilityName}: выбранная цель больше не мертва.`);
+    return false;
+  }
+  if (!targetRaceId || targetRaceId !== String(raceId ?? "").trim()) {
+    ui.notifications.warn(`${abilityName}: раса выбранной цели изменилась или не указана.`);
+    return false;
+  }
+
+  const pendingUpdate = buildAnatomyStudyKnowledgeUpdate({
+    abilityItem,
+    abilityFunction,
+    actor,
+    raceId: targetRaceId,
+    bonusKey
+  });
+  if (!pendingUpdate.ok) {
+    ui.notifications.warn(`${abilityName}: ${pendingUpdate.reason}`);
+    return false;
+  }
+
+  const settings = normalizeAnatomyStudySettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!canSpendCombatActionPoints(actor, settings.actionPointCost, { label: "изучения анатомии" })) return false;
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  if (settings.actionPointCost > 0) await spendCombatActionPoints(actor, settings.actionPointCost);
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, pendingUpdate.state);
+
+  const bonus = getAnatomyStudyBonusDefinitions(settings).find(entry => entry.key === bonusKey);
+  const race = getCreatureOptions().races.find(entry => entry.id === targetRaceId);
+  const raceName = race?.label ?? race?.name ?? targetRaceId;
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `${raceName}: изучено «${bonus?.label ?? bonusKey}» (${bonus?.valueLabel ?? ""}).`
+  );
+  return true;
+}
+
+async function forgetAnatomyStudyKnowledge(actor, abilityItem, abilityFunction, {
+  raceId = "",
+  bonusKey = ""
+} = {}) {
+  if (!actor?.isOwner || abilityItem?.parent?.uuid !== actor.uuid) return false;
+  const update = buildAnatomyStudyKnowledgeUpdate({
+    abilityItem,
+    abilityFunction,
+    actor,
+    raceId,
+    bonusKey,
+    remove: true
+  });
+  if (!update.ok) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: ${update.reason}`);
+    return false;
+  }
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, update.state);
   return true;
 }
 
@@ -7503,6 +7636,31 @@ function requestDoubleAttackDuplicate(context = {}) {
       });
     }
   }
+}
+
+function requestAnatomyStudyWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? context?.actorToken?.actor ?? context?.token?.actor ?? null;
+  if (!actor || !context?.modifierState) return;
+  const bonusesByRace = getActorAnatomyStudyRaceBonuses(actor);
+  if (!bonusesByRace.size) return;
+  const availableBonusKeys = new Set();
+  for (const bonuses of bonusesByRace.values()) {
+    for (const [bonusKey, value] of Object.entries(bonuses)) {
+      if (Number(value) > 0) availableBonusKeys.add(bonusKey);
+    }
+  }
+
+  const addRaceBonus = (combatKey, bonusKey) => {
+    if (!availableBonusKeys.has(bonusKey)) return;
+    context.modifierState.addCombatValue(combatKey, runtimeContext => {
+      const targetActor = runtimeContext?.targetActor ?? runtimeContext?.targetToken?.actor ?? null;
+      return Math.max(0, Number(bonusesByRace.get(getActorRaceId(targetActor))?.[bonusKey]) || 0);
+    });
+  };
+  addRaceBonus("damagePercent", ANATOMY_STUDY_BONUS_KEYS.damage);
+  addRaceBonus("accuracy", ANATOMY_STUDY_BONUS_KEYS.accuracy);
+  addRaceBonus("criticalChance", ANATOMY_STUDY_BONUS_KEYS.criticalChance);
+  addRaceBonus("criticalDamagePercent", ANATOMY_STUDY_BONUS_KEYS.criticalDamage);
 }
 
 function requestFullForceWeaponActionModifiers(context = {}) {

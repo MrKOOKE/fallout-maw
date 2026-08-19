@@ -185,7 +185,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   toTheEnd: "toTheEnd",
   heightenedConcentration: "heightenedConcentration",
   grapplingMaster: "grapplingMaster",
-  goodEnough: "goodEnough"
+  goodEnough: "goodEnough",
+  anatomyStudy: "anatomyStudy"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -2128,7 +2129,27 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.goodEnough) {
     return normalizeGoodEnoughSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
+    return normalizeAnatomyStudySettings(value);
+  }
   return {};
+}
+
+/** "Изучение анатомии": permanent race-specific knowledge. */
+export function normalizeAnatomyStudySettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    actionPointCost: Math.max(0, toInteger(value?.actionPointCost ?? 3)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 21600)),
+    memoryFormula: String(value?.memoryFormula ?? "").trim() || "10+doctor/10",
+    damagePercentBonus: Math.max(0, toInteger(value?.damagePercentBonus ?? 10)),
+    accuracyBonus: Math.max(0, toInteger(value?.accuracyBonus ?? 20)),
+    criticalChanceBonus: Math.max(0, toInteger(value?.criticalChanceBonus ?? 3)),
+    criticalDamagePercentBonus: Math.max(0, toInteger(value?.criticalDamagePercentBonus ?? 20)),
+    drugEffectivenessPercentBonus: Math.max(0, toInteger(value?.drugEffectivenessPercentBonus ?? 15)),
+    treatmentEffectivenessPercentBonus: Math.max(0, toInteger(value?.treatmentEffectivenessPercentBonus ?? 15))
+  };
 }
 
 /** "И так сойдет": tool-less limb healing powered by energy. */

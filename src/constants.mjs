@@ -22,6 +22,7 @@ export const TEMPLATES = Object.freeze({
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
   limbDamageDialog: `systems/${SYSTEM_ID}/templates/actor/limb-damage-dialog.hbs`,
   medicineDialog: `systems/${SYSTEM_ID}/templates/actor/medicine-dialog.hbs`,
+  anatomyStudy: `systems/${SYSTEM_ID}/templates/actor/anatomy-study.hbs`,
   medicineTreatmentRow: `systems/${SYSTEM_ID}/templates/actor/parts/medicine-treatment-row.hbs`,
   repairDialog: `systems/${SYSTEM_ID}/templates/actor/repair-dialog.hbs`,
   trapDisarmDialog: `systems/${SYSTEM_ID}/templates/actor/trap-disarm-dialog.hbs`,

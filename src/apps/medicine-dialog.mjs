@@ -67,6 +67,10 @@ import {
 import { getActorFixedAbilityFunction } from "../abilities/runtime-state.mjs";
 import { ABILITY_FIXED_FUNCTION_KEYS, normalizeGoodEnoughSettings } from "../settings/abilities.mjs";
 import {
+  ANATOMY_STUDY_BONUS_KEYS,
+  getActorAnatomyStudyBonus
+} from "../abilities/anatomy-study.mjs";
+import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
   getActorAvailableEnergy,
@@ -2624,12 +2628,21 @@ function getTreatmentHealingMultiplier(sourceActor, targetActor = null, targetCo
   targetToken = null,
   chanceOperationId = ""
 } = {}) {
-  const outgoing = Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing", {
+  const outgoingContext = {
     actorToken: sourceToken?.object ?? sourceToken,
     targetActor,
     targetToken: targetToken?.object ?? targetToken,
     chanceOperationId
-  }) / 100));
+  };
+  const anatomyBonus = getActorAnatomyStudyBonus(
+    sourceActor,
+    targetActor,
+    ANATOMY_STUDY_BONUS_KEYS.treatmentEffectiveness
+  );
+  const outgoing = Math.max(0, 1 + ((
+    getActorHealingModifierPercent(sourceActor, "outgoing", outgoingContext)
+    + anatomyBonus
+  ) / 100));
   const incomingPercent = targetActor
     ? getActorHealingModifierPercent(targetActor, "incoming", {
       actorToken: targetToken?.object ?? targetToken,

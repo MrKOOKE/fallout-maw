@@ -259,6 +259,7 @@ import {
   ABILITY_FUNCTION_TYPES,
   getAbilitySourceId,
   normalizeActiveApplicationSettings,
+  normalizeAnatomyStudySettings,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
@@ -5123,6 +5124,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -5158,6 +5160,17 @@ function buildAbilityResourceCostRows(item, actor = null) {
     return [
       ["Реакция: базовый расход", String(reactionBase)],
       ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
+    ];
+  }
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
+    const settings = normalizeAnatomyStudySettings(entry.fixedSettings);
+    const activationBase = Math.max(0, toInteger(settings.energyCost));
+    return [
+      ["Активация: базовый расход", `${activationBase} энергии`],
+      ["Активация: итог", `${renderAbilityEnergyCostTotal(item, actor, entry, activationBase)} энергии`],
+      ["Стоимость действия", `${Math.max(0, toInteger(settings.actionPointCost))} ОД`],
+      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} энергии на ${formatDurationShort(settings.overloadDurationSeconds)}`],
+      ["Объём памяти", formatActorFormulaForDisplay(settings.memoryFormula, actor, { includeValues: true })]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {

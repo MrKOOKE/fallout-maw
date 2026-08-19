@@ -130,6 +130,7 @@ import {
   normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeGoodEnoughSettings,
+  normalizeAnatomyStudySettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
@@ -7304,6 +7305,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedGoodEnoughSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.goodEnough
     ? normalizeGoodEnoughSettings(entry?.fixedSettings)
     : null;
+  const fixedAnatomyStudySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
+    ? prepareAnatomyStudySettingsForDisplay(entry?.fixedSettings)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7382,6 +7386,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
     fixedGoodEnoughSettings,
+    fixedAnatomyStudySettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
@@ -7898,6 +7903,16 @@ function prepareHeightenedConcentrationSettingsForDisplay(settings = {}) {
     overloadDurationAmount: overloadDuration.amount,
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.skillKey, getSkillSettings())
+  };
+}
+
+function prepareAnatomyStudySettingsForDisplay(settings = {}) {
+  const normalized = normalizeAnatomyStudySettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
   };
 }
 
@@ -9862,6 +9877,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       const durationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-heightened-concentration-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-heightened-concentration-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-anatomy-study-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-anatomy-study-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
       continue;

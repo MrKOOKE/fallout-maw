@@ -1,0 +1,53 @@
+<section class="fallout-maw-anatomy-study-body">
+  <header class="fallout-maw-anatomy-study-header">
+    <img src="{{actorImg}}" alt="{{actorName}}">
+    <div>
+      <span>Исследователь</span>
+      <strong>{{actorName}}</strong>
+    </div>
+    <button type="button" data-action="research" {{#if researchDisabled}}disabled{{/if}} title="{{researchDisabledReason}}">
+      <i class="fa-solid fa-microscope"></i>
+      Начать исследование
+    </button>
+  </header>
+
+  <section class="fallout-maw-anatomy-memory">
+    <div>
+      <strong>Память</strong>
+      <span>{{memory.used}} / {{memory.capacity}}</span>
+    </div>
+    <div class="fallout-maw-anatomy-memory-track" aria-label="Память {{memory.used}} из {{memory.capacity}}">
+      <span style="width: {{memory.percent}}%"></span>
+    </div>
+    {{#if researchDisabledReason}}<p>{{researchDisabledReason}}</p>{{/if}}
+  </section>
+
+  <section class="fallout-maw-anatomy-costs">
+    <span><i class="fa-solid fa-bolt"></i> Активация: <strong>{{energyCost}} энергии</strong></span>
+    <span><i class="fa-solid fa-hourglass-half"></i> <strong>{{actionPointCost}} ОД</strong></span>
+    <span><i class="fa-solid fa-wave-square"></i> Перегрузка: <strong>{{overloadEnergyCost}} энергии · {{overloadDurationLabel}}</strong></span>
+  </section>
+
+  <section class="fallout-maw-anatomy-knowledge">
+    <h2>Изученные расы</h2>
+    {{#if hasKnowledge}}
+      {{#each races}}
+      <article class="fallout-maw-anatomy-race">
+        <header><strong>{{label}}</strong><span>{{bonuses.length}} / 6</span></header>
+        <div class="fallout-maw-anatomy-bonus-list">
+          {{#each bonuses}}
+          <div class="fallout-maw-anatomy-bonus">
+            <span title="{{label}}: {{valueLabel}}"><strong>{{label}}:</strong><em>{{valueLabel}}</em></span>
+            <button type="button" data-action="forget" data-race-id="{{raceId}}" data-bonus-key="{{key}}" title="Забыть">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+          {{/each}}
+        </div>
+      </article>
+      {{/each}}
+    {{else}}
+      <p class="fallout-maw-anatomy-empty">Знаний пока нет. Начните исследование и выберите подсвеченную мёртвую цель.</p>
+    {{/if}}
+  </section>
+</section>

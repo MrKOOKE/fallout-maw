@@ -79,6 +79,7 @@ import {
   normalizeAtRandomSettings,
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
+  normalizeAnatomyStudySettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
   preserveMissingActiveApplicationTargetSettings,
@@ -2687,6 +2688,24 @@ function readFixedFunctionSettings(row) {
       advantageCount: row.querySelector("[data-field='fixed.heightenedConcentration.advantageCount']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.anatomyStudy.energyCost']")?.value,
+      actionPointCost: row.querySelector("[data-field='fixed.anatomyStudy.actionPointCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.anatomyStudy.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.anatomyStudy.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.anatomyStudy.overloadDurationUnit']")?.value
+      ),
+      memoryFormula: row.querySelector("[data-field='fixed.anatomyStudy.memoryFormula']")?.value,
+      damagePercentBonus: row.querySelector("[data-field='fixed.anatomyStudy.damagePercentBonus']")?.value,
+      accuracyBonus: row.querySelector("[data-field='fixed.anatomyStudy.accuracyBonus']")?.value,
+      criticalChanceBonus: row.querySelector("[data-field='fixed.anatomyStudy.criticalChanceBonus']")?.value,
+      criticalDamagePercentBonus: row.querySelector("[data-field='fixed.anatomyStudy.criticalDamagePercentBonus']")?.value,
+      drugEffectivenessPercentBonus: row.querySelector("[data-field='fixed.anatomyStudy.drugEffectivenessPercentBonus']")?.value,
+      treatmentEffectivenessPercentBonus: row.querySelector("[data-field='fixed.anatomyStudy.treatmentEffectivenessPercentBonus']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -3204,6 +3223,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedAnatomyStudySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
+    ? prepareAnatomyStudySettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3274,6 +3296,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedLookSettings,
     fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
+    fixedAnatomyStudySettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,
@@ -4238,6 +4261,16 @@ function prepareHeightenedConcentrationSettingsForDisplay(settings = {}) {
     overloadDurationAmount: overloadDuration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.skillKey, getSkillSettings())
+  };
+}
+
+function prepareAnatomyStudySettingsForDisplay(settings = {}) {
+  const normalized = normalizeAnatomyStudySettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
   };
 }
 

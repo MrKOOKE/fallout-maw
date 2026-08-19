@@ -20791,3 +20791,233 @@ label.checkbox.fallout-maw-ability-change-choice {
   margin: 0;
   padding: 0.25rem 0;
 }
+
+/* Изучение анатомии */
+.application.fallout-maw-anatomy-study {
+  --anatomy-accent: #b8a486;
+  --anatomy-panel: rgba(18, 16, 22, 0.82);
+  min-width: 440px;
+}
+
+.application.fallout-maw-anatomy-study .window-content {
+  padding: 0;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(120, 87, 60, 0.16), transparent 42%),
+    linear-gradient(180deg, rgba(9, 8, 13, 0.98), rgba(15, 13, 19, 0.98));
+}
+
+.fallout-maw-anatomy-study-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  color: #e8dfd2;
+}
+
+.fallout-maw-anatomy-study-header {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.fallout-maw-anatomy-study-header > img {
+  width: 54px;
+  height: 54px;
+  border: 1px solid var(--anatomy-accent);
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.fallout-maw-anatomy-study-header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fallout-maw-anatomy-study-header > div span,
+.fallout-maw-anatomy-bonus em {
+  color: #aa9d8e;
+  font-style: normal;
+  font-size: 0.82em;
+}
+
+.fallout-maw-anatomy-study-header > div strong {
+  overflow: hidden;
+  font-size: 1.15em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-anatomy-study-header > button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--anatomy-accent);
+  color: #f1e7d8;
+  background: rgba(102, 72, 50, 0.42);
+}
+
+.fallout-maw-anatomy-study-header > button:disabled {
+  opacity: 0.45;
+}
+
+.fallout-maw-anatomy-memory,
+.fallout-maw-anatomy-costs,
+.fallout-maw-anatomy-knowledge {
+  border: 1px solid rgba(184, 164, 134, 0.42);
+  border-radius: 5px;
+  background: var(--anatomy-panel);
+}
+
+.fallout-maw-anatomy-memory {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.fallout-maw-anatomy-memory > div:first-child {
+  display: flex;
+  justify-content: space-between;
+}
+
+.fallout-maw-anatomy-memory-track {
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(184, 164, 134, 0.5);
+  border-radius: 999px;
+  background: #08070a;
+}
+
+.fallout-maw-anatomy-memory-track > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #77634d, #d0b990);
+}
+
+.fallout-maw-anatomy-memory > p {
+  margin: 0;
+  color: #d6aa76;
+  font-size: 0.82em;
+}
+
+.fallout-maw-anatomy-costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 9px 12px;
+  color: #cbbdac;
+  font-size: 0.88em;
+}
+
+.fallout-maw-anatomy-costs i {
+  width: 16px;
+  color: var(--anatomy-accent);
+  text-align: center;
+}
+
+.fallout-maw-anatomy-knowledge {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+}
+
+.fallout-maw-anatomy-knowledge > h2 {
+  margin: 0;
+  border: 0;
+  color: #eadfce;
+  font-size: 1.05em;
+}
+
+.fallout-maw-anatomy-race {
+  display: grid;
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(184, 164, 134, 0.25);
+}
+
+.fallout-maw-anatomy-race > header {
+  display: flex;
+  justify-content: space-between;
+  color: #d6c5ad;
+}
+
+.fallout-maw-anatomy-bonus-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.fallout-maw-anatomy-bonus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 5px;
+  align-items: stretch;
+  border: 1px solid rgba(184, 164, 134, 0.32);
+  border-radius: 4px;
+  background: rgba(38, 31, 31, 0.8);
+}
+
+.fallout-maw-anatomy-bonus > span {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.fallout-maw-anatomy-bonus > span strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-anatomy-bonus > button {
+  width: 30px;
+  min-height: 100%;
+  margin: 0;
+  border: 0;
+  border-left: 1px solid rgba(184, 164, 134, 0.22);
+  border-radius: 0;
+  color: #bca58c;
+  background: transparent;
+}
+
+.fallout-maw-anatomy-bonus > button:hover {
+  color: #f1c091;
+  background: rgba(135, 69, 46, 0.24);
+}
+
+.fallout-maw-anatomy-empty {
+  margin: 4px 0;
+  color: #aa9d8e;
+  text-align: center;
+}
+
+.fallout-maw-anatomy-bonus-dialog > p {
+  margin-top: 0;
+  color: #c9baa8;
+}
+
+@media (max-width: 560px) {
+  .application.fallout-maw-anatomy-study {
+    min-width: 360px;
+  }
+
+  .fallout-maw-anatomy-study-header {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+
+  .fallout-maw-anatomy-study-header > img {
+    width: 46px;
+    height: 46px;
+  }
+
+  .fallout-maw-anatomy-study-header > button {
+    grid-column: 1 / -1;
+  }
+
+  .fallout-maw-anatomy-bonus-list {
+    grid-template-columns: 1fr;
+  }
+}

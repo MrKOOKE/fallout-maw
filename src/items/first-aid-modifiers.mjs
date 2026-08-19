@@ -4,6 +4,10 @@ import {
   FIRST_AID_EFFECT_KEY_FIELDS,
   FIRST_AID_EFFECT_KEYS
 } from "./first-aid-effect-keys.mjs";
+import {
+  ANATOMY_STUDY_BONUS_KEYS,
+  getActorAnatomyStudyBonus
+} from "../abilities/anatomy-study.mjs";
 
 export function getActorFirstAidModifiers(actor = null, context = {}) {
   if (!actor) return createEmptyFirstAidModifiers();
@@ -16,9 +20,15 @@ export function getActorFirstAidModifiers(actor = null, context = {}) {
     })),
     context
   );
-  return Object.fromEntries(
+  const modifiers = Object.fromEntries(
     FIRST_AID_EFFECT_KEY_FIELDS.map(field => [field, toInteger(values[field])])
   );
+  modifiers.outgoingEffectivenessPercent += getActorAnatomyStudyBonus(
+    actor,
+    context?.targetActor ?? context?.targetToken?.actor ?? null,
+    ANATOMY_STUDY_BONUS_KEYS.drugEffectiveness
+  );
+  return modifiers;
 }
 
 export function getActorFirstAidModifierPercent(actor = null, field = "", context = {}) {
