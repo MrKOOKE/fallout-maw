@@ -1202,6 +1202,26 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedGoodEnoughSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: И так сойдет</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Лечение без инструмента</strong>
+          <label>
+            <span>Здоровья за 1 Энергию</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.healthPerEnergy" value="{{fixedGoodEnoughSettings.healthPerEnergy}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Бесплатно при состоянии выше, %</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.freeConditionThreshold" value="{{fixedGoodEnoughSettings.freeConditionThreshold}}" min="0" max="100" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

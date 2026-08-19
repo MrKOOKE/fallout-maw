@@ -129,6 +129,7 @@ import {
   normalizeDoubleAttackSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeGoodEnoughSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
@@ -7300,6 +7301,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedGoodEnoughSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.goodEnough
+    ? normalizeGoodEnoughSettings(entry?.fixedSettings)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7377,6 +7381,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedLookSettings,
     fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
+    fixedGoodEnoughSettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),

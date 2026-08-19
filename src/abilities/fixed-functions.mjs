@@ -30,6 +30,7 @@ import {
   normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeGrapplingMasterSettings,
+  normalizeGoodEnoughSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -598,6 +599,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster,
       fixedSettings: normalizeGrapplingMasterSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.goodEnough,
+    label: "И так сойдет",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.goodEnough,
+      fixedSettings: normalizeGoodEnoughSettings()
     })
   })
 ]);

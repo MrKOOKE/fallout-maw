@@ -5,7 +5,30 @@ import {
   analyzeMedicineToolAvailability,
   MEDICINE_TOOL_AVAILABILITY
 } from "../src/apps/medicine-tool-availability.mjs";
+import {
+  getGoodEnoughEnergyCost,
+  getGoodEnoughHealingCapacity,
+  isGoodEnoughHealingFree
+} from "../src/apps/medicine-good-enough.mjs";
+import { normalizeGoodEnoughSettings } from "../src/settings/abilities.mjs";
 import { createToolGroupKey } from "../src/utils/tool-selection-policy.mjs";
+
+test("good enough uses an exact greater-than-90 free threshold without rounding", () => {
+  const settings = normalizeGoodEnoughSettings();
+  assert.equal(isGoodEnoughHealingFree({ value: 90, max: 100 }, settings), false);
+  assert.equal(isGoodEnoughHealingFree({ value: 901, max: 1000 }, settings), true);
+});
+
+test("good enough converts one energy into ten health and rounds the cost up", () => {
+  const settings = normalizeGoodEnoughSettings();
+  assert.deepEqual(settings, { healthPerEnergy: 10, freeConditionThreshold: 90 });
+  const damagedLimb = { value: 50, max: 100 };
+  assert.equal(getGoodEnoughHealingCapacity(3, settings), 30);
+  assert.equal(getGoodEnoughEnergyCost(damagedLimb, 1, settings), 1);
+  assert.equal(getGoodEnoughEnergyCost(damagedLimb, 10, settings), 1);
+  assert.equal(getGoodEnoughEnergyCost(damagedLimb, 11, settings), 2);
+  assert.equal(getGoodEnoughEnergyCost({ value: 91, max: 100 }, 100, settings), 0);
+});
 
 test("mass medicine reports an absent configured medical instrument", () => {
   const result = analyzeMedicineToolAvailability({

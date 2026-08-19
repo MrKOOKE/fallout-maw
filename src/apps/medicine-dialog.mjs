@@ -1,4 +1,4 @@
-﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import {
   applyDestroyedLimbConsequences,
@@ -58,6 +58,20 @@ import {
   evaluateMedicineSkillResolution,
   resolveMedicineSkillAction
 } from "./medicine-skill-resolution.mjs";
+import {
+  GOOD_ENOUGH_NO_TOOL_ID,
+  getGoodEnoughEnergyCost,
+  getGoodEnoughHealingCapacity,
+  isGoodEnoughHealingFree
+} from "./medicine-good-enough.mjs";
+import { getActorFixedAbilityFunction } from "../abilities/runtime-state.mjs";
+import { ABILITY_FIXED_FUNCTION_KEYS, normalizeGoodEnoughSettings } from "../settings/abilities.mjs";
+import {
+  ENERGY_RESOURCE_KEY,
+  canActorSpendEnergy,
+  getActorAvailableEnergy,
+  getActorEnergy
+} from "../combat/energy-resource.mjs";
 import { analyzeMedicineToolAvailability } from "./medicine-tool-availability.mjs";
 import {
   bindMassOperationDialogSubmitState,
@@ -560,6 +574,46 @@ async function getMedicineTargetContext(targetToken, sourceActor = null) {
   }
 }
 
+function getActorGoodEnoughSettings(sourceActor) {
+  const entry = getActorFixedAbilityFunction(sourceActor, ABILITY_FIXED_FUNCTION_KEYS.goodEnough);
+  return entry ? normalizeGoodEnoughSettings(entry.fixedSettings) : null;
+}
+
+function getActorSpendableEnergy(actor) {
+  const minimum = Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.min));
+  return Math.max(0, getActorAvailableEnergy(actor) - minimum);
+}
+
+function getGoodEnoughNoToolInstrument(
+  limb,
+  settings,
+  skillRequirementMet = true,
+  energy = 0,
+  energyCapacity = 0
+) {
+  const free = isGoodEnoughHealingFree(limb, settings);
+  const usable = skillRequirementMet && (free || energy > 0);
+  return {
+    id: GOOD_ENOUGH_NO_TOOL_ID,
+    name: "И так сойдет — без инструмента",
+    img: "icons/svg/aura.svg",
+    toolLabel: "И так сойдет",
+    toolClass: "D",
+    efficiency: 100,
+    efficiencyLabel: "100%",
+    classAccepted: true,
+    usable,
+    requirementMet: true,
+    skillRequirement: free
+      ? `Бесплатно: состояние выше ${settings.freeConditionThreshold}%`
+      : `1 энергия = ${settings.healthPerEnergy} здоровья`,
+    supplyValue: free ? "∞" : energy,
+    supplyMax: free ? "∞" : energyCapacity,
+    noTool: true,
+    free
+  };
+}
+
 function prepareLimbTreatmentGroups(
   targetContext,
   instruments,
@@ -569,6 +623,14 @@ function prepareLimbTreatmentGroups(
   sourceActor = null,
   medicineMode = getMedicineResolutionMode()
 ) {
+  const goodEnoughSettings = getActorGoodEnoughSettings(sourceActor);
+  const goodEnoughEnergy = goodEnoughSettings ? getActorSpendableEnergy(sourceActor) : 0;
+  const energyResource = goodEnoughSettings
+    ? sourceActor?.system?.resources?.[ENERGY_RESOURCE_KEY]
+    : null;
+  const goodEnoughEnergyCapacity = energyResource
+    ? Math.max(0, toInteger(energyResource.max) - toInteger(energyResource.min))
+    : 0;
   const targetLimbKeys = new Set((targetContext?.limbs ?? []).map(limb => limb.key));
   const traumasByLimb = new Map();
   const unassigned = [];
@@ -602,6 +664,18 @@ function prepareLimbTreatmentGroups(
       medicineMode
     );
     if (!limbTreatment || (!limb.damaged && !traumas.length)) continue;
+    if (goodEnoughSettings) {
+      limbTreatment.availableInstruments = [
+        ...(limbTreatment.availableInstruments ?? []),
+        getGoodEnoughNoToolInstrument(
+          limb,
+          goodEnoughSettings,
+          limbTreatment.treatable && limbTreatment.treatmentSkillThresholdMet,
+          goodEnoughEnergy,
+          goodEnoughEnergyCapacity
+        )
+      ];
+    }
     limbGroups.push({
       key: limb.key,
       label: limb.label,
@@ -2335,8 +2409,16 @@ async function runTreatmentChecks({
   const progressPerCheck = Math.max(1, Math.ceil(maxProgress * TREATMENT_PROGRESS_STEP_RATIO));
   const missingProgress = Math.max(0, maxProgress - initialProgress);
   const totalChecks = Math.max(1, Math.ceil(missingProgress / progressPerCheck));
+  const noTool = tool.noTool === true;
+  const freeEnergy = noTool && tool.freeEnergy === true;
+  const healthPerEnergy = Math.max(1, Number(tool.healthPerEnergy) || 10);
+  const initialEnergy = noTool ? Math.max(0, toInteger(tool.energyAvailable)) : 0;
   let currentProgress = initialProgress;
-  let availableCharges = toInteger(tool.resourceValue);
+  let availableCharges = noTool ? initialEnergy : toInteger(tool.resourceValue);
+  let energyHealing = 0;
+  let availableHealing = noTool && !freeEnergy
+    ? getGoodEnoughHealingCapacity(initialEnergy, { healthPerEnergy })
+    : Number.MAX_SAFE_INTEGER;
   let spentCharges = 0;
   const entries = [];
   const targetActor = targetToken?.actor ?? (String(targetContext?.actorUuid ?? "")
@@ -2346,7 +2428,7 @@ async function runTreatmentChecks({
   for (let index = 1; index <= totalChecks; index += 1) {
     const remainingProgress = Math.max(0, maxProgress - currentProgress);
     if (!remainingProgress) break;
-    if (availableCharges <= 0) break;
+    if ((!noTool && availableCharges <= 0) || (noTool && !freeEnergy && availableHealing <= 0)) break;
 
     const progressForCheck = Math.min(progressPerCheck, remainingProgress);
     const checkOperationId = `${operationId}:check:${index}`;
@@ -2397,7 +2479,7 @@ async function runTreatmentChecks({
     const treatmentResult = calculateTreatmentResult({
       treatmentTarget: treatment,
       tool,
-      availableCharges,
+      availableCharges: noTool ? Number.MAX_SAFE_INTEGER : availableCharges,
       progressForCheck,
       missingProgress: remainingProgress,
       resultKey: String(outcome.result?.key ?? "failure"),
@@ -2409,6 +2491,23 @@ async function runTreatmentChecks({
     });
     if (treatmentResult.chargesUsed <= 0) break;
 
+    const progress = noTool
+      ? Math.min(treatmentResult.progress, availableHealing)
+      : treatmentResult.progress;
+    if (progress <= 0) break;
+    let chargesUsed = treatmentResult.chargesUsed;
+    if (noTool) {
+      if (freeEnergy) chargesUsed = 0;
+      else {
+        const previousCost = Math.ceil(energyHealing / healthPerEnergy);
+        energyHealing += progress;
+        const totalCost = Math.ceil(energyHealing / healthPerEnergy);
+        chargesUsed = totalCost - previousCost;
+        availableCharges = Math.max(0, initialEnergy - totalCost);
+        availableHealing = Math.max(0, (initialEnergy * healthPerEnergy) - energyHealing);
+      }
+    }
+
     if (activeUsePreparations.length) {
       try {
         await commitPreparedActiveUseOperations(activeUsePreparations, {
@@ -2419,15 +2518,15 @@ async function runTreatmentChecks({
       }
     }
 
-    availableCharges -= treatmentResult.chargesUsed;
-    spentCharges += treatmentResult.chargesUsed;
-    currentProgress = Math.min(maxProgress, currentProgress + treatmentResult.progress);
+    if (!noTool) availableCharges -= chargesUsed;
+    spentCharges += chargesUsed;
+    currentProgress = Math.min(maxProgress, currentProgress + progress);
     entries.push({
       index,
       total: totalChecks,
       resultLabel,
-      progress: treatmentResult.progress,
-      charges: treatmentResult.chargesUsed,
+      progress,
+      charges: chargesUsed,
       efficiency: treatmentResult.efficiency,
       currentProgress,
       resultKey: String(outcome.result?.key ?? "failure"),
@@ -2441,7 +2540,11 @@ async function runTreatmentChecks({
     remainingCharges: availableCharges,
     finalProgress: currentProgress,
     halted: false,
-    reason: availableCharges <= 0 ? "Запаса инструмента не хватило для лечения." : ""
+    reason: noTool
+      ? (!freeEnergy && availableHealing <= 0 && currentProgress < maxProgress
+        ? "Энергии не хватило для полного лечения."
+        : "")
+      : (availableCharges <= 0 ? "Запаса инструмента не хватило для лечения." : "")
   };
 }
 
@@ -2747,7 +2850,9 @@ function buildMedicineTreatmentStateSnapshot({
   toolKey = ""
 } = {}) {
   const instrument = sourceActor?.items?.get?.(String(instrumentId ?? "")) ?? null;
-  const supply = getEffectiveMedicineToolFunction(instrument, toolKey)?.resourceValue;
+  const supply = String(instrumentId ?? "") === GOOD_ENOUGH_NO_TOOL_ID
+    ? getActorEnergy(sourceActor)
+    : getEffectiveMedicineToolFunction(instrument, toolKey)?.resourceValue;
   if (treatmentType === "limb") {
     const limb = targetActor?.system?.limbs?.[String(treatmentId ?? "")];
     return {
@@ -2823,19 +2928,45 @@ async function resolveTreatmentOnAuthorityOperation({
   const currentTargetContext = buildTargetContext(targetActor, targetToken);
   const treatment = getTargetTreatments(currentTargetContext, treatmentType)
     .find(item => item.id === String(treatmentId ?? ""));
-  const instrument = sourceActor.items?.get(String(instrumentId ?? ""));
   const normalizedToolKey = validateConfiguredMedicineToolKey(toolKey);
-  if (
-    !treatment
-    || !instrument
-    || instrument.type !== "gear"
-    || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
-  ) {
-    throw new Error("цель или исправный инструмент лечения не найдены");
+  let instrument = null;
+  let tool = null;
+  let noTool = false;
+  if (String(instrumentId ?? "") === GOOD_ENOUGH_NO_TOOL_ID) {
+    if (treatmentType !== "limb") throw new Error("Способность «И так сойдет» применима только к лечению конечностей.");
+    if (!treatment) throw new Error("цель лечения не найдена");
+    const settings = getActorGoodEnoughSettings(sourceActor);
+    if (!settings) throw new Error("Способность «И так сойдет» недоступна.");
+    if (treatment.treatable === false) {
+      throw new Error(treatment.unavailableReason || "Эту цель сейчас нельзя лечить.");
+    }
+    noTool = true;
+    const freeEnergy = isGoodEnoughHealingFree(treatment, settings);
+    const energyAvailable = getActorSpendableEnergy(sourceActor);
+    if (!freeEnergy && energyAvailable <= 0) throw new Error("Недостаточно энергии для лечения.");
+    tool = {
+      toolKey: normalizedToolKey,
+      toolClass: "D",
+      resourceValue: energyAvailable,
+      healthPerEnergy: settings.healthPerEnergy,
+      energyAvailable,
+      freeEnergy,
+      noTool: true
+    };
+  } else {
+    instrument = sourceActor.items?.get(String(instrumentId ?? ""));
+    if (
+      !treatment
+      || !instrument
+      || instrument.type !== "gear"
+      || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
+    ) {
+      throw new Error("цель или исправный инструмент лечения не найдены");
+    }
+    tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
   }
 
-  const tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
-  const validation = validateInstrumentForTreatment(sourceActor, treatment, tool);
+  const validation = noTool ? { ok: true } : validateInstrumentForTreatment(sourceActor, treatment, tool);
   if (!validation.ok) throw new Error(validation.message);
 
   const maxProgress = Math.max(1, toInteger(treatment.healingProgressMax));
@@ -2846,11 +2977,18 @@ async function resolveTreatmentOnAuthorityOperation({
     operationId,
     targetContext: currentTargetContext,
     treatment,
-    instrument: {
-      id: instrument.id,
-      name: instrument.name,
-      img: normalizeImagePath(instrument.img, "icons/svg/item-bag.svg")
-    },
+    instrument: noTool
+      ? {
+        id: GOOD_ENOUGH_NO_TOOL_ID,
+        name: "И так сойдет — без инструмента",
+        img: "icons/svg/aura.svg",
+        noTool: true
+      }
+      : {
+        id: instrument.id,
+        name: instrument.name,
+        img: normalizeImagePath(instrument.img, "icons/svg/item-bag.svg")
+      },
     initialProgress,
     finalProgress: initialProgress,
     maxProgress,
@@ -2900,14 +3038,16 @@ async function resolveTreatmentOnAuthorityOperation({
     targetToken,
     treatmentType,
     treatmentId,
-    instrumentId: instrument.id,
+    instrumentId: noTool ? GOOD_ENOUGH_NO_TOOL_ID : instrument.id,
     toolKey: normalizedToolKey,
     expectedProgress: initialProgress,
     finalProgress,
     completed,
-    expectedSupply: toInteger(tool.resourceValue),
-    remainingSupply: result.remainingCharges,
+    expectedSupply: noTool ? 0 : toInteger(tool.resourceValue),
+    remainingSupply: noTool ? 0 : result.remainingCharges,
+    expectedEnergyCost: noTool ? result.spentCharges : 0,
     expectedMedicineMode: medicineMode,
+    noTool,
     chainRef
   };
   let commitResult;
@@ -2924,7 +3064,7 @@ async function resolveTreatmentOnAuthorityOperation({
         sourceActorUuid: String(sourceActor.uuid ?? ""),
         sourceTokenUuid: getMedicineTokenUuid(sourceToken),
         targetTokenUuid: getMedicineTokenUuid(targetToken),
-        sourceItemUuid: String(instrument.uuid ?? ""),
+        sourceItemUuid: String(instrument?.uuid ?? ""),
         limitedUseSkipOutgoing: true,
         limitedUseSkipIncoming: true,
         chainRef
@@ -2986,29 +3126,45 @@ async function commitTreatmentToActors({
   completed,
   expectedSupply,
   remainingSupply,
+  expectedEnergyCost = 0,
   expectedMedicineMode,
+  noTool = false,
   chainRef = null
 }) {
-  const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
   const normalizedToolKey = String(toolKey ?? "").trim();
-  const tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
-  const currentSupply = Math.max(0, toInteger(tool?.resourceValue));
-  const expected = Math.max(0, toInteger(expectedSupply));
-  const remaining = Math.max(0, toInteger(remainingSupply));
-  if (
-    !instrument
-    || instrument.type !== "gear"
-    || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
-    || !tool?.enabled
-  ) {
-    throw new Error("инструмент лечения не найден");
+  let instrument = null;
+  let tool = null;
+  let goodEnoughSettings = null;
+  if (noTool) {
+    if (treatmentType !== "limb" || instrumentId !== GOOD_ENOUGH_NO_TOOL_ID) {
+      throw new Error("Некорректный способ лечения без инструмента.");
+    }
+    goodEnoughSettings = getActorGoodEnoughSettings(sourceActor);
+    if (!goodEnoughSettings) throw new Error("Способность «И так сойдет» недоступна.");
+  } else {
+    instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
+    tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
   }
-  if (currentSupply !== expected) {
-    throw createTreatmentStaleError("Запас инструмента изменился.");
-  }
-  if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
   if (getMedicineResolutionMode() !== expectedMedicineMode) {
     throw createTreatmentStaleError("Режим медицины изменился во время лечения.");
+  }
+  let remaining = 0;
+  if (!noTool) {
+    const currentSupply = Math.max(0, toInteger(tool?.resourceValue));
+    const expected = Math.max(0, toInteger(expectedSupply));
+    remaining = Math.max(0, toInteger(remainingSupply));
+    if (
+      !instrument
+      || instrument.type !== "gear"
+      || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
+      || !tool?.enabled
+    ) {
+      throw new Error("инструмент лечения не найден");
+    }
+    if (currentSupply !== expected) {
+      throw createTreatmentStaleError("Запас инструмента изменился.");
+    }
+    if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
   }
 
   const treatmentCommit = treatmentType === "limb"
@@ -3025,12 +3181,14 @@ async function commitTreatmentToActors({
         finalProgress,
         completed
       });
-  const authoritativeValidation = validateInstrumentForTreatment(
-    sourceActor,
-    treatmentCommit.treatmentTarget,
-    tool
-  );
-  if (!authoritativeValidation.ok) throw new Error(authoritativeValidation.message);
+  if (!noTool) {
+    const authoritativeValidation = validateInstrumentForTreatment(
+      sourceActor,
+      treatmentCommit.treatmentTarget,
+      tool
+    );
+    if (!authoritativeValidation.ok) throw new Error(authoritativeValidation.message);
+  }
   const authoritativeSkill = getMedicineSkillResolution(
     sourceActor,
     treatmentCommit.treatmentTarget,
@@ -3044,37 +3202,81 @@ async function commitTreatmentToActors({
       )
     );
   }
-  const instrumentUpdate = createToolResourceValueUpdate(instrument, tool, remaining);
-  if (treatmentType === "limb") {
-    await executeAtomicActorItemUpdates([
-      ...treatmentCommit.targetPlan.actorUpdates.map(updates => ({
+  if (noTool) {
+    const energyCost = getGoodEnoughEnergyCost(
+      treatmentCommit.treatmentTarget,
+      treatmentCommit.healing?.appliedHealing,
+      goodEnoughSettings
+    );
+    if (energyCost !== Math.max(0, toInteger(expectedEnergyCost))) {
+      throw createTreatmentStaleError("Стоимость лечения изменилась.");
+    }
+    if (!canActorSpendEnergy(sourceActor, energyCost)) {
+      throw createTreatmentStaleError("Недостаточно энергии для лечения.");
+    }
+    const targetUpdate = Object.assign({}, ...treatmentCommit.targetPlan.actorUpdates);
+    const targetDocumentOptions = {
+      falloutMawSkipDamageStatusSync: true,
+      falloutMawLimbCapSync: true,
+      falloutMawMedicineNoTool: true
+    };
+    const updateEntries = [];
+    if (energyCost > 0) {
+      const energyResource = sourceActor.system?.resources?.[ENERGY_RESOURCE_KEY];
+      const nextEnergy = Math.max(toInteger(energyResource?.min), getActorEnergy(sourceActor) - energyCost);
+      if (sourceActor === targetActor) targetUpdate[`system.resources.${ENERGY_RESOURCE_KEY}.value`] = nextEnergy;
+      else {
+        updateEntries.push({
+          document: sourceActor,
+          updates: { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextEnergy },
+          documentOptions: { falloutMawMedicineNoTool: true }
+        });
+      }
+    }
+    if (Object.keys(targetUpdate).length) {
+      updateEntries.unshift({
         document: targetActor,
-        updates,
-        documentOptions: {
-          falloutMawSkipDamageStatusSync: true,
-          falloutMawLimbCapSync: true
-        }
-      })),
-      { document: instrument, updates: instrumentUpdate }
-    ], {
-      reason: "medicine-limb-treatment-with-tool",
+        updates: targetUpdate,
+        documentOptions: targetDocumentOptions
+      });
+    }
+    await executeAtomicActorItemUpdates(updateEntries, {
+      reason: "medicine-limb-treatment-no-tool",
       chainRef
     });
   } else {
-    await executeInventoryMutation([
-      treatmentCommit.targetPlan,
-      {
-        actor: sourceActor,
-        updates: [{ _id: instrument.id, ...instrumentUpdate }]
-      }
-    ], {
-      reason: "medicine-treatment-with-tool",
-      documentOptions: {
-        falloutMawSkipDamageStatusSync: true,
-        falloutMawLimbCapSync: true,
-        ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
-      }
-    });
+    const instrumentUpdate = createToolResourceValueUpdate(instrument, tool, remaining);
+    if (treatmentType === "limb") {
+      await executeAtomicActorItemUpdates([
+        ...treatmentCommit.targetPlan.actorUpdates.map(updates => ({
+          document: targetActor,
+          updates,
+          documentOptions: {
+            falloutMawSkipDamageStatusSync: true,
+            falloutMawLimbCapSync: true
+          }
+        })),
+        { document: instrument, updates: instrumentUpdate }
+      ], {
+        reason: "medicine-limb-treatment-with-tool",
+        chainRef
+      });
+    } else {
+      await executeInventoryMutation([
+        treatmentCommit.targetPlan,
+        {
+          actor: sourceActor,
+          updates: [{ _id: instrument.id, ...instrumentUpdate }]
+        }
+      ], {
+        reason: "medicine-treatment-with-tool",
+        documentOptions: {
+          falloutMawSkipDamageStatusSync: true,
+          falloutMawLimbCapSync: true,
+          ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
+        }
+      });
+    }
   }
 
   if (treatmentCommit.syncDamageStatuses) {
@@ -3149,6 +3351,9 @@ function prepareLimbTreatmentCommit(targetActor, {
     treatmentTarget: {
       type: "limb",
       name: String(limb.label ?? limbKey),
+      value: currentLimbValue,
+      min,
+      max: Math.max(0, toInteger(limb.max)),
       healingToolClass: LIMB_TREATMENT_TOOL_CLASS,
       healingDifficulty: LIMB_TREATMENT_DIFFICULTY,
       healingSkillKey: LIMB_TREATMENT_SKILL_KEY,
@@ -3787,6 +3992,8 @@ function mixRgb(from, to, ratio) {
 async function postTreatmentResultChat(actor, { treatment, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed }) {
   const progressOffset = treatment.type === "limb" ? toInteger(treatment.min) : 0;
   const displayProgress = value => toInteger(value) + progressOffset;
+  const resourceLabel = instrument?.noTool ? "энергия" : "запас";
+  const spentLabel = instrument?.noTool ? "Потрачено энергии" : "Потрачено запаса";
   const completionLabel = treatment.type === "disease"
     ? "Болезнь вылечена."
     : treatment.type === "limb"
@@ -3796,7 +4003,7 @@ async function postTreatmentResultChat(actor, { treatment, instrument, initialPr
     <li>
       Проверка ${entry.index}/${entry.total}: ${entry.resultLabel},
       +${entry.progress} прогресса,
-      запас ${entry.charges},
+      ${resourceLabel} ${entry.charges},
       эффективность ${formatNumber(entry.efficiency)}%,
       итог ${displayProgress(entry.currentProgress)}/${displayProgress(maxProgress)}
     </li>
@@ -3807,7 +4014,7 @@ async function postTreatmentResultChat(actor, { treatment, instrument, initialPr
     lines: [
       `Инструмент: ${instrument.name}`,
       `Прогресс: ${displayProgress(initialProgress)}/${displayProgress(maxProgress)} -> ${displayProgress(finalProgress)}/${displayProgress(maxProgress)}`,
-      `Потрачено запаса: ${spentCharges}`,
+      `${spentLabel}: ${spentCharges}`,
       `<ul>${rows}</ul>`,
       completed ? completionLabel : ""
     ].filter(Boolean)

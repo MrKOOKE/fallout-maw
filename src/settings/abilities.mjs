@@ -184,7 +184,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   look: "look",
   toTheEnd: "toTheEnd",
   heightenedConcentration: "heightenedConcentration",
-  grapplingMaster: "grapplingMaster"
+  grapplingMaster: "grapplingMaster",
+  goodEnough: "goodEnough"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -2124,7 +2125,27 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster) {
     return normalizeGrapplingMasterSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.goodEnough) {
+    return normalizeGoodEnoughSettings(value);
+  }
   return {};
+}
+
+/** "И так сойдет": tool-less limb healing powered by energy. */
+export function normalizeGoodEnoughSettings(value = {}) {
+  const legacyEnergyPerHealth = Number(value?.energyPerHealth);
+  const healthPerEnergy = Number(value?.healthPerEnergy);
+  return {
+    healthPerEnergy: Math.max(
+      1,
+      Number.isFinite(healthPerEnergy) && healthPerEnergy > 0
+        ? healthPerEnergy
+        : Number.isFinite(legacyEnergyPerHealth) && legacyEnergyPerHealth > 0
+          ? 1 / legacyEnergyPerHealth
+          : 10
+    ),
+    freeConditionThreshold: Math.max(0, Math.min(100, toInteger(value?.freeConditionThreshold ?? 90)))
+  };
 }
 
 export function normalizeDeusExMachinaSettings(value = {}) {

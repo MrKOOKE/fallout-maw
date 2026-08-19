@@ -17,15 +17,21 @@ export const ABILITY_ITEM_USE_COUNTERS_FLAG_KEY = "abilityItemUseCounters";
 export const ACTION_BLOCK_EFFECT_KEY_PREFIX = "system.blocks.actions.";
 export const ATTACKING_WEAPON_ACTION_KEYS = ABILITY_ATTACKING_WEAPON_ACTION_KEYS;
 
-export function hasActorFixedAbilityFunction(actor, fixedKey = "") {
-  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return false;
+export function getActorFixedAbilityFunction(actor, fixedKey = "") {
+  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return null;
   const key = String(fixedKey ?? "").trim();
-  if (!actor || !key) return false;
-  return (actor.items ?? []).some(item => (
-    item?.type === "ability"
-    && normalizeAbilityFunctions(item.system?.functions ?? [])
-      .some(entry => entry.type === ABILITY_FUNCTION_TYPES.fixed && entry.fixedKey === key)
-  ));
+  if (!actor || !key) return null;
+  for (const item of (actor.items ?? [])) {
+    if (item?.type !== "ability") continue;
+    const entry = normalizeAbilityFunctions(item.system?.functions ?? [])
+      .find(candidate => candidate.type === ABILITY_FUNCTION_TYPES.fixed && candidate.fixedKey === key);
+    if (entry) return entry;
+  }
+  return null;
+}
+
+export function hasActorFixedAbilityFunction(actor, fixedKey = "") {
+  return Boolean(getActorFixedAbilityFunction(actor, fixedKey));
 }
 
 const TRUTHY_EFFECT_FALSE_VALUES = new Set(["", "0", "false", "no", "off"]);
