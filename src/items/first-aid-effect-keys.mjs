@@ -5,6 +5,8 @@ export const FIRST_AID_EFFECT_KEYS = Object.freeze({
   withdrawalResistancePercent: "system.firstAid.withdrawalResistancePercent"
 });
 
+export const FIRST_AID_ACTION_POINT_COST_EFFECT_KEY = "system.costs.actions.firstAid";
+
 export const FIRST_AID_EFFECT_KEY_FIELDS = Object.freeze(
   Object.keys(FIRST_AID_EFFECT_KEYS)
 );

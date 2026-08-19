@@ -505,7 +505,7 @@ function abilityConditionField() {
     trackingTargets: new ArrayField(new StringField({
       required: true,
       blank: false,
-      choices: ["owner", "ally", "enemy", "neutral"],
+      choices: ["owner", "ally", "enemy", "neutral", "activeApplicationTarget"],
       initial: "owner"
     }), { required: true, initial: [] }),
     eventSubject: new StringField({

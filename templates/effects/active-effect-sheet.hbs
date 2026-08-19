@@ -64,6 +64,18 @@
           </select>
         </label>
       </div>
+      {{#if canConfigureCarrierExpiration}}
+      <div class="fallout-maw-list-grid">
+        <label>
+          <span>После истечения</span>
+          <select name="flags.fallout-maw.onExpire">
+            {{#each expirationActionChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+      </div>
+      {{/if}}
     </section>
 
     <section class="fallout-maw-panel fallout-maw-active-effect-description">

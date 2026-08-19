@@ -57,15 +57,22 @@ export function getEventReactionProgressCurrent(item = null, abilityFunction = n
   return Math.max(0, Math.min(required, finiteNumber(getEventReactionProgressState(item)?.[key]?.current)));
 }
 
-/** Rows consumed by the existing ability-hover progress renderer. */
-export function getEventReactionProgressEntries(item = null) {
+/** Rows consumed by ability and linked-effect progress renderers. */
+export function getEventReactionProgressEntries(item = null, {
+  trackingTarget = ""
+} = {}) {
   if (item?.type !== "ability") return [];
+  const requiredTrackingTarget = String(trackingTarget ?? "").trim();
   const state = getEventReactionProgressState(item);
   const rows = [];
   for (const abilityFunction of normalizeAbilityFunctions(item.system?.functions ?? [])) {
     if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
     for (const condition of abilityFunction.conditions ?? []) {
       if (condition?.type !== ABILITY_CONDITION_TYPES.eventReaction) continue;
+      if (
+        requiredTrackingTarget
+        && !normalizeStrings(condition?.trackingTargets).includes(requiredTrackingTarget)
+      ) continue;
       if (!isEventReactionProgressTracked(condition.eventKey)) continue;
       const required = normalizeEventReactionProgressRequired(condition.progressRequired);
       const key = getEventReactionProgressKey({ abilityFunction, condition });

@@ -5,6 +5,10 @@ import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
 import { buildEffectKeyTokens, buildResourceBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import {
+  EFFECT_EXPIRATION_ACTIONS,
+  EFFECT_EXPIRATION_ACTION_FLAG_KEY
+} from "../effects/expiration-actions.mjs";
 
 const { ActiveEffectConfig } = foundry.applications.sheets;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -57,6 +61,10 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
       kindChoices: buildKindChoices(this.document.getFlag("fallout-maw", "kind") || getEffectKind(this.document)),
       durationUnitChoices: buildDurationUnitChoices(source.duration?.units ?? ""),
       expiryChoices: buildExpiryChoices(source.duration?.expiry ?? ""),
+      expirationActionChoices: buildExpirationActionChoices(
+        this.document.getFlag("fallout-maw", EFFECT_EXPIRATION_ACTION_FLAG_KEY)
+      ),
+      canConfigureCarrierExpiration: this.document.parent?.documentName === "Item",
       changeTypeChoices: buildChangeTypeChoices(),
       changes: changes.map((change, index) => prepareChangeContext(change, index))
     }, { inplace: false });
@@ -92,6 +100,17 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
     const submitData = this._processFormData(null, this.form, formData);
     return Object.values(submitData.system?.changes ?? {});
   }
+}
+
+function buildExpirationActionChoices(selected = "") {
+  return [
+    { value: "", label: "Ничего", selected: !selected },
+    {
+      value: EFFECT_EXPIRATION_ACTIONS.deleteBearer,
+      label: "Удалить предмет-носитель",
+      selected: selected === EFFECT_EXPIRATION_ACTIONS.deleteBearer
+    }
+  ];
 }
 
 function prepareChangeContext(change, index) {

@@ -445,7 +445,8 @@
           "Owner": "Owner",
           "Ally": "Ally",
           "Enemy": "Enemy",
-          "Neutral": "Neutral"
+          "Neutral": "Neutral",
+          "ActiveApplicationTarget": "This ability's marked target"
         },
         "EventSubjects": {
           "Reactor": "Reactor",
@@ -1898,6 +1899,7 @@
       "CombatDamageFlat": "Flat damage",
       "CombatDamagePercent": "Damage, %",
       "FirstAidGroup": "First aid",
+      "FirstAidActionPointCost": "First-aid item application cost",
       "FirstAidIncomingEffectiveness": "Incoming medication effectiveness",
       "FirstAidOutgoingEffectiveness": "Outgoing medication effectiveness",
       "FirstAidDuration": "Medication duration",
@@ -1933,6 +1935,7 @@
       "ReverseLabel": "{label} (against me)",
       "Disable": "Disable",
       "Disabled": "Disabled",
+      "Suppressed": "Suppressed",
       "Description": "Effect Description",
       "Duration": "Effect Duration",
       "RemainingUses": "Uses Remaining",

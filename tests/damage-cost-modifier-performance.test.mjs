@@ -16,7 +16,11 @@ globalThis.foundry = {
   }
 };
 
-const { getDamageCostModifierState } = await import("../src/combat/damage-hub.mjs");
+const {
+  getActionCostModifierState,
+  getDamageCostModifierState
+} = await import("../src/combat/damage-hub.mjs");
+const { getFirstAidActionPointCost } = await import("../src/items/first-aid-action-cost.mjs");
 
 test("damage cost state traverses applicable effects once for every cost key", () => {
   let applicableEffectReads = 0;
@@ -50,5 +54,34 @@ test("damage cost state traverses applicable effects once for every cost key", (
     movement: { add: 3, multiplier: 1, override: null },
     action: { add: 2, multiplier: 1.5, override: 7 }
   });
+  assert.equal(applicableEffectReads, 1);
+});
+
+test("first-aid cost uses the general and dedicated action keys with one effect traversal", () => {
+  let applicableEffectReads = 0;
+  const actor = {
+    system: {},
+    items: { contents: [] },
+    *allApplicableEffects() {
+      applicableEffectReads += 1;
+      yield {
+        disabled: false,
+        changes: [
+          { key: "system.costs.action", type: "add", value: "1" },
+          { key: "system.costs.actions.firstAid", type: "add", value: "-3" }
+        ]
+      };
+    }
+  };
+
+  assert.deepEqual(getActionCostModifierState(actor, { actionKey: "firstAid" }), {
+    add: -2,
+    multiplier: 1,
+    override: null
+  });
+  assert.equal(applicableEffectReads, 1);
+
+  applicableEffectReads = 0;
+  assert.equal(getFirstAidActionPointCost(actor, { actionPointCost: 5 }), 3);
   assert.equal(applicableEffectReads, 1);
 });

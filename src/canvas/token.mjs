@@ -3,8 +3,10 @@ import { stripEffectTooltipBonusWords } from "../utils/effect-tooltip-labels.mjs
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   evaluateActorEffectChangeBaseNumber,
+  isActorTraumaDiseaseEffectSuppressed,
   isReverseEffectKey,
   isSkillBonusPercentEffectKey,
+  isTraumaDiseaseSuppressionEffectKey,
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
 import { parseDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
@@ -20,6 +22,7 @@ import {
 } from "../settings/abilities.mjs";
 import { getEffectSourceFunctionContext } from "../abilities/effect-lifecycle.mjs";
 import { getEffectLimitedUseStates } from "../abilities/limited-uses-state.mjs";
+import { getEventReactionProgressEntries } from "../events/event-reaction-progress.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import {
   formatActorFormulaForDisplay,
@@ -801,9 +804,20 @@ function registerMiddleClickGuard() {
 }
 
 export function buildEffectTooltipHTML(effect, actor = null) {
-  const name = localizeDocumentName(effect.name);
+  const baseName = localizeDocumentName(effect.name);
+  const name = isActorTraumaDiseaseEffectSuppressed(actor, effect)
+    ? `${baseName} (${localize("FALLOUTMAW.Effects.Suppressed")})`
+    : baseName;
   const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
   const sourceContext = getEffectSourceFunctionContext(effect, actor);
+  // A marker renders only counters whose reaction condition explicitly tracks
+  // this ability's active-application target. The Item remains the single
+  // source of truth; overload and reward effects have no such relationship.
+  const progressRows = sourceContext.systemFlags?.activeApplication
+    ? getEventReactionProgressEntries(sourceContext.sourceItem, {
+      trackingTarget: "activeApplicationTarget"
+    })
+    : [];
   const triggerCosts = getEffectTriggerCostRows(effect, sourceContext);
   const triggerCostLines = formatEffectTriggerCostRows(triggerCosts, actor);
   const duration = getEffectDurationLabel(effect);
@@ -821,7 +835,11 @@ export function buildEffectTooltipHTML(effect, actor = null) {
     triggeredAura ? {
       label: "Аура",
       value: triggeredAura
-    } : null
+    } : null,
+    ...progressRows.map(row => ({
+      label: row.label,
+      value: `${formatEffectProgressValue(row.current)} / ${formatEffectProgressValue(row.required)}`
+    }))
   ].filter(Boolean);
   const description = String(effect.description ?? "").trim();
 
@@ -851,6 +869,12 @@ export function buildEffectTooltipHTML(effect, actor = null) {
       </section>` : ""}
     </article>
   `;
+}
+
+function formatEffectProgressValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+  return Number.isInteger(numeric) ? String(numeric) : String(Math.round(numeric * 100) / 100);
 }
 
 function getEffectTriggeredAuraSummary(effect, actor = null) {
@@ -965,6 +989,16 @@ function formatEffectChange(change, actor = null, effect = null) {
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(healing, change?.type))}</span>`;
   }
   const path = getChangeKeyLabel(key);
+  if (isTraumaDiseaseSuppressionEffectKey(key)) {
+    const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
+      fallback: Number(change?.value),
+      stage: getEffectChangePreparationStage(change, actor)
+    });
+    const suppressedCount = Number.isFinite(value)
+      ? Math.max(0, Math.trunc(value))
+      : stringifyChangeValue(change?.value);
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(suppressedCount, change?.type))}</span>`;
+  }
   if (isDodgeAmountModifierEffectKey(key)) {
     const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
       fallback: Number(change?.value),

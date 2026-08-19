@@ -71,7 +71,10 @@ import {
   SKILL_CHECK_ACTIONS
 } from "../rolls/skill-check-action-effects.mjs";
 import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
-import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
+import {
+  FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
+  FIRST_AID_EFFECT_KEYS
+} from "../items/first-aid-effect-keys.mjs";
 import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
 import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
 import {
@@ -530,13 +533,22 @@ export function buildCombatAttackDisadvantageEffectKeyTokens() {
 }
 
 export function buildActionCostEffectKeyTokens() {
-  return getWeaponActionCostEntries().map(entry => createEffectKeyToken({
-    code: entry.code,
-    key: entry.key,
-    label: entry.label,
-    path: `system.costs.actions.${entry.key}`,
-    group: "Стоимость"
-  })).filter(Boolean);
+  return [
+    ...getWeaponActionCostEntries().map(entry => createEffectKeyToken({
+      code: entry.code,
+      key: entry.key,
+      label: entry.label,
+      path: `system.costs.actions.${entry.key}`,
+      group: "Стоимость"
+    })),
+    createEffectKeyToken({
+      code: "firstAidCost",
+      key: "firstAid",
+      label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidActionPointCost"),
+      path: FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
+      group: "Стоимость"
+    })
+  ].filter(Boolean);
 }
 
 export function buildWeaponSwitchCostEffectKeyToken() {

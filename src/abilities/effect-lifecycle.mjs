@@ -80,6 +80,7 @@ function resolveEffectSourceItem(effect = null, actor = null, systemFlags = {}) 
   const uuidCandidates = [
     systemFlags?.eventReaction?.sourceItemUuid,
     systemFlags?.abilityTimedTriggerEffect?.sourceItemUuid,
+    systemFlags?.activeApplication?.sourceItemUuid,
     systemFlags?.auraGenerated?.sourceItemUuid,
     systemFlags?.auraGenerated?.triggerCost?.sourceItemUuid,
     effect?.origin

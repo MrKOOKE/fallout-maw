@@ -124,6 +124,8 @@ import {
   scaleFirstAidSignedValue
 } from "../utils/first-aid-scaling.mjs";
 import { getActorFirstAidModifiers } from "../items/first-aid-modifiers.mjs";
+import { getFirstAidActionPointCost } from "../items/first-aid-action-cost.mjs";
+import { FIRST_AID_ACTION_POINT_COST_EFFECT_KEY } from "../items/first-aid-effect-keys.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
 import { openButcheringConfig } from "../apps/butchering-config.mjs";
@@ -5570,7 +5572,7 @@ function buildFirstAidTooltipSection(item, actor = null) {
     outgoingEffectivenessPercent: firstAidModifiers.outgoingEffectivenessPercent,
     outgoingHealingPercent: getActorHealingModifierPercent(actor, "outgoing")
   });
-  const actionPointCost = Math.max(0, toInteger(firstAid.actionPointCost));
+  const actionPointCost = getFirstAidActionPointCost(actor, firstAid);
   if (actionPointCost) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidActionPointCost"), actionPointCost]);
   const healing = Math.max(0, toInteger(firstAid.healing));
   if (healing) {
@@ -9400,6 +9402,7 @@ function buildEffectPathLabelMap({
   map.set("system.costs.actions.aimedMeleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")}: стоимость`);
   map.set("system.costs.actions.push", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")}: стоимость`);
   map.set("system.costs.actions.reload", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")}: стоимость`);
+  map.set(FIRST_AID_ACTION_POINT_COST_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.FirstAidActionPointCost"));
   map.set(WEAPON_SWITCH_COST_KEY, "Смена оружия: стоимость");
   const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
   map.set("fallout-maw.healing", firstAidHealingLabel);

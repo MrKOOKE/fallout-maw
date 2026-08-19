@@ -202,7 +202,8 @@ const COST_EFFECT_KEYS = Object.freeze({
     meleeAttack: "system.costs.actions.meleeAttack",
     aimedMeleeAttack: "system.costs.actions.aimedMeleeAttack",
     push: "system.costs.actions.push",
-    reload: "system.costs.actions.reload"
+    reload: "system.costs.actions.reload",
+    firstAid: "system.costs.actions.firstAid"
   })
 });
 const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
@@ -3113,16 +3114,20 @@ export async function restoreActorHealthCost(actor, amount = 0, { chainRef = nul
 
 export function getDamageCostModifierState(actor, { actionKey = "" } = {}) {
   const effectSnapshot = createActorEffectSnapshot(actor);
-  const action = collectCostModifier(actor, COST_EFFECT_KEYS.action, { effectSnapshot });
-  const specificAction = collectCostModifier(
-    actor,
-    COST_EFFECT_KEYS.actions[String(actionKey ?? "").trim()],
-    { effectSnapshot }
-  );
   return {
     movement: collectCostModifier(actor, COST_EFFECT_KEYS.movement, { effectSnapshot }),
-    action: mergeCostModifiers(action, specificAction)
+    action: getActionCostModifierState(actor, { actionKey, effectSnapshot })
   };
+}
+
+export function getActionCostModifierState(actor, { actionKey = "", effectSnapshot = null } = {}) {
+  const snapshot = effectSnapshot ?? createActorEffectSnapshot(actor);
+  return mergeCostModifiers(
+    collectCostModifier(actor, COST_EFFECT_KEYS.action, { effectSnapshot: snapshot }),
+    collectCostModifier(actor, COST_EFFECT_KEYS.actions[String(actionKey ?? "").trim()], {
+      effectSnapshot: snapshot
+    })
+  );
 }
 
 export async function prepareActorDamageUpdate(actor, changes = {}, options = {}) {

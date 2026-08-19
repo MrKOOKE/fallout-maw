@@ -359,6 +359,7 @@ test("interactive ability paths quote costs before opening target or change pick
   const executionStart = fixedSource.indexOf("async function executeActiveApplicationUse");
   const executionEnd = fixedSource.indexOf("async function gateActiveApplicationTargets", executionStart);
   const executionFlow = fixedSource.slice(executionStart, executionEnd);
+  assert.match(executionFlow, /const createsApplicationEffect = durationSeconds > 0 \|\| settings\.persistent/);
   assert.ok(executionFlow.indexOf("quoteActiveApplicationCostPlan") >= 0);
   assert.ok(executionFlow.indexOf("quoteActiveApplicationCostPlan") < executionFlow.indexOf("resolveLimitedChangeSet"));
   assert.ok(executionFlow.indexOf("quoteActiveApplicationCostPlan") < executionFlow.indexOf("prepareAbilityFunctionActions"));
@@ -388,6 +389,8 @@ test("active-application cost payers normalize independently from trigger costs"
     ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets,
     ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
   ]);
+  assert.equal(settings.persistent, false);
+  assert.equal(normalizeActiveApplicationSettings({ persistent: true }).persistent, true);
 });
 
 test("target-payer rows expand once per unique final target and merge self with source", () => {

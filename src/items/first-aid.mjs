@@ -43,6 +43,7 @@ import {
 } from "../combat/periodic-healing.mjs";
 import { getActorFirstAidModifiers } from "./first-aid-modifiers.mjs";
 import { buildFirstAidApplicationCardContext } from "./first-aid-chat-card.mjs";
+import { getFirstAidActionPointCost } from "./first-aid-action-cost.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FIRST_AID_SOCKET = `system.${SYSTEM_ID}`;
@@ -103,7 +104,35 @@ export async function useFirstAidItem({
     ui.notifications.warn(`${item.name}: not enough charges.`);
     return false;
   }
-  if (!(await spendActionPointsIfNeeded(sourceActor, firstAid))) return false;
+
+  const contextualAbilitySnapshots = new Map();
+  const outgoingContext = {
+    actorToken: sourceToken?.object ?? sourceToken,
+    targetActor,
+    targetToken: targetToken?.object ?? targetToken,
+    item,
+    firstAid,
+    actionKey: "firstAid",
+    requester: "firstAid",
+    activeUseStages: { action: true, check: false, damage: false },
+    chanceOperationId: firstAidOperationId,
+    limitedUseOperationId: firstAidOperationId,
+    contextualAbilitySnapshots
+  };
+  const incomingContext = {
+    actorToken: targetToken?.object ?? targetToken,
+    targetActor: sourceActor,
+    targetToken: sourceToken?.object ?? sourceToken,
+    item,
+    firstAid,
+    actionKey: "firstAid",
+    requester: "firstAid",
+    activeUseStages: { action: true, check: false, damage: false },
+    chanceOperationId: firstAidOperationId,
+    limitedUseOperationId: firstAidOperationId,
+    contextualAbilitySnapshots
+  };
+  if (!(await spendActionPointsIfNeeded(sourceActor, firstAid, outgoingContext))) return false;
 
   const inheritedChainRef = chainRef
     ?? options?.falloutMawSystemEventChainRef
@@ -142,18 +171,6 @@ export async function useFirstAidItem({
   source.chanceOperationId = firstAidOperationId;
   source.limitedUseOperationId = firstAidOperationId;
 
-  const outgoingContext = {
-    actorToken: sourceToken?.object ?? sourceToken,
-    targetActor,
-    targetToken: targetToken?.object ?? targetToken,
-    chanceOperationId: firstAidOperationId
-  };
-  const incomingContext = {
-    actorToken: targetToken?.object ?? targetToken,
-    targetActor: sourceActor,
-    targetToken: sourceToken?.object ?? sourceToken,
-    chanceOperationId: firstAidOperationId
-  };
   const canApplyMainEffects = resultKey !== "criticalFailure";
   const canScaleEffects = canApplyMainEffects
     && firstAidHasScalableEffects(firstAid, targetContext, selectedLimbs);
@@ -161,9 +178,10 @@ export async function useFirstAidItem({
   const canResistWithdrawal = firstAidHasWithdrawalEffects(firstAid);
   const canUseOutgoingHealing = canApplyMainEffects
     && firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs);
-  const outgoingActiveUseKeys = canScaleEffects
-    ? getFirstAidResolutionActiveUseKeys({ direction: "outgoing" })
-    : new Set();
+  const outgoingActiveUseKeys = getFirstAidResolutionActiveUseKeys({
+    direction: "outgoing",
+    includeEffectiveness: canScaleEffects
+  });
   if (canUseOutgoingHealing) {
     for (const key of getHealingResolutionActiveUseKeys({ direction: "outgoing" })) {
       outgoingActiveUseKeys.add(key);
@@ -993,8 +1011,8 @@ function getResponsibleGM() {
     .at(0) ?? null;
 }
 
-async function spendActionPointsIfNeeded(actor, firstAid = {}) {
-  const cost = Math.max(0, toInteger(firstAid.actionPointCost));
+async function spendActionPointsIfNeeded(actor, firstAid = {}, context = null) {
+  const cost = getFirstAidActionPointCost(actor, firstAid, context);
   if (!cost || !isActorInActiveCombat(actor)) return true;
   if (!canSpendCombatActionPoints(actor, cost, { label: "первой помощи" })) return false;
   await spendCombatActionPoints(actor, cost);

@@ -80,6 +80,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
   normalizeAnatomyStudySettings,
+  normalizeSpecialMixSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
   preserveMissingActiveApplicationTargetSettings,
@@ -2124,11 +2125,18 @@ function readActiveApplicationSettings(row, previousValue = {}) {
   const excludeSelfInput = row.querySelector("[data-field='active.excludeSelf']");
   const radiusFormulaInput = row.querySelector("[data-field='active.radiusFormula']");
   const wallsBlockInput = row.querySelector("[data-field='active.wallsBlock']");
+  const persistentInput = row.querySelector("[data-field='active.persistent']");
   const changeEvaluationInput = row.querySelector("[data-field='active.changeEvaluation']");
   const settings = {
     name: row.querySelector("[data-field='active.name']")?.value ?? "",
     costs: readActiveApplicationCostRows(row),
-    targetMode: row.querySelector("[data-field='active.targetMode']")?.value
+    targetMode: row.querySelector("[data-field='active.targetMode']")?.value,
+    treatmentClassShift: {
+      itemTypes: Array.from(row.querySelectorAll("[data-field='active.treatmentClassItemType']:checked") ?? [])
+        .map(input => String(input.value ?? "").trim())
+        .filter(Boolean),
+      steps: row.querySelector("[data-field='active.treatmentClassSteps']")?.value
+    }
   };
   if (targetSelectionModeInput) settings.targetSelectionMode = targetSelectionModeInput.value;
   if (targetLimitInput) settings.targetLimit = targetLimitInput.value;
@@ -2141,6 +2149,7 @@ function readActiveApplicationSettings(row, previousValue = {}) {
   if (excludeSelfInput) settings.excludeSelf = Boolean(excludeSelfInput.checked);
   if (radiusFormulaInput) settings.radiusFormula = radiusFormulaInput.value;
   if (wallsBlockInput) settings.wallsBlock = Boolean(wallsBlockInput.checked);
+  if (persistentInput) settings.persistent = Boolean(persistentInput.checked);
   if (changeEvaluationInput) settings.changeEvaluation = changeEvaluationInput.value;
   return preserveMissingActiveApplicationTargetSettings(settings, previousValue);
 }
@@ -2706,6 +2715,23 @@ function readFixedFunctionSettings(row) {
       treatmentEffectivenessPercentBonus: row.querySelector("[data-field='fixed.anatomyStudy.treatmentEffectivenessPercentBonus']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.specialMix.energyCost']")?.value,
+      actionPointCost: row.querySelector("[data-field='fixed.specialMix.actionPointCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.specialMix.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.specialMix.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.specialMix.overloadDurationUnit']")?.value
+      ),
+      effectivenessPercentBonus: row.querySelector("[data-field='fixed.specialMix.effectivenessPercentBonus']")?.value,
+      durationPercentBonus: row.querySelector("[data-field='fixed.specialMix.durationPercentBonus']")?.value,
+      spoilDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.specialMix.spoilDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.specialMix.spoilDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -3226,6 +3252,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedAnatomyStudySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
     ? prepareAnatomyStudySettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedSpecialMixSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix
+    ? prepareSpecialMixSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3297,6 +3326,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
     fixedAnatomyStudySettings,
+    fixedSpecialMixSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,
@@ -3698,6 +3728,11 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
   return {
     ...normalized,
+    treatmentClassShift: {
+      ...normalized.treatmentClassShift,
+      shiftsTraumas: normalized.treatmentClassShift.itemTypes.includes("trauma"),
+      shiftsDiseases: normalized.treatmentClassShift.itemTypes.includes("disease")
+    },
     activationCosts: prepareActiveApplicationCostRowsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
@@ -4271,6 +4306,19 @@ function prepareAnatomyStudySettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: overloadDuration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareSpecialMixSettingsForDisplay(settings = {}) {
+  const normalized = normalizeSpecialMixSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const spoilDuration = splitDurationSeconds(normalized.spoilDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    spoilDurationAmount: spoilDuration.amount,
+    spoilDurationUnitChoices: buildDurationUnitChoices(spoilDuration.unit)
   };
 }
 
@@ -4987,7 +5035,11 @@ function getEventTrackingTargetLabel(group = "") {
     owner: localizeEventReactionUi("TrackingTargetOptions.Owner", "Owner"),
     ally: localizeEventReactionUi("TrackingTargetOptions.Ally", "Ally"),
     enemy: localizeEventReactionUi("TrackingTargetOptions.Enemy", "Enemy"),
-    neutral: localizeEventReactionUi("TrackingTargetOptions.Neutral", "Neutral")
+    neutral: localizeEventReactionUi("TrackingTargetOptions.Neutral", "Neutral"),
+    activeApplicationTarget: localizeEventReactionUi(
+      "TrackingTargetOptions.ActiveApplicationTarget",
+      "Active application target"
+    )
   }[group] ?? group;
 }
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 globalThis.foundry = {
@@ -131,6 +132,60 @@ test("combat-only reactions require an active combat when requested", () => {
   assert.equal(eventReactionCombatAllows({ combatOnly: false }, { inCombat: false }), true);
   assert.equal(eventReactionCombatAllows({ combatOnly: true }, { inCombat: true }), true);
   assert.equal(eventReactionCombatAllows({ combatOnly: true }, { inCombat: false }), false);
+});
+
+test("event reaction tracks only the event recipient marked by the same ability item", () => {
+  const marker = sourceItemUuid => ({
+    flags: {
+      [SYSTEM_ID]: {
+        activeApplication: { sourceItemUuid }
+      }
+    }
+  });
+  const reactor = { uuid: "Actor.Doctor" };
+  const attacker = {
+    uuid: "Actor.Attacker",
+    effects: [marker("Actor.Doctor.Item.Care")]
+  };
+  const patient = {
+    uuid: "Actor.Patient",
+    effects: [marker("Actor.Doctor.Item.Care")]
+  };
+  const condition = {
+    eventKey: "fallout-maw.damage.resolved",
+    trackingTargets: ["activeApplicationTarget"]
+  };
+
+  assert.equal(eventReactionTrackingTargetsMatch(condition, {
+    reactorActor: reactor,
+    sourceActor: attacker,
+    targetActor: patient,
+    sourceItemUuid: "Actor.Doctor.Item.Care",
+    eventKey: condition.eventKey
+  }), true);
+  assert.equal(eventReactionTrackingTargetsMatch(condition, {
+    reactorActor: reactor,
+    sourceActor: patient,
+    targetActor: { uuid: "Actor.Other", effects: [] },
+    sourceItemUuid: "Actor.Doctor.Item.Care",
+    eventKey: condition.eventKey
+  }), false);
+  assert.equal(eventReactionTrackingTargetsMatch(condition, {
+    reactorActor: reactor,
+    sourceActor: attacker,
+    targetActor: patient,
+    sourceItemUuid: "Actor.OtherDoctor.Item.Care",
+    eventKey: condition.eventKey
+  }), false);
+});
+
+test("ability Item schema accepts the active-application tracking target", () => {
+  const source = readFileSync(
+    new URL("../src/data/models/item-data-models.mjs", import.meta.url),
+    "utf8"
+  );
+  const trackingField = source.match(/trackingTargets:\s*new ArrayField\([\s\S]*?\}\), \{ required: true, initial: \[\] \}\)/)?.[0] ?? "";
+  assert.match(trackingField, /"activeApplicationTarget"/);
 });
 
 test("event reaction status permissions default off and remain independent", () => {

@@ -196,7 +196,8 @@ export async function getMatchingEventReactionSubscriptionIds({
   const matchedConditionIds = subscriptions.filter(condition => eventReactionSubscriptionMatches(condition, envelope, reactorActorUuid, {
     reactorActor: reactor,
     sourceActor: resolved.sourceActor,
-    targetActor: resolved.targetActor
+    targetActor: resolved.targetActor,
+    sourceItemUuid: String(item?.uuid ?? "")
   })).map(condition => String(condition?.id ?? "").trim()).filter(Boolean);
   if (!matchedConditionIds.length) return [];
   const secondaryMatches = await evaluateEventReactionSecondaryConditions({

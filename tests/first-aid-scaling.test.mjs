@@ -8,7 +8,10 @@ import {
   scaleFirstAidDurationSeconds,
   scaleFirstAidSignedValue
 } from "../src/utils/first-aid-scaling.mjs";
-import { FIRST_AID_EFFECT_KEYS } from "../src/items/first-aid-effect-keys.mjs";
+import {
+  FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
+  FIRST_AID_EFFECT_KEYS
+} from "../src/items/first-aid-effect-keys.mjs";
 import {
   getFirstAidResolutionActiveUseKeys,
   isActiveUseEffectKey
@@ -95,7 +98,11 @@ test("first aid effect keys are exact and participate in active-use accounting",
 
   assert.deepEqual(
     Array.from(getFirstAidResolutionActiveUseKeys({ direction: "outgoing" })),
-    [FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent]
+    [
+      "system.costs.action",
+      FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
+      FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent
+    ]
   );
   assert.deepEqual(
     Array.from(getFirstAidResolutionActiveUseKeys({ direction: "incoming" })),
@@ -106,7 +113,8 @@ test("first aid effect keys are exact and participate in active-use accounting",
     ]
   );
   assert.equal(
-    Object.values(FIRST_AID_EFFECT_KEYS).every(key => isActiveUseEffectKey(key)),
+    [...Object.values(FIRST_AID_EFFECT_KEYS), FIRST_AID_ACTION_POINT_COST_EFFECT_KEY]
+      .every(key => isActiveUseEffectKey(key)),
     true
   );
   assert.deepEqual(

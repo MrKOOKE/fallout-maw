@@ -1102,6 +1102,35 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedSpecialMixSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Особый намес</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.specialMix.energyCost" value="{{fixedSpecialMixSettings.energyCost}}" min="0" step="1"></label>
+          <label><span>Стоимость, ОД</span><input type="number" data-field="fixed.specialMix.actionPointCost" value="{{fixedSpecialMixSettings.actionPointCost}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" data-field="fixed.specialMix.overloadEnergyCost" value="{{fixedSpecialMixSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" data-field="fixed.specialMix.overloadDurationAmount" value="{{fixedSpecialMixSettings.overloadDurationAmount}}" min="0" step="1">
+            <select data-field="fixed.specialMix.overloadDurationUnit">{{#each fixedSpecialMixSettings.overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Результат</strong>
+          <label><span>Бонус эффективности, %</span><input type="number" data-field="fixed.specialMix.effectivenessPercentBonus" value="{{fixedSpecialMixSettings.effectivenessPercentBonus}}" min="0" step="1"></label>
+          <label><span>Бонус длительности, %</span><input type="number" data-field="fixed.specialMix.durationPercentBonus" value="{{fixedSpecialMixSettings.durationPercentBonus}}" min="0" step="1"></label>
+          <label><span>Срок годности</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" data-field="fixed.specialMix.spoilDurationAmount" value="{{fixedSpecialMixSettings.spoilDurationAmount}}" min="1" step="1">
+            <select data-field="fixed.specialMix.spoilDurationUnit">{{#each fixedSpecialMixSettings.spoilDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>
@@ -2063,6 +2092,10 @@
             <span>Блокировать стенами</span>
             <input aria-label="Блокировать стенами" type="checkbox" data-field="active.wallsBlock" {{checked activeApplicationSettings.wallsBlock}}>
           </div>
+          <div class="fallout-maw-inline-checkbox">
+            <span>Бессрочная метка</span>
+            <input aria-label="Бессрочная метка" type="checkbox" data-field="active.persistent" {{checked activeApplicationSettings.persistent}}>
+          </div>
           <label>
             <span>Формулы изменений</span>
             <select data-field="active.changeEvaluation">
@@ -2099,6 +2132,24 @@
           </div>
           {{/if}}
         </div>
+      </fieldset>
+      <fieldset class="fallout-maw-fieldset">
+        <legend>Разовое изменение класса травм/болезней</legend>
+        <div class="fallout-maw-fixed-settings-row">
+          <div class="fallout-maw-inline-checkbox">
+            <span>Травмы</span>
+            <input aria-label="Травмы" type="checkbox" data-field="active.treatmentClassItemType" value="trauma" {{checked activeApplicationSettings.treatmentClassShift.shiftsTraumas}}>
+          </div>
+          <div class="fallout-maw-inline-checkbox">
+            <span>Болезни</span>
+            <input aria-label="Болезни" type="checkbox" data-field="active.treatmentClassItemType" value="disease" {{checked activeApplicationSettings.treatmentClassShift.shiftsDiseases}}>
+          </div>
+          <label>
+            <span>Изменение класса</span>
+            <input type="number" data-field="active.treatmentClassSteps" value="{{activeApplicationSettings.treatmentClassShift.steps}}" min="-4" max="4" step="1">
+          </label>
+        </div>
+        <p class="fallout-maw-hint">Разово изменяет класс D/C/B/A/S у всех уже существующих состояний выбранных типов. Отрицательное значение понижает класс; изменение не исчезает вместе с эффектом.</p>
       </fieldset>
     </div>
     {{/if}}

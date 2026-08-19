@@ -449,7 +449,8 @@
           "Owner": "Владелец",
           "Ally": "Союзник",
           "Enemy": "Враг",
-          "Neutral": "Нейтрал"
+          "Neutral": "Нейтрал",
+          "ActiveApplicationTarget": "Носитель метки этой способности"
         },
         "EventSubjects": {
           "Reactor": "Реагирующий",
@@ -1963,6 +1964,7 @@
       "CombatDamageFlat": "Урон, плоский",
       "CombatDamagePercent": "Урон, %",
       "FirstAidGroup": "Первая помощь",
+      "FirstAidActionPointCost": "Стоимость применения предметов первой помощи",
       "FirstAidIncomingEffectiveness": "Входящая эффективность препаратов",
       "FirstAidOutgoingEffectiveness": "Исходящая эффективность препаратов",
       "FirstAidDuration": "Длительность препаратов",
@@ -1998,6 +2000,7 @@
       "ReverseLabel": "{label} (в мою сторону)",
       "Disable": "Отключить",
       "Disabled": "Отключен",
+      "Suppressed": "Подавлено",
       "Description": "Описание эффекта",
       "Duration": "Длительность эффекта",
       "RemainingUses": "Осталось применений",

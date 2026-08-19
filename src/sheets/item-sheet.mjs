@@ -131,6 +131,7 @@ import {
   normalizeFullForceSettings,
   normalizeGoodEnoughSettings,
   normalizeAnatomyStudySettings,
+  normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
@@ -7308,6 +7309,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedAnatomyStudySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
     ? prepareAnatomyStudySettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedSpecialMixSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix
+    ? prepareSpecialMixSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7387,6 +7391,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedHeightenedConcentrationSettings,
     fixedGoodEnoughSettings,
     fixedAnatomyStudySettings,
+    fixedSpecialMixSettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
@@ -7606,6 +7611,11 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
   return {
     ...normalized,
+    treatmentClassShift: {
+      ...normalized.treatmentClassShift,
+      shiftsTraumas: normalized.treatmentClassShift.itemTypes.includes("trauma"),
+      shiftsDiseases: normalized.treatmentClassShift.itemTypes.includes("disease")
+    },
     activationCosts: prepareActiveApplicationCostsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
@@ -7913,6 +7923,19 @@ function prepareAnatomyStudySettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: overloadDuration.amount,
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareSpecialMixSettingsForDisplay(settings = {}) {
+  const normalized = normalizeSpecialMixSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const spoilDuration = splitAbilityDurationSeconds(normalized.spoilDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    spoilDurationAmount: spoilDuration.amount,
+    spoilDurationUnitChoices: buildAbilityDurationUnitChoices(spoilDuration.unit)
   };
 }
 
@@ -8610,7 +8633,11 @@ function getAbilityEventTrackingTargetLabel(group = "") {
     owner: localizeAbilityEventReactionUi("TrackingTargetOptions.Owner", "Owner"),
     ally: localizeAbilityEventReactionUi("TrackingTargetOptions.Ally", "Ally"),
     enemy: localizeAbilityEventReactionUi("TrackingTargetOptions.Enemy", "Enemy"),
-    neutral: localizeAbilityEventReactionUi("TrackingTargetOptions.Neutral", "Neutral")
+    neutral: localizeAbilityEventReactionUi("TrackingTargetOptions.Neutral", "Neutral"),
+    activeApplicationTarget: localizeAbilityEventReactionUi(
+      "TrackingTargetOptions.ActiveApplicationTarget",
+      "Active application target"
+    )
   }[group] ?? group;
 }
 
@@ -9790,6 +9817,11 @@ function normalizeSubmittedActiveApplicationFunctions(form = null, submitData = 
       foundry.utils.setProperty(submitData, `${settingsPath}.wallsBlock`, Boolean(wallsBlockInput.checked));
     }
 
+    const persistentInput = row.querySelector("[data-active-application-persistent]");
+    if (persistentInput) {
+      foundry.utils.setProperty(submitData, `${settingsPath}.persistent`, Boolean(persistentInput.checked));
+    }
+
     const excludeSelfInput = row.querySelector("[data-active-application-exclude-self]");
     if (excludeSelfInput) {
       foundry.utils.setProperty(submitData, `${settingsPath}.excludeSelf`, Boolean(excludeSelfInput.checked));
@@ -9888,6 +9920,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-anatomy-study-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-special-mix-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-special-mix-overload-duration-unit]")?.value
+      );
+      const spoilDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-special-mix-spoil-duration-amount]")?.value,
+        row.querySelector("[data-fixed-special-mix-spoil-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.spoilDurationSeconds`, spoilDurationSeconds);
       continue;
     }
 

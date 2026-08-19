@@ -1198,6 +1198,180 @@ body #prosemirror-dropdown {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
 
+.fallout-maw-special-mix-dialog {
+  display: grid;
+  gap: 12px;
+  color: #d8c9b5;
+}
+
+.fallout-maw-special-mix-dialog > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.fallout-maw-special-mix-dialog > header p {
+  margin: 0;
+}
+
+.fallout-maw-special-mix-dialog > header strong {
+  flex: 0 0 auto;
+  color: #ead2a8;
+}
+
+.fallout-maw-special-mix-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.fallout-maw-special-mix-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.fallout-maw-special-mix-card {
+  display: grid;
+  grid-template-columns: 18px 46px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(184, 164, 134, 0.35);
+  border-radius: 5px;
+  background: rgba(25, 22, 24, 0.82);
+  cursor: pointer;
+}
+
+.fallout-maw-special-mix-card:hover,
+.fallout-maw-special-mix-card.selected {
+  border-color: #d0ad72;
+  background: rgba(78, 61, 43, 0.74);
+}
+
+.fallout-maw-special-mix-card:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fallout-maw-special-mix-card img {
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(184, 164, 134, 0.3);
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.fallout-maw-special-mix-card-content {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.fallout-maw-special-mix-card-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fallout-maw-special-mix-card-heading strong,
+.fallout-maw-special-mix-card-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fallout-maw-special-mix-card-heading small,
+.fallout-maw-special-mix-empty {
+  color: #aa9d8e;
+  font-size: 0.88em;
+}
+
+.fallout-maw-special-mix-effects {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fallout-maw-special-mix-effects li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.88em;
+}
+
+.fallout-maw-special-mix-effects li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-special-mix-effects li b {
+  color: #ead2a8;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fallout-maw-special-mix-effects .fallout-maw-special-mix-effect-section {
+  display: block;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(184, 164, 134, 0.22);
+  color: #cdb995;
+}
+
+.fallout-maw-special-mix-effects .fallout-maw-special-mix-effect-section:first-child {
+  margin-top: 0;
+}
+
+.fallout-maw-special-mix-preview {
+  display: grid;
+  gap: 7px;
+  padding: 9px 11px;
+  border: 1px solid rgba(208, 173, 114, 0.55);
+  border-radius: 5px;
+  background: rgba(54, 43, 33, 0.55);
+}
+
+.fallout-maw-special-mix-preview > span:not(.fallout-maw-special-mix-preview-heading) {
+  color: #aa9d8e;
+}
+
+.fallout-maw-special-mix-preview-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.fallout-maw-special-mix-preview-heading small {
+  color: #c1ad8f;
+}
+
+.fallout-maw-special-mix-dialog > footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fallout-maw-special-mix-dialog > footer span {
+  padding: 4px 8px;
+  border: 1px solid rgba(184, 164, 134, 0.3);
+  border-radius: 999px;
+  color: #d8c39e;
+  background: rgba(41, 36, 33, 0.72);
+}
+
+@media (max-width: 900px) {
+  .fallout-maw-special-mix-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fallout-maw-skill-advancement-settings > .fallout-maw-skill-development-limit-toggle {
   align-items: center;
   display: flex;

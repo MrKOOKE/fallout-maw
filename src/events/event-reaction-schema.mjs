@@ -9,6 +9,10 @@ import {
   getActorFactionBelongs,
   getRelationTo
 } from "../settings/factions.mjs";
+import { SYSTEM_ID } from "../constants.mjs";
+
+const ACTIVE_APPLICATION_TRACKING_TARGET = "activeApplicationTarget";
+const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 
 const TRACKING_SOURCE_ROLES = new Set([
   "subject", "source", "initiator", "attacker", "healer", "observer"
@@ -159,12 +163,23 @@ export function eventReactionTrackingTargetsMatch(condition = {}, {
   reactorActor = null,
   sourceActor = null,
   targetActor = null,
+  sourceItemUuid = "",
   eventKey = "",
   roles = null,
   resolveRelation = null
 } = {}) {
   const accepted = new Set(normalizeEventTrackingTargets(condition?.trackingTargets));
   if (!accepted.size) return true;
+  if (
+    accepted.has(ACTIVE_APPLICATION_TRACKING_TARGET)
+    && eventReactionActiveApplicationTargetMatches({
+      sourceActor,
+      targetActor,
+      sourceItemUuid,
+      eventKey: eventKey || condition?.eventKey,
+      roles
+    })
+  ) return true;
   const participants = getEventReactionTrackingParticipants({
     eventKey: eventKey || condition?.eventKey,
     sourceActor,
@@ -172,8 +187,32 @@ export function eventReactionTrackingTargetsMatch(condition = {}, {
     roles
   });
   if (!participants.length) return false;
-  const matched = participants.some(actor => accepted.has(getEventTrackingRelation(reactorActor, actor, { resolveRelation })));
-  return matched;
+  return participants.some(actor => accepted.has(getEventTrackingRelation(reactorActor, actor, { resolveRelation })));
+}
+
+/** Match the actor receiving this event against a marker created by the same ability Item. */
+export function eventReactionActiveApplicationTargetMatches({
+  sourceActor = null,
+  targetActor = null,
+  sourceItemUuid = "",
+  eventKey = "",
+  roles = null
+} = {}) {
+  const normalizedSourceItemUuid = String(sourceItemUuid ?? "").trim();
+  if (!normalizedSourceItemUuid) return false;
+  const catalogRoles = Array.isArray(roles)
+    ? roles
+    : (getSystemEventDescriptor(String(eventKey ?? "").trim())?.roles ?? ["subject"]);
+  const expectsTarget = catalogRoles.some(role => TRACKING_TARGET_ROLES.has(role));
+  const recipient = expectsTarget ? targetActor : sourceActor;
+  if (!recipient) return false;
+  return Array.from(recipient?.effects ?? []).some(effect => {
+    if (effect?.disabled || effect?.isSuppressed || effect?.duration?.expired === true) return false;
+    const flag = effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)
+      ?? effect?.flags?.[SYSTEM_ID]?.[ACTIVE_APPLICATION_EFFECT_FLAG_KEY]
+      ?? null;
+    return String(flag?.sourceItemUuid ?? "").trim() === normalizedSourceItemUuid;
+  });
 }
 
 export const EVENT_REACTION_SKILL_FILTER_ALL = "*";
@@ -598,6 +637,7 @@ export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, 
   reactorActor = null,
   sourceActor = null,
   targetActor = null,
+  sourceItemUuid = "",
   inCombat = null,
   resolveRelation = null
 } = {}) {
@@ -612,6 +652,7 @@ export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, 
     reactorActor: reactorActor ?? { uuid: reactorActorUuid },
     sourceActor: sourceActor ?? actorStubFromParticipant(envelope?.source),
     targetActor: targetActor ?? actorStubFromParticipant(envelope?.target),
+    sourceItemUuid,
     eventKey,
     resolveRelation
   });

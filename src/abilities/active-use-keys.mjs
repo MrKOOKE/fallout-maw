@@ -37,7 +37,10 @@ import {
   DAMAGE_BARRIER_ALL_EFFECT_KEY,
   getDamageBarrierEffectKey
 } from "../combat/damage-barriers.mjs";
-import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
+import {
+  FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
+  FIRST_AID_EFFECT_KEYS
+} from "../items/first-aid-effect-keys.mjs";
 import { isNeedChangeModifierEffectKey } from "../needs/need-change-effect-keys.mjs";
 import { getConfiguredWeaponProficiencyKeys } from "../utils/item-functions.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
@@ -278,7 +281,12 @@ export function getFirstAidResolutionActiveUseKeys({
   includeWithdrawalResistance = true
 } = {}) {
   if (direction === "outgoing") {
-    return new Set(includeEffectiveness ? [FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent] : []);
+    const keys = new Set([
+      "system.costs.action",
+      FIRST_AID_ACTION_POINT_COST_EFFECT_KEY
+    ]);
+    if (includeEffectiveness) keys.add(FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent);
+    return keys;
   }
   const keys = new Set();
   if (includeEffectiveness) keys.add(FIRST_AID_EFFECT_KEYS.incomingEffectivenessPercent);

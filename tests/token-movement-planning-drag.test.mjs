@@ -67,6 +67,7 @@ globalThis.foundry = {
   utils: {
     randomID: () => "test-id",
     deepClone: value => structuredClone(value),
+    mergeObject: (original, other) => ({ ...structuredClone(original), ...structuredClone(other) }),
     escapeHTML: value => String(value),
     cleanHTML: value => String(value)
   }
@@ -109,6 +110,70 @@ test("effect tooltip displays universal barrier points without treating them as 
   assert.doesNotMatch(html, /<span>\+58<\/span>/);
 });
 
+test("effect tooltip displays trauma and disease suppression changes", () => {
+  const html = buildEffectTooltipHTML({
+    name: "Просто царапины",
+    img: "icons/svg/aura.svg",
+    system: {
+      changes: [{
+        key: "fallout-maw.suppression.traumas.count",
+        type: "add",
+        value: "2.8"
+      }, {
+        key: "fallout-maw.suppression.diseases.all",
+        type: "add",
+        value: "1"
+      }]
+    },
+    flags: {}
+  });
+
+  assert.match(html, /Травмы: подавить случайные/);
+  assert.match(html, /Болезни: подавить все/);
+  assert.match(html, /<span>\+2<\/span>/);
+  assert.match(html, /<span>\+1<\/span>/);
+});
+
+test("effect tooltip marks an actually suppressed trauma", () => {
+  const trauma = { id: "trauma-1", type: "trauma" };
+  const traumaEffect = {
+    id: "trauma-effect",
+    name: "Огнестрельное ранение туловища",
+    img: "icons/svg/blood.svg",
+    parent: trauma,
+    system: { changes: [] },
+    flags: {}
+  };
+  const suppressionEffect = {
+    id: "suppression-effect",
+    uuid: "Actor.Target.ActiveEffect.Suppression",
+    parent: { type: "actor" },
+    system: {
+      changes: [{
+        key: "fallout-maw.suppression.traumas.count",
+        type: "add",
+        value: "1"
+      }]
+    }
+  };
+  const actor = {
+    id: "target",
+    uuid: "Actor.Target",
+    itemTypes: { trauma: [trauma], disease: [] },
+    effects: [suppressionEffect]
+  };
+  const previousLocalize = game.i18n.localize;
+  game.i18n.localize = key => key === "FALLOUTMAW.Effects.Suppressed"
+    ? "Подавлено"
+    : previousLocalize(key);
+  try {
+    const html = buildEffectTooltipHTML(traumaEffect, actor);
+    assert.match(html, /Огнестрельное ранение туловища \(Подавлено\)/);
+  } finally {
+    game.i18n.localize = previousLocalize;
+  }
+});
+
 test("effect tooltip exposes a condition-triggering aura stored by the Active Effect", () => {
   const html = buildEffectTooltipHTML({
     name: "Блокада",
@@ -136,6 +201,83 @@ test("effect tooltip exposes a condition-triggering aura stored by the Active Ef
   assert.match(html, /Аура/);
   assert.match(html, /враги, нейтралы/);
   assert.match(html, /не чаще раза в 6 с/);
+});
+
+test("active application tooltip shows the source ability damage progress", () => {
+  const previousFromUuidSync = globalThis.fromUuidSync;
+  globalThis.fromUuidSync = uuid => uuid === "Actor.Doctor.Item.Care" ? {
+    documentName: "Item",
+    type: "ability",
+    system: {
+      functions: [{
+        id: "patient-reward",
+        type: "effectChanges",
+        changes: [],
+        conditions: [{
+          id: "patient-damage",
+          type: "eventReaction",
+          eventKey: "fallout-maw.damage.resolved",
+          progressRequired: 200,
+          trackingTargets: ["activeApplicationTarget"]
+        }, {
+          id: "unrelated-progress",
+          type: "eventReaction",
+          eventKey: "fallout-maw.research.progressed",
+          progressRequired: 50,
+          trackingTargets: ["owner"]
+        }]
+      }]
+    },
+    flags: {
+      "fallout-maw": {
+        eventReactionProgress: {
+          "patient-reward_patient-damage": { current: 85 },
+          "patient-reward_unrelated-progress": { current: 15 }
+        }
+      }
+    }
+  } : null;
+  try {
+    const html = buildEffectTooltipHTML({
+      name: "Опекаемый пациент",
+      img: "icons/svg/aura.svg",
+      system: { changes: [] },
+      flags: {
+        "fallout-maw": {
+          activeApplication: {
+            sourceItemUuid: "Actor.Doctor.Item.Care",
+            functionId: "patient-mark",
+            functionData: { id: "patient-mark", type: "activeApplication" }
+          }
+        }
+      }
+    });
+
+    assert.match(html, /Damage received/);
+    assert.match(html, /85 \/ 200/);
+    assert.doesNotMatch(html, /Research progress/);
+    assert.doesNotMatch(html, /15 \/ 50/);
+
+    const rewardHTML = buildEffectTooltipHTML({
+      name: "Опекаемый пациент",
+      img: "icons/svg/aura.svg",
+      origin: "Actor.Doctor.Item.Care",
+      duration: { label: "6 с" },
+      system: { changes: [] },
+      flags: {
+        "fallout-maw": {
+          eventReaction: {
+            sourceItemUuid: "Actor.Doctor.Item.Care",
+            functionId: "patient-reward"
+          }
+        }
+      }
+    });
+    assert.doesNotMatch(rewardHTML, /Damage received/);
+    assert.doesNotMatch(rewardHTML, /85 \/ 200/);
+  } finally {
+    globalThis.fromUuidSync = previousFromUuidSync;
+  }
 });
 
 function createToken(id = "executor") {

@@ -76,10 +76,14 @@ const {
   buildReverseInteractionEffectKeyTokens
 } = await import("../src/utils/effect-key-tokens.mjs");
 const {
+  getFirstAidResolutionActiveUseKeys,
   getSkillCheckActiveUseKeys,
   getWeaponActionActiveUseKeys,
   isActiveUseEffectKey
 } = await import("../src/abilities/active-use-keys.mjs");
+const {
+  FIRST_AID_ACTION_POINT_COST_EFFECT_KEY
+} = await import("../src/items/first-aid-effect-keys.mjs");
 const {
   getSkillCheckActionEffectKeys,
   SKILL_CHECK_ACTIONS
@@ -139,6 +143,21 @@ test("condition loss multiplier is registered and participates only when an atta
     ...actionContext,
     weaponData: { resourceCosts: [] }
   }).has(key), false);
+});
+
+test("first-aid application cost is registered as its own active-use key", () => {
+  const token = buildEffectKeyTokens()
+    .find(entry => entry.path === FIRST_AID_ACTION_POINT_COST_EFFECT_KEY);
+  const activeUseKeys = getFirstAidResolutionActiveUseKeys({
+    direction: "outgoing",
+    includeEffectiveness: false
+  });
+
+  assert.equal(token?.code, "firstAidCost");
+  assert.equal(token?.label, "Стоимость применения предметов первой помощи");
+  assert.equal(activeUseKeys.has("system.costs.action"), true);
+  assert.equal(activeUseKeys.has(FIRST_AID_ACTION_POINT_COST_EFFECT_KEY), true);
+  assert.equal(isActiveUseEffectKey(FIRST_AID_ACTION_POINT_COST_EFFECT_KEY), true);
 });
 
 test("aimed effective-range controls are registered and active only for ranged aimed checks", () => {

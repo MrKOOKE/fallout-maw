@@ -147,6 +147,8 @@ export const ABILITY_ACTION_POINT_COST_MODES = Object.freeze({
   actual: "actual"
 });
 
+export const ABILITY_TREATMENT_CLASS_ITEM_TYPES = Object.freeze(["trauma", "disease"]);
+
 export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   deusExMachina: "deusExMachina",
   curseAndBlessing: "curseAndBlessing",
@@ -186,7 +188,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   heightenedConcentration: "heightenedConcentration",
   grapplingMaster: "grapplingMaster",
   goodEnough: "goodEnough",
-  anatomyStudy: "anatomyStudy"
+  anatomyStudy: "anatomyStudy",
+  specialMix: "specialMix"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -233,7 +236,13 @@ export const ABILITY_ATTACK_DISTANCE_SIDES = Object.freeze({
   both: "both"
 });
 
-export const ABILITY_EVENT_TRACKING_TARGETS = Object.freeze(["owner", "ally", "enemy", "neutral"]);
+export const ABILITY_EVENT_TRACKING_TARGETS = Object.freeze([
+  "owner",
+  "ally",
+  "enemy",
+  "neutral",
+  "activeApplicationTarget"
+]);
 
 export const ABILITY_EVENT_SUBJECTS = Object.freeze({
   reactor: "reactor",
@@ -1182,6 +1191,10 @@ export function normalizeActiveApplicationSettings(value = {}) {
     includeSelf: !excludeSelf,
     radiusFormula: normalizeFormulaText(value?.radiusFormula ?? value?.targetRadiusFormula, ""),
     wallsBlock: normalizeBoolean(value?.wallsBlock ?? value?.targetWallsBlock, false),
+    // A persistent application creates an Active Effect without a duration.
+    // This is intended for marks that remain until explicitly removed.
+    persistent: normalizeBoolean(value?.persistent, false),
+    treatmentClassShift: normalizeTreatmentClassShift(value?.treatmentClassShift),
     // Active applications historically evaluated each change against the
     // recipient actor.  Keep that behavior unless a constructor explicitly
     // requests a source snapshot (as Encouraging Speech does).
@@ -1207,8 +1220,18 @@ const ACTIVE_APPLICATION_TARGET_SETTING_KEYS = Object.freeze([
   "excludeSelf",
   "radiusFormula",
   "wallsBlock",
+  "persistent",
+  "treatmentClassShift",
   "changeEvaluation"
 ]);
+
+export function normalizeTreatmentClassShift(value = {}) {
+  return {
+    itemTypes: normalizeStringList(value?.itemTypes)
+      .filter(type => ABILITY_TREATMENT_CLASS_ITEM_TYPES.includes(type)),
+    steps: Math.max(-4, Math.min(4, toInteger(value?.steps)))
+  };
+}
 
 export function preserveMissingActiveApplicationTargetSettings(value = {}, previous = {}) {
   const current = value !== null && typeof value === "object" && !Array.isArray(value)
@@ -2132,7 +2155,23 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
     return normalizeAnatomyStudySettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix) {
+    return normalizeSpecialMixSettings(value);
+  }
   return {};
+}
+
+/** "Особый намес": combine two medicines into one short-lived dose. */
+export function normalizeSpecialMixSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 30)),
+    actionPointCost: Math.max(0, toInteger(value?.actionPointCost ?? 2)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 50)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 21600)),
+    effectivenessPercentBonus: Math.max(0, toInteger(value?.effectivenessPercentBonus ?? 100)),
+    durationPercentBonus: Math.max(0, toInteger(value?.durationPercentBonus ?? 50)),
+    spoilDurationSeconds: Math.max(1, toInteger(value?.spoilDurationSeconds ?? 1800))
+  };
 }
 
 /** "Изучение анатомии": permanent race-specific knowledge. */

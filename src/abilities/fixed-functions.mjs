@@ -1,6 +1,13 @@
 import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import {
+  getCharacteristicSettings,
+  getCreatureOptions,
+  getCurrencySettings,
+  getDamageTypeSettings,
+  getNeedSettings,
+  getSkillSettings
+} from "../settings/accessors.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
@@ -32,6 +39,7 @@ import {
   normalizeGrapplingMasterSettings,
   normalizeGoodEnoughSettings,
   normalizeAnatomyStudySettings,
+  normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -115,6 +123,7 @@ import {
 } from "./deus-ex-machina-progress-runtime.mjs";
 import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -152,7 +161,9 @@ import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSys
 import {
   canSpendCombatActionPoints,
   isActorInActiveCombat,
-  spendCombatActionPoints
+  refundCombatActionPointReceipt,
+  spendCombatActionPoints,
+  spendCombatActionPointsWithReceipt
 } from "../combat/reaction-resources.mjs";
 import { notifyCombatResourcesSpent, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
 import {
@@ -183,21 +194,42 @@ import {
   getRelationTo
 } from "../settings/factions.mjs";
 import { dropActorInventoryItem } from "../items/dropped-items.mjs";
-import { prepareInventoryContext, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
-  ROOT_CONTAINER_ID
+  getActorInventoryGridDimensions,
+  getActorRootInventoryGridOptions,
+  prepareInventoryContext,
+  normalizeImagePath
+} from "../utils/actor-display-data.mjs";
+import {
+  ROOT_CONTAINER_ID,
+  createStoredPlacement,
+  findFirstAvailableResolvedInventoryPlacement,
+  getContainerInventoryGridOptions,
+  getContextInventoryItems,
+  getItemContainerParentId
 } from "../utils/inventory-containers.mjs";
 import {
   executeInventoryMutation,
-  expandInventoryDeleteIds
+  expandInventoryDeleteIds,
+  projectActorInventoryState
 } from "../inventory/mutation.mjs";
 import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
 import {
   getDeployedWeaponSetKey,
   ITEM_FUNCTIONS,
   getEnabledWeaponFunctions,
+  getFirstAidChargesData,
   hasItemFunction
 } from "../utils/item-functions.mjs";
+import { planInventoryItemConsumption } from "../inventory/consume.mjs";
+import {
+  areDistinctSpecialMixMedicines,
+  buildSpecialMixItemData,
+  getSpecialMixFirstAidDetails,
+  getSpecialMixMedicineDetails,
+  isSpecialMixMedicineEligible,
+  mergeSpecialMixFirstAid
+} from "./special-mix.mjs";
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import {
@@ -255,6 +287,11 @@ import {
   prepareActiveApplicationAuraFunctionData,
   resolveActiveApplicationMarkerChanges
 } from "./active-application-effects.mjs";
+import {
+  applyActiveApplicationItemMutations,
+  hasActiveApplicationItemMutations,
+  rollbackActiveApplicationItemMutations
+} from "./active-application-item-mutations.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -630,6 +667,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy,
       fixedSettings: normalizeAnatomyStudySettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.specialMix,
+    label: "Особый намес",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.specialMix,
+      fixedSettings: normalizeSpecialMixSettings()
     })
   })
 ]);
@@ -1130,6 +1176,12 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix) {
+    const used = await useSpecialMix(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(abilityFunction.fixedKey)) {
     const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -1138,6 +1190,304 @@ export async function useFixedAbilityFunctionItem({
 
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
   return true;
+}
+
+async function useSpecialMix(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeSpecialMixSettings(abilityFunction.fixedSettings);
+  const medicines = (actor.items?.contents ?? [])
+    .filter(isSpecialMixMedicineEligible)
+    .sort((left, right) => String(left.name).localeCompare(String(right.name), "ru"));
+  if (medicines.length < 2 || !hasDistinctSpecialMixPair(medicines)) {
+    ui.notifications.warn(`${abilityName}: нужны два разных доступных препарата.`);
+    return false;
+  }
+
+  const selectedIds = await promptSpecialMixMedicines(abilityName, medicines, settings);
+  if (!Array.isArray(selectedIds) || selectedIds.length !== 2) return false;
+  const [firstItem, secondItem] = selectedIds.map(id => actor.items.get(String(id)));
+  if (
+    !isSpecialMixMedicineEligible(firstItem)
+    || !isSpecialMixMedicineEligible(secondItem)
+    || !areDistinctSpecialMixMedicines(firstItem, secondItem)
+  ) {
+    ui.notifications.warn(`${abilityName}: выбранные препараты уже недоступны или совпадают.`);
+    return false;
+  }
+
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!canSpendCombatActionPoints(actor, settings.actionPointCost, { label: "особого намеса" })) return false;
+
+  let inventoryPlan;
+  try {
+    inventoryPlan = prepareSpecialMixInventoryPlan(actor, firstItem, secondItem, abilityItem, settings);
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Failed to prepare special mix`, error);
+    ui.notifications.warn(`${abilityName}: ${formatSpecialMixInventoryError(error)}`);
+    return false;
+  }
+
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  const actionPointTransaction = settings.actionPointCost > 0
+    ? await spendCombatActionPointsWithReceipt(actor, settings.actionPointCost, {
+      suppressResourceNotification: true,
+      label: "особого намеса"
+    })
+    : { spent: 0, receipt: null };
+  if (isActorInActiveCombat(actor) && actionPointTransaction.spent !== settings.actionPointCost) {
+    await refundEnergy(actor, energyCost);
+    ui.notifications.warn(`${abilityName}: не удалось потратить ${settings.actionPointCost} ОД.`);
+    return false;
+  }
+
+  let mutation;
+  try {
+    mutation = await executeInventoryMutation({ actor, ...inventoryPlan }, {
+      reason: "special-mix",
+      render: true
+    });
+  } catch (error) {
+    await Promise.allSettled([
+      refundEnergy(actor, energyCost),
+      refundCombatActionPointReceipt(actor, actionPointTransaction.receipt, { label: "особого намеса" })
+    ]);
+    console.error(`${SYSTEM_ID} | Failed to create special mix`, error);
+    ui.notifications.error(`${abilityName}: не удалось создать препарат; энергия и ОД возвращены.`);
+    return false;
+  }
+
+  if (actionPointTransaction.spent > 0 && actionPointTransaction.receipt?.resourceKey) {
+    await notifyCombatResourcesSpent(actor, {
+      [actionPointTransaction.receipt.resourceKey]: actionPointTransaction.spent
+    }, { label: "особого намеса" });
+  }
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  const createdItem = mutation.createdDocuments?.[0];
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Создан «${createdItem?.name ?? inventoryPlan.creates[0].name}»: 1/1 заряд, срок годности ${formatDuration(settings.spoilDurationSeconds)}.`
+  );
+  return true;
+}
+
+function hasDistinctSpecialMixPair(medicines) {
+  for (let index = 0; index < medicines.length - 1; index += 1) {
+    if (medicines.slice(index + 1).some(item => areDistinctSpecialMixMedicines(medicines[index], item))) return true;
+  }
+  return false;
+}
+
+async function promptSpecialMixMedicines(abilityName, medicines, settings) {
+  const labels = getSpecialMixDetailLabels();
+  const medicineById = new Map(medicines.map(item => [String(item.id), item]));
+  const rows = medicines.map(item => {
+    const details = getSpecialMixMedicineDetails(item, labels);
+    return `
+    <label class="fallout-maw-special-mix-card" data-special-mix-card data-special-mix-identity="${escapeAttribute(String(item.name ?? "").trim().toLocaleLowerCase("ru-RU"))}">
+      <input type="checkbox" name="medicineIds" value="${escapeAttribute(item.id)}">
+      <img src="${escapeAttribute(item.img)}" alt="">
+      <span class="fallout-maw-special-mix-card-content">
+        <span class="fallout-maw-special-mix-card-heading">
+          <strong>${escapeHTML(item.name)}</strong>
+          <small>${escapeHTML(details.durationLabel)} · ${escapeHTML(details.chargesLabel)}</small>
+        </span>
+        ${buildSpecialMixDetailRows(details.rows, "Нет числовых эффектов")}
+      </span>
+    </label>
+  `;
+  }).join("");
+  const result = await DialogV2.input({
+    modal: true,
+    window: { title: `${abilityName}: смешивание` },
+    content: `
+      <div class="fallout-maw-special-mix-dialog">
+        <header>
+          <p>Выберите ровно два разных препарата. Будет потрачено по одному заряду каждого.</p>
+          <strong data-special-mix-counter>Выбрано: 0 / 2</strong>
+        </header>
+        <div class="fallout-maw-special-mix-workspace">
+          <div class="fallout-maw-special-mix-list">${rows}</div>
+          <section class="fallout-maw-special-mix-preview" data-special-mix-preview>
+            <strong>Итоговый препарат</strong>
+            <span>Выберите два препарата — здесь сразу появятся записываемые в предмет значения.</span>
+          </section>
+        </div>
+        <footer><span>Итог эффектов: сумма +${settings.effectivenessPercentBonus}%</span><span>Длительность: целое среднее +${settings.durationPercentBonus}%</span><span>Срок годности ${escapeHTML(formatDuration(settings.spoilDurationSeconds))}</span></footer>
+      </div>
+    `,
+    render: (_event, dialog) => bindSpecialMixSelection(
+      dialog.element?.querySelector?.("form") ?? dialog.element,
+      { medicineById, settings, labels }
+    ),
+    ok: {
+      label: "Смешать",
+      icon: "fa-solid fa-flask-vial",
+      callback: (_event, button) => {
+        const selected = [...button.form.querySelectorAll("input[name='medicineIds']:checked")];
+        if (selected.length !== 2) {
+          ui.notifications.warn("Выберите ровно два препарата.");
+          return "cancel";
+        }
+        return selected.map(input => String(input.value));
+      }
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 1060 },
+    rejectClose: false
+  });
+  return Array.isArray(result) ? result : null;
+}
+
+function bindSpecialMixSelection(form, { medicineById, settings, labels }) {
+  if (!form) return;
+  const inputs = [...form.querySelectorAll("input[name='medicineIds']")];
+  const counter = form.querySelector("[data-special-mix-counter]");
+  const preview = form.querySelector("[data-special-mix-preview]");
+  const sync = changed => {
+    let selected = inputs.filter(input => input.checked);
+    if (selected.length > 2 && changed) {
+      changed.checked = false;
+      selected = inputs.filter(input => input.checked);
+    }
+    const selectedNames = new Set(selected.map(input => input.closest("[data-special-mix-card]")?.dataset.specialMixIdentity));
+    for (const input of inputs) {
+      const card = input.closest("[data-special-mix-card]");
+      card?.classList.toggle("selected", input.checked);
+      const name = card?.dataset.specialMixIdentity;
+      input.disabled = !input.checked && (selected.length >= 2 || selectedNames.has(name));
+    }
+    if (counter) counter.textContent = `Выбрано: ${selected.length} / 2`;
+    if (preview) updateSpecialMixPreview(preview, selected, medicineById, settings, labels);
+  };
+  for (const input of inputs) input.addEventListener("change", () => sync(input));
+  sync(null);
+}
+
+function updateSpecialMixPreview(preview, selected, medicineById, settings, labels) {
+  if (selected.length !== 2) {
+    preview.innerHTML = `
+      <strong>Итоговый препарат</strong>
+      <span>Выберите два препарата — здесь сразу появятся записываемые в предмет значения.</span>
+    `;
+    return;
+  }
+  const first = medicineById.get(String(selected[0].value));
+  const second = medicineById.get(String(selected[1].value));
+  if (!first || !second) return;
+  const firstAid = getSpecialMixFirstAidDetails(
+    mergeSpecialMixFirstAid(first.system.functions.firstAid, second.system.functions.firstAid, settings),
+    labels
+  );
+  preview.innerHTML = `
+    <span class="fallout-maw-special-mix-preview-heading">
+      <strong>Итоговый препарат</strong>
+      <small>${escapeHTML(firstAid.durationLabel)} · ${escapeHTML(firstAid.chargesLabel)}</small>
+    </span>
+    ${buildSpecialMixDetailRows(firstAid.rows, "Нет числовых эффектов")}
+  `;
+}
+
+function buildSpecialMixDetailRows(rows, emptyText) {
+  if (!rows.length) return `<small class="fallout-maw-special-mix-empty">${escapeHTML(emptyText)}</small>`;
+  return `<ul class="fallout-maw-special-mix-effects">${rows.map(row => `
+    ${row.kind === "section"
+      ? `<li class="fallout-maw-special-mix-effect-section"><strong>${escapeHTML(row.label)}</strong></li>`
+      : `<li><span>${escapeHTML(row.label)}</span><b>${escapeHTML(row.value)}</b></li>`}
+  `).join("")}</ul>`;
+}
+
+function getSpecialMixDetailLabels() {
+  return {
+    pathLabels: new Map(buildEffectKeyTokens({ includePeriodicHealing: true })
+      .filter(token => token?.path)
+      .map(token => [token.path, token.label || token.path])),
+    needLabels: new Map(getNeedSettings().map(need => [need.key, need.label || need.key])),
+    damageTypeLabels: new Map(getDamageTypeSettings().map(type => [type.key, type.label || type.key]))
+  };
+}
+
+function prepareSpecialMixInventoryPlan(actor, firstItem, secondItem, abilityItem, settings) {
+  const consumptions = [firstItem, secondItem].map(item => planInventoryItemConsumption({
+    item,
+    amount: 1,
+    charges: getFirstAidChargesData(item),
+    chargePath: "system.functions.firstAid.charges.value"
+  }));
+  const updates = consumptions.flatMap(plan => plan.updates);
+  const deletes = consumptions.flatMap(plan => plan.deletes);
+  const projectedItems = projectActorInventoryState(actor, { updates, deletes });
+  const createData = buildSpecialMixItemData({
+    firstItem,
+    secondItem,
+    abilityItem,
+    settings,
+    startTime: Number(game.time?.worldTime) || 0
+  });
+  const commonParentId = getItemContainerParentId(firstItem) === getItemContainerParentId(secondItem)
+    ? getItemContainerParentId(firstItem)
+    : ROOT_CONTAINER_ID;
+  const parentIds = [...new Set([commonParentId, ROOT_CONTAINER_ID])];
+  let destination = null;
+
+  for (const parentId of parentIds) {
+    const context = getSpecialMixInventoryContext(actor, projectedItems, parentId);
+    if (!context) continue;
+    const placement = findFirstAvailableResolvedInventoryPlacement(
+      getContextInventoryItems(parentId, projectedItems),
+      context.columns,
+      context.rows,
+      createData,
+      projectedItems,
+      [],
+      [],
+      context.options
+    );
+    if (placement) {
+      destination = { parentId, placement };
+      break;
+    }
+  }
+  if (!destination) {
+    const error = new Error("No inventory space for the mixed medicine.");
+    error.code = "inventory-no-space";
+    throw error;
+  }
+  createData.system.container.parentId = destination.parentId;
+  createData.system.placement = createStoredPlacement(destination.placement, createData);
+  return { updates, deletes, creates: [createData] };
+}
+
+function getSpecialMixInventoryContext(actor, projectedItems, parentId) {
+  if (parentId) {
+    const container = projectedItems.find(item => String(item?._id ?? item?.id ?? "") === String(parentId));
+    if (!container) return null;
+    const options = getContainerInventoryGridOptions(container);
+    return { columns: options.columns, rows: options.rows, options };
+  }
+  const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId) ?? null;
+  const dimensions = getActorInventoryGridDimensions(actor, race);
+  return {
+    columns: dimensions.columns,
+    rows: dimensions.rows,
+    options: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+  };
+}
+
+function formatSpecialMixInventoryError(error) {
+  if (error?.code === "inventory-no-space" || error?.code === "actor-load-limit") {
+    return "в инвентаре недостаточно места или грузоподъёмности для нового препарата.";
+  }
+  return "не удалось подготовить смешивание выбранных препаратов.";
 }
 
 async function useAnatomyStudy(actor, abilityItem, abilityFunction) {
@@ -1821,6 +2171,9 @@ async function executeActiveApplicationUse(scope, {
   sourceToken = null,
   occurrenceId = "activation"
 } = {}) {
+  const createsApplicationEffect = durationSeconds > 0 || settings.persistent;
+  const hasItemMutations = hasActiveApplicationItemMutations(settings);
+  const hasApplicationOperation = createsApplicationEffect || hasItemMutations;
   const { allowed, terminalTargets } = await gateActiveApplicationTargets(scope, {
     actor,
     abilityItem,
@@ -1945,7 +2298,7 @@ async function executeActiveApplicationUse(scope, {
     }
     return { used: false, appliedCount: 0, cancelled: true, reason: "changeSelectionCancelled" };
   }
-  const requiresRemoteEffectAuthority = durationSeconds > 0
+  const requiresRemoteEffectAuthority = hasApplicationOperation
     && allowed.some(entry => !entry.target?.actor?.isOwner);
   const requiresRemoteTrialAuthority = abilityFunctionHasTrialConsequences(abilityFunction)
     && allowed.some(entry => !entry.target?.actor?.isOwner);
@@ -2070,7 +2423,7 @@ async function executeActiveApplicationUse(scope, {
           return false;
         }
         committedPayment = payment;
-        if (durationSeconds > 0) {
+        if (hasApplicationOperation) {
           try {
             const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
               chainRef: scope.chainRef,
@@ -2145,7 +2498,7 @@ async function executeActiveApplicationUse(scope, {
         actionResult.committed
         && actionResult.attempted > 0
         && actionResult.executed === 0
-        && durationSeconds <= 0
+        && !hasApplicationOperation
         && committedPayment?.ok
       ) {
         await rollbackActiveApplicationPaymentPlan({
@@ -2256,7 +2609,7 @@ async function gateActiveApplicationTargets(scope, {
       continue;
     }
     if (
-      durationSeconds > 0
+      (durationSeconds > 0 || settings.persistent)
       && (
         !abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction)
         || activeApplicationFunctionHasRuntimeAura(abilityFunction)
@@ -2611,9 +2964,11 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   selectedChanges = null,
   costContext = null
 } = {}) {
-  if (durationSeconds <= 0) return true;
-  const startTime = Number(game.time?.worldTime) || 0;
   const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
+  const hasItemMutations = hasActiveApplicationItemMutations(settings);
+  const createsApplicationEffect = durationSeconds > 0 || settings.persistent;
+  if (!createsApplicationEffect && !hasItemMutations) return true;
+  const startTime = Number(game.time?.worldTime) || 0;
   const selectedFunction = Array.isArray(selectedChanges)
     ? { ...abilityFunction, changes: selectedChanges }
     : abilityFunction;
@@ -2666,7 +3021,9 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
         .filter(change => change.key && change.value !== "");
   }
   const createsRuntimeAuraEffect = activeApplicationFunctionHasRuntimeAura(abilityFunction);
-  const effectPlans = plans.filter(plan => plan.changes?.length || createsRuntimeAuraEffect);
+  const effectPlans = createsApplicationEffect
+    ? plans.filter(plan => plan.changes?.length || createsRuntimeAuraEffect)
+    : [];
   if (
     effectPlans.length
     && !activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets)
@@ -2697,6 +3054,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     reservations.push(reservation);
   }
   const createdEffects = [];
+  const itemMutationResults = [];
   try {
     for (const plan of effectPlans) {
       const target = plan.target;
@@ -2712,11 +3070,13 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
         disabled: false,
         showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
         start: { time: startTime },
-        duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
+        ...(durationSeconds > 0 ? {
+          duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false }
+        } : {}),
         system: { changes },
         flags: {
           [SYSTEM_ID]: {
-            kind: "temporary",
+            kind: durationSeconds > 0 ? "temporary" : "active",
             [EFFECT_LIFECYCLE_FLAG_KEY]: {
               kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
             },
@@ -2749,7 +3109,20 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
       });
       createdEffects.push(...(created ?? []));
     }
+    if (hasItemMutations) {
+      const actors = new Map(targets
+        .filter(target => target?.actor)
+        .map(target => [String(target.actor.uuid ?? target.actor.id), target.actor]));
+      for (const targetActor of actors.values()) {
+        itemMutationResults.push(await applyActiveApplicationItemMutations(
+          targetActor,
+          settings,
+          createAbilitySystemEventOptions(chainRef)
+        ));
+      }
+    }
   } catch (error) {
+    await rollbackActiveApplicationItemMutations(itemMutationResults);
     await deleteActiveApplicationEffectsSafely(createdEffects, chainRef);
     throw error;
   } finally {
@@ -3148,6 +3521,10 @@ async function processActiveApplicationEffectOperation(payload = {}) {
   };
 
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
+  const createsApplicationEffect = durationSeconds > 0
+    || normalizeActiveApplicationSettings(abilityFunction?.activeSettings).persistent;
+  const hasItemMutations = hasActiveApplicationItemMutations(settings);
+  const hasApplicationOperation = createsApplicationEffect || hasItemMutations;
   const resolvedTargets = targetTokenDocuments.map(tokenDocument => ({
     token: tokenDocument.object ?? tokenDocument,
     actor: tokenDocument.actor
@@ -3155,7 +3532,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
   const createsRuntimeAuraEffect = activeApplicationFunctionHasRuntimeAura(abilityFunction);
   if (createsRuntimeAuraEffect && durationSeconds <= 0) return false;
   if (
-    durationSeconds > 0
+    createsApplicationEffect
     && (!abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction) || createsRuntimeAuraEffect)
     && !activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, resolvedTargets)
   ) return false;
@@ -3186,7 +3563,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
 
   const sourceToken = sourceTokenDocument.object ?? sourceTokenDocument;
   try {
-    const applied = durationSeconds <= 0 || await applyActiveApplicationEffectsDirect(
+    const applied = !hasApplicationOperation || await applyActiveApplicationEffectsDirect(
         sourceActor,
         abilityItem,
         abilityFunction,
@@ -8239,6 +8616,23 @@ async function spendFullForceEnergy(actor, abilityItem, abilityFunction, energyC
 async function spendEnergy(actor, energyCost = 0, updateOptions = {}) {
   const cost = Math.max(0, toInteger(energyCost));
   return runActorEnergyMutation(actor, () => spendEnergyNow(actor, cost, updateOptions));
+}
+
+async function refundEnergy(actor, energyAmount = 0) {
+  const amount = Math.max(0, toInteger(energyAmount));
+  if (!amount) return true;
+  return runActorEnergyMutation(actor, async () => {
+    const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
+    if (!resource) return false;
+    const maximum = Math.max(0, toInteger(resource.max));
+    const nextValue = Math.min(maximum, getActorEnergy(actor) + amount);
+    const update = { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue };
+    if (Object.hasOwn(resource, "spent")) {
+      update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, maximum - nextValue);
+    }
+    await actor.update(update, { falloutMawAbilityResourceRefund: true });
+    return true;
+  });
 }
 
 async function spendEnergyNow(actor, cost = 0, updateOptions = {}) {
