@@ -71,6 +71,7 @@ import {
   getActiveApplicationEffectAuraProjectionDescriptor
 } from "./active-application-effects.mjs";
 import { isAdvancementPureValueEffectKey } from "../advancement/pure-value-keys.mjs";
+import { tokenMatchesRegionPresenceCondition } from "./region-presence-condition.mjs";
 
 const TRIGGER_CHANCE_DECISION_LIMIT = 512;
 const triggerChanceDecisions = new Map();
@@ -278,6 +279,15 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.energyConsumption) return energyConsumptionConditionApplies(actor, condition, context);
   if (condition.type === ABILITY_CONDITION_TYPES.timeOfDay) return timeOfDayConditionApplies(condition, context);
   if (condition.type === ABILITY_CONDITION_TYPES.illumination) return illuminationConditionApplies(actor, condition, context);
+  if (condition.type === ABILITY_CONDITION_TYPES.regionPresence) {
+    const token = context?.actorToken
+      ?? actor?.token
+      ?? actor?.getActiveTokens?.()?.at(0)?.document
+      ?? null;
+    return tokenMatchesRegionPresenceCondition(token, condition, {
+      worldTime: context?.worldTime ?? (Number(globalThis.game?.time?.worldTime) || 0)
+    });
+  }
 
   const targetActor = context?.targetToken?.actor
     ?? context?.targetToken?.document?.actor

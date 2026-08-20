@@ -57,6 +57,7 @@ import {
   hasPersistedContainerSpecialGridBaseAnchor
 } from "../utils/inventory-containers.mjs";
 import {
+  ABILITY_ACTION_EVENT_CONTROLS,
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_ROUTE_BUDGET_MODES,
   ABILITY_ACTION_ROUTE_EVALUATION_MODES,
@@ -131,6 +132,9 @@ import {
   normalizeFullForceSettings,
   normalizeGoodEnoughSettings,
   normalizeAnatomyStudySettings,
+  normalizeEmergencyOperationsSettings,
+  normalizeExperimentalSurgerySettings,
+  normalizeInconspicuousSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
@@ -192,6 +196,12 @@ import {
   getFixedAbilityFunctionChoices,
   getFixedAbilityFunctionLabel
 } from "../abilities/fixed-functions.mjs";
+import {
+  buildInconspicuousRoundStateUpdate,
+  getInconspicuousRoundState,
+  isInconspicuousRoundStateCurrent
+} from "../abilities/inconspicuous-state.mjs";
+import { getActorActiveCombat } from "../combat/combat-membership.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
@@ -1105,6 +1115,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.element?.querySelector("[data-choose-fixed-ability-function]"),
       event => this.#onChooseFixedAbilityFunction(event)
     );
+    this.element?.querySelectorAll("[data-fixed-inconspicuous-attacked]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onInconspicuousRoundStatusChange(event));
+    });
     this.element?.querySelector("[data-fixed-ability-function-search]")?.addEventListener("input", event => this.#onFixedAbilityFunctionSearch(event));
     this.element?.querySelectorAll("[data-fixed-rescue-mode]").forEach(select => {
       select.addEventListener("change", () => syncFixedRescueCountVisibility(select));
@@ -1304,6 +1317,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-cover]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityCover(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-region-damage-type]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityRegionDamageType(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-region-damage-type]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityRegionDamageType(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-region-special-property]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityRegionSpecialProperty(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-region-special-property]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityRegionSpecialProperty(event));
     });
     this.element?.querySelectorAll("[data-add-ability-weapon-action]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityWeaponAction(event));
@@ -3005,6 +3030,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.#submitCurrentForm({ "system.functions": functions });
   }
 
+  async #onInconspicuousRoundStatusChange(event) {
+    const select = event.currentTarget;
+    const functionId = String(select?.closest?.("[data-ability-function-row]")?.dataset.functionId ?? "");
+    const abilityFunction = normalizeAbilityFunctions(this.item?.system?.functions ?? [])
+      .find(entry => (
+        entry.id === functionId
+        && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous
+      ));
+    const actor = this.item?.actor
+      ?? (this.item?.parent?.documentName === "Actor" ? this.item.parent : null);
+    const combat = getActorActiveCombat(actor);
+    if (!abilityFunction || !combat) {
+      ui.notifications.warn("Статус «Неприметного» можно изменить только для участника текущего боя.");
+      return this.render({ force: true });
+    }
+    return this.item.update(buildInconspicuousRoundStateUpdate(abilityFunction, {
+      combat,
+      attacked: String(select?.value ?? "false") === "true"
+    }));
+  }
+
   #onFixedAbilityFunctionSearch(event) {
     const query = String(event.currentTarget?.value ?? "").trim().toLocaleLowerCase();
     const select = this.element?.querySelector("[data-choose-fixed-ability-function]");
@@ -3875,6 +3921,50 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const values = normalizeAbilityConditionValues(condition.coverKeys);
     values.splice(index, 1);
     condition.coverKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityRegionDamageType(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.damageTypeKeys);
+    const next = getFirstUnusedAbilityRegionDamageTypeKey(values);
+    if (!next) return undefined;
+    condition.damageTypeKeys = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityRegionDamageType(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-region-damage-type-index]")?.dataset.regionDamageTypeIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.damageTypeKeys);
+    values.splice(index, 1);
+    condition.damageTypeKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityRegionSpecialProperty(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.regionSpecialPropertyTypes);
+    const next = getFirstUnusedAbilityRegionSpecialPropertyType(values);
+    if (!next) return undefined;
+    condition.regionSpecialPropertyTypes = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityRegionSpecialProperty(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-region-special-property-index]")?.dataset.regionSpecialPropertyIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.regionSpecialPropertyTypes);
+    values.splice(index, 1);
+    condition.regionSpecialPropertyTypes = values;
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -7312,6 +7402,15 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedSpecialMixSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix
     ? prepareSpecialMixSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedExperimentalSurgerySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery
+    ? normalizeExperimentalSurgerySettings(entry?.fixedSettings)
+    : null;
+  const fixedEmergencyOperationsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations
+    ? prepareEmergencyOperationsSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedInconspicuousSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous
+    ? prepareInconspicuousSettingsForDisplay(entry?.fixedSettings, entry, item)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7339,7 +7438,11 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     action,
     index,
     functionIndex,
-    functionPath
+    functionPath,
+    {
+      allowEventSkillCheck: isEffectChanges && hasEventReaction,
+      allowTreatmentClassShift: isActiveApplication
+    }
   ));
   return {
     ...entry,
@@ -7392,6 +7495,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedGoodEnoughSettings,
     fixedAnatomyStudySettings,
     fixedSpecialMixSettings,
+    fixedExperimentalSurgerySettings,
+    fixedEmergencyOperationsSettings,
+    fixedInconspicuousSettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
@@ -7410,11 +7516,19 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   };
 }
 
-function prepareItemAbilityActionForDisplay(action, index, functionIndex, functionPath) {
+function prepareItemAbilityActionForDisplay(
+  action,
+  index,
+  functionIndex,
+  functionPath,
+  { allowEventSkillCheck = false, allowTreatmentClassShift = false } = {}
+) {
   const type = String(action?.type ?? "");
   const isPending = !type;
   const isWeaponAttack = type === ABILITY_ACTION_TYPES.weaponAttack;
   const isMovementRoute = type === ABILITY_ACTION_TYPES.movementRoute;
+  const isEventSkillCheck = type === ABILITY_ACTION_TYPES.eventSkillCheck;
+  const isTreatmentClassShift = type === ABILITY_ACTION_TYPES.treatmentClassShift;
   const typeChoices = [
     { value: "", label: "", selected: isPending },
     {
@@ -7426,7 +7540,17 @@ function prepareItemAbilityActionForDisplay(action, index, functionIndex, functi
       value: ABILITY_ACTION_TYPES.movementRoute,
       label: game.i18n.localize("FALLOUTMAW.Ability.Actions.MovementRoute"),
       selected: isMovementRoute
-    }
+    },
+    ...((allowEventSkillCheck || isEventSkillCheck) ? [{
+      value: ABILITY_ACTION_TYPES.eventSkillCheck,
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventSkillCheck"),
+      selected: isEventSkillCheck
+    }] : []),
+    ...((allowTreatmentClassShift || isTreatmentClassShift) ? [{
+      value: ABILITY_ACTION_TYPES.treatmentClassShift,
+      label: "Разовое изменение класса травм/болезней",
+      selected: isTreatmentClassShift
+    }] : [])
   ];
   const common = {
     ...action,
@@ -7454,12 +7578,46 @@ function prepareItemAbilityActionForDisplay(action, index, functionIndex, functi
     usesFixedActionPointCost: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed,
     usesActualActionPointCost: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual
   };
-  if (isPending || (!isWeaponAttack && !isMovementRoute)) {
+  if (isPending || (!isWeaponAttack && !isMovementRoute && !isEventSkillCheck && !isTreatmentClassShift)) {
     return {
       ...common,
       isPending,
       isWeaponAttack: false,
-      isMovementRoute: false
+      isMovementRoute: false,
+      isEventSkillCheck: false,
+      isTreatmentClassShift: false
+    };
+  }
+  if (isTreatmentClassShift) {
+    const shift = action?.treatmentClassShift ?? {};
+    return {
+      ...common,
+      isPending: false,
+      isWeaponAttack: false,
+      isMovementRoute: false,
+      isEventSkillCheck: false,
+      isTreatmentClassShift: true,
+      shiftsTraumas: shift.itemTypes?.includes("trauma"),
+      shiftsDiseases: shift.itemTypes?.includes("disease")
+    };
+  }
+  if (isEventSkillCheck) {
+    return {
+      ...common,
+      isPending: false,
+      isWeaponAttack: false,
+      isMovementRoute: false,
+      isEventSkillCheck: true,
+      skillChoices: [
+        { value: "", label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventSkillInherited"), selected: !action?.skillKey },
+        ...getSkillSettings().map(skill => ({
+          value: skill.key,
+          label: skill.label || skill.key,
+          selected: skill.key === action?.skillKey
+        }))
+      ],
+      skillSuccessControlChoices: buildAbilityEventControlChoices(action?.skillSuccessControl),
+      skillFailureControlChoices: buildAbilityEventControlChoices(action?.skillFailureControl)
     };
   }
   if (isMovementRoute) {
@@ -7468,6 +7626,7 @@ function prepareItemAbilityActionForDisplay(action, index, functionIndex, functi
       isPending: false,
       isWeaponAttack: false,
       isMovementRoute: true,
+      isEventSkillCheck: false,
       routeBudgetModeChoices: [
         { value: ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteBudgetMovementCost"), selected: action?.routeBudgetMode === ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost },
         { value: ABILITY_ACTION_ROUTE_BUDGET_MODES.distance, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteBudgetDistance"), selected: action?.routeBudgetMode === ABILITY_ACTION_ROUTE_BUDGET_MODES.distance }
@@ -7496,6 +7655,8 @@ function prepareItemAbilityActionForDisplay(action, index, functionIndex, functi
     functionPath,
     isPending: false,
     isWeaponAttack: true,
+    isMovementRoute: false,
+    isEventSkillCheck: false,
     typeChoices,
     attackActionRows: (allSelected ? [ABILITY_ATTACK_ACTION_ALL] : action.attackActionKeys).map((selectedKey, choiceIndex) => ({
       choiceIndex,
@@ -7611,11 +7772,6 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
   return {
     ...normalized,
-    treatmentClassShift: {
-      ...normalized.treatmentClassShift,
-      shiftsTraumas: normalized.treatmentClassShift.itemTypes.includes("trauma"),
-      shiftsDiseases: normalized.treatmentClassShift.itemTypes.includes("disease")
-    },
     activationCosts: prepareActiveApplicationCostsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
@@ -7926,6 +8082,14 @@ function prepareAnatomyStudySettingsForDisplay(settings = {}) {
   };
 }
 
+function buildAbilityEventControlChoices(selectedValue = ABILITY_ACTION_EVENT_CONTROLS.none) {
+  return [
+    { value: ABILITY_ACTION_EVENT_CONTROLS.none, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventControlNone") },
+    { value: ABILITY_ACTION_EVENT_CONTROLS.cancelCurrent, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventControlCancelCurrent") },
+    { value: ABILITY_ACTION_EVENT_CONTROLS.cancelRemaining, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventControlCancelRemaining") }
+  ].map(choice => ({ ...choice, selected: choice.value === selectedValue }));
+}
+
 function prepareSpecialMixSettingsForDisplay(settings = {}) {
   const normalized = normalizeSpecialMixSettings(settings);
   const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
@@ -7936,6 +8100,38 @@ function prepareSpecialMixSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     spoilDurationAmount: spoilDuration.amount,
     spoilDurationUnitChoices: buildAbilityDurationUnitChoices(spoilDuration.unit)
+  };
+}
+
+function prepareEmergencyOperationsSettingsForDisplay(settings = {}) {
+  const normalized = normalizeEmergencyOperationsSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareInconspicuousSettingsForDisplay(settings = {}, abilityFunction = {}, item = null) {
+  const normalized = normalizeInconspicuousSettings(settings);
+  const duration = splitDurationSeconds(normalized.stealthBonusDurationSeconds);
+  const actor = item?.actor
+    ?? (item?.parent?.documentName === "Actor" ? item.parent : null);
+  const combat = getActorActiveCombat(actor);
+  const state = getInconspicuousRoundState(item, abilityFunction);
+  const stateIsCurrent = isInconspicuousRoundStateCurrent(state, combat);
+  const attacked = stateIsCurrent && state.attacked;
+  return {
+    ...normalized,
+    stealthBonusDurationAmount: duration.amount,
+    stealthBonusDurationUnitChoices: buildDurationUnitChoices(duration.unit),
+    roundStateLabel: combat ? `Раунд ${Math.max(0, toInteger(combat.round))}` : "Вне боя",
+    roundStateDisabled: !combat,
+    roundStateChoices: [
+      { value: "false", label: "Не атакован", selected: !attacked },
+      { value: "true", label: "Атакован", selected: attacked }
+    ]
   };
 }
 
@@ -7998,6 +8194,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isSelectedChanges = type === ABILITY_CONDITION_TYPES.selectedChanges;
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
   const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
+  const isRegionPresence = type === ABILITY_CONDITION_TYPES.regionPresence;
   const isUnsupportedEventCondition = eventReactionMode
     && ((!isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies && !isSelectedChanges) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
@@ -8064,7 +8261,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isSelectedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isRegionPresence && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isSelectedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isAccumulation,
@@ -8119,6 +8316,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
       : [],
     isTimeOfDay,
     isIllumination,
+    isRegionPresence,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -8192,6 +8390,12 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     eventSubjectChoices: buildAbilityEventSubjectChoices(condition?.eventSubject),
     effectTargetChoices: buildAbilityEffectTargetChoices(condition?.effectTarget),
     illuminationLevelChoices: buildAbilityIlluminationLevelChoices(condition?.illuminationLevel),
+    regionDamageTypeRows: buildAbilityRegionDamageTypeRows(condition?.damageTypeKeys),
+    canAddRegionDamageType: Boolean(getFirstUnusedAbilityRegionDamageTypeKey(condition?.damageTypeKeys)),
+    regionSpecialPropertyRows: buildAbilityRegionSpecialPropertyRows(condition?.regionSpecialPropertyTypes),
+    canAddRegionSpecialProperty: Boolean(
+      getFirstUnusedAbilityRegionSpecialPropertyType(condition?.regionSpecialPropertyTypes)
+    ),
     healthTargetChoices: buildAbilityHealthTargetChoices(healthTarget),
     limbChoices: buildAbilityLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
@@ -8332,6 +8536,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.triggerChance, label: "Вероятность срабатывания", selected: selected === ABILITY_CONDITION_TYPES.triggerChance },
     { value: ABILITY_CONDITION_TYPES.timeOfDay, label: "Время суток", selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
     { value: ABILITY_CONDITION_TYPES.illumination, label: "Степень освещения", selected: selected === ABILITY_CONDITION_TYPES.illumination },
+    { value: ABILITY_CONDITION_TYPES.regionPresence, label: "Нахождение в области", selected: selected === ABILITY_CONDITION_TYPES.regionPresence },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
     { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
@@ -9098,6 +9303,7 @@ function isAbilityRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.triggerChance,
     ABILITY_CONDITION_TYPES.timeOfDay,
     ABILITY_CONDITION_TYPES.illumination,
+    ABILITY_CONDITION_TYPES.regionPresence,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.targetFaction,
@@ -9286,6 +9492,48 @@ function getAbilityCoverEntriesWithSelected(selected = "") {
 function getFirstUnusedAbilityCoverKey(value = []) {
   const selected = new Set(normalizeAbilityConditionValues(value));
   return getCoverSettings().entries.find(entry => !selected.has(entry.key))?.key ?? "";
+}
+
+function buildAbilityRegionDamageTypeRows(value = []) {
+  const selected = normalizeAbilityConditionValues(value);
+  return selected.map((damageTypeKey, index) => ({
+    index,
+    choices: getAbilityRegionDamageTypesWithSelected(damageTypeKey).map(entry => ({
+      value: entry.key,
+      label: entry.label || entry.key,
+      selected: entry.key === damageTypeKey,
+      disabled: entry.key !== damageTypeKey && selected.includes(entry.key)
+    }))
+  }));
+}
+
+function getAbilityRegionDamageTypesWithSelected(selected = "") {
+  const entries = [...getConfigurableDamageTypes(getDamageTypeSettings())];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries;
+}
+
+function getFirstUnusedAbilityRegionDamageTypeKey(value = []) {
+  const selected = new Set(normalizeAbilityConditionValues(value));
+  return getConfigurableDamageTypes(getDamageTypeSettings())
+    .find(entry => !selected.has(entry.key))?.key ?? "";
+}
+
+function buildAbilityRegionSpecialPropertyRows(value = []) {
+  const selected = normalizeAbilityConditionValues(value);
+  return selected.map((type, index) => ({
+    index,
+    choices: [{ value: REGION_SPECIAL_PROPERTY_SMOKE, label: "Задымление" }].map(choice => ({
+      ...choice,
+      selected: choice.value === type,
+      disabled: choice.value !== type && selected.includes(choice.value)
+    }))
+  }));
+}
+
+function getFirstUnusedAbilityRegionSpecialPropertyType(value = []) {
+  const selected = new Set(normalizeAbilityConditionValues(value));
+  return [REGION_SPECIAL_PROPERTY_SMOKE].find(type => !selected.has(type)) ?? "";
 }
 
 function normalizeAbilityConditionValues(value = []) {
@@ -9672,6 +9920,20 @@ function normalizeSubmittedAbilityActionCheckboxes(form = null, submitData = {})
     const path = String(input?.name ?? "").trim();
     if (path) foundry.utils.setProperty(submitData, path, Boolean(input.checked));
   }
+  for (const row of form?.querySelectorAll?.("[data-ability-action-row]") ?? []) {
+    const typeInput = row.querySelector("input[name$='.type'], select[name$='.type']");
+    if (typeInput?.value !== ABILITY_ACTION_TYPES.treatmentClassShift) continue;
+    const typePath = String(typeInput.name ?? "");
+    if (!typePath.endsWith(".type")) continue;
+    const actionPath = typePath.slice(0, -".type".length);
+    const itemTypes = Array.from(
+      row.querySelectorAll("[data-ability-treatment-class-item-type]") ?? []
+    )
+      .filter(input => input.checked)
+      .map(input => String(input.value ?? "").trim())
+      .filter(type => ["trauma", "disease"].includes(type));
+    foundry.utils.setProperty(submitData, `${actionPath}.treatmentClassShift.itemTypes`, itemTypes);
+  }
 }
 
 function normalizeSubmittedAbilityTrialConditions(form = null, submitData = {}) {
@@ -9934,6 +10196,28 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.spoilDurationSeconds`, spoilDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-emergency-operations-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-emergency-operations-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous) {
+      const stealthBonusDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-inconspicuous-duration-amount]")?.value,
+        row.querySelector("[data-fixed-inconspicuous-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(
+        submitData,
+        `${functionPath}.${functionIndex}.fixedSettings.stealthBonusDurationSeconds`,
+        stealthBonusDurationSeconds
+      );
       continue;
     }
 

@@ -129,6 +129,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         consciousnessRecoveryTarget: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
       }),
       stealth: new SchemaField({
+        illuminationPenaltyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         attackBonuses: new SchemaField({
           accuracy: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
           criticalChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),

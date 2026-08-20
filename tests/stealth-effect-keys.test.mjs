@@ -55,12 +55,18 @@ const {
   STEALTH_ATTACK_BONUS_EFFECT_KEYS,
   STEALTH_ATTACK_CRITICAL_CHANCE_EFFECT_KEY,
   STEALTH_ATTACK_CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
-  STEALTH_ATTACK_DAMAGE_PERCENT_EFFECT_KEY
+  STEALTH_ATTACK_DAMAGE_PERCENT_EFFECT_KEY,
+  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
 } = await import("../src/stealth/effect-keys.mjs");
 const {
   buildSmokePerceptionEffectKeyToken,
-  buildStealthAttackBonusEffectKeyTokens
+  buildStealthAttackBonusEffectKeyTokens,
+  buildStealthEffectKeyTokens
 } = await import("../src/utils/effect-key-tokens.mjs");
+const {
+  getSkillCheckActiveUseKeys,
+  isActiveUseEffectKey
+} = await import("../src/abilities/active-use-keys.mjs");
 const {
   SMOKE_PERCEPTION_PERCENT_EFFECT_KEY
 } = await import("../src/canvas/smoke-perception.mjs");
@@ -94,6 +100,26 @@ test("stealth attack effect keys are available in autocomplete with localized la
   assert.equal(tokens.every(token => token.label.startsWith("Атака из скрытности:")), true);
 });
 
+test("stealth illumination penalty modifier is localized and participates only in stealth checks", () => {
+  const [token] = buildStealthEffectKeyTokens();
+
+  assert.equal(STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY, "system.stealth.illuminationPenaltyPercent");
+  assert.equal(token.path, STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY);
+  assert.equal(token.code, "stealthIlluminationPenaltyPercent");
+  assert.equal(token.group, "Скрытность");
+  assert.equal(token.label, "Изменение штрафа к скрытности от освещения, %");
+  assert.equal(isActiveUseEffectKey(STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY), true);
+  assert.equal(getSkillCheckActiveUseKeys("stealth", { requester: "stealth" }).has(
+    STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+  ), true);
+  assert.equal(getSkillCheckActiveUseKeys("stealth", { requester: "medicine" }).has(
+    STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+  ), false);
+  assert.equal(getSkillCheckActiveUseKeys("firstAid", { requester: "stealth" }).has(
+    STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+  ), false);
+});
+
 test("actor schema exposes four transient signed stealth attack deltas", async () => {
   const source = await readFile(new URL("../src/data/models/actor-data-models.mjs", import.meta.url), "utf8");
   const block = source.match(/stealth:\s*new SchemaField\(\{[\s\S]*?\r?\n\s{6}\}\),\r?\n\s{6}healing:/)?.[0] ?? "";
@@ -105,6 +131,10 @@ test("actor schema exposes four transient signed stealth attack deltas", async (
       new RegExp(`${field}: new NumberField\\(\\{ required: true, integer: true, initial: 0, persisted: false \\}\\)`)
     );
   }
+  assert.match(
+    block,
+    /illuminationPenaltyPercent: new NumberField\(\{ required: true, integer: true, initial: 0, persisted: false \}\)/
+  );
   assert.doesNotMatch(block, /min:\s*0/);
 });
 
@@ -116,6 +146,8 @@ test("stealth attack effect labels exist in Russian and English", () => {
     assert.ok(effects.StealthAttackCriticalChance);
     assert.ok(effects.StealthAttackDamagePercent);
     assert.ok(effects.StealthAttackCriticalDamagePercent);
+    assert.ok(effects.StealthGroup);
+    assert.ok(effects.StealthIlluminationPenaltyPercent);
   }
 });
 

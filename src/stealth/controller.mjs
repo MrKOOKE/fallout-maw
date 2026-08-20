@@ -39,6 +39,7 @@ import {
 } from "./weapon-noise.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { getSmokeRegionRevision } from "../canvas/smoke-vision.mjs";
 import { getDetectionModeIdFromRangeEffectKey } from "../canvas/vision-effect-keys.mjs";
 import {
@@ -89,10 +90,12 @@ export function registerStealthHooks() {
   configureStealthVisualization({ refreshWindows: () => queueStealthRefresh({ allWindows: true }) });
   registerStealthMovementProvider({
     rollStealthCheck,
+    rollStealthChecks,
     pauseGame: pauseGameForStealthDetection
   });
   configureWeaponNoiseDetection({
     rollStealthCheck,
+    rollStealthChecks,
     pauseGame: pauseGameForStealthDetection
   });
   if (game.ready) registerStealthSocket();
@@ -246,30 +249,145 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 }
 
-async function rollStealthCheck(sourceToken, targetToken, app = null, { animate = true } = {}) {
-  if (isStealthObserverIncapacitated(targetToken)) return undefined;
-  const difficulty = computeStealthDifficulty(sourceToken, targetToken);
-  if (!difficulty) return undefined;
-  const outcome = await requestSkillCheck({
-    actor: sourceToken.actor,
-    skillKey: "stealth",
-    requester: "stealth",
-    animate,
-    data: {
-      difficulty: difficulty.difficulty,
-      situationalModifier: 0,
-      advantage: difficulty.advantageCount > 0,
-      advantageCount: difficulty.advantageCount,
-      actorToken: sourceToken,
+async function rollStealthCheck(sourceToken, targetToken, app = null, {
+  animate = true,
+  skillBonus = 0
+} = {}) {
+  return (await rollStealthChecks([{ sourceToken, targetToken, app, skillBonus }], { animate }))[0];
+}
+
+async function rollStealthChecks(checks = [], { animate = false } = {}) {
+  const prepared = [];
+  for (const check of checks) {
+    const sourceToken = check?.sourceToken ?? null;
+    const targetToken = check?.targetToken ?? null;
+    if (!sourceToken?.actor || isStealthObserverIncapacitated(targetToken)) continue;
+    const difficulty = computeStealthDifficulty(sourceToken, targetToken);
+    if (!difficulty) continue;
+    prepared.push({
+      ...check,
+      sourceToken,
       targetToken,
-      targetActor: targetToken?.actor ?? null
-    },
-    messageData: result => isStealthCheckSuccess(result) ? createStealthSuccessMessageData(sourceToken.actor) : {}
+      difficulty,
+      skillBonus: Math.trunc(Number(check?.skillBonus) || 0)
+    });
+  }
+  if (!prepared.length) return [];
+
+  const resolved = [];
+  for (const check of prepared) {
+    const outcome = await requestSkillCheck({
+      actor: check.sourceToken.actor,
+      skillKey: "stealth",
+      requester: "stealth",
+      animate,
+      data: {
+        difficulty: check.difficulty.difficulty,
+        situationalModifier: check.skillBonus,
+        advantage: check.difficulty.advantageCount > 0,
+        advantageCount: check.difficulty.advantageCount,
+        actorToken: check.sourceToken,
+        targetToken: check.targetToken,
+        targetActor: check.targetToken?.actor ?? null
+      },
+      messageData: result => isStealthCheckSuccess(result)
+        ? createStealthSuccessMessageData(check.sourceToken.actor)
+        : {}
+    });
+    resolved.push({ ...check, outcome });
+  }
+
+  const failures = resolved.filter(check => isStealthCheckFailure(check.outcome));
+  const revealPrevented = failures.length
+    ? await resolveStealthDetectionFailures(failures)
+    : false;
+  const outcomes = resolved.map(check => {
+    const preventedFailure = revealPrevented && isStealthCheckFailure(check.outcome);
+    if (isStealthCheckSuccess(check.outcome) || preventedFailure) {
+      notifyDangerSenseWarning(check.targetToken.actor);
+    }
+    if (check.app) queueStealthRefresh({ actor: check.sourceToken.actor });
+    return preventedFailure
+      ? { ...check.outcome, falloutMawRevealPrevented: true }
+      : check.outcome;
   });
-  if (isStealthCheckFailure(outcome)) await toggleActorStealth(sourceToken.actor, false);
-  else if (isStealthCheckSuccess(outcome)) notifyDangerSenseWarning(targetToken.actor);
-  if (app) queueStealthRefresh({ actor: sourceToken.actor });
-  return outcome;
+  return outcomes;
+}
+
+async function resolveStealthDetectionFailures(failures = []) {
+  const first = failures[0];
+  const hiddenToken = first?.sourceToken ?? null;
+  const actor = hiddenToken?.actor ?? null;
+  if (!actor || !isActorStealthed(actor)) return false;
+  const participant = token => ({
+    actorUuid: String(token?.actor?.uuid ?? ""),
+    tokenUuid: String(token?.document?.uuid ?? token?.uuid ?? "")
+  });
+  const participants = {
+    source: participant(hiddenToken),
+    target: participant(first.targetToken),
+    related: failures.slice(1).map(check => participant(check.targetToken))
+  };
+  const skillChecks = failures.map(check => ({
+    skillKey: "stealth",
+    difficulty: Math.max(0, Math.trunc(Number(check.difficulty?.difficulty) || 0)),
+    situationalModifier: Math.trunc(Number(check.skillBonus) || 0),
+    advantageCount: Math.max(0, Math.trunc(Number(check.difficulty?.advantageCount) || 0)),
+    disadvantageCount: 0,
+    targetActorUuid: String(check.targetToken?.actor?.uuid ?? ""),
+    targetTokenUuid: String(check.targetToken?.document?.uuid ?? check.targetToken?.uuid ?? "")
+  }));
+  const eventData = {
+    skillKey: "stealth",
+    difficulty: skillChecks[0]?.difficulty ?? 0,
+    situationalModifier: skillChecks[0]?.situationalModifier ?? 0,
+    advantageCount: skillChecks[0]?.advantageCount ?? 0,
+    disadvantageCount: 0,
+    skillChecks,
+    request: {
+      skillKey: "stealth",
+      difficulty: skillChecks[0]?.difficulty ?? 0,
+      situationalModifier: skillChecks[0]?.situationalModifier ?? 0,
+      advantageCount: skillChecks[0]?.advantageCount ?? 0,
+      disadvantageCount: 0
+    }
+  };
+  try {
+    return await withSystemEventRoot({
+      kind: "stealthReveal",
+      operationId: `stealth-reveal:${foundry.utils.randomID()}`,
+      sceneUuid: String(hiddenToken?.document?.parent?.uuid ?? canvas?.scene?.uuid ?? ""),
+      combatUuid: String(game.combat?.uuid ?? "")
+    }, async scope => {
+      const gate = await scope.emit("fallout-maw.stealth.reveal.before", {
+        data: eventData,
+        before: { stealthed: true },
+        reason: "detectionCheckFailed"
+      }, {
+        occurrenceKey: `stealth:${actor.uuid}:reveal:before`,
+        participants
+      });
+      if (gate?.control?.current || gate?.control?.root) return true;
+
+      await toggleActorStealth(actor, false);
+      if (!isActorStealthed(actor)) {
+        await scope.emit("fallout-maw.stealth.reveal.revealed", {
+          data: eventData,
+          before: { stealthed: true },
+          after: { stealthed: false },
+          reason: "detectionCheckFailed"
+        }, {
+          occurrenceKey: `stealth:${actor.uuid}:reveal:revealed`,
+          participants
+        });
+      }
+      return false;
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Stealth reveal event failed; revealing actor fail-open.", error);
+    await toggleActorStealth(actor, false);
+    return false;
+  }
 }
 
 async function resolveStealthEntryDetection(actor) {
@@ -285,16 +403,17 @@ async function resolveStealthEntryDetection(actor) {
 async function resolveStealthEntryDetectionForToken(hiddenToken, settings) {
   if (!hiddenToken?.actor || !isActorStealthed(hiddenToken.actor)) return false;
   const hiddenPoint = getTokenCenter(hiddenToken);
+  const checks = [];
   for (const observerToken of globalThis.canvas?.tokens?.placeables ?? []) {
-    if (!isActorStealthed(hiddenToken.actor)) return true;
     if (!isValidStealthObserver(hiddenToken, observerToken)) continue;
     const observerOrigin = getTokenCenter(observerToken);
     if (!isPointInsideObserverZone(hiddenPoint, observerToken, observerOrigin, settings)) continue;
-    const outcome = await rollStealthCheck(hiddenToken, observerToken, null, { animate: false });
-    if (!isActorStealthed(hiddenToken.actor) || isStealthCheckFailure(outcome)) {
-      pauseGameForStealthDetection();
-      return true;
-    }
+    checks.push({ sourceToken: hiddenToken, targetToken: observerToken });
+  }
+  const outcomes = await rollStealthChecks(checks, { animate: false });
+  if (!isActorStealthed(hiddenToken.actor) || outcomes.some(isStealthCheckFailure)) {
+    pauseGameForStealthDetection();
+    return true;
   }
   return false;
 }
@@ -954,6 +1073,7 @@ function isStealthCheckSuccess(outcome) {
 }
 
 function isStealthCheckFailure(outcome) {
+  if (outcome?.falloutMawRevealPrevented) return false;
   const resultKey = String(outcome?.result?.key ?? "");
   return ["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure;
 }

@@ -13,9 +13,14 @@ globalThis.foundry = {
   }
 };
 
-const { normalizeTreatmentClassShift } = await import("../src/settings/abilities.mjs");
+const {
+  ABILITY_ACTION_TYPES,
+  normalizeAbilityFunctions,
+  normalizeTreatmentClassShift
+} = await import("../src/settings/abilities.mjs");
 const {
   applyActiveApplicationItemMutations,
+  buildActiveApplicationItemMutationUpdates,
   buildTreatmentClassShiftUpdates,
   hasActiveApplicationItemMutations,
   rollbackActiveApplicationItemMutations
@@ -35,6 +40,47 @@ test("treatment class shift normalizes supported item types and bounded steps", 
   assert.equal(hasActiveApplicationItemMutations({
     treatmentClassShift: { itemTypes: ["trauma"], steps: 0 }
   }), false);
+});
+
+test("legacy active setting migrates into an ordinary treatment action", () => {
+  const [abilityFunction] = normalizeAbilityFunctions([{
+    id: "legacy-function",
+    type: "activeApplication",
+    activeSettings: {
+      treatmentClassShift: { itemTypes: ["trauma", "disease"], steps: -2 }
+    },
+    actions: []
+  }]);
+  assert.equal(abilityFunction.activeSettings.treatmentClassShift, undefined);
+  assert.equal(abilityFunction.actions.length, 1);
+  assert.equal(abilityFunction.actions[0].type, ABILITY_ACTION_TYPES.treatmentClassShift);
+  assert.deepEqual(abilityFunction.actions[0].treatmentClassShift, {
+    itemTypes: ["trauma", "disease"],
+    steps: -2
+  });
+});
+
+test("multiple treatment actions are folded into one embedded-item update batch", () => {
+  const actor = createActor([
+    createItem("trauma-a", "trauma", "A"),
+    createItem("disease-a", "disease", "A")
+  ]);
+  const abilityFunction = {
+    actions: [
+      {
+        type: ABILITY_ACTION_TYPES.treatmentClassShift,
+        treatmentClassShift: { itemTypes: ["trauma", "disease"], steps: -1 }
+      },
+      {
+        type: ABILITY_ACTION_TYPES.treatmentClassShift,
+        treatmentClassShift: { itemTypes: ["trauma"], steps: -1 }
+      }
+    ]
+  };
+  assert.deepEqual(buildActiveApplicationItemMutationUpdates(actor, abilityFunction), [
+    { _id: "trauma-a", "system.healingToolClass": "C" },
+    { _id: "disease-a", "system.healingToolClass": "B" }
+  ]);
 });
 
 test("treatment class shift plans only current selected condition types and clamps ranks", () => {

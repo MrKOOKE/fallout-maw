@@ -44,6 +44,7 @@ import {
 import { isNeedChangeModifierEffectKey } from "../needs/need-change-effect-keys.mjs";
 import { getConfiguredWeaponProficiencyKeys } from "../utils/item-functions.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
+import { STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY } from "../stealth/effect-keys.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -102,6 +103,7 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   "fallout-maw.dodge.roundRecovery",
   "system.healing.incomingPercent",
   "system.healing.outgoingPercent",
+  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
   ...Object.values(FIRST_AID_EFFECT_KEYS)
 ]);
 
@@ -132,6 +134,9 @@ export function getSkillCheckActiveUseKeys(skillKey = "", context = {}) {
   for (const suffix of SKILL_CHANGE_SUFFIXES) keys.add(`system.skills.${key}.${suffix}`);
 
   const requester = getContextText(context, "requester");
+  if (key === "stealth" && requester === "stealth") {
+    keys.add(STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY);
+  }
   for (const actionEffectKey of getSkillCheckActionEffectKeys(requester)) keys.add(actionEffectKey);
   if (requester === "weaponAttack") {
     for (const smartFudgeKey of SMART_FUDGE_RESULT_KEYS) keys.add(smartFudgeKey);

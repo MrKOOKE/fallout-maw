@@ -317,26 +317,29 @@ export function createGenericEventReactionProvider({
           logger?.error?.("fallout-maw | Trigger-cost overload application failed.", error);
         }
         if (effect && getAbilityFunctionEffectDurationSeconds(abilityFunction) === 0) ensureRootCleanup(envelope.rootId);
-        const actionUsed = actionSelection.option
-          ? await actionRuntime.execute({
+        const actionExecution = actionSelection.option
+          ? normalizeActionExecutionResult(await actionRuntime.execute({
             actor,
             option: actionSelection.option,
             targetToken: actionSelection.targetToken,
+            envelope,
+            title: String(offer?.label ?? ""),
             chainRef: context?.chainRef,
             damageHubOperationRef: context?.damageHubOperationRef,
             ignoreReactionLock: true,
             preventCancel: true,
             autoApply: Boolean(actionSelection.autoApply)
-          })
-          : true;
-        return { effect, actionUsed, executionContext };
+          }))
+          : normalizeActionExecutionResult(true);
+        return { effect, actionExecution, executionContext };
       }
       });
     } finally {
       releaseLimitedEffectCopyReservation(copyReservation);
     }
     if (!execution.ok) return failedResult(execution.reason);
-    if (execution.afterResult?.actionUsed === false) return failedResult("actionFailed");
+    const actionExecution = normalizeActionExecutionResult(execution.afterResult?.actionExecution);
+    if (!actionExecution.used) return failedResult("actionFailed");
     try {
       await progressManager.reset({
         item: sourceItem,
@@ -350,10 +353,10 @@ export function createGenericEventReactionProvider({
     return {
       handled: true,
       status: REACTION_SUCCESS,
-      cancelCurrent: false,
-      cancelRemaining: false,
+      cancelCurrent: actionExecution.cancelCurrent,
+      cancelRemaining: actionExecution.cancelRemaining,
       difficultyBonus: 0,
-      reason: "eventReactionApplied"
+      reason: actionExecution.reason || "eventReactionApplied"
     };
   }
 
@@ -463,6 +466,7 @@ async function collectActionVariants(actor, abilityFunction, envelope, actionRun
     if (action.targetMode !== "free" && !targetToken) continue;
     const options = await actionRuntime.collectOptions(actor, action, {
       targetToken,
+      envelope,
       requireReachableTarget: true
     });
     for (const option of options) variants.push({ action, option, targetToken });
@@ -495,6 +499,23 @@ async function resolveActionSelection({ actor, abilityFunction, envelope, offer,
     if (!targetToken?.actor) return { ok: false, reason: "noValidTarget" };
   }
   return { ok: true, option: selected.option, targetToken, autoApply };
+}
+
+function normalizeActionExecutionResult(value) {
+  if (value && typeof value === "object") {
+    return {
+      used: value.used !== false,
+      cancelCurrent: Boolean(value.cancelCurrent),
+      cancelRemaining: Boolean(value.cancelRemaining),
+      reason: String(value.reason ?? "")
+    };
+  }
+  return {
+    used: value !== false && value !== null && value !== undefined,
+    cancelCurrent: false,
+    cancelRemaining: false,
+    reason: ""
+  };
 }
 
 export function getReactionEnvelope(eventKey = "", context = {}) {

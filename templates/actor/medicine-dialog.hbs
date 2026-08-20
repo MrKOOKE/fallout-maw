@@ -9,6 +9,19 @@
     <strong>{{toolLabel}}</strong>
   </header>
 
+  {{#if medicineCombatStatus}}
+  <div class="fallout-maw-medicine-operation-status {{#if medicineCombatStatus.blocked}}is-blocked{{else}}is-available{{/if}}">
+    <i class="{{medicineCombatStatus.icon}}" aria-hidden="true"></i>
+    <strong>{{medicineCombatStatus.text}}</strong>
+  </div>
+  {{/if}}
+  {{#if emergencyTreatmentStatus}}
+  <div class="fallout-maw-medicine-operation-status is-prepared">
+    <i class="fa-solid fa-kit-medical" aria-hidden="true"></i>
+    <strong>{{emergencyTreatmentStatus.text}}</strong>
+  </div>
+  {{/if}}
+
   <nav class="fallout-maw-medicine-tabs">
     <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma">Конечности и травмы</button>
     <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease">Болезни</button>
@@ -150,6 +163,7 @@
                 data-action="removeImplant"
                 data-limb-key="{{../implants.activeLimb.key}}"
                 data-implant-item-id="{{id}}"
+                {{#unless @root.medicineOperationsUsable}}disabled{{/unless}}
               >
                 <i class="fa-solid fa-eject"></i>
               </button>
@@ -264,6 +278,7 @@
             data-action="removeProsthesis"
             data-limb-key="{{prostheses.activeLimb.key}}"
             data-prosthesis-item-id="{{prostheses.activeLimb.prosthesis.id}}"
+            {{#unless medicineOperationsUsable}}disabled{{/unless}}
           >
             Снять
           </button>

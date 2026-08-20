@@ -33,12 +33,12 @@ import {
 } from "./event-reaction-scanner.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
-  collectAbilityWeaponAttackOptions,
-  executeAbilityWeaponAttackOption,
+  collectAbilityEventActionOptions,
+  executeAbilityEventActionOption,
   pickRandomAbilityFreeAttackTarget,
   registerAbilityActionQueries,
   resolveAbilityActionTriggerTarget,
-  selectAbilityWeaponAttackOption
+  selectAbilityEventActionOption
 } from "../abilities/ability-actions.mjs";
 import {
   configureAbilityTriggerCostRuntime,
@@ -71,9 +71,9 @@ export function registerFoundrySystemEventIntegration() {
     registerRootFinalizer: registerSystemEventRootFinalizer,
     canReactToEvent: envelope => envelope?.data?.suppressGenericEventReactions !== true,
     actionRuntime: {
-      collectOptions: collectAbilityWeaponAttackOptions,
-      selectOption: selectAbilityWeaponAttackOption,
-      execute: executeAbilityWeaponAttackOption,
+      collectOptions: collectAbilityEventActionOptions,
+      selectOption: selectAbilityEventActionOption,
+      execute: executeAbilityEventActionOption,
       resolveTriggerTarget: resolveAbilityActionTriggerTarget,
       pickRandomFreeTarget: pickRandomAbilityFreeAttackTarget
     },

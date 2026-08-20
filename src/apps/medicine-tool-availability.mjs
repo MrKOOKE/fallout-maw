@@ -1,6 +1,7 @@
 import { createToolGroupKey } from "../utils/tool-selection-policy.mjs";
 
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
+const TOOL_CLASSES_BY_RANK = Object.freeze(["D", "C", "B", "A", "S"]);
 
 export const MEDICINE_TOOL_AVAILABILITY = Object.freeze({
   available: "available",
@@ -70,12 +71,21 @@ export function analyzeMedicineToolAvailability({
     normalizedTreatments,
     ({ instrument, treatment }) => (
       toToolClassRank(instrument?.toolClass)
-      >= toToolClassRank(treatment?.healingToolClass)
+      >= Math.max(
+        0,
+        toToolClassRank(treatment?.healingToolClass)
+          - Math.max(0, toInteger(treatment?.allowedToolClassDeficit))
+      )
     )
   );
   if (!classMatches.length) {
     const closest = selectClosestClassMatch(selectedInstruments, normalizedTreatments);
-    const requiredClass = normalizeToolClass(closest?.treatment?.healingToolClass);
+    const originalRequiredClass = normalizeToolClass(closest?.treatment?.healingToolClass);
+    const allowedDeficit = Math.max(0, toInteger(closest?.treatment?.allowedToolClassDeficit));
+    const requiredClass = TOOL_CLASSES_BY_RANK[Math.max(
+      0,
+      toToolClassRank(originalRequiredClass) - allowedDeficit
+    )];
     const availableClass = normalizeToolClass(closest?.instrument?.toolClass);
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.toolClass,

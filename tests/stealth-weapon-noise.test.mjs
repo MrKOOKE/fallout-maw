@@ -12,6 +12,7 @@ import {
 
 const originalCanvas = globalThis.canvas;
 const originalConfig = globalThis.CONFIG;
+const originalGame = globalThis.game;
 const originalPIXI = globalThis.PIXI;
 
 afterEach(() => {
@@ -24,6 +25,8 @@ afterEach(() => {
   else globalThis.canvas = originalCanvas;
   if (originalConfig === undefined) delete globalThis.CONFIG;
   else globalThis.CONFIG = originalConfig;
+  if (originalGame === undefined) delete globalThis.game;
+  else globalThis.game = originalGame;
   if (originalPIXI === undefined) delete globalThis.PIXI;
   else globalThis.PIXI = originalPIXI;
 });
@@ -157,7 +160,7 @@ test("weapon noise never checks blind or zero-perception observers", async () =>
   assert.equal(fixture.actor.statuses.has("invisible"), true);
 });
 
-test("the first failed observer reveals, pauses, and stops later checks", async () => {
+test("grouped failed observers reveal once and pause once", async () => {
   const fixture = createNoiseFixture({
     currentAttackerX: 100,
     observerCount: 2
@@ -177,7 +180,7 @@ test("the first failed observer reveals, pauses, and stops later checks", async 
   });
 
   assert.equal(await resolveWeaponNoiseDetection(fixture.staleAttacker, { noiseLevel: 1 }), true);
-  assert.deepEqual(observerIds, [fixture.observers[0].id]);
+  assert.deepEqual(observerIds, fixture.observers.map(observer => observer.id));
   assert.equal(pauses, 1);
   assert.equal(fixture.actor.statuses.has("invisible"), false);
 });
@@ -204,6 +207,47 @@ test("successful checks leave the attacker hidden and visit observers sequential
   assert.deepEqual(observerIds, fixture.observers.map(observer => observer.id));
   assert.equal(pauses, 0);
   assert.equal(fixture.actor.statuses.has("invisible"), true);
+});
+
+test("inconspicuous adds its skill bonus once to every weapon-noise check in combat", async () => {
+  const fixture = createNoiseFixture({ currentAttackerX: 100, observerCount: 2 });
+  fixture.actor.items = [{
+    id: "inconspicuous-ability",
+    type: "ability",
+    system: {
+      functions: [{
+        id: "inconspicuous-main",
+        type: "fixed",
+        fixedKey: "inconspicuous",
+        fixedSettings: {
+          attackStealthBonus: 20,
+          stealthBonus: 20,
+          stealthBonusDurationSeconds: 6
+        },
+        changes: [],
+        actions: [],
+        conditions: [],
+        penalties: []
+      }]
+    }
+  }];
+  const combat = {
+    started: true,
+    combatants: [{ actor: fixture.actor }],
+    getCombatantsByActor: actor => actor === fixture.actor ? [{}] : []
+  };
+  globalThis.game = { combats: [combat], combat };
+  const skillBonuses = [];
+  configureWeaponNoiseDetection({
+    getSettings: () => createSettings(true),
+    rollStealthCheck: async (_source, _observer, _app, options) => {
+      skillBonuses.push(options.skillBonus);
+      return successOutcome();
+    }
+  });
+
+  assert.equal(await resolveWeaponNoiseDetection(fixture.staleAttacker, { noiseLevel: 1 }), false);
+  assert.deepEqual(skillBonuses, [20, 20]);
 });
 
 test("same-actor weapon noise resolutions cannot roll concurrently", async () => {

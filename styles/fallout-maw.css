@@ -12024,6 +12024,29 @@ html.fallout-maw-token-action-hud-open #hotbar {
   background: rgba(220, 197, 110, 0.12);
 }
 
+.fallout-maw-medicine-operation-status {
+  align-items: center;
+  background: rgba(220, 197, 110, 0.08);
+  border: 1px solid rgba(220, 197, 110, 0.36);
+  color: var(--fallout-maw-actor-text-strong);
+  display: flex;
+  gap: 0.55rem;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.fallout-maw-medicine-operation-status.is-blocked {
+  background: rgba(138, 42, 34, 0.2);
+  border-color: rgba(220, 88, 70, 0.65);
+  color: #efb0a3;
+}
+
+.fallout-maw-medicine-operation-status.is-prepared {
+  background: rgba(54, 104, 75, 0.22);
+  border-color: rgba(130, 230, 165, 0.5);
+  color: #bde7c5;
+}
+
 .fallout-maw-mass-operation-dialog,
 .fallout-maw-mass-operation-categories,
 .fallout-maw-mass-operation-modes,
@@ -12119,6 +12142,28 @@ html.fallout-maw-token-action-hud-open #hotbar {
 
 .fallout-maw-treatment-unavailable {
   color: #c7a67b !important;
+}
+
+.application.fallout-maw-medicine-dialog .fallout-maw-treatment-tool-class.is-reduced {
+  flex-direction: row;
+  gap: 0.3rem;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.application.fallout-maw-medicine-dialog .fallout-maw-treatment-tool-class__original {
+  color: var(--fallout-maw-actor-text-soft);
+  font-weight: 700;
+}
+
+.application.fallout-maw-medicine-dialog .fallout-maw-treatment-tool-class__arrow {
+  color: #d9513f;
+  filter: drop-shadow(0 0 2px rgba(217, 81, 63, 0.45));
+  font-size: 0.72rem;
+}
+
+.application.fallout-maw-medicine-dialog .fallout-maw-treatment-tool-class__effective {
+  color: #f0daa0;
 }
 
 .application.fallout-maw-medicine-dialog .fallout-maw-treatment-row--limb {

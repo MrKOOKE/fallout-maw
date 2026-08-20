@@ -32,7 +32,16 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
 
 export const ABILITY_ACTION_TYPES = Object.freeze({
   weaponAttack: "weaponAttack",
-  movementRoute: "movementRoute"
+  movementRoute: "movementRoute",
+  eventSkillCheck: "eventSkillCheck",
+  treatmentClassShift: "treatmentClassShift"
+});
+
+/** Control returned to the system event after a constructor skill-check action resolves. */
+export const ABILITY_ACTION_EVENT_CONTROLS = Object.freeze({
+  none: "none",
+  cancelCurrent: "cancelCurrent",
+  cancelRemaining: "cancelRemaining"
 });
 
 export const ABILITY_CONSTRUCT_TYPES = Object.freeze({
@@ -149,6 +158,8 @@ export const ABILITY_ACTION_POINT_COST_MODES = Object.freeze({
 
 export const ABILITY_TREATMENT_CLASS_ITEM_TYPES = Object.freeze(["trauma", "disease"]);
 
+export const ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY = "abilityFixedFunctionState";
+
 export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   deusExMachina: "deusExMachina",
   curseAndBlessing: "curseAndBlessing",
@@ -189,7 +200,11 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   grapplingMaster: "grapplingMaster",
   goodEnough: "goodEnough",
   anatomyStudy: "anatomyStudy",
-  specialMix: "specialMix"
+  specialMix: "specialMix",
+  experimentalSurgery: "experimentalSurgery",
+  emergencyOperations: "emergencyOperations",
+  inconspicuous: "inconspicuous",
+  shadow: "shadow"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -200,6 +215,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   triggerChance: "triggerChance",
   timeOfDay: "timeOfDay",
   illumination: "illumination",
+  regionPresence: "regionPresence",
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
   targetFaction: "targetFaction",
@@ -775,7 +791,17 @@ export function createAbilityAction(type = "") {
     routeExecutionMode: ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential,
     routeMovementAction: "",
     routeAutoRotate: false,
-    routeShowRuler: true
+    routeShowRuler: true,
+    skillKey: "",
+    skillDifficultyFormula: "",
+    skillAdvantageCount: 0,
+    skillDisadvantageCount: 0,
+    skillSuccessControl: ABILITY_ACTION_EVENT_CONTROLS.none,
+    skillFailureControl: ABILITY_ACTION_EVENT_CONTROLS.none,
+    treatmentClassShift: {
+      itemTypes: [],
+      steps: 0
+    }
   });
 }
 
@@ -904,6 +930,24 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   const activeSettings = type === ABILITY_FUNCTION_TYPES.activeApplication
     ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
     : {};
+  const actions = [ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication].includes(type)
+    ? normalizeAbilityActions(value?.actions)
+    : [];
+  // Compatibility for active applications saved before item mutations became
+  // ordinary constructor actions. Saving the function persists only `actions`.
+  if (type === ABILITY_FUNCTION_TYPES.activeApplication) {
+    const legacyShift = normalizeTreatmentClassShift(
+      value?.activeSettings?.treatmentClassShift ?? value?.settings?.treatmentClassShift
+    );
+    const hasTreatmentAction = actions.some(action => action.type === ABILITY_ACTION_TYPES.treatmentClassShift);
+    if (!hasTreatmentAction && legacyShift.steps !== 0 && legacyShift.itemTypes.length) {
+      actions.push(normalizeAbilityAction({
+        id: foundry.utils.randomID(),
+        type: ABILITY_ACTION_TYPES.treatmentClassShift,
+        treatmentClassShift: legacyShift
+      }));
+    }
+  }
   const attackSettings = type === ABILITY_FUNCTION_TYPES.attackAction
     ? normalizeAttackActionSettings(value?.attackSettings ?? value?.settings)
     : null;
@@ -943,9 +987,7 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     // into the standalone triggerCost condition above.
     reactionSettings: { durationSeconds: 0, costs: [] },
     changes,
-    actions: [ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication].includes(type)
-      ? normalizeAbilityActions(value?.actions)
-      : [],
+    actions,
     conditions,
     penalties,
     sort: index
@@ -1065,7 +1107,14 @@ export function normalizeAbilityAction(value = {}) {
       routeExecutionMode: ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential,
       routeMovementAction: "",
       routeAutoRotate: false,
-      routeShowRuler: true
+      routeShowRuler: true,
+      skillKey: "",
+      skillDifficultyFormula: "",
+      skillAdvantageCount: 0,
+      skillDisadvantageCount: 0,
+      skillSuccessControl: ABILITY_ACTION_EVENT_CONTROLS.none,
+      skillFailureControl: ABILITY_ACTION_EVENT_CONTROLS.none,
+      treatmentClassShift: normalizeTreatmentClassShift(value?.treatmentClassShift)
     };
   }
   const rawKeys = Array.isArray(value?.attackActionKeys)
@@ -1100,6 +1149,12 @@ export function normalizeAbilityAction(value = {}) {
   const routeExecutionMode = Object.values(ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES).includes(value?.routeExecutionMode)
     ? value.routeExecutionMode
     : ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential;
+  const skillSuccessControl = Object.values(ABILITY_ACTION_EVENT_CONTROLS).includes(value?.skillSuccessControl)
+    ? value.skillSuccessControl
+    : ABILITY_ACTION_EVENT_CONTROLS.none;
+  const skillFailureControl = Object.values(ABILITY_ACTION_EVENT_CONTROLS).includes(value?.skillFailureControl)
+    ? value.skillFailureControl
+    : ABILITY_ACTION_EVENT_CONTROLS.none;
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
@@ -1122,7 +1177,14 @@ export function normalizeAbilityAction(value = {}) {
     routeExecutionMode,
     routeMovementAction: String(value?.routeMovementAction ?? "").trim(),
     routeAutoRotate: normalizeBoolean(value?.routeAutoRotate, false),
-    routeShowRuler: normalizeBoolean(value?.routeShowRuler, true)
+    routeShowRuler: normalizeBoolean(value?.routeShowRuler, true),
+    skillKey: String(value?.skillKey ?? "").trim(),
+    skillDifficultyFormula: String(value?.skillDifficultyFormula ?? "").trim(),
+    skillAdvantageCount: Math.max(0, toInteger(value?.skillAdvantageCount)),
+    skillDisadvantageCount: Math.max(0, toInteger(value?.skillDisadvantageCount)),
+    skillSuccessControl,
+    skillFailureControl,
+    treatmentClassShift: normalizeTreatmentClassShift(value?.treatmentClassShift)
   };
 }
 
@@ -1194,7 +1256,6 @@ export function normalizeActiveApplicationSettings(value = {}) {
     // A persistent application creates an Active Effect without a duration.
     // This is intended for marks that remain until explicitly removed.
     persistent: normalizeBoolean(value?.persistent, false),
-    treatmentClassShift: normalizeTreatmentClassShift(value?.treatmentClassShift),
     // Active applications historically evaluated each change against the
     // recipient actor.  Keep that behavior unless a constructor explicitly
     // requests a source snapshot (as Encouraging Speech does).
@@ -1221,7 +1282,6 @@ const ACTIVE_APPLICATION_TARGET_SETTING_KEYS = Object.freeze([
   "radiusFormula",
   "wallsBlock",
   "persistent",
-  "treatmentClassShift",
   "changeEvaluation"
 ]);
 
@@ -1337,6 +1397,7 @@ export function isAbilityFunctionTimedTriggerCost(abilityFunction = {}) {
     ABILITY_CONDITION_TYPES.toggleable,
     ABILITY_CONDITION_TYPES.timeOfDay,
     ABILITY_CONDITION_TYPES.illumination,
+    ABILITY_CONDITION_TYPES.regionPresence,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.posture,
@@ -1566,6 +1627,20 @@ export function normalizeAbilityCondition(value = {}) {
       type,
       eventSubject,
       illuminationLevel: normalizeIlluminationLevel(value?.illuminationLevel)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.regionPresence) {
+    return {
+      id,
+      groupId,
+      type,
+      eventSubject,
+      damageTypeKeys: normalizeConditionKeyList(value?.damageTypeKeys, value?.damageTypeKey),
+      regionSpecialPropertyTypes: normalizeConditionKeyList(
+        value?.regionSpecialPropertyTypes,
+        value?.regionSpecialPropertyType
+      ).filter(entry => entry === "smoke")
     };
   }
 
@@ -2158,7 +2233,62 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix) {
     return normalizeSpecialMixSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery) {
+    return normalizeExperimentalSurgerySettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations) {
+    return normalizeEmergencyOperationsSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous) {
+    return normalizeInconspicuousSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
+    return normalizeShadowSettings(value);
+  }
   return {};
+}
+
+/** "Тень": a short target-specific stealth bonus with action-point conversion. */
+export function normalizeShadowSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 3600)),
+    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 12)),
+    stealthBonus: Math.max(0, toInteger(value?.stealthBonus ?? 100))
+  };
+}
+
+/** "Неприметный": bonuses after a stealth attack and an unchallenged turn. */
+export function normalizeInconspicuousSettings(value = {}) {
+  return {
+    attackStealthBonus: Math.max(0, toInteger(value?.attackStealthBonus ?? value?.detectionDifficultyBonus ?? 20)),
+    stealthBonus: Math.max(0, toInteger(value?.stealthBonus ?? 20)),
+    stealthBonusDurationSeconds: Math.max(0, toInteger(value?.stealthBonusDurationSeconds ?? 6))
+  };
+}
+
+/** "Экстренные операции": combat medicine access and a prepared treatment boost. */
+export function normalizeEmergencyOperationsSettings(value = {}) {
+  return {
+    combatActionPointCost: Math.max(0, toInteger(value?.combatActionPointCost ?? 3)),
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 3600)),
+    toolEfficiencyPercentBonus: Math.max(0, toNumber(value?.toolEfficiencyPercentBonus ?? 500))
+  };
+}
+
+/** "Эксперементальная хирургия": lower-class medical tools with per-treatment risks. */
+export function normalizeExperimentalSurgerySettings(value = {}) {
+  return {
+    treatmentEnergyCost: Math.max(0, toInteger(value?.treatmentEnergyCost ?? 10)),
+    allowedToolClassDeficit: Math.max(0, Math.min(4, toInteger(value?.allowedToolClassDeficit ?? 1))),
+    extraSupplyChancePercent: Math.max(0, Math.min(100, toNumber(value?.extraSupplyChancePercent ?? 25))),
+    supplyCostMultiplier: Math.max(1, toInteger(value?.supplyCostMultiplier ?? 2)),
+    patientDamageChancePercent: Math.max(0, Math.min(100, toNumber(value?.patientDamageChancePercent ?? 5))),
+    patientHealthDamagePercent: Math.max(0, Math.min(100, toNumber(value?.patientHealthDamagePercent ?? 5)))
+  };
 }
 
 /** "Особый намес": combine two medicines into one short-lived dose. */

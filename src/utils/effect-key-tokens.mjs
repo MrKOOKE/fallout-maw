@@ -70,7 +70,10 @@ import {
   getSkillCheckActionEffectKey,
   SKILL_CHECK_ACTIONS
 } from "../rolls/skill-check-action-effects.mjs";
-import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
+import {
+  STEALTH_ATTACK_BONUS_EFFECT_KEYS,
+  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+} from "../stealth/effect-keys.mjs";
 import {
   FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
   FIRST_AID_EFFECT_KEYS
@@ -202,6 +205,7 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     ...buildCombatEffectKeyTokens(),
     ...buildDetectionModeRangeEffectKeyTokens(),
     buildSmokePerceptionEffectKeyToken(),
+    ...buildStealthEffectKeyTokens(),
     ...buildStealthAttackBonusEffectKeyTokens(),
     ...buildReverseInteractionEffectKeyTokens()
   ];
@@ -947,6 +951,16 @@ export function buildStealthAttackBonusEffectKeyTokens() {
       group
     })
   ].filter(Boolean);
+}
+
+export function buildStealthEffectKeyTokens() {
+  return [createEffectKeyToken({
+    code: "stealthIlluminationPenaltyPercent",
+    key: "stealthIlluminationPenaltyPercent",
+    label: game.i18n.localize("FALLOUTMAW.Effects.StealthIlluminationPenaltyPercent"),
+    path: STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Effects.StealthGroup")
+  })].filter(Boolean);
 }
 
 export function buildSkillCheckDisabledResultEffectKeyTokens() {

@@ -16,6 +16,7 @@ globalThis.foundry = {
 };
 
 const {
+  ABILITY_ACTION_EVENT_CONTROLS,
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_ROUTE_BUDGET_MODES,
   ABILITY_ACTION_TYPES,
@@ -86,6 +87,26 @@ test("constructor preserves target actors as weapon-action executors", () => {
     executorMode: ABILITY_ACTION_EXECUTOR_MODES.targets
   });
   assert.equal(action.executorMode, ABILITY_ACTION_EXECUTOR_MODES.targets);
+});
+
+test("event skill-check actions preserve inherited difficulty and event controls", () => {
+  const action = normalizeAbilityAction({
+    ...createAbilityAction(ABILITY_ACTION_TYPES.eventSkillCheck),
+    skillKey: "stealth",
+    skillDifficultyFormula: "",
+    skillAdvantageCount: 1,
+    skillDisadvantageCount: 0,
+    skillSuccessControl: ABILITY_ACTION_EVENT_CONTROLS.cancelCurrent,
+    skillFailureControl: ABILITY_ACTION_EVENT_CONTROLS.none
+  });
+
+  assert.equal(action.type, ABILITY_ACTION_TYPES.eventSkillCheck);
+  assert.equal(action.skillKey, "stealth");
+  assert.equal(action.skillDifficultyFormula, "");
+  assert.equal(action.skillAdvantageCount, 1);
+  assert.equal(action.skillDisadvantageCount, 0);
+  assert.equal(action.skillSuccessControl, ABILITY_ACTION_EVENT_CONTROLS.cancelCurrent);
+  assert.equal(action.skillFailureControl, ABILITY_ACTION_EVENT_CONTROLS.none);
 });
 
 test("movement routes use Foundry pathfinding and measure from the token origin", async () => {
@@ -283,12 +304,12 @@ test("movement-route actions retain constructor defaults and use native path mea
   assert.deepEqual(result.path.map(point => [point.x, point.y]), [[0, 0], [30, 40]]);
 });
 
-test("the Item data schema persists every movement-route constructor field", () => {
+test("the Item data schema persists movement-route and event-check constructor fields", () => {
   const source = fs.readFileSync(new URL(
     "../src/data/models/item-data-models.mjs",
     import.meta.url
   ), "utf8");
-  assert.match(source, /choices: \["", "weaponAttack", "movementRoute"\]/);
+  assert.match(source, /choices: \["", "weaponAttack", "movementRoute", "eventSkillCheck", "treatmentClassShift"\]/);
   for (const field of [
     "actionPointPayer",
     "routeBudgetMode",
@@ -299,7 +320,14 @@ test("the Item data schema persists every movement-route constructor field", () 
     "routeExecutionMode",
     "routeMovementAction",
     "routeAutoRotate",
-    "routeShowRuler"
+    "routeShowRuler",
+    "skillKey",
+    "skillDifficultyFormula",
+    "skillAdvantageCount",
+    "skillDisadvantageCount",
+    "skillSuccessControl",
+    "skillFailureControl",
+    "treatmentClassShift"
   ]) {
     assert.match(source, new RegExp(`\\b${field}: new `));
   }

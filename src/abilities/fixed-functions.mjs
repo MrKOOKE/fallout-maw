@@ -11,6 +11,7 @@ import {
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
+  ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
@@ -39,6 +40,10 @@ import {
   normalizeGrapplingMasterSettings,
   normalizeGoodEnoughSettings,
   normalizeAnatomyStudySettings,
+  normalizeEmergencyOperationsSettings,
+  normalizeExperimentalSurgerySettings,
+  normalizeInconspicuousSettings,
+  normalizeShadowSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
@@ -58,6 +63,7 @@ import {
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
+export { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
 import { openAnatomyStudyApplication } from "../apps/anatomy-study.mjs";
 import {
   ANATOMY_STUDY_BONUS_KEYS,
@@ -71,6 +77,11 @@ import {
   isActorDeadForAnatomyStudy
 } from "./anatomy-study.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
+import {
+  buildInconspicuousRoundStateUpdate,
+  getInconspicuousRoundState,
+  isInconspicuousRoundStateCurrent
+} from "./inconspicuous-state.mjs";
 import { buildActiveApplicationCostPlanEntries } from "./active-application-costs.mjs";
 import {
   executePreparedAbilityFunctionActions,
@@ -150,16 +161,20 @@ import {
 } from "../combat/dodge-effect-keys.mjs";
 import {
   registerActorTurnEndHandler,
-  registerActorTurnStartPreparedHandler
+  registerActorTurnStartPreparedHandler,
+  registerCombatRoundStartHandler
 } from "../combat/turn-events.mjs";
 import {
   ONE_TIME_SKILL_MODIFIER_FLAG_KEY,
   getPendingOneTimeSkillModifierEffects
 } from "../rolls/one-time-skill-modifiers.mjs";
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
+import { registerSystemEventObserver } from "../events/dispatcher.mjs";
+import { getShadowStealthBonus, SHADOW_EFFECT_FLAG_KEY } from "../stealth/shadow.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import {
   canSpendCombatActionPoints,
+  getActorActiveCombat,
   isActorInActiveCombat,
   refundCombatActionPointReceipt,
   spendCombatActionPoints,
@@ -296,7 +311,6 @@ import {
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const { renderTemplate } = foundry.applications.handlebars;
-export const ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY = "abilityFixedFunctionState";
 const DEUS_EX_MACHINA_INSIGHT_EFFECT_FLAG_KEY = "deusExMachinaInsight";
 const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
@@ -305,6 +319,7 @@ const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const HEIGHTENED_CONCENTRATION_EFFECT_SOURCE = "heightenedConcentration";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
+const INCONSPICUOUS_EFFECT_FLAG_KEY = "inconspicuous";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY = "knockOffBalance";
 const TO_THE_END_EFFECT_FLAG_KEY = "toTheEnd";
@@ -677,6 +692,35 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.specialMix,
       fixedSettings: normalizeSpecialMixSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery,
+    label: "Эксперементальная хирургия",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery,
+      fixedSettings: normalizeExperimentalSurgerySettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations,
+    label: "Экстренные операции",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations,
+      fixedSettings: normalizeEmergencyOperationsSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.inconspicuous,
+    label: "Неприметный",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.inconspicuous,
+      fixedSettings: normalizeInconspicuousSettings()
+    })
   })
 ]);
 
@@ -708,6 +752,10 @@ function registerFixedAbilityRuntimeHooks() {
     "fallout-maw.fixed.counterAttack",
     runFixedAbilityRuntimeHandler(requestCounterAttackReaction)
   );
+  registerWeaponAttackResolvedHandler(
+    "fallout-maw.fixed.inconspicuous",
+    runFixedAbilityRuntimeHandler(markInconspicuousTargetsAttacked)
+  );
   registerOversightReactionProvider();
   registerWatchOutReactionProvider();
   registerCounterSniperReactionProvider();
@@ -722,6 +770,7 @@ function registerFixedAbilityRuntimeHooks() {
   }));
   registerActorTurnEndHandler(runFixedAbilityRuntimeHandler(context => applyDefensiveTacticsAtTurnEnd(context)));
   registerActorTurnStartPreparedHandler(runFixedAbilityRuntimeHandler(context => deleteDefensiveTacticsEffects(context?.actor)));
+  registerInconspicuousRoundHandler();
   registerLethalDamagePreventionHandler(runFixedAbilityRuntimeHandler(context => processLastChanceLethalDamage(context)));
   registerDamageAppliedHandler(
     "fallout-maw.fixed.deusExMachinaProgress",
@@ -1178,6 +1227,18 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix) {
     const used = await useSpecialMix(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery) {
+    await toggleExperimentalSurgery(item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations) {
+    const used = await useEmergencyOperations(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -2172,7 +2233,7 @@ async function executeActiveApplicationUse(scope, {
   occurrenceId = "activation"
 } = {}) {
   const createsApplicationEffect = durationSeconds > 0 || settings.persistent;
-  const hasItemMutations = hasActiveApplicationItemMutations(settings);
+  const hasItemMutations = hasActiveApplicationItemMutations(abilityFunction);
   const hasApplicationOperation = createsApplicationEffect || hasItemMutations;
   const { allowed, terminalTargets } = await gateActiveApplicationTargets(scope, {
     actor,
@@ -2965,7 +3026,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   costContext = null
 } = {}) {
   const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
-  const hasItemMutations = hasActiveApplicationItemMutations(settings);
+  const hasItemMutations = hasActiveApplicationItemMutations(abilityFunction);
   const createsApplicationEffect = durationSeconds > 0 || settings.persistent;
   if (!createsApplicationEffect && !hasItemMutations) return true;
   const startTime = Number(game.time?.worldTime) || 0;
@@ -3116,7 +3177,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
       for (const targetActor of actors.values()) {
         itemMutationResults.push(await applyActiveApplicationItemMutations(
           targetActor,
-          settings,
+          abilityFunction,
           createAbilitySystemEventOptions(chainRef)
         ));
       }
@@ -3523,7 +3584,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const createsApplicationEffect = durationSeconds > 0
     || normalizeActiveApplicationSettings(abilityFunction?.activeSettings).persistent;
-  const hasItemMutations = hasActiveApplicationItemMutations(settings);
+  const hasItemMutations = hasActiveApplicationItemMutations(abilityFunction);
   const hasApplicationOperation = createsApplicationEffect || hasItemMutations;
   const resolvedTargets = targetTokenDocuments.map(tokenDocument => ({
     token: tokenDocument.object ?? tokenDocument,
@@ -7631,6 +7692,63 @@ async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function toggleExperimentalSurgery(abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
+async function useEmergencyOperations(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeEmergencyOperationsSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (state[stateKey]?.pending) {
+    ui.notifications.info(`${abilityName}: усиление уже подготовлено для следующего лечения.`);
+    return false;
+  }
+
+  const energyCost = getAbilityEnergyCost(
+    actor,
+    abilityItem,
+    abilityFunction,
+    settings.activationEnergyCost
+  );
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: true,
+    activatedAt: Math.max(0, Number(game.time?.worldTime) || 0)
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Следующее лечение инструментом получает +${settings.toolEfficiencyPercentBonus}% эффективности.`
+  );
+  return true;
+}
+
 async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeDoubleAttackSettings(abilityFunction.fixedSettings);
@@ -9124,6 +9242,138 @@ async function createDefensiveTacticsEffect(actor, abilityItem, abilityFunction,
     }
   }], { animate: false });
   return true;
+}
+
+function registerInconspicuousRoundHandler() {
+  const register = () => registerCombatRoundStartHandler(
+    runFixedAbilityRuntimeHandler(processInconspicuousRoundStart)
+  );
+  // Damage time advances at the round boundary. Register after ready so the
+  // six-second effect starts after that advance and survives the new round.
+  if (game.ready) register();
+  else Hooks.once("ready", register);
+}
+
+async function markInconspicuousTargetsAttacked(context = {}) {
+  if (!game.user?.isActiveGM) return;
+  const targetActorUuids = new Set([
+    ...(context?.targetActorUuids ?? []),
+    context?.targetActorUuid
+  ].map(value => String(value ?? "").trim()).filter(Boolean));
+  for (const actorUuid of targetActorUuids) {
+    const actor = fromUuidSync(actorUuid);
+    const entry = getActorInconspicuousEntry(actor);
+    const combat = getActorActiveCombat(actor);
+    if (!entry || !combat) continue;
+    const state = getInconspicuousRoundState(entry.abilityItem, entry.abilityFunction);
+    if (isInconspicuousRoundStateCurrent(state, combat) && state.attacked) continue;
+    await entry.abilityItem.update(buildInconspicuousRoundStateUpdate(entry.abilityFunction, {
+      combat,
+      attacked: true
+    }));
+  }
+}
+
+async function processInconspicuousRoundStart({
+  combat = null,
+  round = 0,
+  skipped = false
+} = {}) {
+  const currentRound = Math.max(0, toInteger(round));
+  if (!game.user?.isActiveGM || skipped || !combat?.started || currentRound <= 0) return;
+  const actorEntries = [];
+  const seenActorUuids = new Set();
+  for (const combatant of combat.combatants ?? []) {
+    const actor = combatant?.actor ?? null;
+    if (!actor?.uuid || seenActorUuids.has(actor.uuid)) continue;
+    seenActorUuids.add(actor.uuid);
+    const entry = getActorInconspicuousEntry(actor);
+    if (entry) actorEntries.push({ actor, entry });
+  }
+
+  for (const { actor, entry } of actorEntries) {
+    try {
+      const state = getInconspicuousRoundState(entry.abilityItem, entry.abilityFunction);
+      if (isInconspicuousRoundStateCurrent(state, combat, currentRound)) continue;
+      const sameCombat = state.combatUuid === String(combat.uuid ?? combat.id ?? "");
+      if (sameCombat && state.round === currentRound - 1 && !state.attacked) {
+        await createOrRefreshInconspicuousEffect(actor, entry);
+      }
+      await entry.abilityItem.update(buildInconspicuousRoundStateUpdate(entry.abilityFunction, {
+        combat,
+        round: currentRound,
+        attacked: false
+      }));
+    } catch (error) {
+      console.error(`Fallout MaW | Failed to update Inconspicuous round state for ${actor?.name ?? actor?.uuid}.`, error);
+    }
+  }
+}
+
+async function createOrRefreshInconspicuousEffect(actor, entry) {
+  const { abilityItem, abilityFunction, settings } = entry;
+  const stealthBonus = Math.max(0, toInteger(settings.stealthBonus));
+  const durationSeconds = Math.max(0, toInteger(settings.stealthBonusDurationSeconds));
+  if (!stealthBonus || !durationSeconds) return false;
+
+  const startTime = Number(game.time?.worldTime) || 0;
+  const effectData = {
+    type: "base",
+    name: getAbilityDisplayName(abilityItem),
+    img: abilityItem?.img || "icons/svg/mystery-man.svg",
+    origin: abilityItem?.uuid ?? actor.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: { seconds: durationSeconds, startTime },
+    system: {
+      changes: [{
+        key: "system.skills.stealth.bonus",
+        type: "add",
+        value: String(stealthBonus),
+        phase: "initial",
+        priority: null
+      }]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [INCONSPICUOUS_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem?.id ?? "",
+          functionId: abilityFunction?.id ?? "",
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.inconspicuous,
+          createdAt: startTime
+        }
+      }
+    }
+  };
+  const existing = Array.from(actor.effects ?? [])
+    .filter(effect => Boolean(effect.getFlag?.(SYSTEM_ID, INCONSPICUOUS_EFFECT_FLAG_KEY)));
+  if (existing[0]) {
+    const { type: _type, ...updateData } = effectData;
+    await existing[0].update(updateData, { animate: false });
+    const duplicateIds = existing.slice(1).map(effect => effect.id).filter(Boolean);
+    if (duplicateIds.length) {
+      await actor.deleteEmbeddedDocuments("ActiveEffect", duplicateIds, { animate: false });
+    }
+  } else {
+    await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false });
+  }
+  return true;
+}
+
+function getActorInconspicuousEntry(actor) {
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous);
+    if (!abilityFunction) continue;
+    return {
+      abilityItem,
+      abilityFunction,
+      settings: normalizeInconspicuousSettings(abilityFunction.fixedSettings)
+    };
+  }
+  return null;
 }
 
 function getActorDefensiveTacticsEntries(actor) {

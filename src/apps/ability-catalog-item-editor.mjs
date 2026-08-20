@@ -13,6 +13,7 @@ import {
   ABILITY_ACQUISITION_ABILITY_MODES,
   ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_CATALOG_DRAG_TYPE,
+  ABILITY_ACTION_EVENT_CONTROLS,
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_ROUTE_BUDGET_MODES,
   ABILITY_ACTION_ROUTE_EVALUATION_MODES,
@@ -80,6 +81,9 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
   normalizeAnatomyStudySettings,
+  normalizeEmergencyOperationsSettings,
+  normalizeExperimentalSurgerySettings,
+  normalizeInconspicuousSettings,
   normalizeSpecialMixSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
@@ -284,6 +288,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteConditionPosture: this.#onDeleteConditionPosture,
       addConditionCover: this.#onAddConditionCover,
       deleteConditionCover: this.#onDeleteConditionCover,
+      addConditionRegionDamageType: this.#onAddConditionRegionDamageType,
+      deleteConditionRegionDamageType: this.#onDeleteConditionRegionDamageType,
+      addConditionRegionSpecialProperty: this.#onAddConditionRegionSpecialProperty,
+      deleteConditionRegionSpecialProperty: this.#onDeleteConditionRegionSpecialProperty,
       addConditionWeaponAction: this.#onAddConditionWeaponAction,
       deleteConditionWeaponAction: this.#onDeleteConditionWeaponAction,
       addConditionWeaponSkill: this.#onAddConditionWeaponSkill,
@@ -1793,6 +1801,54 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  static #onAddConditionRegionDamageType(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition) return this.#persist({ render: true, sync: false });
+    const values = normalizeConditionValues(condition.damageTypeKeys);
+    const next = getFirstUnusedRegionDamageTypeKey(values);
+    if (next) condition.damageTypeKeys = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionRegionDamageType(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-region-damage-type-index]")?.dataset.regionDamageTypeIndex ?? -1);
+    if (condition && index >= 0) {
+      const values = normalizeConditionValues(condition.damageTypeKeys);
+      values.splice(index, 1);
+      condition.damageTypeKeys = values;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionRegionSpecialProperty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition) return this.#persist({ render: true, sync: false });
+    const values = normalizeConditionValues(condition.regionSpecialPropertyTypes);
+    const next = getFirstUnusedRegionSpecialPropertyType(values);
+    if (next) condition.regionSpecialPropertyTypes = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionRegionSpecialProperty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-region-special-property-index]")?.dataset.regionSpecialPropertyIndex ?? -1);
+    if (condition && index >= 0) {
+      const values = normalizeConditionValues(condition.regionSpecialPropertyTypes);
+      values.splice(index, 1);
+      condition.regionSpecialPropertyTypes = values;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
   static #onAddConditionWeaponAction(event, target) {
     event.preventDefault();
     this.#syncFromForm();
@@ -2113,7 +2169,17 @@ function readAbilityActions(row) {
         routeExecutionMode: actionRow.querySelector("[data-field='action.routeExecutionMode']")?.value,
         routeMovementAction: actionRow.querySelector("[data-field='action.routeMovementAction']")?.value,
         routeAutoRotate: actionRow.querySelector("[data-field='action.routeAutoRotate']")?.checked,
-        routeShowRuler: actionRow.querySelector("[data-field='action.routeShowRuler']")?.checked
+        routeShowRuler: actionRow.querySelector("[data-field='action.routeShowRuler']")?.checked,
+        skillKey: actionRow.querySelector("[data-field='action.skillKey']")?.value,
+        skillDifficultyFormula: actionRow.querySelector("[data-field='action.skillDifficultyFormula']")?.value,
+        skillAdvantageCount: actionRow.querySelector("[data-field='action.skillAdvantageCount']")?.value,
+        skillDisadvantageCount: actionRow.querySelector("[data-field='action.skillDisadvantageCount']")?.value,
+        skillSuccessControl: actionRow.querySelector("[data-field='action.skillSuccessControl']")?.value,
+        skillFailureControl: actionRow.querySelector("[data-field='action.skillFailureControl']")?.value,
+        treatmentClassShift: {
+          itemTypes: readCheckedFieldValues(actionRow, "[data-field='action.treatmentClassItemType']"),
+          steps: actionRow.querySelector("[data-field='action.treatmentClassSteps']")?.value
+        }
       }));
 }
 
@@ -2130,13 +2196,7 @@ function readActiveApplicationSettings(row, previousValue = {}) {
   const settings = {
     name: row.querySelector("[data-field='active.name']")?.value ?? "",
     costs: readActiveApplicationCostRows(row),
-    targetMode: row.querySelector("[data-field='active.targetMode']")?.value,
-    treatmentClassShift: {
-      itemTypes: Array.from(row.querySelectorAll("[data-field='active.treatmentClassItemType']:checked") ?? [])
-        .map(input => String(input.value ?? "").trim())
-        .filter(Boolean),
-      steps: row.querySelector("[data-field='active.treatmentClassSteps']")?.value
-    }
+    targetMode: row.querySelector("[data-field='active.targetMode']")?.value
   };
   if (targetSelectionModeInput) settings.targetSelectionMode = targetSelectionModeInput.value;
   if (targetLimitInput) settings.targetLimit = targetLimitInput.value;
@@ -2732,6 +2792,38 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery) {
+    return {
+      treatmentEnergyCost: row.querySelector("[data-field='fixed.experimentalSurgery.treatmentEnergyCost']")?.value,
+      allowedToolClassDeficit: row.querySelector("[data-field='fixed.experimentalSurgery.allowedToolClassDeficit']")?.value,
+      extraSupplyChancePercent: row.querySelector("[data-field='fixed.experimentalSurgery.extraSupplyChancePercent']")?.value,
+      supplyCostMultiplier: row.querySelector("[data-field='fixed.experimentalSurgery.supplyCostMultiplier']")?.value,
+      patientDamageChancePercent: row.querySelector("[data-field='fixed.experimentalSurgery.patientDamageChancePercent']")?.value,
+      patientHealthDamagePercent: row.querySelector("[data-field='fixed.experimentalSurgery.patientHealthDamagePercent']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations) {
+    return {
+      combatActionPointCost: row.querySelector("[data-field='fixed.emergencyOperations.combatActionPointCost']")?.value,
+      activationEnergyCost: row.querySelector("[data-field='fixed.emergencyOperations.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.emergencyOperations.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.emergencyOperations.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.emergencyOperations.overloadDurationUnit']")?.value
+      ),
+      toolEfficiencyPercentBonus: row.querySelector("[data-field='fixed.emergencyOperations.toolEfficiencyPercentBonus']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous) {
+    return {
+      attackStealthBonus: row.querySelector("[data-field='fixed.inconspicuous.attackStealthBonus']")?.value,
+      stealthBonus: row.querySelector("[data-field='fixed.inconspicuous.stealthBonus']")?.value,
+      stealthBonusDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.inconspicuous.stealthBonusDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.inconspicuous.stealthBonusDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -2970,6 +3062,8 @@ function readAbilityConditions(root) {
       timeFrom: row.querySelector("[data-field='conditionTimeFrom']")?.value ?? "00:00",
       timeTo: row.querySelector("[data-field='conditionTimeTo']")?.value ?? "23:59",
       illuminationLevel: row.querySelector("[data-field='conditionIlluminationLevel']")?.value ?? "normal",
+      damageTypeKeys: readFieldValues(row, "[data-field='conditionRegionDamageType']"),
+      regionSpecialPropertyTypes: readFieldValues(row, "[data-field='conditionRegionSpecialProperty']"),
       operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
       percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
       healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
@@ -3255,6 +3349,15 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedSpecialMixSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.specialMix
     ? prepareSpecialMixSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedExperimentalSurgerySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery
+    ? normalizeExperimentalSurgerySettings(normalized.fixedSettings)
+    : null;
+  const fixedEmergencyOperationsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations
+    ? prepareEmergencyOperationsSettingsForDisplay(normalized.fixedSettings)
+    : null;
+  const fixedInconspicuousSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous
+    ? prepareInconspicuousSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3280,7 +3383,10 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     abilityFunction: normalized
   }));
   const hasRuntimeConditions = normalized.conditions.some(condition => isRuntimeCondition(condition.type));
-  const preparedActions = normalized.actions.map((action, index) => prepareAbilityActionForDisplay(action, index));
+  const preparedActions = normalized.actions.map((action, index) => prepareAbilityActionForDisplay(action, index, {
+    allowEventSkillCheck: isEffectChanges && hasEventReaction,
+    allowTreatmentClassShift: isActiveApplication
+  }));
   return {
     ...normalized,
     isAcquisitionChanges,
@@ -3327,6 +3433,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedHeightenedConcentrationSettings,
     fixedAnatomyStudySettings,
     fixedSpecialMixSettings,
+    fixedExperimentalSurgerySettings,
+    fixedEmergencyOperationsSettings,
+    fixedInconspicuousSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,
@@ -3347,11 +3456,16 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   };
 }
 
-function prepareAbilityActionForDisplay(action, index) {
+function prepareAbilityActionForDisplay(action, index, {
+  allowEventSkillCheck = false,
+  allowTreatmentClassShift = false
+} = {}) {
   const type = String(action?.type ?? "");
   const isPending = !type;
   const isWeaponAttack = type === ABILITY_ACTION_TYPES.weaponAttack;
   const isMovementRoute = type === ABILITY_ACTION_TYPES.movementRoute;
+  const isEventSkillCheck = type === ABILITY_ACTION_TYPES.eventSkillCheck;
+  const isTreatmentClassShift = type === ABILITY_ACTION_TYPES.treatmentClassShift;
   const typeChoices = [
     { value: "", label: "", selected: isPending },
     {
@@ -3363,7 +3477,17 @@ function prepareAbilityActionForDisplay(action, index) {
       value: ABILITY_ACTION_TYPES.movementRoute,
       label: game.i18n.localize("FALLOUTMAW.Ability.Actions.MovementRoute"),
       selected: isMovementRoute
-    }
+    },
+    ...((allowEventSkillCheck || isEventSkillCheck) ? [{
+      value: ABILITY_ACTION_TYPES.eventSkillCheck,
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventSkillCheck"),
+      selected: isEventSkillCheck
+    }] : []),
+    ...((allowTreatmentClassShift || isTreatmentClassShift) ? [{
+      value: ABILITY_ACTION_TYPES.treatmentClassShift,
+      label: "Разовое изменение класса травм/болезней",
+      selected: isTreatmentClassShift
+    }] : [])
   ];
   const common = {
     ...action,
@@ -3389,13 +3513,43 @@ function prepareAbilityActionForDisplay(action, index) {
     usesFixedActionPointCost: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed,
     usesActualActionPointCost: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual
   };
-  if (isPending || (!isWeaponAttack && !isMovementRoute)) {
+  if (isPending || (!isWeaponAttack && !isMovementRoute && !isEventSkillCheck && !isTreatmentClassShift)) {
     return {
       ...common,
       isPending,
       isWeaponAttack: false,
       isMovementRoute: false,
+      isEventSkillCheck: false,
+      isTreatmentClassShift: false,
       typeChoices
+    };
+  }
+  if (isTreatmentClassShift) {
+    const shift = action?.treatmentClassShift ?? {};
+    return {
+      ...common,
+      isPending: false,
+      isWeaponAttack: false,
+      isMovementRoute: false,
+      isEventSkillCheck: false,
+      isTreatmentClassShift: true,
+      shiftsTraumas: shift.itemTypes?.includes("trauma"),
+      shiftsDiseases: shift.itemTypes?.includes("disease")
+    };
+  }
+  if (isEventSkillCheck) {
+    return {
+      ...common,
+      isPending: false,
+      isWeaponAttack: false,
+      isMovementRoute: false,
+      isEventSkillCheck: true,
+      skillChoices: [
+        { value: "", label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventSkillInherited"), selected: !action.skillKey },
+        ...buildSkillChoices(action.skillKey, getSkillSettings())
+      ],
+      skillSuccessControlChoices: buildAbilityEventControlChoices(action.skillSuccessControl),
+      skillFailureControlChoices: buildAbilityEventControlChoices(action.skillFailureControl)
     };
   }
   if (isMovementRoute) {
@@ -3404,6 +3558,7 @@ function prepareAbilityActionForDisplay(action, index) {
       isPending: false,
       isWeaponAttack: false,
       isMovementRoute: true,
+      isEventSkillCheck: false,
       routeBudgetModeChoices: [
         { value: ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteBudgetMovementCost"), selected: action.routeBudgetMode === ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost },
         { value: ABILITY_ACTION_ROUTE_BUDGET_MODES.distance, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteBudgetDistance"), selected: action.routeBudgetMode === ABILITY_ACTION_ROUTE_BUDGET_MODES.distance }
@@ -3429,6 +3584,8 @@ function prepareAbilityActionForDisplay(action, index) {
     ...common,
     isPending: false,
     isWeaponAttack: true,
+    isMovementRoute: false,
+    isEventSkillCheck: false,
     typeChoices,
     attackActionRows: (allSelected ? [ABILITY_ATTACK_ACTION_ALL] : action.attackActionKeys).map((selectedKey, choiceIndex) => ({
       choiceIndex,
@@ -3728,11 +3885,6 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
   return {
     ...normalized,
-    treatmentClassShift: {
-      ...normalized.treatmentClassShift,
-      shiftsTraumas: normalized.treatmentClassShift.itemTypes.includes("trauma"),
-      shiftsDiseases: normalized.treatmentClassShift.itemTypes.includes("disease")
-    },
     activationCosts: prepareActiveApplicationCostRowsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
@@ -4309,6 +4461,14 @@ function prepareAnatomyStudySettingsForDisplay(settings = {}) {
   };
 }
 
+function buildAbilityEventControlChoices(selectedValue = ABILITY_ACTION_EVENT_CONTROLS.none) {
+  return [
+    { value: ABILITY_ACTION_EVENT_CONTROLS.none, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventControlNone") },
+    { value: ABILITY_ACTION_EVENT_CONTROLS.cancelCurrent, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventControlCancelCurrent") },
+    { value: ABILITY_ACTION_EVENT_CONTROLS.cancelRemaining, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventControlCancelRemaining") }
+  ].map(choice => ({ ...choice, selected: choice.value === selectedValue }));
+}
+
 function prepareSpecialMixSettingsForDisplay(settings = {}) {
   const normalized = normalizeSpecialMixSettings(settings);
   const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
@@ -4319,6 +4479,26 @@ function prepareSpecialMixSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     spoilDurationAmount: spoilDuration.amount,
     spoilDurationUnitChoices: buildDurationUnitChoices(spoilDuration.unit)
+  };
+}
+
+function prepareEmergencyOperationsSettingsForDisplay(settings = {}) {
+  const normalized = normalizeEmergencyOperationsSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareInconspicuousSettingsForDisplay(settings = {}) {
+  const normalized = normalizeInconspicuousSettings(settings);
+  const duration = splitDurationSeconds(normalized.stealthBonusDurationSeconds);
+  return {
+    ...normalized,
+    stealthBonusDurationAmount: duration.amount,
+    stealthBonusDurationUnitChoices: buildDurationUnitChoices(duration.unit)
   };
 }
 
@@ -4374,6 +4554,7 @@ function prepareConditionForDisplay(condition, {
   const isSelectedChanges = type === ABILITY_CONDITION_TYPES.selectedChanges;
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
   const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
+  const isRegionPresence = type === ABILITY_CONDITION_TYPES.regionPresence;
   const isUnsupportedEventCondition = eventReactionMode
     && ((!isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies && !isSelectedChanges) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
@@ -4430,7 +4611,7 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isSelectedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isRegionPresence && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isSelectedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isAccumulation,
@@ -4482,6 +4663,7 @@ function prepareConditionForDisplay(condition, {
       : [],
     isTimeOfDay,
     isIllumination,
+    isRegionPresence,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -4548,6 +4730,12 @@ function prepareConditionForDisplay(condition, {
     eventSubjectChoices: buildEventSubjectChoices(condition?.eventSubject),
     effectTargetChoices: buildEffectTargetChoices(condition?.effectTarget),
     illuminationLevelChoices: buildIlluminationLevelChoices(condition?.illuminationLevel),
+    regionDamageTypeRows: buildRegionDamageTypeRows(condition?.damageTypeKeys),
+    canAddRegionDamageType: Boolean(getFirstUnusedRegionDamageTypeKey(condition?.damageTypeKeys)),
+    regionSpecialPropertyRows: buildRegionSpecialPropertyRows(condition?.regionSpecialPropertyTypes),
+    canAddRegionSpecialProperty: Boolean(
+      getFirstUnusedRegionSpecialPropertyType(condition?.regionSpecialPropertyTypes)
+    ),
     healthTargetChoices: buildHealthTargetChoices(healthTarget),
     limbChoices: buildLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
@@ -4740,6 +4928,7 @@ function buildConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.triggerChance, label: "Вероятность срабатывания", selected: selected === ABILITY_CONDITION_TYPES.triggerChance },
     { value: ABILITY_CONDITION_TYPES.timeOfDay, label: "Время суток", selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
     { value: ABILITY_CONDITION_TYPES.illumination, label: "Степень освещения", selected: selected === ABILITY_CONDITION_TYPES.illumination },
+    { value: ABILITY_CONDITION_TYPES.regionPresence, label: "Нахождение в области", selected: selected === ABILITY_CONDITION_TYPES.regionPresence },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
     { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
@@ -5391,6 +5580,7 @@ function isRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.triggerChance,
     ABILITY_CONDITION_TYPES.timeOfDay,
     ABILITY_CONDITION_TYPES.illumination,
+    ABILITY_CONDITION_TYPES.regionPresence,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.targetFaction,
@@ -5732,6 +5922,47 @@ function getCoverEntriesWithSelected(selected = "") {
 function getFirstUnusedCoverKey(value = []) {
   const selected = new Set(normalizeConditionValues(value));
   return getCoverSettings().entries.find(entry => !selected.has(entry.key))?.key ?? "";
+}
+
+function buildRegionDamageTypeRows(value = []) {
+  const selected = normalizeConditionValues(value);
+  return selected.map((damageTypeKey, index) => ({
+    index,
+    choices: getRegionDamageTypesWithSelected(damageTypeKey).map(entry => ({
+      value: entry.key,
+      label: entry.label || entry.key,
+      selected: entry.key === damageTypeKey,
+      disabled: entry.key !== damageTypeKey && selected.includes(entry.key)
+    }))
+  }));
+}
+
+function getRegionDamageTypesWithSelected(selected = "") {
+  const entries = [...getConfigurableDamageTypes(getDamageTypeSettings())];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries;
+}
+
+function getFirstUnusedRegionDamageTypeKey(value = []) {
+  const selected = new Set(normalizeConditionValues(value));
+  return getConfigurableDamageTypes(getDamageTypeSettings()).find(entry => !selected.has(entry.key))?.key ?? "";
+}
+
+function buildRegionSpecialPropertyRows(value = []) {
+  const selected = normalizeConditionValues(value);
+  return selected.map((type, index) => ({
+    index,
+    choices: [{ value: REGION_SPECIAL_PROPERTY_SMOKE, label: "Задымление" }].map(choice => ({
+      ...choice,
+      selected: choice.value === type,
+      disabled: choice.value !== type && selected.includes(choice.value)
+    }))
+  }));
+}
+
+function getFirstUnusedRegionSpecialPropertyType(value = []) {
+  const selected = new Set(normalizeConditionValues(value));
+  return [REGION_SPECIAL_PROPERTY_SMOKE].find(type => !selected.has(type)) ?? "";
 }
 
 function normalizeConditionValues(value = []) {

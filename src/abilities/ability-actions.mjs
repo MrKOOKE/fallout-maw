@@ -1,6 +1,7 @@
 import {
   ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
+  ABILITY_ACTION_EVENT_CONTROLS,
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_POINT_COST_MODES,
   ABILITY_ACTION_ROUTE_BUDGET_MODES,
@@ -76,6 +77,7 @@ import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
+import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -132,6 +134,148 @@ export function collectAbilityWeaponAttackOptions(actor, actionSource = {}, {
   }
   if (!requireReachableTarget) return options;
   return options.filter(option => abilityWeaponAttackOptionCanReach(actor, option, targetToken));
+}
+
+/** Collect options for an action executed by the generic system-event reaction provider. */
+export function collectAbilityEventActionOptions(actor, actionSource = {}, options = {}) {
+  const action = normalizeAbilityAction(actionSource);
+  if (action.type === ABILITY_ACTION_TYPES.weaponAttack) {
+    return collectAbilityWeaponAttackOptions(actor, action, options);
+  }
+  if (action.type !== ABILITY_ACTION_TYPES.eventSkillCheck) return [];
+  const envelope = options?.envelope ?? {};
+  const skillKey = getAbilityEventSkillKey(action, envelope);
+  if (!actor || !skillKey || !actor.system?.skills?.[skillKey]) return [];
+  return [{
+    id: `${action.id}|event-skill-check`,
+    action,
+    actionLabel: game.i18n.localize("FALLOUTMAW.Ability.Actions.EventSkillCheck"),
+    skillKey
+  }];
+}
+
+/** Select one event action without showing weapon-specific UI for skill checks. */
+export async function selectAbilityEventActionOption(actor, options = [], context = {}) {
+  if (!options.length) return null;
+  if (options.length === 1 || context?.autoApply) return options[0];
+  if (options.every(option => option?.action?.type === ABILITY_ACTION_TYPES.weaponAttack)) {
+    return selectAbilityWeaponAttackOption(actor, options, context);
+  }
+  const rows = options.map((option, index) => `
+    <label class="fallout-maw-radio-card">
+      <input type="radio" name="optionId" value="${escapeAttribute(option.id)}" ${index === 0 ? "checked" : ""}>
+      <span><strong>${escapeHTML(option.actionLabel || option.skillKey || option.id)}</strong></span>
+    </label>
+  `).join("");
+  const data = await DialogV2.input({
+    window: { title: String(context?.title ?? "") || game.i18n.localize("FALLOUTMAW.Ability.Actions.SelectAction") },
+    content: `<div class="fallout-maw-disarm-choice-grid">${rows}</div>`,
+    ok: {
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.Execute"),
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    rejectClose: false
+  });
+  return options.find(option => option.id === String(data?.optionId ?? "")) ?? null;
+}
+
+/** Execute an action chosen by the generic system-event reaction provider. */
+export async function executeAbilityEventActionOption({ actor = null, option = null, envelope = null, ...context } = {}) {
+  const action = normalizeAbilityAction(option?.action);
+  if (action.type === ABILITY_ACTION_TYPES.weaponAttack) {
+    return executeAbilityWeaponAttackOption({ actor, option, ...context });
+  }
+  if (action.type !== ABILITY_ACTION_TYPES.eventSkillCheck) return false;
+  const skillKey = getAbilityEventSkillKey(action, envelope);
+  if (!actor || !skillKey || !actor.system?.skills?.[skillKey]) return false;
+  const sourceToken = context?.targetToken?.object ?? context?.targetToken ?? null;
+  const eventData = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  const requestData = eventData.request && typeof eventData.request === "object" ? eventData.request : {};
+  const inheritedChecks = Array.isArray(eventData.skillChecks) && eventData.skillChecks.length
+    ? eventData.skillChecks
+    : [{
+      skillKey,
+      difficulty: eventData.difficulty ?? requestData.difficulty,
+      situationalModifier: eventData.situationalModifier ?? requestData.situationalModifier,
+      advantageCount: eventData.advantageCount ?? requestData.advantageCount,
+      disadvantageCount: eventData.disadvantageCount ?? requestData.disadvantageCount,
+      targetActorUuid: String(envelope?.target?.actorUuid ?? ""),
+      targetTokenUuid: getEventParticipantTokenUuid(envelope?.target)
+    }];
+  const configuredDifficulty = action.skillDifficultyFormula
+    ? Math.trunc(evaluateActorFormula(action.skillDifficultyFormula, actor, {
+      fallback: 0,
+      minimum: 0,
+      context: "ability event skill-check difficulty"
+    }))
+    : null;
+  const entries = [];
+  for (const inherited of inheritedChecks) {
+    const entrySkillKey = action.skillKey || String(inherited?.skillKey ?? skillKey).trim();
+    if (!entrySkillKey || !actor.system?.skills?.[entrySkillKey]) return false;
+    const targetTokenUuid = String(inherited?.targetTokenUuid ?? "").trim();
+    const targetActorUuid = String(inherited?.targetActorUuid ?? "").trim();
+    const [targetTokenDocument, targetActorDocument] = await Promise.all([
+      targetTokenUuid ? globalThis.fromUuid?.(targetTokenUuid) : null,
+      !targetTokenUuid && targetActorUuid ? globalThis.fromUuid?.(targetActorUuid) : null
+    ]);
+    const targetToken = targetTokenDocument?.object ?? targetTokenDocument ?? null;
+    const targetActor = targetToken?.actor ?? targetActorDocument ?? null;
+    const advantageCount = Math.max(0, Math.trunc(Number(inherited?.advantageCount) || 0))
+      + action.skillAdvantageCount;
+    const disadvantageCount = Math.max(0, Math.trunc(Number(inherited?.disadvantageCount) || 0))
+      + action.skillDisadvantageCount;
+    entries.push({
+      actor,
+      skillKey: entrySkillKey,
+      data: {
+        difficulty: configuredDifficulty ?? Math.max(0, Math.trunc(Number(inherited?.difficulty) || 0)),
+        situationalModifier: Math.trunc(Number(inherited?.situationalModifier) || 0),
+        advantage: advantageCount > 0,
+        advantageCount,
+        disadvantage: disadvantageCount > 0,
+        disadvantageCount,
+        actorToken: sourceToken,
+        targetToken,
+        targetActor
+      }
+    });
+  }
+  const outcomes = entries.length === 1
+    ? [await requestSkillCheck({
+      ...entries[0],
+      animate: false,
+      requester: "abilityEventAction",
+      chainRef: context?.chainRef ?? null
+    })].filter(Boolean)
+    : (await requestSkillCheckBatch({
+      actor,
+      entries,
+      animate: false,
+      requester: "abilityEventAction",
+      title: String(context?.title ?? "") || game.i18n.localize("FALLOUTMAW.Ability.Actions.EventSkillCheck"),
+      chainRef: context?.chainRef ?? null
+    }))?.outcomes ?? [];
+  if (outcomes.length !== entries.length) return false;
+  const succeeded = outcomes.every(outcome => {
+    const resultKey = String(outcome?.result?.key ?? "");
+    return ["success", "criticalSuccess"].includes(resultKey) || outcome?.result?.autoSuccess;
+  });
+  const control = succeeded ? action.skillSuccessControl : action.skillFailureControl;
+  return {
+    used: true,
+    outcomes,
+    cancelCurrent: control === ABILITY_ACTION_EVENT_CONTROLS.cancelCurrent,
+    cancelRemaining: control === ABILITY_ACTION_EVENT_CONTROLS.cancelRemaining,
+    reason: succeeded ? "eventSkillCheckSucceeded" : "eventSkillCheckFailed"
+  };
+}
+
+function getAbilityEventSkillKey(action = {}, envelope = {}) {
+  if (action.skillKey) return action.skillKey;
+  const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  return String(data.skillKey ?? data.skill?.key ?? data.request?.skillKey ?? "").trim();
 }
 
 export function abilityWeaponAttackOptionCanReach(actor, option = null, targetToken = null) {
@@ -338,6 +482,9 @@ async function prepareAbilityFunctionActionsInternal({
   const actionContexts = [];
   for (const actionSource of abilityFunction?.actions ?? []) {
     const action = normalizeAbilityAction(actionSource);
+    // Active-application item mutations are committed atomically by the
+    // application transaction, not by the target action executor.
+    if (action.type === ABILITY_ACTION_TYPES.treatmentClassShift) continue;
     const executorTargets = action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets
       ? normalizedTargets
       : [{ actor, token: resolvedSourceToken }];
@@ -888,14 +1035,20 @@ async function executeMovementRouteBatch(batch = [], {
 export function getAbilityTargetExecutorAvailability(actor = null, abilityFunction = {}, token = null) {
   const targetExecutorActions = (abilityFunction?.actions ?? [])
     .map(action => normalizeAbilityAction(action))
-    .filter(action => action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets);
+    .filter(action => (
+      action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets
+      && action.type !== ABILITY_ACTION_TYPES.treatmentClassShift
+    ));
   if (!targetExecutorActions.length) return { available: true, reason: "" };
   if (!actor || !token?.actor || token.actor.uuid !== actor.uuid) {
     return { available: false, reason: "нет токена исполнителя" };
   }
   if (isActorUnableToAct(actor)) return { available: false, reason: "актёр не может действовать" };
   for (const action of targetExecutorActions) {
-    if (action.type === ABILITY_ACTION_TYPES.movementRoute) continue;
+    if ([
+      ABILITY_ACTION_TYPES.movementRoute,
+      ABILITY_ACTION_TYPES.eventSkillCheck
+    ].includes(action.type)) continue;
     if (!collectAbilityWeaponAttackOptions(actor, action).length) {
       return { available: false, reason: "нет доступного атакующего действия или ресурсов" };
     }

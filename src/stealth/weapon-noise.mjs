@@ -8,21 +8,30 @@ import {
   getTokenCenter,
   isActorStealthed
 } from "./rules.mjs";
+import {
+  ABILITY_FIXED_FUNCTION_KEYS,
+  normalizeInconspicuousSettings
+} from "../settings/abilities.mjs";
+import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
+import { isActorInActiveCombat } from "../combat/combat-membership.mjs";
 
 const weaponNoiseDetectionQueues = new Map();
 
 let rollStealthCheckCallback = async () => undefined;
+let rollStealthChecksCallback = null;
 let pauseGameCallback = () => undefined;
 let settingsProvider = getRuntimeStealthSettings;
 
 export function configureWeaponNoiseDetection({
   rollStealthCheck = null,
+  rollStealthChecks = null,
   pauseGame = null,
   getSettings = null
 } = {}) {
   rollStealthCheckCallback = typeof rollStealthCheck === "function"
     ? rollStealthCheck
     : async () => undefined;
+  rollStealthChecksCallback = typeof rollStealthChecks === "function" ? rollStealthChecks : null;
   pauseGameCallback = typeof pauseGame === "function" ? pauseGame : () => undefined;
   settingsProvider = typeof getSettings === "function" ? getSettings : getRuntimeStealthSettings;
 }
@@ -70,8 +79,9 @@ async function resolveWeaponNoiseDetectionNow(attackerToken, noiseLevel) {
 
   const hiddenPoint = getTokenCenter(hiddenToken);
   const noiseZone = buildWeaponNoiseZone(hiddenToken, { noiseLevel });
+  const skillBonus = getInconspicuousAttackStealthBonus(hiddenToken.actor);
+  const checks = [];
   for (const observerToken of globalThis.canvas?.tokens?.placeables ?? []) {
-    if (!isActorStealthed(hiddenToken.actor)) return true;
     if (!isValidStealthObserver(hiddenToken, observerToken)) continue;
     const observerOrigin = getTokenCenter(observerToken);
     if (!testWeaponNoiseZoneContact(observerToken, observerOrigin, hiddenPoint, {
@@ -79,14 +89,35 @@ async function resolveWeaponNoiseDetectionNow(attackerToken, noiseLevel) {
       noiseZone,
       settings
     })) continue;
-
-    const outcome = await rollStealthCheckCallback(hiddenToken, observerToken, null, { animate: false });
-    if (!isActorStealthed(hiddenToken.actor) || isStealthCheckFailure(outcome)) {
-      pauseGameCallback();
-      return true;
-    }
+    checks.push({ sourceToken: hiddenToken, targetToken: observerToken, skillBonus });
+  }
+  const outcomes = rollStealthChecksCallback
+    ? await rollStealthChecksCallback(checks, { animate: false })
+    : await Promise.all(checks.map(check => rollStealthCheckCallback(
+      check.sourceToken,
+      check.targetToken,
+      null,
+      { animate: false, skillBonus: check.skillBonus }
+    )));
+  if (!isActorStealthed(hiddenToken.actor) || outcomes.some(isStealthCheckFailure)) {
+    pauseGameCallback();
+    return true;
   }
   return false;
+}
+
+function getInconspicuousAttackStealthBonus(actor) {
+  if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false || !isActorInActiveCombat(actor)) return 0;
+  for (const item of actor?.items ?? []) {
+    if (item?.type !== "ability") continue;
+    const entry = (item.system?.functions ?? [])
+      .find(abilityFunction => (
+        abilityFunction?.type === "fixed"
+        && abilityFunction?.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous
+      ));
+    if (entry) return normalizeInconspicuousSettings(entry.fixedSettings).attackStealthBonus;
+  }
+  return 0;
 }
 
 function getCurrentSceneToken(token) {
@@ -114,6 +145,7 @@ function getWeaponNoiseDetectionQueueKey(token) {
 }
 
 function isStealthCheckFailure(outcome) {
+  if (outcome?.falloutMawRevealPrevented) return false;
   const resultKey = String(outcome?.result?.key ?? "");
   return ["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure;
 }

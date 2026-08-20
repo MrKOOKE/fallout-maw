@@ -118,7 +118,10 @@ import {
   calculateStealthDamageBonusAmount,
   getStealthAttackModifiers
 } from "../stealth/attack-bonuses.mjs";
-import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
+import {
+  STEALTH_ATTACK_BONUS_EFFECT_KEYS,
+  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+} from "../stealth/effect-keys.mjs";
 import {
   calculateFirstAidScalingMultipliers,
   scaleFirstAidSignedValue
@@ -229,6 +232,11 @@ import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
+import {
+  getInconspicuousRoundState,
+  isInconspicuousRoundStateCurrent
+} from "../abilities/inconspicuous-state.mjs";
+import { getActorActiveCombat } from "../combat/combat-membership.mjs";
 import { getEventReactionProgressEntries } from "../events/event-reaction-progress.mjs";
 import {
   getContextualAbilityChangeValue,
@@ -5082,6 +5090,7 @@ function buildAbilityTooltipFunctionSections(item, actor = null) {
     ...getEventReactionProgressEntries(item)
   ]
     .map(entry => [entry.label, entry.value ?? `${entry.current} / ${entry.required}`]);
+  const runtimeStateRows = getInconspicuousTooltipStateRows(item, actor);
   const hasActiveApplication = normalizeAbilityFunctions(item?.system?.functions ?? [])
     .some(abilityFunction => abilityFunction.type === ABILITY_FUNCTION_TYPES.activeApplication);
   const resourceCostRows = buildAbilityResourceCostRows(item, actor);
@@ -5092,10 +5101,23 @@ function buildAbilityTooltipFunctionSections(item, actor = null) {
         : "Энергия",
       resourceCostRows
     ),
+    renderTooltipFunctionSection("Состояние", runtimeStateRows),
     renderTooltipFunctionSection("Прогресс условий", progressRows)
   ].filter(Boolean);
   if (!sections.length) return "";
   return `<section class="functions">${sections.join("")}</section>`;
+}
+
+function getInconspicuousTooltipStateRows(item, actor = null) {
+  if (item?.type !== "ability" || getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return [];
+  const abilityFunction = normalizeAbilityFunctions(item.system?.functions ?? [])
+    .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous);
+  if (!abilityFunction) return [];
+  const combat = getActorActiveCombat(actor);
+  if (!combat) return [["Атакован в текущем раунде", "Вне боя"]];
+  const state = getInconspicuousRoundState(item, abilityFunction);
+  const attacked = isInconspicuousRoundStateCurrent(state, combat) && state.attacked;
+  return [["Атакован в текущем раунде", attacked ? "Да" : "Нет"]];
 }
 
 function buildAbilityResourceCostRows(item, actor = null) {
@@ -9389,6 +9411,10 @@ function buildEffectPathLabelMap({
   for (const token of buildStealthAttackBonusEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }
+  map.set(
+    STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
+    game.i18n.localize("FALLOUTMAW.Effects.StealthIlluminationPenaltyPercent")
+  );
   for (const token of buildSkillCheckActionEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }

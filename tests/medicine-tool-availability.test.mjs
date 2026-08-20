@@ -56,6 +56,20 @@ test("mass medicine distinguishes an insufficient instrument class", () => {
   assert.match(result.message, /доступен класс D/);
 });
 
+test("experimental surgery admits an instrument exactly one class below", () => {
+  const accepted = analyzeMedicineToolAvailability({
+    instruments: [createInstrument({ toolClass: "C" })],
+    treatments: [createTreatment({ healingToolClass: "B", allowedToolClassDeficit: 1 })]
+  });
+  const rejected = analyzeMedicineToolAvailability({
+    instruments: [createInstrument({ toolClass: "D" })],
+    treatments: [createTreatment({ healingToolClass: "B", allowedToolClassDeficit: 1 })]
+  });
+
+  assert.equal(accepted.ok, true);
+  assert.equal(rejected.code, MEDICINE_TOOL_AVAILABILITY.toolClass);
+});
+
 test("mass medicine distinguishes a depleted compatible instrument", () => {
   const result = analyzeMedicineToolAvailability({
     instruments: [createInstrument({ name: "Пустая аптечка", supplyValue: 0 })],

@@ -311,7 +311,7 @@ function abilityConstructField() {
 function abilityActionField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
-    type: new StringField({ required: true, blank: true, choices: ["", "weaponAttack", "movementRoute"], initial: "weaponAttack" }),
+    type: new StringField({ required: true, blank: true, choices: ["", "weaponAttack", "movementRoute", "eventSkillCheck", "treatmentClassShift"], initial: "weaponAttack" }),
     attackActionKeys: new ArrayField(new StringField({ required: true, blank: false }), { required: true, initial: ["all"] }),
     executorMode: new StringField({
       required: true,
@@ -369,7 +369,32 @@ function abilityActionField() {
     }),
     routeMovementAction: new StringField({ required: true, blank: true, initial: "" }),
     routeAutoRotate: new BooleanField({ required: true, initial: false }),
-    routeShowRuler: new BooleanField({ required: true, initial: true })
+    routeShowRuler: new BooleanField({ required: true, initial: true }),
+    // Event-reaction action. Empty skill/difficulty values inherit the triggering event.
+    skillKey: new StringField({ required: true, blank: true, initial: "" }),
+    skillDifficultyFormula: new StringField({ required: true, blank: true, initial: "" }),
+    skillAdvantageCount: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    skillDisadvantageCount: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    skillSuccessControl: new StringField({
+      required: true,
+      blank: false,
+      choices: ["none", "cancelCurrent", "cancelRemaining"],
+      initial: "none"
+    }),
+    skillFailureControl: new StringField({
+      required: true,
+      blank: false,
+      choices: ["none", "cancelCurrent", "cancelRemaining"],
+      initial: "none"
+    }),
+    treatmentClassShift: new SchemaField({
+      itemTypes: new ArrayField(new StringField({
+        required: true,
+        blank: false,
+        choices: ["trauma", "disease"]
+      }), { required: true, initial: [] }),
+      steps: new NumberField({ required: true, integer: true, min: -4, max: 4, initial: 0 })
+    })
   });
 }
 
@@ -411,7 +436,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "trial", "aura", "limitedChanges", "selectedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "regionPresence", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "trial", "aura", "limitedChanges", "selectedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     trialSubject: new StringField({
@@ -535,6 +560,16 @@ function abilityConditionField() {
       choices: ["normal", "shadow", "dim", "dark", "blackout"],
       initial: "normal"
     }),
+    damageTypeKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    regionSpecialPropertyTypes: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      choices: ["smoke"],
+      initial: "smoke"
+    }), { required: true, initial: [] }),
     name: new StringField({ required: true, blank: true, initial: "" }),
     cooldownSeconds: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
     amountPerHour: new NumberField({ required: true, min: 0, initial: 0 }),

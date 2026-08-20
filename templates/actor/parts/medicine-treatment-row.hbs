@@ -9,7 +9,15 @@
     {{#unless treatmentSkillThresholdMet}}<small class="fallout-maw-treatment-unavailable">{{treatmentSkillRequirement}}</small>{{/unless}}
   </div>
   <div class="fallout-maw-action-cell"><strong>{{progressValue}} / {{progressMax}}</strong></div>
-  <div class="fallout-maw-action-cell"><strong>{{healingToolClass}}</strong></div>
+  <div class="fallout-maw-action-cell fallout-maw-treatment-tool-class {{#if healingToolClassReduced}}is-reduced{{/if}}">
+    {{#if healingToolClassReduced}}
+    <span class="fallout-maw-treatment-tool-class__original">{{healingToolClassOriginal}}</span>
+    <i class="fa-solid fa-arrow-right fallout-maw-treatment-tool-class__arrow" aria-hidden="true"></i>
+    <strong class="fallout-maw-treatment-tool-class__effective">{{healingToolClassEffective}}</strong>
+    {{else}}
+    <strong>{{healingToolClass}}</strong>
+    {{/if}}
+  </div>
   <div class="fallout-maw-action-cell"><strong>{{healingDifficulty}}</strong></div>
   <div class="fallout-maw-action-cell"><strong>{{healingSkillLabel}}</strong></div>
   <div class="fallout-maw-action-cell fallout-maw-action-cell--button">
@@ -36,6 +44,7 @@
     </div>
     <div class="fallout-maw-action-cell fallout-maw-action-cell--name">
       <strong>{{name}}</strong>
+      {{#if unavailableReason}}<small class="fallout-maw-treatment-unavailable">{{unavailableReason}}</small>{{/if}}
     </div>
     <div class="fallout-maw-action-cell"><strong>{{toolClass}}</strong></div>
     <div class="fallout-maw-action-cell"><strong>{{efficiencyLabel}}</strong></div>

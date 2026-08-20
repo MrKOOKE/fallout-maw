@@ -1382,6 +1382,84 @@ test("generic provider consumes one chance across skill-check subjects in one op
   assert.equal(second.length, 0);
 });
 
+test("generic provider propagates a constructor action's current-event cancellation", async () => {
+  const eventKey = "fallout-maw.stealth.reveal.before";
+  const actor = { uuid: "Actor.Hidden", items: [] };
+  const abilityFunction = {
+    id: "probably-seemed",
+    type: "effectChanges",
+    reactionSettings: { durationSeconds: 0, costs: [] },
+    changes: [],
+    penalties: [],
+    actions: [{ id: "reroll", type: "eventSkillCheck", targetMode: "triggerActor" }],
+    conditions: [{
+      id: "detected",
+      groupId: "",
+      type: "eventReaction",
+      eventKey,
+      progressRequired: 1,
+      trackingTargets: ["owner"],
+      reactionMode: "standard"
+    }]
+  };
+  const item = createSourceItem(actor, {
+    id: "ability",
+    uuid: "Actor.Hidden.Item.ability",
+    type: "ability",
+    functions: [abilityFunction]
+  });
+  actor.items = [item];
+  const docs = new Map([[actor.uuid, actor], [item.uuid, item]]);
+  const targetToken = { actor };
+  const provider = createGenericEventReactionProvider({
+    getReactorActors: () => [actor],
+    resolveUuid: uuid => docs.get(uuid) ?? null,
+    canOfferToActor: () => true,
+    costRegistry: createResourceCostRegistry({
+      getResourceDefinitions: () => [],
+      evaluateFormula: () => 0
+    }),
+    effectManager: {
+      apply: async () => ({}),
+      cleanupRoot: async () => 0,
+      cleanupOrphans: async () => 0
+    },
+    actionRuntime: {
+      resolveTriggerTarget: async () => targetToken,
+      collectOptions: async (_actor, action) => [{ id: "reroll", action }],
+      selectOption: async (_actor, options) => options[0],
+      execute: async () => ({
+        used: true,
+        cancelCurrent: true,
+        cancelRemaining: false,
+        reason: "eventSkillCheckSucceeded"
+      })
+    },
+    progressManager: {
+      advance: async () => ({ ready: true, readyConditionIds: ["detected"] }),
+      isReady: async () => true,
+      reset: async () => true
+    },
+    conditionEvaluator: () => true,
+    normalizeFunctions: functions => functions,
+    hasEventKey: async () => true
+  });
+  const envelope = eventEnvelope({
+    key: eventKey,
+    source: { actorUuid: actor.uuid },
+    target: { actorUuid: "Actor.Observer" }
+  });
+  const [offer] = await provider.collect({ eventKey, context: { envelope } });
+  assert.ok(offer);
+  assert.equal(offer.autoApply, false);
+
+  const result = await provider.execute({ eventKey, context: { envelope }, offer });
+  assert.equal(result.handled, true);
+  assert.equal(result.cancelCurrent, true);
+  assert.equal(result.cancelRemaining, false);
+  assert.equal(result.reason, "eventSkillCheckSucceeded");
+});
+
 function eventEnvelope(overrides = {}) {
   return {
     key: EVENT_KEY,

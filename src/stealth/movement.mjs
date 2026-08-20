@@ -43,11 +43,13 @@ const movementThresholdFormulaData = {
 };
 
 let rollStealthCheckCallback = async () => undefined;
+let rollStealthChecksCallback = null;
 let pauseGameCallback = () => undefined;
 let providerRegistered = false;
 
-export function registerStealthMovementProvider({ rollStealthCheck, pauseGame } = {}) {
+export function registerStealthMovementProvider({ rollStealthCheck, rollStealthChecks, pauseGame } = {}) {
   if (typeof rollStealthCheck === "function") rollStealthCheckCallback = rollStealthCheck;
+  if (typeof rollStealthChecks === "function") rollStealthChecksCallback = rollStealthChecks;
   if (typeof pauseGame === "function") pauseGameCallback = pauseGame;
   if (providerRegistered) return;
   registerMovementInterruptionProvider({
@@ -445,17 +447,29 @@ async function executeStealthMovementInterruption({
   isCurrent = null
 } = {}) {
   let revealed = false;
-  const revealedActors = new Map();
+  const checksByActor = new Map();
   for (const check of getStealthEventChecks(event)) {
     const hiddenTokenDocument = await fromUuid(String(check.hiddenTokenUuid ?? ""));
     const observerTokenDocument = await fromUuid(String(check.observerTokenUuid ?? ""));
     const hiddenToken = hiddenTokenDocument?.object ?? hiddenTokenDocument;
     const observerToken = observerTokenDocument?.object ?? observerTokenDocument;
     if (!hiddenToken?.actor || !observerToken?.actor || !isActorStealthed(hiddenToken.actor)) continue;
+    const actorChecks = checksByActor.get(hiddenToken.actor.uuid) ?? [];
+    actorChecks.push({ sourceToken: hiddenToken, targetToken: observerToken });
+    checksByActor.set(hiddenToken.actor.uuid, actorChecks);
+  }
 
-    const outcome = await rollStealthCheckCallback(hiddenToken, observerToken, null, { animate: false });
-    const checkRevealed = !isActorStealthed(hiddenToken.actor) || isStealthCheckFailure(outcome);
-    if (checkRevealed) revealedActors.set(hiddenToken.actor.uuid, hiddenToken.actor);
+  for (const actorChecks of checksByActor.values()) {
+    const actor = actorChecks[0]?.sourceToken?.actor ?? null;
+    const outcomes = rollStealthChecksCallback
+      ? await rollStealthChecksCallback(actorChecks, { animate: false })
+      : await Promise.all(actorChecks.map(check => rollStealthCheckCallback(
+        check.sourceToken,
+        check.targetToken,
+        null,
+        { animate: false }
+    )));
+    const checkRevealed = !isActorStealthed(actor) || outcomes.some(isStealthCheckFailure);
     revealed ||= checkRevealed;
   }
 
@@ -702,6 +716,7 @@ function isTokenAtWaypoint(tokenDocument, waypoint = {}) {
 }
 
 function isStealthCheckFailure(outcome) {
+  if (outcome?.falloutMawRevealPrevented) return false;
   const resultKey = String(outcome?.result?.key ?? "");
   return ["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure;
 }

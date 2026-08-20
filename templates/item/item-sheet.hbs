@@ -1305,6 +1305,78 @@
       </div>
     </div>
     {{/if}}
+
+    {{#if fixedExperimentalSurgerySettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Эксперементальная хирургия</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Лечение</strong>
+          <label><span>Стоимость, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.treatmentEnergyCost" value="{{fixedExperimentalSurgerySettings.treatmentEnergyCost}}" min="0" step="1"></label>
+          <label><span>Допуск ниже класса</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.allowedToolClassDeficit" value="{{fixedExperimentalSurgerySettings.allowedToolClassDeficit}}" min="0" max="4" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Расход инструмента</strong>
+          <label><span>Шанс повышенного расхода, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.extraSupplyChancePercent" value="{{fixedExperimentalSurgerySettings.extraSupplyChancePercent}}" min="0" max="100" step="1"></label>
+          <label><span>Множитель расхода</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.supplyCostMultiplier" value="{{fixedExperimentalSurgerySettings.supplyCostMultiplier}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Осложнение</strong>
+          <label><span>Шанс урона пациенту, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.patientDamageChancePercent" value="{{fixedExperimentalSurgerySettings.patientDamageChancePercent}}" min="0" max="100" step="1"></label>
+          <label><span>Урон от максимума здоровья, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.patientHealthDamagePercent" value="{{fixedExperimentalSurgerySettings.patientHealthDamagePercent}}" min="0" max="100" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedEmergencyOperationsSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Экстренные операции</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Пассивная часть</strong>
+          <label><span>Стоимость операции в бою, ОД</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.combatActionPointCost" value="{{fixedEmergencyOperationsSettings.combatActionPointCost}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedEmergencyOperationsSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Эффективность следующего лечения, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.toolEfficiencyPercentBonus" value="{{fixedEmergencyOperationsSettings.toolEfficiencyPercentBonus}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedEmergencyOperationsSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" value="{{fixedEmergencyOperationsSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-emergency-operations-overload-duration-amount>
+            <select data-fixed-emergency-operations-overload-duration-unit>{{#each fixedEmergencyOperationsSettings.overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedInconspicuousSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Неприметный</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Атака из скрытности</strong>
+          <label><span>Бонус к проверке Скрытности</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackStealthBonus" value="{{fixedInconspicuousSettings.attackStealthBonus}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Конец раунда без попыток атаки</strong>
+          <label><span>Бонус к Скрытности</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.stealthBonus" value="{{fixedInconspicuousSettings.stealthBonus}}" min="0" step="1"></label>
+          <label><span>Длительность</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" value="{{fixedInconspicuousSettings.stealthBonusDurationAmount}}" min="0" step="1" data-fixed-inconspicuous-duration-amount>
+            <select data-fixed-inconspicuous-duration-unit>{{#each fixedInconspicuousSettings.stealthBonusDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Состояние: {{fixedInconspicuousSettings.roundStateLabel}}</strong>
+          <label><span>Попытка атаки по актёру</span><select data-fixed-inconspicuous-attacked {{#if fixedInconspicuousSettings.roundStateDisabled}}disabled{{/if}}>
+            {{#each fixedInconspicuousSettings.roundStateChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">
@@ -2341,24 +2413,6 @@
           {{/if}}
         </div>
       </fieldset>
-      <fieldset class="fallout-maw-fieldset">
-        <legend>Разовое изменение класса травм/болезней</legend>
-        <div class="fallout-maw-fixed-settings-row">
-          <div class="fallout-maw-inline-checkbox">
-            <span>Травмы</span>
-            <input aria-label="Травмы" type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.treatmentClassShift.itemTypes.0" value="trauma" {{checked activeApplicationSettings.treatmentClassShift.shiftsTraumas}}>
-          </div>
-          <div class="fallout-maw-inline-checkbox">
-            <span>Болезни</span>
-            <input aria-label="Болезни" type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.treatmentClassShift.itemTypes.1" value="disease" {{checked activeApplicationSettings.treatmentClassShift.shiftsDiseases}}>
-          </div>
-          <label>
-            <span>Изменение класса</span>
-            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.treatmentClassShift.steps" value="{{activeApplicationSettings.treatmentClassShift.steps}}" min="-4" max="4" step="1">
-          </label>
-        </div>
-        <p class="fallout-maw-hint">Разово изменяет класс D/C/B/A/S у всех уже существующих состояний выбранных типов. Отрицательное значение понижает класс; изменение не исчезает вместе с эффектом.</p>
-      </fieldset>
     </div>
     {{/if}}
     {{#if canConfigureChanges}}
@@ -2503,6 +2557,37 @@
             <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeAutoRotate" {{#if routeAutoRotate}}checked{{/if}}><span>{{localize "FALLOUTMAW.Ability.Actions.RouteAutoRotate"}}</span></label>
             <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeShowRuler" {{#if routeShowRuler}}checked{{/if}}><span>{{localize "FALLOUTMAW.Ability.Actions.RouteShowRuler"}}</span></label>
           </div>
+        </div>
+        {{/if}}
+        {{#if isEventSkillCheck}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{localize "FALLOUTMAW.Ability.Actions.EventSkillCheck"}}</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkill"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillKey">{{#each skillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillDifficulty"}}</span><input type="text" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillDifficultyFormula" value="{{skillDifficultyFormula}}" data-formula-autocomplete="all" placeholder="{{localize 'FALLOUTMAW.Ability.Actions.EventSkillDifficultyHint'}}"></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillAdvantage"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillAdvantageCount" value="{{skillAdvantageCount}}"></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillDisadvantage"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillDisadvantageCount" value="{{skillDisadvantageCount}}"></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillSuccessControl"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillSuccessControl">{{#each skillSuccessControlChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillFailureControl"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillFailureControl">{{#each skillFailureControlChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          </div>
+          <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.EventSkillInherited"}}</p>
+        </div>
+        {{/if}}
+        {{#if isTreatmentClassShift}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>Разовое изменение класса травм/болезней</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-fixed-settings-row">
+            <label class="fallout-maw-inline-checkbox"><span>Травмы</span><input aria-label="Травмы" type="checkbox" data-ability-treatment-class-item-type value="trauma" {{checked shiftsTraumas}}></label>
+            <label class="fallout-maw-inline-checkbox"><span>Болезни</span><input aria-label="Болезни" type="checkbox" data-ability-treatment-class-item-type value="disease" {{checked shiftsDiseases}}></label>
+            <label><span>Изменение класса</span><input type="number" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.treatmentClassShift.steps" value="{{treatmentClassShift.steps}}" min="-4" max="4" step="1"></label>
+          </div>
+          <p class="fallout-maw-hint">Разово изменяет класс D/C/B/A/S у всех уже существующих состояний выбранных типов. Отрицательное значение понижает класс; изменение не исчезает вместе с эффектом.</p>
         </div>
         {{/if}}
         {{/if}}
@@ -2864,6 +2949,30 @@
               </label>
               {{/if}}
 
+              {{#if isRegionPresence}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Области по виду урона</span><button type="button" data-add-ability-region-damage-type {{#unless canAddRegionDamageType}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each regionDamageTypeRows}}
+                  <div class="fallout-maw-item-use-category-row" data-region-damage-type-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.damageTypeKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-region-damage-type title="Удалить вид урона"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Виды урона не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Особые области</span><button type="button" data-add-ability-region-special-property {{#unless canAddRegionSpecialProperty}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each regionSpecialPropertyRows}}
+                  <div class="fallout-maw-item-use-category-row" data-region-special-property-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.regionSpecialPropertyTypes.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-region-special-property title="Удалить особую область"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Особые области не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
 
               {{#if isHealth}}
               <label>
@@ -3711,6 +3820,37 @@
           </div>
         </div>
         {{/if}}
+        {{#if isEventSkillCheck}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{localize "FALLOUTMAW.Ability.Actions.EventSkillCheck"}}</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkill"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillKey">{{#each skillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillDifficulty"}}</span><input type="text" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillDifficultyFormula" value="{{skillDifficultyFormula}}" data-formula-autocomplete="all" placeholder="{{localize 'FALLOUTMAW.Ability.Actions.EventSkillDifficultyHint'}}"></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillAdvantage"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillAdvantageCount" value="{{skillAdvantageCount}}"></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillDisadvantage"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillDisadvantageCount" value="{{skillDisadvantageCount}}"></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillSuccessControl"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillSuccessControl">{{#each skillSuccessControlChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.EventSkillFailureControl"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.skillFailureControl">{{#each skillFailureControlChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          </div>
+          <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.EventSkillInherited"}}</p>
+        </div>
+        {{/if}}
+        {{#if isTreatmentClassShift}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>Разовое изменение класса травм/болезней</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-fixed-settings-row">
+            <label class="fallout-maw-inline-checkbox"><span>Травмы</span><input aria-label="Травмы" type="checkbox" data-ability-treatment-class-item-type value="trauma" {{checked shiftsTraumas}}></label>
+            <label class="fallout-maw-inline-checkbox"><span>Болезни</span><input aria-label="Болезни" type="checkbox" data-ability-treatment-class-item-type value="disease" {{checked shiftsDiseases}}></label>
+            <label><span>Изменение класса</span><input type="number" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.treatmentClassShift.steps" value="{{treatmentClassShift.steps}}" min="-4" max="4" step="1"></label>
+          </div>
+          <p class="fallout-maw-hint">Разово изменяет класс D/C/B/A/S у всех уже существующих состояний выбранных типов. Отрицательное значение понижает класс; изменение не исчезает вместе с эффектом.</p>
+        </div>
+        {{/if}}
         {{/if}}
       </div>
       {{/each}}
@@ -4070,6 +4210,30 @@
               </label>
               {{/if}}
 
+              {{#if isRegionPresence}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Области по виду урона</span><button type="button" data-add-ability-region-damage-type {{#unless canAddRegionDamageType}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each regionDamageTypeRows}}
+                  <div class="fallout-maw-item-use-category-row" data-region-damage-type-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.damageTypeKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-region-damage-type title="Удалить вид урона"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Виды урона не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Особые области</span><button type="button" data-add-ability-region-special-property {{#unless canAddRegionSpecialProperty}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each regionSpecialPropertyRows}}
+                  <div class="fallout-maw-item-use-category-row" data-region-special-property-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.regionSpecialPropertyTypes.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-region-special-property title="Удалить особую область"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Особые области не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
 
               {{#if isHealth}}
               <label>

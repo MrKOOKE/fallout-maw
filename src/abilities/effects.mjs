@@ -81,6 +81,7 @@ import {
 import { getActiveSceneWorldTimeActors } from "../time/world-time-actor-index.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "./deus-ex-machina-progress-runtime.mjs";
+import { tokenMatchesRegionPresenceCondition } from "./region-presence-condition.mjs";
 import {
   ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
   getActiveApplicationEffectAuraDescriptor,
@@ -134,6 +135,7 @@ let environmentConditionIndexInitialized = false;
 
 export function registerAbilityEffectHooks() {
   registerQueuedWorldTimeProcessor(syncTimeOfDayConditionEffects, { priority: -25 });
+  registerQueuedWorldTimeProcessor(syncRegionPresenceConditionEffects, { priority: -25 });
   registerBulkOperationFlusher(flushDeferredAbilityEffectSyncs);
   Hooks.on("createActor", actor => {
     queueActorAbilityEffectSync(actor, {}, { aura: true });
@@ -243,6 +245,16 @@ export function registerAbilityEffectHooks() {
     queueIlluminationConditionEffectSync(tokenDocument);
     queueAuraStateSync();
   });
+  for (const hookName of [
+    "createRegion",
+    "updateRegion",
+    "deleteRegion",
+    "createRegionBehavior",
+    "updateRegionBehavior",
+    "deleteRegionBehavior"
+  ]) {
+    Hooks.on(hookName, document => queueRegionPresenceSceneEffectSync(document));
+  }
   Hooks.on("createActiveEffect", (effect, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
     if (getActiveApplicationEffectFlag(effect)) {
@@ -376,7 +388,13 @@ function queueAuraSyncAfterTokenMovement(tokenDocument, { syncMovingActor = fals
 
 function queueAuraDependentStateSync(tokenDocument, { syncMovingActor = false } = {}) {
   queueIlluminationConditionEffectSync(tokenDocument);
-  if (syncMovingActor) {
+  if (
+    syncMovingActor
+    || getActorPassiveEnvironmentConditions(
+      tokenDocument?.actor,
+      ABILITY_CONDITION_TYPES.regionPresence
+    ).length
+  ) {
     queueActorAbilityEffectSync(tokenDocument?.actor, { actorToken: tokenDocument }, { aura: true });
   }
 
@@ -406,6 +424,36 @@ async function syncTimeOfDayConditionEffects(worldTime, deltaTime) {
       !== timeOfDayConditionApplies(condition, { worldTime: current })
     ))) continue;
     queueActorAbilityEffectSync(actor, context, { aura: true });
+  }
+}
+
+async function syncRegionPresenceConditionEffects(worldTime, deltaTime) {
+  if (!game.ready || !game.user?.isActiveGM) return;
+  const current = Number(worldTime) || 0;
+  const previous = current - (Number(deltaTime) || 0);
+  const actors = new Map();
+  for (const actor of await getActiveSceneWorldTimeActors()) actors.set(actor.uuid, actor);
+  for (const { actor, context } of collectEnvironmentActorContexts({ actors })) {
+    const conditions = getActorPassiveEnvironmentConditions(actor, ABILITY_CONDITION_TYPES.regionPresence);
+    if (!conditions.some(condition => (
+      tokenMatchesRegionPresenceCondition(context.actorToken, condition, { worldTime: previous })
+      !== tokenMatchesRegionPresenceCondition(context.actorToken, condition, { worldTime: current })
+    ))) continue;
+    queueActorAbilityEffectSync(actor, context, { aura: true });
+  }
+}
+
+function queueRegionPresenceSceneEffectSync(document = null) {
+  if (!game.ready || !game.user?.isActiveGM) return;
+  const region = document?.documentName === "RegionBehavior" ? document.parent : document;
+  const scene = region?.parent ?? null;
+  for (const tokenDocument of scene?.tokens ?? []) {
+    const actor = tokenDocument?.actor;
+    if (!actor?.uuid) continue;
+    if (!getActorPassiveEnvironmentConditions(actor, ABILITY_CONDITION_TYPES.regionPresence).length) continue;
+    // The engine updates TokenDocument.regions immediately after Region hooks.
+    // The standard 40 ms actor queue coalesces this with those membership writes.
+    queueActorAbilityEffectSync(actor, { actorToken: tokenDocument }, { aura: true });
   }
 }
 
@@ -499,7 +547,11 @@ function refreshEnvironmentConditionActorIndex(actor) {
   if (!actorUuid) return;
   const conditionsByType = collectActorPassiveEnvironmentConditions(actor);
   environmentConditionCache.set(actorUuid, conditionsByType);
-  if (conditionsByType.timeOfDay.length || conditionsByType.illumination.length) {
+  if (
+    conditionsByType.timeOfDay.length
+    || conditionsByType.illumination.length
+    || conditionsByType.regionPresence.length
+  ) {
     environmentConditionActorIndex.set(actorUuid, actor);
   } else {
     environmentConditionActorIndex.delete(actorUuid);
@@ -519,7 +571,8 @@ function shouldRefreshEnvironmentConditionIndex(item, changes = {}) {
 function collectActorPassiveEnvironmentConditions(actor) {
   const conditionsByType = {
     [ABILITY_CONDITION_TYPES.timeOfDay]: [],
-    [ABILITY_CONDITION_TYPES.illumination]: []
+    [ABILITY_CONDITION_TYPES.illumination]: [],
+    [ABILITY_CONDITION_TYPES.regionPresence]: []
   };
   for (const item of getActorItemsWithActiveHudModules(actor)) {
     const functions = item?.type === "ability"

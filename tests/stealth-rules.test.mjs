@@ -127,3 +127,46 @@ test("difficulty combines target skill, lighting and hidden-observer modifier", 
   assert.equal(result.advantageCount, 1);
   assert.equal(result.distance, 25);
 });
+
+test("negative illumination penalty percent reduces only the lighting difficulty bonus", () => {
+  globalThis.CONFIG = { specialStatusEffects: { INVISIBLE: "stealth-hidden" } };
+  globalThis.canvas = {
+    scene: { grid: { distance: 5 } },
+    grid: { size: 100 },
+    environment: { darknessLevel: 0.75, globalLightSource: { active: false } },
+    effects: {
+      lightSources: new Map(),
+      getDarknessLevel: () => 0.75,
+      testInsideDarkness: () => false
+    }
+  };
+  invalidateLightingAnalysisCache();
+
+  const sourceToken = {
+    actor: {
+      statuses: new Set(),
+      system: { stealth: { illuminationPenaltyPercent: -50 } }
+    },
+    document: {
+      getVisibilityTestPoints: () => [{ x: 0, y: 0, elevation: 0 }],
+      getCenterPoint: () => ({ x: 0, y: 0, elevation: 0 })
+    }
+  };
+  const targetToken = {
+    actor: {
+      statuses: new Set(),
+      system: { skills: { naturalist: { value: 31 } } }
+    },
+    document: {
+      getCenterPoint: () => ({ x: 300, y: 400, elevation: 0 })
+    }
+  };
+
+  const result = computeStealthDifficulty(sourceToken, targetToken, SETTINGS);
+
+  assert.equal(result.baseDifficulty, 31);
+  assert.equal(result.lighting.modifiers.baseDifficultyBonus, 20);
+  assert.equal(result.lighting.modifiers.illuminationPenaltyPercent, -50);
+  assert.equal(result.lighting.modifiers.difficultyBonus, 10);
+  assert.equal(result.difficulty, 41);
+});

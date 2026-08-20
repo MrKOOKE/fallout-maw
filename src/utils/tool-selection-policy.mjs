@@ -50,17 +50,19 @@ export function groupToolSelectionOptions(instruments = []) {
 
 export function selectToolByPolicy(instruments = [], {
   requiredToolKey = "",
-  requiredToolClass = "D"
+  requiredToolClass = "D",
+  allowedToolClassDeficit = 0
 } = {}, options = {}) {
   const policy = normalizeToolSelectionPolicy(options);
   const allowedGroups = new Set(policy.allowedToolGroupKeys);
   const requiredKey = String(requiredToolKey ?? "").trim();
   const requiredRank = toToolClassRank(requiredToolClass);
+  const minimumRank = Math.max(0, requiredRank - Math.max(0, Math.trunc(toFiniteNumber(allowedToolClassDeficit))));
   const choices = instruments
     .filter(instrument => !requiredKey || String(instrument?.toolKey ?? "").trim() === requiredKey)
     .filter(instrument => Boolean(instrument?.requirementMet))
     .filter(instrument => toFiniteNumber(instrument?.supplyValue) > 0)
-    .filter(instrument => toToolClassRank(instrument?.toolClass) >= requiredRank)
+    .filter(instrument => toToolClassRank(instrument?.toolClass) >= minimumRank)
     .filter(instrument => (
       !allowedGroups.size
       || allowedGroups.has(createToolGroupKey(instrument?.toolKey, instrument?.toolClass))

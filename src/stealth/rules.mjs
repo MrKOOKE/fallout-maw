@@ -61,7 +61,15 @@ export function computeStealthDifficulty(sourceToken, targetToken, settings = ge
   if (!sourceActor || !targetActor) return null;
 
   const lighting = getTokenLightingAnalysis(sourceToken, settings);
-  const modifiers = lighting.modifiers;
+  const baseLightingDifficultyBonus = Math.max(0, Number(lighting.modifiers?.difficultyBonus) || 0);
+  const illuminationPenaltyPercent = Number(sourceActor.system?.stealth?.illuminationPenaltyPercent) || 0;
+  const lightingDifficultyMultiplier = Math.max(0, 100 + illuminationPenaltyPercent) / 100;
+  const modifiers = {
+    ...lighting.modifiers,
+    baseDifficultyBonus: baseLightingDifficultyBonus,
+    illuminationPenaltyPercent,
+    difficultyBonus: Math.max(0, Math.round(baseLightingDifficultyBonus * lightingDifficultyMultiplier))
+  };
   const difficultySkillKey = String(settings.difficulty?.skillKey ?? "naturalist");
   const targetBase = Math.max(0, getActorSkillValue(targetActor, difficultySkillKey));
   const distance = measureTokenDistance(sourceToken, targetToken);

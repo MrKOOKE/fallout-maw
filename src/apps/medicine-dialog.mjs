@@ -64,8 +64,21 @@ import {
   getGoodEnoughHealingCapacity,
   isGoodEnoughHealingFree
 } from "./medicine-good-enough.mjs";
-import { getActorFixedAbilityFunction } from "../abilities/runtime-state.mjs";
-import { ABILITY_FIXED_FUNCTION_KEYS, normalizeGoodEnoughSettings } from "../settings/abilities.mjs";
+import {
+  getActorActiveFixedAbilityFunctionEntry,
+  getActorFixedAbilityFunction,
+  getActorFixedAbilityFunctionEntry,
+  getActorPendingFixedAbilityFunctionEntry,
+  getAbilityFixedFunctionState,
+  getAbilityFixedFunctionStateKey
+} from "../abilities/runtime-state.mjs";
+import {
+  ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY,
+  ABILITY_FIXED_FUNCTION_KEYS,
+  normalizeEmergencyOperationsSettings,
+  normalizeExperimentalSurgerySettings,
+  normalizeGoodEnoughSettings
+} from "../settings/abilities.mjs";
 import {
   ANATOMY_STUDY_BONUS_KEYS,
   getActorAnatomyStudyBonus
@@ -78,9 +91,24 @@ import {
 } from "../combat/energy-resource.mjs";
 import { analyzeMedicineToolAvailability } from "./medicine-tool-availability.mjs";
 import {
+  calculateExperimentalSurgeryPatientDamage,
+  calculateExperimentalSurgerySupplyCost,
+  getExperimentalSurgeryEffectiveToolClass,
+  isExperimentalSurgeryTreatmentType,
+  rollExperimentalSurgeryChance
+} from "./medicine-experimental-surgery.mjs";
+import {
   bindMassOperationDialogSubmitState,
   getMassOperationDialogSelectionState
 } from "./mass-operation-dialog-state.mjs";
+import { applyEmergencyOperationsToolEfficiency } from "./medicine-emergency-operations.mjs";
+import {
+  getCombatActionPointState,
+  isActorInActiveCombat,
+  refundCombatActionPointReceipt,
+  spendCombatActionPointsWithReceipt
+} from "../combat/reaction-resources.mjs";
+import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MEDICINE_SOCKET = `system.${SYSTEM_ID}`;
@@ -192,6 +220,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
+    const combatAccess = getMedicineCombatOperationAccess(this.#sourceActor);
+    const emergencyTreatment = getPendingEmergencyOperationsTreatment(this.#sourceActor);
+    const medicineOperationsUsable = combatAccess.usable;
     let traumaTreatmentContext = { limbGroups: [], unassignedTraumas: [], hasTreatments: false };
     let diseases = [];
     let implants = {};
@@ -210,9 +241,11 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
           this.#activeTreatmentId,
           instrumentRowsByClass,
           this.#sourceActor,
-          medicineMode
+          medicineMode,
+          medicineOperationsUsable,
+          emergencyTreatment?.settings.toolEfficiencyPercentBonus ?? 0
         );
-        hasMassTreatments = hasMassTreatmentTargets(this.#targetContext);
+        hasMassTreatments = medicineOperationsUsable && hasMassTreatmentTargets(this.#targetContext);
       } else {
         diseases = prepareTargetTreatments(
           this.#targetContext?.diseases ?? [],
@@ -220,21 +253,25 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
           this.#activeTreatmentType === "disease" ? this.#activeTreatmentId : "",
           instrumentRowsByClass,
           this.#sourceActor,
-          medicineMode
+          medicineMode,
+          medicineOperationsUsable,
+          emergencyTreatment?.settings.toolEfficiencyPercentBonus ?? 0
         );
       }
     } else if (this.#activeTab === "implant") {
       implants = prepareImplantMedicineContext(
         this.#sourceActor,
         this.#targetContext,
-        this.#activeImplantLimbKey
+        this.#activeImplantLimbKey,
+        medicineOperationsUsable
       );
       this.#activeImplantLimbKey = implants.activeLimbKey;
     } else if (this.#activeTab === "prosthesis") {
       prostheses = prepareProsthesisMedicineContext(
         this.#sourceActor,
         this.#targetContext,
-        this.#activeProsthesisLimbKey
+        this.#activeProsthesisLimbKey,
+        medicineOperationsUsable
       );
       this.#activeProsthesisLimbKey = prostheses.activeLimbKey;
     }
@@ -255,6 +292,16 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       hasTraumaTreatments: traumaTreatmentContext.hasTreatments,
       hasMassTreatments,
       hasDiseases: diseases.length > 0,
+      medicineOperationsUsable,
+      medicineCombatStatus: combatAccess.inCombat ? {
+        blocked: !combatAccess.usable,
+        icon: combatAccess.usable ? "fa-solid fa-bolt" : "fa-solid fa-ban",
+        text: combatAccess.message
+      } : null,
+      emergencyTreatmentStatus: emergencyTreatment ? {
+        bonus: emergencyTreatment.settings.toolEfficiencyPercentBonus,
+        text: `Следующее лечение инструментом: +${formatNumber(emergencyTreatment.settings.toolEfficiencyPercentBonus)}% эффективности`
+      } : null,
       tabs: {
         trauma: {
           active: this.#activeTab === "trauma",
@@ -583,6 +630,93 @@ function getActorGoodEnoughSettings(sourceActor) {
   return entry ? normalizeGoodEnoughSettings(entry.fixedSettings) : null;
 }
 
+function getMedicineCombatOperationAccess(sourceActor) {
+  if (!isActorInActiveCombat(sourceActor)) {
+    return { inCombat: false, allowed: true, usable: true, cost: 0, entry: null, settings: null, message: "" };
+  }
+  const entry = getActorFixedAbilityFunctionEntry(
+    sourceActor,
+    ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations
+  );
+  if (!entry) {
+    return {
+      inCombat: true,
+      allowed: false,
+      usable: false,
+      cost: 0,
+      entry: null,
+      settings: null,
+      message: "Медицинские операции в бою заблокированы."
+    };
+  }
+  const settings = normalizeEmergencyOperationsSettings(entry.abilityFunction.fixedSettings);
+  const cost = settings.combatActionPointCost;
+  const actionPointState = getCombatActionPointState(sourceActor);
+  const usable = cost <= 0 || Boolean(actionPointState && actionPointState.value >= cost);
+  return {
+    inCombat: true,
+    allowed: true,
+    usable,
+    cost,
+    entry,
+    settings,
+    actionPointState,
+    message: usable
+      ? `Экстренные операции: каждая медицинская операция стоит ${cost} ${actionPointState?.label ?? "ОД"}.`
+      : `Недостаточно ${actionPointState?.label ?? "ОД"}: для медицинской операции требуется ${cost}.`
+  };
+}
+
+function getPendingEmergencyOperationsTreatment(sourceActor) {
+  const entry = getActorPendingFixedAbilityFunctionEntry(
+    sourceActor,
+    ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations
+  );
+  if (!entry) return null;
+  return {
+    ...entry,
+    settings: normalizeEmergencyOperationsSettings(entry.abilityFunction.fixedSettings)
+  };
+}
+
+async function executeMedicineCombatOperation(sourceActor, {
+  label = "медицинской операции",
+  operation,
+  didStart = () => true
+} = {}) {
+  if (typeof operation !== "function") throw new TypeError("Medicine operation callback is required.");
+  const access = getMedicineCombatOperationAccess(sourceActor);
+  if (!access.allowed) throw new Error(access.message);
+  if (!access.usable) throw new Error(access.message);
+  if (!access.inCombat || access.cost <= 0) return operation();
+
+  const transaction = await spendCombatActionPointsWithReceipt(sourceActor, access.cost, {
+    suppressResourceNotification: true,
+    label
+  });
+  if (transaction.spent !== access.cost) {
+    throw new Error(`Не удалось потратить ${access.cost} ОД для ${label}.`);
+  }
+
+  let result;
+  try {
+    result = await operation();
+  } catch (error) {
+    await refundCombatActionPointReceipt(sourceActor, transaction.receipt, { label });
+    throw error;
+  }
+  if (!didStart(result)) {
+    await refundCombatActionPointReceipt(sourceActor, transaction.receipt, { label });
+    return result;
+  }
+  if (transaction.receipt?.resourceKey) {
+    await notifyCombatResourcesSpent(sourceActor, {
+      [transaction.receipt.resourceKey]: transaction.spent
+    }, { label });
+  }
+  return result;
+}
+
 function getActorSpendableEnergy(actor) {
   const minimum = Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.min));
   return Math.max(0, getActorAvailableEnergy(actor) - minimum);
@@ -593,10 +727,11 @@ function getGoodEnoughNoToolInstrument(
   settings,
   skillRequirementMet = true,
   energy = 0,
-  energyCapacity = 0
+  energyCapacity = 0,
+  medicineOperationsUsable = true
 ) {
   const free = isGoodEnoughHealingFree(limb, settings);
-  const usable = skillRequirementMet && (free || energy > 0);
+  const usable = medicineOperationsUsable && skillRequirementMet && (free || energy > 0);
   return {
     id: GOOD_ENOUGH_NO_TOOL_ID,
     name: "И так сойдет — без инструмента",
@@ -625,7 +760,9 @@ function prepareLimbTreatmentGroups(
   activeTreatmentId = "",
   instrumentRowsByClass = new Map(),
   sourceActor = null,
-  medicineMode = getMedicineResolutionMode()
+  medicineMode = getMedicineResolutionMode(),
+  medicineOperationsUsable = true,
+  emergencyEfficiencyBonus = 0
 ) {
   const goodEnoughSettings = getActorGoodEnoughSettings(sourceActor);
   const goodEnoughEnergy = goodEnoughSettings ? getActorSpendableEnergy(sourceActor) : 0;
@@ -657,7 +794,9 @@ function prepareLimbTreatmentGroups(
       activeTreatmentType === "trauma" ? activeTreatmentId : "",
       instrumentRowsByClass,
       sourceActor,
-      medicineMode
+      medicineMode,
+      medicineOperationsUsable,
+      emergencyEfficiencyBonus
     );
     const [limbTreatment] = prepareTargetTreatments(
       [limb],
@@ -665,7 +804,9 @@ function prepareLimbTreatmentGroups(
       activeTreatmentType === "limb" ? activeTreatmentId : "",
       instrumentRowsByClass,
       sourceActor,
-      medicineMode
+      medicineMode,
+      medicineOperationsUsable,
+      emergencyEfficiencyBonus
     );
     if (!limbTreatment || (!limb.damaged && !traumas.length)) continue;
     if (goodEnoughSettings) {
@@ -676,7 +817,8 @@ function prepareLimbTreatmentGroups(
           goodEnoughSettings,
           limbTreatment.treatable && limbTreatment.treatmentSkillThresholdMet,
           goodEnoughEnergy,
-          goodEnoughEnergyCapacity
+          goodEnoughEnergyCapacity,
+          medicineOperationsUsable
         )
       ];
     }
@@ -699,7 +841,9 @@ function prepareLimbTreatmentGroups(
     activeTreatmentType === "trauma" ? activeTreatmentId : "",
     instrumentRowsByClass,
     sourceActor,
-    medicineMode
+    medicineMode,
+    medicineOperationsUsable,
+    emergencyEfficiencyBonus
   );
   return {
     limbGroups,
@@ -721,15 +865,31 @@ function prepareTargetTreatments(
   activeTreatmentId,
   instrumentRowsByClass = new Map(),
   sourceActor = null,
-  medicineMode = getMedicineResolutionMode()
+  medicineMode = getMedicineResolutionMode(),
+  medicineOperationsUsable = true,
+  emergencyEfficiencyBonus = 0
 ) {
   return treatments.map(treatment => {
     const requiredClass = String(treatment.healingToolClass ?? "D");
-    let baseInstrumentRows = instrumentRowsByClass.get(requiredClass);
+    const experimentalSurgery = getActorExperimentalSurgeryContext(sourceActor, treatment?.type);
+    const allowedToolClassDeficit = experimentalSurgery?.settings.allowedToolClassDeficit ?? 0;
+    const effectiveToolClass = getExperimentalSurgeryEffectiveToolClass(
+      requiredClass,
+      allowedToolClassDeficit
+    );
+    const instrumentCacheKey = `${requiredClass}:${allowedToolClassDeficit}:${emergencyEfficiencyBonus}`;
+    let baseInstrumentRows = instrumentRowsByClass.get(instrumentCacheKey);
     if (!baseInstrumentRows) {
       baseInstrumentRows = instruments.map(instrument => {
-        const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
-        const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
+        const classAccepted = isToolClassAccepted(
+          instrument.toolClass,
+          requiredClass,
+          allowedToolClassDeficit
+        );
+        const efficiency = applyEmergencyOperationsToolEfficiency(
+          calculateBaseEfficiency(instrument.toolClass, requiredClass),
+          emergencyEfficiencyBonus
+        );
         return {
           ...instrument,
           efficiency,
@@ -738,18 +898,28 @@ function prepareTargetTreatments(
           usable: classAccepted && instrument.supplyValue > 0 && instrument.requirementMet
         };
       });
-      instrumentRowsByClass.set(requiredClass, baseInstrumentRows);
+      instrumentRowsByClass.set(instrumentCacheKey, baseInstrumentRows);
     }
     const skillResolution = getMedicineSkillResolution(sourceActor, treatment, medicineMode);
+    const hasTreatmentEnergy = !experimentalSurgery
+      || canActorSpendEnergy(sourceActor, experimentalSurgery.settings.treatmentEnergyCost);
     const availableInstruments = baseInstrumentRows.map(instrument => ({
       ...instrument,
       treatmentSkillThresholdMet: skillResolution.met,
-      usable: instrument.usable && skillResolution.met
+      usable: instrument.usable && skillResolution.met && hasTreatmentEnergy && medicineOperationsUsable,
+      unavailableReason: !medicineOperationsUsable
+        ? "Медицинская операция сейчас недоступна."
+        : !hasTreatmentEnergy
+        ? `Нужно ${experimentalSurgery.settings.treatmentEnergyCost} энергии.`
+        : ""
     }));
     const treatable = treatment.treatable !== false
       && toInteger(treatment.healingProgress) < Math.max(1, toInteger(treatment.healingProgressMax));
     return {
       ...treatment,
+      healingToolClassOriginal: requiredClass,
+      healingToolClassEffective: effectiveToolClass,
+      healingToolClassReduced: effectiveToolClass !== requiredClass,
       active: treatment.id === activeTreatmentId,
       treatable,
       treatmentSkillThresholdMet: skillResolution.met,
@@ -956,7 +1126,9 @@ function chooseBestTreatmentInstrument(sourceActor, treatment, toolKey, options 
   if (!availability.ok) return { reason: availability.message };
   const selected = selectToolByPolicy(availability.instruments, {
     requiredToolKey: toolKey,
-    requiredToolClass: treatment?.healingToolClass
+    requiredToolClass: treatment?.healingToolClass,
+    allowedToolClassDeficit: getActorExperimentalSurgeryContext(sourceActor, treatment?.type)
+      ?.settings.allowedToolClassDeficit ?? 0
   }, normalizedOptions);
   return selected
     ? { instrumentId: selected.id }
@@ -991,8 +1163,10 @@ function prepareMedicineTreatmentRequirement(
   medicineMode = getMedicineResolutionMode()
 ) {
   const skillResolution = getMedicineSkillResolution(sourceActor, treatment, medicineMode);
+  const experimentalSurgery = getActorExperimentalSurgeryContext(sourceActor, treatment?.type);
   return {
     ...treatment,
+    allowedToolClassDeficit: experimentalSurgery?.settings.allowedToolClassDeficit ?? 0,
     skillThreshold: {
       ...skillResolution,
       skillLabel: getHealingSkillLabel(skillResolution.skillKey)
@@ -1005,7 +1179,7 @@ function getMedicineToolLabel(toolKey = "medical") {
   return getToolSettings().find(tool => tool.key === normalized)?.label ?? normalized;
 }
 
-function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimbKey = "") {
+function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimbKey = "", medicineOperationsUsable = true) {
   const targetLimbs = (targetContext?.limbs ?? []).filter(limb => limb.missing || limb.prosthesis);
   const active = targetLimbs.some(limb => limb.key === activeLimbKey)
     ? activeLimbKey
@@ -1022,7 +1196,7 @@ function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimb
       .filter(item => item.limbKeys.includes(limb.key))
       .map(item => ({
         ...item,
-        usable: !limb.prosthesis && limb.missing && isProsthesisSnapshotInstallable(item),
+        usable: medicineOperationsUsable && !limb.prosthesis && limb.missing && isProsthesisSnapshotInstallable(item),
         skillRequirement: item.skillLabel
       }));
     const conditionRatio = limb.prosthesis?.hasCondition && limb.prosthesis.conditionMax > 0
@@ -1068,7 +1242,7 @@ function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimb
   };
 }
 
-function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey = "") {
+function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey = "", medicineOperationsUsable = true) {
   const targetLimbs = (targetContext?.limbs ?? []).filter(limb => (
     Math.max(0, toInteger(limb?.implantLimit)) > 0
     || (limb?.implants ?? []).length > 0
@@ -1091,7 +1265,7 @@ function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey
       .filter(item => item.limbKeys.includes(limb.key))
       .map(item => ({
         ...item,
-        usable: slotsAvailable && isImplantSnapshotInstallable(item),
+        usable: medicineOperationsUsable && slotsAvailable && isImplantSnapshotInstallable(item),
         skillRequirement: item.skillLabel
       }));
     const fillRatio = implantLimit > 0 ? Math.max(0, Math.min(1, installed.length / implantLimit)) : 1;
@@ -1161,6 +1335,8 @@ async function performTreatment({ sourceActor, sourceToken = null, targetContext
     spentCharges,
     entries = [],
     completed,
+    experimentalSurgery = null,
+    emergencyOperations = null,
     reason = "",
     alreadyHealed = false
   } = resolution;
@@ -1189,7 +1365,9 @@ async function performTreatment({ sourceActor, sourceToken = null, targetContext
     maxProgress,
     spentCharges,
     entries,
-    completed
+    completed,
+    experimentalSurgery,
+    emergencyOperations
   });
   return { targetContext: updatedTargetContext };
 }
@@ -1561,26 +1739,30 @@ async function resolveImplantInstallationOnAuthorityLocked({
   const data = getImplantFunction(implant);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
-  const skillResolution = await resolveMedicineSkillAction(sourceActor, {
-    skillKey,
-    difficulty,
-    thresholdMode: isSkillThresholdMode(getMedicineResolutionMode())
-  }, {
-    requestCheck: () => requestSkillCheck({
-      actor: sourceActor,
+  const skillResolution = await executeMedicineCombatOperation(sourceActor, {
+    label: "установки импланта",
+    operation: () => resolveMedicineSkillAction(sourceActor, {
       skillKey,
-      data: {
-        difficulty,
-        actorToken: sourceToken?.object ?? sourceToken,
-        targetActor,
-        targetToken: targetToken?.object ?? targetToken,
-        allowImplicitTarget: false
-      },
-      animate: false,
-      createMessage: true,
-      prompt: false,
-      requester: "medicineImplant"
-    })
+      difficulty,
+      thresholdMode: isSkillThresholdMode(getMedicineResolutionMode())
+    }, {
+      requestCheck: () => requestSkillCheck({
+        actor: sourceActor,
+        skillKey,
+        data: {
+          difficulty,
+          actorToken: sourceToken?.object ?? sourceToken,
+          targetActor,
+          targetToken: targetToken?.object ?? targetToken,
+          allowImplicitTarget: false
+        },
+        animate: false,
+        createMessage: true,
+        prompt: false,
+        requester: "medicineImplant"
+      })
+    }),
+    didStart: resolution => Boolean(resolution?.met && resolution?.outcome)
   });
   if (!skillResolution.met) {
     return {
@@ -1645,10 +1827,13 @@ async function applyImplantRemoval({ sourceActor, targetContext, targetToken = n
     && canUseActorLocally(targetActor)
     && canUseActorLocally(sourceActorDocument)
   ) {
-    return runWithMedicineAuthorityLocks(
-      [sourceActorDocument, targetActor],
-      () => applyImplantRemovalLocally({ sourceActor: sourceActorDocument, targetActor, targetToken, limbKey, itemId })
-    );
+    return resolveImplantRemovalOnAuthority({
+      sourceActor: sourceActorDocument,
+      targetActor,
+      targetToken,
+      limbKey,
+      itemId
+    });
   }
   const gm = getResponsibleGM();
   if (!gm) {
@@ -1663,6 +1848,16 @@ async function applyImplantRemoval({ sourceActor, targetContext, targetToken = n
     itemId
   }, gm);
   return result?.targetContext ?? null;
+}
+
+async function resolveImplantRemovalOnAuthority(args = {}) {
+  return runWithMedicineAuthorityLocks(
+    [args.sourceActor, args.targetActor],
+    () => executeMedicineCombatOperation(args.sourceActor, {
+      label: "извлечения импланта",
+      operation: () => applyImplantRemovalLocally(args)
+    })
+  );
 }
 
 async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = "", implantSource = "", itemId = "" } = {}) {
@@ -2024,26 +2219,30 @@ async function resolveProsthesisInstallationOnAuthorityLocked({
   const data = getProsthesisFunction(prosthesis);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
-  const skillResolution = await resolveMedicineSkillAction(sourceActor, {
-    skillKey,
-    difficulty,
-    thresholdMode: isSkillThresholdMode(getMedicineResolutionMode())
-  }, {
-    requestCheck: () => requestSkillCheck({
-      actor: sourceActor,
+  const skillResolution = await executeMedicineCombatOperation(sourceActor, {
+    label: "установки протеза",
+    operation: () => resolveMedicineSkillAction(sourceActor, {
       skillKey,
-      data: {
-        difficulty,
-        actorToken: sourceToken?.object ?? sourceToken,
-        targetActor,
-        targetToken: targetToken?.object ?? targetToken,
-        allowImplicitTarget: false
-      },
-      animate: false,
-      createMessage: true,
-      prompt: false,
-      requester: "medicineProsthesis"
-    })
+      difficulty,
+      thresholdMode: isSkillThresholdMode(getMedicineResolutionMode())
+    }, {
+      requestCheck: () => requestSkillCheck({
+        actor: sourceActor,
+        skillKey,
+        data: {
+          difficulty,
+          actorToken: sourceToken?.object ?? sourceToken,
+          targetActor,
+          targetToken: targetToken?.object ?? targetToken,
+          allowImplicitTarget: false
+        },
+        animate: false,
+        createMessage: true,
+        prompt: false,
+        requester: "medicineProsthesis"
+      })
+    }),
+    didStart: resolution => Boolean(resolution?.met && resolution?.outcome)
   });
   if (!skillResolution.met) {
     return {
@@ -2108,10 +2307,13 @@ async function applyProsthesisRemoval({ sourceActor, targetContext, targetToken 
     && canUseActorLocally(targetActor)
     && canUseActorLocally(sourceActorDocument)
   ) {
-    return runWithMedicineAuthorityLocks(
-      [sourceActorDocument, targetActor],
-      () => applyProsthesisRemovalLocally({ sourceActor: sourceActorDocument, targetActor, targetToken, limbKey, itemId })
-    );
+    return resolveProsthesisRemovalOnAuthority({
+      sourceActor: sourceActorDocument,
+      targetActor,
+      targetToken,
+      limbKey,
+      itemId
+    });
   }
   const gm = getResponsibleGM();
   if (!gm) {
@@ -2126,6 +2328,16 @@ async function applyProsthesisRemoval({ sourceActor, targetContext, targetToken 
     itemId
   }, gm);
   return result?.targetContext ?? null;
+}
+
+async function resolveProsthesisRemovalOnAuthority(args = {}) {
+  return runWithMedicineAuthorityLocks(
+    [args.sourceActor, args.targetActor],
+    () => executeMedicineCombatOperation(args.sourceActor, {
+      label: "снятия протеза",
+      operation: () => applyProsthesisRemovalLocally(args)
+    })
+  );
 }
 
 async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
@@ -2390,7 +2602,8 @@ async function runTreatmentChecks({
   maxProgress,
   operationId = `medicine-treatment:${foundry.utils.randomID()}`,
   chainRef = null,
-  medicineMode = getMedicineResolutionMode()
+  medicineMode = getMedicineResolutionMode(),
+  toolEfficiencyPercentBonus = 0
 }) {
   const skillKey = String(treatment.healingSkillKey ?? "");
   const difficulty = Math.max(1, toInteger(treatment.healingDifficulty));
@@ -2407,6 +2620,7 @@ async function runTreatmentChecks({
       remainingCharges: toInteger(tool.resourceValue),
       finalProgress: initialProgress,
       halted: false,
+      attemptedChecks: 0,
       reason: getMedicineSkillThresholdMessage(skillResolution, treatment?.name)
     };
   }
@@ -2425,6 +2639,7 @@ async function runTreatmentChecks({
     : Number.MAX_SAFE_INTEGER;
   let spentCharges = 0;
   const entries = [];
+  let attemptedChecks = 0;
   const targetActor = targetToken?.actor ?? (String(targetContext?.actorUuid ?? "")
     ? await fromUuid(String(targetContext.actorUuid))
     : null);
@@ -2468,9 +2683,11 @@ async function runTreatmentChecks({
         remainingCharges: availableCharges,
         finalProgress: currentProgress,
         halted: true,
+        attemptedChecks,
         reason: "Проверка навыка лечения не выполнена."
       };
     }
+    attemptedChecks += 1;
 
     const healingOperationId = `${operationId}:healing:${index}`;
     const activeUsePreparations = prepareTreatmentHealingActiveUses({
@@ -2487,6 +2704,7 @@ async function runTreatmentChecks({
       progressForCheck,
       missingProgress: remainingProgress,
       resultKey: String(outcome.result?.key ?? "failure"),
+      toolEfficiencyPercentBonus,
       healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetActor, targetContext, {
         sourceToken,
         targetToken,
@@ -2544,6 +2762,7 @@ async function runTreatmentChecks({
     remainingCharges: availableCharges,
     finalProgress: currentProgress,
     halted: false,
+    attemptedChecks,
     reason: noTool
       ? (!freeEnergy && availableHealing <= 0 && currentProgress < maxProgress
         ? "Энергии не хватило для полного лечения."
@@ -2552,7 +2771,7 @@ async function runTreatmentChecks({
   };
 }
 
-function validateInstrumentForTreatment(actor, treatment, tool) {
+function validateInstrumentForTreatment(actor, treatment, tool, { allowedToolClassDeficit = 0 } = {}) {
   if (treatment?.treatable === false) {
     return { ok: false, message: treatment.unavailableReason || "Эту цель сейчас нельзя лечить." };
   }
@@ -2561,8 +2780,14 @@ function validateInstrumentForTreatment(actor, treatment, tool) {
 
   const requiredClass = String(treatment.healingToolClass ?? "D");
   const toolClass = String(tool.toolClass ?? "D");
-  if (!isToolClassAccepted(toolClass, requiredClass)) {
-    return { ok: false, message: `Нужен инструмент класса ${requiredClass} или выше.` };
+  if (!isToolClassAccepted(toolClass, requiredClass, allowedToolClassDeficit)) {
+    const deficit = Math.max(0, toInteger(allowedToolClassDeficit));
+    return {
+      ok: false,
+      message: deficit > 0
+        ? `Нужен инструмент не более чем на ${deficit} класс ниже ${requiredClass}.`
+        : `Нужен инструмент класса ${requiredClass} или выше.`
+    };
   }
 
   const skillKey = String(tool.skillKey ?? "");
@@ -2575,9 +2800,12 @@ function validateInstrumentForTreatment(actor, treatment, tool) {
   return { ok: true, message: "" };
 }
 
-function calculateTreatmentResult({ treatmentTarget, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1 }) {
+function calculateTreatmentResult({ treatmentTarget, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1, toolEfficiencyPercentBonus = 0 }) {
   const targetProgress = Math.min(progressForCheck, missingProgress);
-  let efficiency = calculateBaseEfficiency(tool.toolClass, treatmentTarget.healingToolClass);
+  let efficiency = applyEmergencyOperationsToolEfficiency(
+    calculateBaseEfficiency(tool.toolClass, treatmentTarget.healingToolClass),
+    toolEfficiencyPercentBonus
+  );
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
   else if (resultKey === "failure") efficiency *= 0.5;
 
@@ -2979,7 +3207,18 @@ async function resolveTreatmentOnAuthorityOperation({
     tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
   }
 
-  const validation = noTool ? { ok: true } : validateInstrumentForTreatment(sourceActor, treatment, tool);
+  const experimentalSurgery = getActorExperimentalSurgeryContext(sourceActor, treatmentType);
+  if (
+    experimentalSurgery
+    && !canActorSpendEnergy(sourceActor, experimentalSurgery.settings.treatmentEnergyCost)
+  ) {
+    throw new Error(`Недостаточно энергии для лечения: нужно ${experimentalSurgery.settings.treatmentEnergyCost}.`);
+  }
+  const validation = noTool
+    ? { ok: true }
+    : validateInstrumentForTreatment(sourceActor, treatment, tool, {
+        allowedToolClassDeficit: experimentalSurgery?.settings.allowedToolClassDeficit ?? 0
+      });
   if (!validation.ok) throw new Error(validation.message);
 
   const maxProgress = Math.max(1, toInteger(treatment.healingProgressMax));
@@ -3022,24 +3261,76 @@ async function resolveTreatmentOnAuthorityOperation({
   }
 
   const medicineMode = getMedicineResolutionMode();
-  const result = await runTreatmentChecks({
-    sourceActor,
-    sourceToken,
-    targetContext: currentTargetContext,
-    targetToken,
-    treatment,
-    tool,
-    initialProgress,
-    maxProgress,
-    operationId,
-    chainRef,
-    medicineMode
+  const emergencyOperations = noTool ? null : getPendingEmergencyOperationsTreatment(sourceActor);
+  const emergencyOperationsResult = emergencyOperations ? {
+    abilityItemId: String(emergencyOperations.abilityItem.id ?? ""),
+    functionId: String(emergencyOperations.abilityFunction.id ?? ""),
+    toolEfficiencyPercentBonus: emergencyOperations.settings.toolEfficiencyPercentBonus
+  } : null;
+  const result = await executeMedicineCombatOperation(sourceActor, {
+    label: "лечения",
+    operation: () => runTreatmentChecks({
+      sourceActor,
+      sourceToken,
+      targetContext: currentTargetContext,
+      targetToken,
+      treatment,
+      tool,
+      initialProgress,
+      maxProgress,
+      operationId,
+      chainRef,
+      medicineMode,
+      toolEfficiencyPercentBonus: emergencyOperationsResult?.toolEfficiencyPercentBonus ?? 0
+    }),
+    didStart: treatmentResult => Math.max(0, toInteger(treatmentResult?.attemptedChecks)) > 0
   });
   if (!result.entries.length) {
+    if (emergencyOperationsResult && Math.max(0, toInteger(result.attemptedChecks)) > 0) {
+      const consumption = prepareEmergencyOperationsConsumption(sourceActor, emergencyOperationsResult);
+      await consumption.abilityItem.update(consumption.update);
+    }
     return {
       ...receiptBase,
       status: "failed",
       reason: result.reason || "Лечение не выполнено."
+    };
+  }
+
+  let experimentalSurgeryResult = null;
+  if (experimentalSurgery) {
+    const normalSupplySpent = result.spentCharges;
+    const extraSupplyTriggered = rollExperimentalSurgeryChance(
+      experimentalSurgery.settings.extraSupplyChancePercent
+    );
+    const supplyCost = calculateExperimentalSurgerySupplyCost({
+      normalSpent: result.spentCharges,
+      currentSupply: tool.resourceValue,
+      multiplier: experimentalSurgery.settings.supplyCostMultiplier,
+      triggered: extraSupplyTriggered
+    });
+    const patientDamageTriggered = rollExperimentalSurgeryChance(
+      experimentalSurgery.settings.patientDamageChancePercent
+    );
+    const patientDamage = patientDamageTriggered
+      ? calculateExperimentalSurgeryPatientDamage(
+          targetActor.system?.resources?.health?.max,
+          experimentalSurgery.settings.patientHealthDamagePercent
+        )
+      : 0;
+    result.spentCharges = supplyCost.spent;
+    result.remainingCharges = supplyCost.remaining;
+    experimentalSurgeryResult = {
+      abilityItemId: String(experimentalSurgery.abilityItem.id ?? ""),
+      functionId: String(experimentalSurgery.abilityFunction.id ?? ""),
+      energyCost: experimentalSurgery.settings.treatmentEnergyCost,
+      allowedToolClassDeficit: experimentalSurgery.settings.allowedToolClassDeficit,
+      normalSupplySpent,
+      extraSupplyTriggered: supplyCost.triggered,
+      extraSupplySpent: supplyCost.extraSpent,
+      supplyCostMultiplier: experimentalSurgery.settings.supplyCostMultiplier,
+      patientDamageTriggered,
+      patientDamage
     };
   }
 
@@ -3049,6 +3340,7 @@ async function resolveTreatmentOnAuthorityOperation({
     sourceActor,
     targetActor,
     targetToken,
+    operationId,
     treatmentType,
     treatmentId,
     instrumentId: noTool ? GOOD_ENOUGH_NO_TOOL_ID : instrument.id,
@@ -3060,6 +3352,8 @@ async function resolveTreatmentOnAuthorityOperation({
     remainingSupply: noTool ? 0 : result.remainingCharges,
     expectedEnergyCost: noTool ? result.spentCharges : 0,
     expectedMedicineMode: medicineMode,
+    experimentalSurgery: experimentalSurgeryResult,
+    emergencyOperations: emergencyOperationsResult,
     noTool,
     chainRef
   };
@@ -3121,6 +3415,13 @@ async function resolveTreatmentOnAuthorityOperation({
     spentCharges: result.spentCharges,
     entries: result.entries,
     completed,
+    experimentalSurgery: experimentalSurgeryResult
+      ? {
+          ...experimentalSurgeryResult,
+          patientDamage: commitResult.patientDamageApplied ?? 0
+        }
+      : null,
+    emergencyOperations: emergencyOperationsResult,
     halted: Boolean(result.halted),
     reason: String(result.reason ?? "")
   };
@@ -3141,6 +3442,9 @@ async function commitTreatmentToActors({
   remainingSupply,
   expectedEnergyCost = 0,
   expectedMedicineMode,
+  experimentalSurgery = null,
+  emergencyOperations = null,
+  operationId = "",
   noTool = false,
   chainRef = null
 }) {
@@ -3161,6 +3465,40 @@ async function commitTreatmentToActors({
   if (getMedicineResolutionMode() !== expectedMedicineMode) {
     throw createTreatmentStaleError("Режим медицины изменился во время лечения.");
   }
+  let currentExperimentalSurgery = null;
+  if (experimentalSurgery) {
+    currentExperimentalSurgery = getActorExperimentalSurgeryContext(sourceActor, treatmentType);
+    if (
+      !currentExperimentalSurgery
+      || String(currentExperimentalSurgery.abilityItem.id ?? "") !== String(experimentalSurgery.abilityItemId ?? "")
+      || String(currentExperimentalSurgery.abilityFunction.id ?? "") !== String(experimentalSurgery.functionId ?? "")
+    ) {
+      throw createTreatmentStaleError("Эксперементальная хирургия была выключена во время лечения.");
+    }
+    const settings = currentExperimentalSurgery.settings;
+    if (
+      settings.treatmentEnergyCost !== Math.max(0, toInteger(experimentalSurgery.energyCost))
+      || settings.allowedToolClassDeficit !== Math.max(0, toInteger(experimentalSurgery.allowedToolClassDeficit))
+      || settings.supplyCostMultiplier !== Math.max(1, toInteger(experimentalSurgery.supplyCostMultiplier))
+    ) {
+      throw createTreatmentStaleError("Настройки эксперементальной хирургии изменились во время лечения.");
+    }
+    if (!canActorSpendEnergy(sourceActor, settings.treatmentEnergyCost)) {
+      throw createTreatmentStaleError("Недостаточно энергии для лечения.");
+    }
+    const expectedPatientDamage = experimentalSurgery.patientDamageTriggered
+      ? calculateExperimentalSurgeryPatientDamage(
+          targetActor.system?.resources?.health?.max,
+          settings.patientHealthDamagePercent
+        )
+      : 0;
+    if (expectedPatientDamage !== Math.max(0, toInteger(experimentalSurgery.patientDamage))) {
+      throw createTreatmentStaleError("Максимум здоровья пациента изменился во время лечения.");
+    }
+  }
+  const emergencyOperationsConsumption = emergencyOperations
+    ? prepareEmergencyOperationsConsumption(sourceActor, emergencyOperations)
+    : null;
   let remaining = 0;
   if (!noTool) {
     const currentSupply = Math.max(0, toInteger(tool?.resourceValue));
@@ -3176,6 +3514,20 @@ async function commitTreatmentToActors({
     }
     if (currentSupply !== expected) {
       throw createTreatmentStaleError("Запас инструмента изменился.");
+    }
+    if (currentExperimentalSurgery) {
+      const expectedSupplyCost = calculateExperimentalSurgerySupplyCost({
+        normalSpent: experimentalSurgery.normalSupplySpent,
+        currentSupply,
+        multiplier: currentExperimentalSurgery.settings.supplyCostMultiplier,
+        triggered: experimentalSurgery.extraSupplyTriggered
+      });
+      if (
+        remaining !== expectedSupplyCost.remaining
+        || Math.max(0, toInteger(experimentalSurgery.extraSupplySpent)) !== expectedSupplyCost.extraSpent
+      ) {
+        throw createTreatmentStaleError("Расход инструмента изменился во время лечения.");
+      }
     }
     if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
   }
@@ -3198,7 +3550,10 @@ async function commitTreatmentToActors({
     const authoritativeValidation = validateInstrumentForTreatment(
       sourceActor,
       treatmentCommit.treatmentTarget,
-      tool
+      tool,
+      {
+        allowedToolClassDeficit: currentExperimentalSurgery?.settings.allowedToolClassDeficit ?? 0
+      }
     );
     if (!authoritativeValidation.ok) throw new Error(authoritativeValidation.message);
   }
@@ -3269,17 +3624,42 @@ async function commitTreatmentToActors({
             falloutMawLimbCapSync: true
           }
         })),
-        { document: instrument, updates: instrumentUpdate }
+        { document: instrument, updates: instrumentUpdate },
+        ...(emergencyOperationsConsumption ? [{
+          document: emergencyOperationsConsumption.abilityItem,
+          updates: emergencyOperationsConsumption.update
+        }] : [])
       ], {
         reason: "medicine-limb-treatment-with-tool",
         chainRef
       });
     } else {
+      const sourceActorUpdates = [];
+      if (currentExperimentalSurgery?.settings.treatmentEnergyCost > 0) {
+        const energyCost = currentExperimentalSurgery.settings.treatmentEnergyCost;
+        const energyResource = sourceActor.system?.resources?.[ENERGY_RESOURCE_KEY];
+        const nextEnergy = Math.max(toInteger(energyResource?.min), getActorEnergy(sourceActor) - energyCost);
+        const energyUpdate = { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextEnergy };
+        if (energyResource && Object.hasOwn(energyResource, "spent")) {
+          energyUpdate[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(
+            0,
+            toInteger(energyResource.max) - nextEnergy
+          );
+        }
+        sourceActorUpdates.push(energyUpdate);
+      }
       await executeInventoryMutation([
         treatmentCommit.targetPlan,
         {
           actor: sourceActor,
-          updates: [{ _id: instrument.id, ...instrumentUpdate }]
+          updates: [
+            { _id: instrument.id, ...instrumentUpdate },
+            ...(emergencyOperationsConsumption ? [{
+              _id: emergencyOperationsConsumption.abilityItem.id,
+              ...emergencyOperationsConsumption.update
+            }] : [])
+          ],
+          actorUpdates: sourceActorUpdates
         }
       ], {
         reason: "medicine-treatment-with-tool",
@@ -3309,9 +3689,61 @@ async function commitTreatmentToActors({
       ui.notifications.warn("Болезнь вылечена, но эффект иммунитета создать не удалось.");
     }
   }
+  let patientDamageApplied = 0;
+  if (currentExperimentalSurgery && experimentalSurgery?.patientDamageTriggered) {
+    patientDamageApplied = Math.max(0, toInteger(experimentalSurgery.patientDamage));
+    if (patientDamageApplied > 0) {
+      try {
+        await requestDamageApplication({
+          actor: targetActor,
+          amount: patientDamageApplied,
+          mode: "damage",
+          scope: "health",
+          applyMitigation: false,
+          processDamageTypeSettings: false,
+          source: {
+            requester: "experimentalSurgery",
+            operationId: String(operationId ?? ""),
+            sourceActorUuid: String(sourceActor.uuid ?? ""),
+            sourceItemUuid: String(currentExperimentalSurgery.abilityItem.uuid ?? "")
+          }
+        });
+      } catch (error) {
+        patientDamageApplied = 0;
+        console.error(`${SYSTEM_ID} | Experimental surgery patient damage failed`, error);
+        ui.notifications.warn("Лечение завершено, но побочный урон эксперементальной хирургии применить не удалось.");
+      }
+    }
+  }
   return {
     targetContext: buildTargetContext(targetActor, targetToken),
-    healing: treatmentCommit.healing ?? null
+    healing: treatmentCommit.healing ?? null,
+    patientDamageApplied
+  };
+}
+
+function prepareEmergencyOperationsConsumption(sourceActor, expected = {}) {
+  const current = getPendingEmergencyOperationsTreatment(sourceActor);
+  if (
+    !current
+    || String(current.abilityItem.id ?? "") !== String(expected.abilityItemId ?? "")
+    || String(current.abilityFunction.id ?? "") !== String(expected.functionId ?? "")
+    || current.settings.toolEfficiencyPercentBonus !== Math.max(0, Number(expected.toolEfficiencyPercentBonus) || 0)
+  ) {
+    throw createTreatmentStaleError("Подготовка экстренной операции изменилась во время лечения.");
+  }
+  const state = foundry.utils.deepClone(getAbilityFixedFunctionState(current.abilityItem));
+  const stateKey = getAbilityFixedFunctionStateKey(current.abilityFunction);
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: current.abilityFunction.fixedKey,
+    pending: false
+  };
+  return {
+    abilityItem: current.abilityItem,
+    update: {
+      [`flags.${SYSTEM_ID}.${ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY}`]: state
+    }
   };
 }
 
@@ -3903,16 +4335,13 @@ async function handleMedicineSocketRequest(action, payload = {}, requesterUserId
     const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
     const targetToken = await resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true });
     return {
-      targetContext: await runWithMedicineAuthorityLocks(
-        [sourceActor, actor],
-        () => applyImplantRemovalLocally({
-          sourceActor,
-          targetActor: actor,
-          targetToken,
-          limbKey: payload.limbKey,
-          itemId: payload.itemId
-        })
-      )
+      targetContext: await resolveImplantRemovalOnAuthority({
+        sourceActor,
+        targetActor: actor,
+        targetToken,
+        limbKey: payload.limbKey,
+        itemId: payload.itemId
+      })
     };
   }
 
@@ -3939,16 +4368,13 @@ async function handleMedicineSocketRequest(action, payload = {}, requesterUserId
     const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
     const targetToken = await resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true });
     return {
-      targetContext: await runWithMedicineAuthorityLocks(
-        [sourceActor, actor],
-        () => applyProsthesisRemovalLocally({
-          sourceActor,
-          targetActor: actor,
-          targetToken,
-          limbKey: payload.limbKey,
-          itemId: payload.itemId
-        })
-      )
+      targetContext: await resolveProsthesisRemovalOnAuthority({
+        sourceActor,
+        targetActor: actor,
+        targetToken,
+        limbKey: payload.limbKey,
+        itemId: payload.itemId
+      })
     };
   }
 
@@ -4002,7 +4428,7 @@ function mixRgb(from, to, ratio) {
   return `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
 }
 
-async function postTreatmentResultChat(actor, { treatment, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed }) {
+async function postTreatmentResultChat(actor, { treatment, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed, experimentalSurgery = null, emergencyOperations = null }) {
   const progressOffset = treatment.type === "limb" ? toInteger(treatment.min) : 0;
   const displayProgress = value => toInteger(value) + progressOffset;
   const resourceLabel = instrument?.noTool ? "энергия" : "запас";
@@ -4028,6 +4454,18 @@ async function postTreatmentResultChat(actor, { treatment, instrument, initialPr
       `Инструмент: ${instrument.name}`,
       `Прогресс: ${displayProgress(initialProgress)}/${displayProgress(maxProgress)} -> ${displayProgress(finalProgress)}/${displayProgress(maxProgress)}`,
       `${spentLabel}: ${spentCharges}`,
+      experimentalSurgery
+        ? `Эксперементальная хирургия: -${Math.max(0, toInteger(experimentalSurgery.energyCost))} энергии.`
+        : "",
+      experimentalSurgery?.extraSupplyTriggered
+        ? `Повышенный расход инструмента: x${Math.max(1, toInteger(experimentalSurgery.supplyCostMultiplier))} (дополнительно ${Math.max(0, toInteger(experimentalSurgery.extraSupplySpent))}).`
+        : "",
+      experimentalSurgery?.patientDamage > 0
+        ? `Осложнение: пациент потерял ${Math.max(0, toInteger(experimentalSurgery.patientDamage))} здоровья.`
+        : "",
+      emergencyOperations
+        ? `Экстренные операции: +${formatNumber(emergencyOperations.toolEfficiencyPercentBonus)}% эффективности инструмента.`
+        : "",
       `<ul>${rows}</ul>`,
       completed ? completionLabel : ""
     ].filter(Boolean)
@@ -4147,8 +4585,24 @@ function getActorItemsByType(actor, type = "") {
     ?? Array.from(actor?.items ?? []).filter(item => item?.type === type);
 }
 
-function isToolClassAccepted(actual, required) {
-  return toToolClassRank(actual) >= toToolClassRank(required);
+function isToolClassAccepted(actual, required, allowedDeficit = 0) {
+  return toToolClassRank(actual) >= Math.max(
+    0,
+    toToolClassRank(required) - Math.max(0, toInteger(allowedDeficit))
+  );
+}
+
+function getActorExperimentalSurgeryContext(actor, treatmentType = "") {
+  if (!isExperimentalSurgeryTreatmentType(treatmentType)) return null;
+  const entry = getActorActiveFixedAbilityFunctionEntry(
+    actor,
+    ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery
+  );
+  if (!entry) return null;
+  return {
+    ...entry,
+    settings: normalizeExperimentalSurgerySettings(entry.abilityFunction.fixedSettings)
+  };
 }
 
 function toToolClassRank(value) {

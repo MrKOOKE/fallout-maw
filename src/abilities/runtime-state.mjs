@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
   ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
+  ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   normalizeAbilityFunctions,
@@ -18,6 +19,33 @@ export const ACTION_BLOCK_EFFECT_KEY_PREFIX = "system.blocks.actions.";
 export const ATTACKING_WEAPON_ACTION_KEYS = ABILITY_ATTACKING_WEAPON_ACTION_KEYS;
 
 export function getActorFixedAbilityFunction(actor, fixedKey = "") {
+  return getActorFixedAbilityFunctionEntry(actor, fixedKey)?.abilityFunction ?? null;
+}
+
+export function getActorActiveFixedAbilityFunctionEntry(actor, fixedKey = "") {
+  return getActorFixedAbilityFunctionEntry(actor, fixedKey, { activeOnly: true });
+}
+
+export function getActorPendingFixedAbilityFunctionEntry(actor, fixedKey = "") {
+  return getActorFixedAbilityFunctionEntry(actor, fixedKey, { pendingOnly: true });
+}
+
+export function getAbilityFixedFunctionState(abilityItem) {
+  const state = abilityItem?.getFlag?.(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY)
+    ?? abilityItem?.flags?.[SYSTEM_ID]?.[ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY];
+  return state && typeof state === "object" ? state : {};
+}
+
+export function getAbilityFixedFunctionStateKey(abilityFunction = {}) {
+  return [String(abilityFunction.id ?? ""), String(abilityFunction.fixedKey ?? "")]
+    .filter(Boolean)
+    .join(":");
+}
+
+export function getActorFixedAbilityFunctionEntry(actor, fixedKey = "", {
+  activeOnly = false,
+  pendingOnly = false
+} = {}) {
   if (getActiveRulesProfile().fixedAbilityFunctionsEnabled === false) return null;
   const key = String(fixedKey ?? "").trim();
   if (!actor || !key) return null;
@@ -25,7 +53,14 @@ export function getActorFixedAbilityFunction(actor, fixedKey = "") {
     if (item?.type !== "ability") continue;
     const entry = normalizeAbilityFunctions(item.system?.functions ?? [])
       .find(candidate => candidate.type === ABILITY_FUNCTION_TYPES.fixed && candidate.fixedKey === key);
-    if (entry) return entry;
+    if (!entry) continue;
+    if (activeOnly || pendingOnly) {
+      const state = getAbilityFixedFunctionState(item);
+      const stateKey = getAbilityFixedFunctionStateKey(entry);
+      if (activeOnly && !Boolean(state?.[stateKey]?.active)) continue;
+      if (pendingOnly && !Boolean(state?.[stateKey]?.pending)) continue;
+    }
+    return { abilityItem: item, abilityFunction: entry };
   }
   return null;
 }
