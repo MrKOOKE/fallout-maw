@@ -206,12 +206,13 @@ test("cancelled dynamic AP update does not create a spend receipt", async () => 
   assert.equal(actor.system.resources.actionPoints.value, 7);
 });
 
-test("dynamic AP receipts restore normal and one-time points separately", async () => {
+test("dynamic AP receipts spend one-time points first and restore their exact split", async () => {
   installFoundryImportGlobals();
   const {
     ONE_TIME_ACTION_POINTS_KEY,
     getOneTimeActionPointTotal,
     refundCombatActionPointReceipt,
+    spendCombatActionPoints,
     spendCombatActionPointsWithReceipt
   } = await import("../src/combat/reaction-resources.mjs");
   const actor = createActor("Actor.DynamicReceipt", 2);
@@ -275,15 +276,19 @@ test("dynamic AP receipts restore normal and one-time points separately", async 
     suppressResourceNotification: true
   });
   assert.equal(transaction.spent, 4);
-  assert.equal(transaction.receipt.normalSpent, 2);
-  assert.equal(transaction.receipt.onceSpent, 2);
-  assert.equal(actor.system.resources.actionPoints.value, 0);
-  assert.equal(getOneTimeActionPointTotal(actor), 2);
+  assert.equal(transaction.receipt.normalSpent, 0);
+  assert.equal(transaction.receipt.onceSpent, 4);
+  assert.equal(actor.system.resources.actionPoints.value, 2);
+  assert.equal(getOneTimeActionPointTotal(actor), 0);
 
   const restored = await refundCombatActionPointReceipt(actor, transaction.receipt);
   assert.equal(restored, 4);
   assert.equal(actor.system.resources.actionPoints.value, 2);
   assert.equal(getOneTimeActionPointTotal(actor), 4);
+
+  await spendCombatActionPoints(actor, 5, { suppressResourceNotification: true });
+  assert.equal(actor.system.resources.actionPoints.value, 1);
+  assert.equal(getOneTimeActionPointTotal(actor), 0);
 });
 
 test("only ОД, ОР, ОП and dodge are combat-only resources", () => {

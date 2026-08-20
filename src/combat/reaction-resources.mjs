@@ -44,6 +44,7 @@ import {
 
 export const REACTION_RESOURCE_KEY = "reactionPoints";
 export const ONE_TIME_ACTION_POINTS_KEY = "system.resources.actionPoints.once";
+export const ONE_TIME_REACTION_POINTS_FLAG = "oneTimeReactionPoints";
 export {
   canSpendStrictActionPoints,
   getActorActiveCombat,
@@ -71,6 +72,7 @@ const IN_TURN_REACTION_SOURCE = "inTurnReaction";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const DODGE_CONVERSION_MULTIPLIER = 5;
 const REACTION_FILL_COLOR = "#f2f2eb";
+const ONE_TIME_RESOURCE_FILL_COLOR = "#b9d9ff";
 const CLEAR_EFFECT_DURATION_UPDATE = Object.freeze({
   start: null,
   "duration.value": null,
@@ -405,36 +407,17 @@ export async function prepareCombatTurnRewind(combat, prior, current, {
 }
 
 /**
- * Add reaction points through the canonical reaction-point Active Effect.
- * Raising the effect's bonus raises both the prepared maximum and the current
- * amount without a second raw Actor update.
+ * Grant one-time reaction points directly on the Actor.
+ *
+ * This is deliberately not an Active Effect: the points are a temporary
+ * spendable balance, not a modifier to the actor's reaction-point maximum or
+ * bonus. They are consumed before normal ОР and cleared at turn start.
  */
 export async function grantActorReactionPoints(actor, amount = 0) {
   const granted = Math.max(0, toInteger(amount));
   if (!actor?.isOwner || !granted) return 0;
-  const existing = actor.effects?.find(effect => (
-    effect.getFlag(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG)?.source === "abilityGrant"
-  )) ?? null;
-  const current = existing?.system?.changes
-    ?.filter(change => String(change?.key ?? "") === `system.resources.${REACTION_RESOURCE_KEY}.bonus`)
-    .reduce((total, change) => total + Math.max(0, toInteger(change?.value)), 0) ?? 0;
-  const data = buildReactionPointEffectData(actor, current + granted);
-  data.name = "Очки реакции от способностей";
-  data.flags[SYSTEM_ID][REACTION_POINTS_EFFECT_FLAG] = { source: "abilityGrant" };
-  if (existing) {
-    await existing.update({
-      name: data.name,
-      img: data.img,
-      "system.changes": data.system.changes,
-      flags: data.flags,
-      ...CLEAR_EFFECT_DURATION_UPDATE
-    }, { animate: false, falloutMawActiveAuraRuntime: true });
-  } else {
-    await actor.createEmbeddedDocuments("ActiveEffect", [data], {
-      animate: false,
-      falloutMawActiveAuraRuntime: true
-    });
-  }
+  await deleteLegacyReactionPointGrantEffects(actor);
+  await addOneTimeReactionPoints(actor, granted);
   return granted;
 }
 
@@ -458,12 +441,24 @@ export function getOneTimeActionPointTotal(actor) {
     .reduce((total, entry) => total + Math.max(0, toInteger(entry.value)), 0);
 }
 
+export function getOneTimeReactionPointTotal(actor) {
+  const raw = actor?.getFlag?.(SYSTEM_ID, ONE_TIME_REACTION_POINTS_FLAG)
+    ?? actor?.flags?.[SYSTEM_ID]?.[ONE_TIME_REACTION_POINTS_FLAG];
+  return Math.max(0, toInteger(raw));
+}
+
 export function decorateActionPointHudEntry(actor, entry) {
   if (!entry?.key || entry.key !== ACTION_RESOURCE_KEY) return entry;
   const reactionValue = getReactionPointValue(actor);
   const combat = getActorActiveCombat(actor);
   if (combat && !isActorCurrentCombatant(actor, combat)) {
     const reactionMax = Math.max(0, toInteger(actor?.system?.resources?.[REACTION_RESOURCE_KEY]?.max));
+    const reactionOnce = getOneTimeReactionPointTotal(actor);
+    const reactionTotal = reactionValue + reactionOnce;
+    const visualMax = Math.max(1, reactionMax, reactionTotal);
+    const hasOneTimeResource = reactionOnce > 0;
+    const normalPercent = (reactionValue / visualMax) * 100;
+    const oneTimePercent = (reactionOnce / visualMax) * 100;
     return {
       ...entry,
       key: REACTION_RESOURCE_KEY,
@@ -471,19 +466,43 @@ export function decorateActionPointHudEntry(actor, entry) {
       value: reactionValue,
       min: 0,
       max: reactionMax,
-      valueLabel: reactionValue,
-      maxLabel: reactionMax,
-      meterStyle: buildFlatMeterStyle(REACTION_FILL_COLOR, getMeterSections(reactionMax)),
-      fillStyle: buildFlatFillStyle(REACTION_FILL_COLOR, reactionMax ? (reactionValue / reactionMax) * 100 : 0)
+      valueLabel: hasOneTimeResource
+        ? `${reactionValue}+${reactionOnce}`
+        : reactionValue,
+      maxLabel: hasOneTimeResource ? reactionTotal : reactionMax,
+      oneTimeResource: hasOneTimeResource,
+      meterValue: reactionTotal,
+      meterMax: visualMax,
+      meterStyle: buildFlatMeterStyle(REACTION_FILL_COLOR, getMeterSections(visualMax)),
+      fillStyle: buildFlatFillStyle(REACTION_FILL_COLOR, normalPercent),
+      oneTimeFillStyle: buildFlatOverlayFillStyle(
+        ONE_TIME_RESOURCE_FILL_COLOR,
+        normalPercent,
+        oneTimePercent
+      )
     };
   }
 
   const once = getOneTimeActionPointTotal(actor);
   if (!once) return entry;
+  const total = Math.max(0, toInteger(entry.value)) + once;
+  const visualMax = Math.max(1, toInteger(entry.max), total);
+  const normalPercent = (Math.max(0, toInteger(entry.value)) / visualMax) * 100;
+  const oneTimePercent = (once / visualMax) * 100;
   return {
     ...entry,
-    valueLabel: `${entry.value}+${once}`,
-    maxLabel: entry.max
+    valueLabel: `${Math.max(0, toInteger(entry.value))}+${once}`,
+    maxLabel: total,
+    oneTimeResource: true,
+    meterValue: total,
+    meterMax: visualMax,
+    meterStyle: buildFlatMeterStyle(REACTION_FILL_COLOR, getMeterSections(visualMax)),
+    fillStyle: buildFlatFillStyle(REACTION_FILL_COLOR, normalPercent),
+    oneTimeFillStyle: buildFlatOverlayFillStyle(
+      ONE_TIME_RESOURCE_FILL_COLOR,
+      normalPercent,
+      oneTimePercent
+    )
   };
 }
 
@@ -493,12 +512,16 @@ export function getCombatActionPointState(actor) {
   if (!action) return null;
   const actionValue = Math.max(0, toInteger(action.value));
   const reactionValue = Math.max(0, toInteger(reaction?.value));
-  const onceValue = getOneTimeActionPointTotal(actor);
   const combat = getActorActiveCombat(actor);
   const ownTurn = !combat || isActorCurrentCombatant(actor, combat);
+  const actionOnceValue = getOneTimeActionPointTotal(actor);
+  const reactionOnceValue = getOneTimeReactionPointTotal(actor);
+  const onceValue = ownTurn ? actionOnceValue : reactionOnceValue;
   const key = ownTurn ? ACTION_RESOURCE_KEY : REACTION_RESOURCE_KEY;
   const current = ownTurn ? actionValue : reactionValue;
-  const total = ownTurn ? actionValue + onceValue : reactionValue;
+  const total = ownTurn
+    ? actionValue + actionOnceValue
+    : reactionValue + reactionOnceValue;
   const limited = Math.min(total, getActorResourceLimitAmount(actor, key));
   return {
     ownTurn,
@@ -509,6 +532,7 @@ export function getCombatActionPointState(actor) {
     value: Math.max(0, total - limited),
     normal: actionValue,
     once: onceValue,
+    reactionOnce: reactionOnceValue,
     max: ownTurn
       ? Math.max(0, toInteger(action.max))
       : Math.max(0, toInteger(reaction?.max))
@@ -532,20 +556,26 @@ export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
   const state = getCombatActionPointState(actor);
   if (!state || cost > state.value) return;
   if (!state.ownTurn) {
-    await actor.update({
-      [`system.resources.${REACTION_RESOURCE_KEY}.value`]: Math.max(0, state.current - cost),
-      [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, toInteger(actor.system?.resources?.[REACTION_RESOURCE_KEY]?.max) - Math.max(0, state.current - cost))
-    }, { [REACTION_UPDATE_OPTION]: true });
+    const onceSpend = Math.min(cost, state.once);
+    const normalSpend = cost - onceSpend;
+    if (onceSpend) await spendOneTimeReactionPoints(actor, onceSpend);
+    if (normalSpend) {
+      const next = Math.max(0, state.current - normalSpend);
+      await actor.update({
+        [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
+        [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, toInteger(actor.system?.resources?.[REACTION_RESOURCE_KEY]?.max) - next)
+      }, { [REACTION_UPDATE_OPTION]: true });
+    }
     if (context?.suppressResourceNotification) return [];
     return notifyCombatResourcesSpent(actor, { [REACTION_RESOURCE_KEY]: cost }, context);
   }
 
-  const normalSpend = Math.min(cost, state.normal);
-  const onceSpend = cost - normalSpend;
+  const onceSpend = Math.min(cost, state.once);
+  const normalSpend = cost - onceSpend;
   const updates = {};
   if (normalSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.normal - normalSpend);
-  if (Object.keys(updates).length) await actor.update(updates);
   if (onceSpend) await spendOneTimeActionPoints(actor, onceSpend);
+  if (Object.keys(updates).length) await actor.update(updates);
   if (context?.suppressResourceNotification) return [];
   return notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
 }
@@ -568,31 +598,63 @@ export async function spendCombatActionPointsWithReceipt(actor, amount = 0, cont
 
   if (!state.ownTurn) {
     const resource = actor.system?.resources?.[REACTION_RESOURCE_KEY];
-    const before = Math.max(0, toInteger(resource?.value));
-    const maximum = Math.max(0, toInteger(resource?.max));
-    const next = Math.max(0, before - cost);
-    await actor.update({
-      [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
-      [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
-    }, { [REACTION_UPDATE_OPTION]: true });
-    const applied = getDirectCombatResourceValue(actor, REACTION_RESOURCE_KEY);
-    const observedSpend = Math.min(cost, Math.max(0, before - applied));
-    if (applied !== next) {
-      if (observedSpend > 0) {
-        await refundCombatActionPointReceipt(actor, createCombatActionPointReceipt(actor, {
-          mode: "reaction",
-          resourceKey: REACTION_RESOURCE_KEY,
-          amount: observedSpend,
-          reactionSpent: observedSpend
-        }), context);
+    const normalBefore = Math.max(0, toInteger(resource?.value));
+    const onceBefore = getOneTimeReactionPointTotal(actor);
+    const onceSpend = Math.min(cost, onceBefore);
+    const normalSpend = cost - onceSpend;
+    let observedNormalSpend = 0;
+    let observedOnceSpend = 0;
+    try {
+      if (onceSpend > 0) {
+        observedOnceSpend = await spendOneTimeReactionPoints(actor, onceSpend);
+        if (observedOnceSpend !== onceSpend) {
+          const error = new Error("One-time reaction-point update was cancelled or altered.");
+          error.cancelled = true;
+          throw error;
+        }
       }
-      return emptyCombatActionPointTransaction();
+      if (normalSpend > 0) {
+        const maximum = Math.max(0, toInteger(resource?.max));
+        const next = Math.max(0, normalBefore - normalSpend);
+        await actor.update({
+          [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
+          [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+        }, { [REACTION_UPDATE_OPTION]: true });
+        const applied = getDirectCombatResourceValue(actor, REACTION_RESOURCE_KEY);
+        observedNormalSpend = Math.min(normalSpend, Math.max(0, normalBefore - applied));
+        if (applied !== next) {
+          const error = new Error("Combat reaction-point Actor update was cancelled or altered.");
+          error.cancelled = true;
+          throw error;
+        }
+      }
+    } catch (error) {
+      const partialAmount = observedNormalSpend + observedOnceSpend;
+      if (partialAmount > 0) {
+        try {
+          const restored = await refundCombatActionPointReceipt(actor, createCombatActionPointReceipt(actor, {
+            mode: "reaction",
+            resourceKey: REACTION_RESOURCE_KEY,
+            amount: partialAmount,
+            reactionSpent: observedNormalSpend,
+            reactionOnceSpent: observedOnceSpend
+          }), context);
+          if (restored < partialAmount) {
+            throw new Error(`Only ${restored} of ${partialAmount} reaction points were rolled back.`);
+          }
+        } catch (rollbackError) {
+          error.rollbackError ??= rollbackError;
+        }
+      }
+      if (error.cancelled && !error.rollbackError) return emptyCombatActionPointTransaction();
+      throw error;
     }
     const receipt = createCombatActionPointReceipt(actor, {
       mode: "reaction",
       resourceKey: REACTION_RESOURCE_KEY,
       amount: cost,
-      reactionSpent: cost
+      reactionSpent: normalSpend,
+      reactionOnceSpent: onceSpend
     });
     return {
       spent: cost,
@@ -605,12 +667,22 @@ export async function spendCombatActionPointsWithReceipt(actor, amount = 0, cont
 
   const normalBefore = getNormalActionPointValue(actor);
   const onceBefore = getOneTimeActionPointTotal(actor);
-  const normalSpend = Math.min(cost, normalBefore);
-  const onceSpend = cost - normalSpend;
+  const onceSpend = Math.min(cost, onceBefore);
+  const normalSpend = cost - onceSpend;
   const onceRestores = planOneTimeActionPointRestores(actor, onceSpend);
   let observedNormalSpend = 0;
   let observedOnceSpend = 0;
   try {
+    if (onceSpend > 0) {
+      await spendOneTimeActionPoints(actor, onceSpend);
+      const onceAfter = getOneTimeActionPointTotal(actor);
+      observedOnceSpend = Math.min(onceSpend, Math.max(0, onceBefore - onceAfter));
+      if (onceAfter !== onceBefore - onceSpend) {
+        const error = new Error("One-time action-point update was cancelled or altered.");
+        error.cancelled = true;
+        throw error;
+      }
+    }
     if (normalSpend > 0) {
       const next = normalBefore - normalSpend;
       await actor.update({
@@ -620,16 +692,6 @@ export async function spendCombatActionPointsWithReceipt(actor, amount = 0, cont
       observedNormalSpend = Math.min(normalSpend, Math.max(0, normalBefore - applied));
       if (applied !== next) {
         const error = new Error("Combat action-point Actor update was cancelled or altered.");
-        error.cancelled = true;
-        throw error;
-      }
-    }
-    if (onceSpend > 0) {
-      await spendOneTimeActionPoints(actor, onceSpend);
-      const onceAfter = getOneTimeActionPointTotal(actor);
-      observedOnceSpend = Math.min(onceSpend, Math.max(0, onceBefore - onceAfter));
-      if (onceAfter !== onceBefore - onceSpend) {
-        const error = new Error("One-time action-point update was cancelled or altered.");
         error.cancelled = true;
         throw error;
       }
@@ -685,21 +747,30 @@ export async function refundCombatActionPointReceipt(actor, receipt = null, cont
 
   if (receipt.mode === "reaction" && receipt.resourceKey === REACTION_RESOURCE_KEY) {
     const resource = actor.system?.resources?.[REACTION_RESOURCE_KEY];
-    if (!resource) return 0;
-    const before = Math.max(0, toInteger(resource.value));
-    const maximum = Math.max(0, toInteger(resource.max));
-    const next = Math.min(maximum, before + Math.max(0, toInteger(receipt.reactionSpent)));
-    const requested = next - before;
-    if (requested <= 0) return 0;
-    await actor.update({
-      [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
-      [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
-    }, {
-      [REACTION_UPDATE_OPTION]: true,
-      falloutMawCombatActionPointRefund: true,
-      ...getCombatActionPointOperationOptions(context)
-    });
-    return Math.min(requested, Math.max(0, getDirectCombatResourceValue(actor, REACTION_RESOURCE_KEY) - before));
+    let restored = 0;
+    const normalAmount = Math.max(0, toInteger(receipt.reactionSpent));
+    if (resource && normalAmount > 0) {
+      const before = Math.max(0, toInteger(resource.value));
+      const maximum = Math.max(0, toInteger(resource.max));
+      const next = Math.min(maximum, before + normalAmount);
+      const requested = next - before;
+      if (requested > 0) {
+        await actor.update({
+          [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
+          [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+        }, {
+          [REACTION_UPDATE_OPTION]: true,
+          falloutMawCombatActionPointRefund: true,
+          ...getCombatActionPointOperationOptions(context)
+        });
+        restored += Math.min(requested, Math.max(0, getDirectCombatResourceValue(actor, REACTION_RESOURCE_KEY) - before));
+      }
+    }
+    const onceAmount = Math.max(0, toInteger(receipt.reactionOnceSpent));
+    if (onceAmount > 0) {
+      restored += await addOneTimeReactionPoints(actor, onceAmount);
+    }
+    return Math.min(amount, restored);
   }
 
   if (receipt.mode !== "action" || receipt.resourceKey !== ACTION_RESOURCE_KEY) return 0;
@@ -764,6 +835,7 @@ function createCombatActionPointReceipt(actor, data = {}) {
     normalSpent: Math.max(0, toInteger(data.normalSpent)),
     onceSpent: Math.max(0, toInteger(data.onceSpent)),
     reactionSpent: Math.max(0, toInteger(data.reactionSpent)),
+    reactionOnceSpent: Math.max(0, toInteger(data.reactionOnceSpent)),
     onceRestores: Object.freeze((data.onceRestores ?? []).map(entry => Object.freeze({
       amount: Math.max(0, toInteger(entry?.amount)),
       source: String(entry?.source ?? "")
@@ -1053,6 +1125,60 @@ async function deleteTurnStartResourceEffects(actor) {
   if (ids.size) {
     await actor.deleteEmbeddedDocuments("ActiveEffect", Array.from(ids), { animate: false });
   }
+  await clearOneTimeReactionPoints(actor);
+}
+
+async function deleteLegacyReactionPointGrantEffects(actor) {
+  const ids = actor?.effects
+    ?.filter(effect => effect.getFlag?.(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG)?.source === "abilityGrant")
+    .map(effect => effect.id)
+    .filter(Boolean) ?? [];
+  if (ids.length && typeof actor?.deleteEmbeddedDocuments === "function") {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
+  }
+}
+
+async function setOneTimeReactionPointTotal(actor, value) {
+  const next = Math.max(0, toInteger(value));
+  const options = { [REACTION_UPDATE_OPTION]: true };
+  if (next > 0 && typeof actor?.setFlag === "function") {
+    await actor.setFlag(SYSTEM_ID, ONE_TIME_REACTION_POINTS_FLAG, next, options);
+    return next;
+  }
+  if (next <= 0 && typeof actor?.unsetFlag === "function") {
+    await actor.unsetFlag(SYSTEM_ID, ONE_TIME_REACTION_POINTS_FLAG, options);
+    return 0;
+  }
+  if (typeof actor?.update === "function") {
+    await actor.update({
+      [`flags.${SYSTEM_ID}.${ONE_TIME_REACTION_POINTS_FLAG}`]: next > 0 ? next : null
+    }, options);
+  }
+  return next;
+}
+
+async function addOneTimeReactionPoints(actor, amount) {
+  const value = Math.max(0, toInteger(amount));
+  if (!value) return 0;
+  const before = getOneTimeReactionPointTotal(actor);
+  const next = before + value;
+  await setOneTimeReactionPointTotal(actor, next);
+  return Math.max(0, getOneTimeReactionPointTotal(actor) - before);
+}
+
+async function spendOneTimeReactionPoints(actor, amount) {
+  const requested = Math.max(0, toInteger(amount));
+  if (!requested) return 0;
+  const before = getOneTimeReactionPointTotal(actor);
+  const spent = Math.min(requested, before);
+  if (!spent) return 0;
+  await setOneTimeReactionPointTotal(actor, before - spent);
+  return Math.min(spent, Math.max(0, before - getOneTimeReactionPointTotal(actor)));
+}
+
+async function clearOneTimeReactionPoints(actor) {
+  if (!getOneTimeReactionPointTotal(actor)) return;
+  await setOneTimeReactionPointTotal(actor, 0);
 }
 
 async function addOneTimeActionPointEffect(actor, amount, { source = "" } = {}) {
@@ -1225,5 +1351,14 @@ function buildFlatFillStyle(color, percent) {
     `width: ${Math.max(0, Math.min(100, Number(percent) || 0)).toFixed(2)}%`,
     `background: linear-gradient(180deg, ${color}, #b9b9b0)`,
     "box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 14px rgba(242, 242, 235, 0.34)"
+  ].join("; ");
+}
+
+function buildFlatOverlayFillStyle(color, leftPercent, widthPercent) {
+  return [
+    `left: ${Math.max(0, Math.min(100, Number(leftPercent) || 0)).toFixed(2)}%`,
+    `width: ${Math.max(0, Math.min(100, Number(widthPercent) || 0)).toFixed(2)}%`,
+    `background: linear-gradient(180deg, ${color}, #78aee8)`,
+    `box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0 14px rgba(118, 185, 255, 0.48)`
   ].join("; ");
 }

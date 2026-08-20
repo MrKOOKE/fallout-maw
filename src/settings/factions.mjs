@@ -141,6 +141,18 @@ export function getRelationTo(actor, factionName) {
   return getActorFactionRelations(actor)[target] ?? "neutral";
 }
 
+export function getActorFactionRelation(sourceActor, targetActor) {
+  if (!sourceActor || !targetActor) return "neutral";
+  if (sourceActor.uuid && sourceActor.uuid === targetActor.uuid) return "ally";
+  const sourcePrimary = getActorPrimaryFaction(sourceActor);
+  const targetFactions = getActorFactionBelongs(targetActor);
+  const factions = targetFactions.length ? targetFactions : [DEFAULT_FACTION_NAME];
+  const relations = factions.map(faction => faction === sourcePrimary ? "ally" : getRelationTo(sourceActor, faction));
+  if (relations.includes("ally")) return "ally";
+  if (relations.includes("enemy")) return "enemy";
+  return "neutral";
+}
+
 export function registerFactionApi() {
   const api = {
     defaultFactionName: DEFAULT_FACTION_NAME,
@@ -152,6 +164,7 @@ export function registerFactionApi() {
     setFactionScoreMutable,
     getRelationFromScore,
     getRelationTo,
+    getActorRelation: getActorFactionRelation,
     getActorBelongs: getActorFactionBelongs,
     setActorBelongs: setActorFactionBelongs,
     getActorRelations: getActorFactionRelations,

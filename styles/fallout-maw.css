@@ -4593,6 +4593,16 @@ body #prosemirror-dropdown {
   z-index: 1;
 }
 
+.fallout-maw-resource-meter-once-fill {
+  bottom: 1px;
+  display: block;
+  height: calc(100% - 2px);
+  pointer-events: none;
+  position: absolute;
+  top: 1px;
+  z-index: 2;
+}
+
 .fallout-maw-consciousness-recovery-marker {
   background: #f3e7b5;
   bottom: 0;
@@ -6024,6 +6034,10 @@ body #prosemirror-dropdown {
 
 .fallout-maw-damage-entry-table .fallout-maw-settings-row {
   grid-template-columns: minmax(150px, 1fr) minmax(90px, 130px) 2.5rem;
+}
+
+.fallout-maw-region-effect-change-table .fallout-maw-settings-row {
+  grid-template-columns: minmax(190px, 1.4fr) minmax(105px, 0.8fr) minmax(100px, 1fr) minmax(70px, 85px) 2.5rem;
 }
 
 .fallout-maw-icon-delete-button {
@@ -13199,6 +13213,7 @@ label.checkbox.fallout-maw-ability-change-choice {
   border: 1px solid rgba(190, 174, 126, 0.16);
   padding: 4px;
 }
+
 
 .fallout-maw-token-hud-meter-header {
   align-items: center;

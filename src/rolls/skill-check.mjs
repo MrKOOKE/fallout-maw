@@ -1642,6 +1642,7 @@ function resolveSkillCheckContext(actor, data = {}) {
     attackDistanceMeters: normalizeAttackDistanceMeters(data?.attackDistanceMeters),
     effectiveRange: normalizeAttackEffectiveRange(data?.effectiveRange),
     weaponActionKey: String(data?.weaponActionKey ?? "").trim(),
+    stealthAttack: data?.stealthAttack === true,
     chanceOperationId: getActiveUseOperationId(data)
   };
 }

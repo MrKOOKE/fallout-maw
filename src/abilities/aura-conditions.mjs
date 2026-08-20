@@ -1,5 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { getActorFactionBelongs, getActorPrimaryFaction, getRelationTo, DEFAULT_FACTION_NAME } from "../settings/factions.mjs";
+import { getActorFactionRelation } from "../settings/factions.mjs";
 import {
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
@@ -183,13 +183,7 @@ function auraTargetRelationMatches(sourceActor, targetActor, targetGroups = []) 
 }
 
 export function getAuraRelation(sourceActor, targetActor) {
-  const sourcePrimary = getActorPrimaryFaction(sourceActor);
-  const targetFactions = getActorFactionBelongs(targetActor);
-  const factions = targetFactions.length ? targetFactions : [DEFAULT_FACTION_NAME];
-  const relations = factions.map(faction => faction === sourcePrimary ? "ally" : getRelationTo(sourceActor, faction));
-  if (relations.includes("ally")) return "ally";
-  if (relations.includes("enemy")) return "enemy";
-  return "neutral";
+  return getActorFactionRelation(sourceActor, targetActor);
 }
 
 function resolveActorToken(actor, context = {}) {

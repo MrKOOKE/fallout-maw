@@ -122,7 +122,10 @@ export function buildObserverDetectionZone(observerToken, {
     y: center.y - radiusWithCell,
     width: radiusWithCell * 2,
     height: radiusWithCell * 2
-  }, { elevation: center.elevation });
+  }, {
+    elevation: center.elevation,
+    targetActor: observerToken?.actor ?? null
+  });
 
   const ordinaryVision = createObserverOrdinaryVisionMask(observerToken, { origin: center });
   try {
@@ -489,6 +492,7 @@ function measureDetectionPath(
   const smokePath = measureSmokePath(origin, destination, {
     elevation: origin.elevation === destination.elevation ? origin.elevation : null,
     regionCandidates: smokeRegionCandidates,
+    targetActor: smokeRegionCandidates ? null : (observerToken?.actor ?? null),
     densityAdjustment: getActorSmokeDensityAdjustment(observerToken?.actor)
   });
   const unaidedSightRange = getObserverUnaidedSightRange(observerToken);

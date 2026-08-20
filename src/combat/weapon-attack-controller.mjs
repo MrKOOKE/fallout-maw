@@ -120,6 +120,7 @@ import {
   calculateStealthDamageBonusAmount,
   clearWeaponNoisePreview,
   getStealthAttackModifiers,
+  isActorStealthed,
   resolveWeaponNoiseDetection,
   setWeaponNoisePreview
 } from "../stealth/index.mjs";
@@ -4136,6 +4137,7 @@ export class WeaponAttackController {
     this.weapon = weapon;
     this.actionKey = actionKey;
     this.weaponFunctionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
+    this.stealthAttack = isActorStealthed(this.token?.actor);
     this.attackId = String(options.attackId ?? "").trim() || foundry.utils.randomID();
     this.chanceOperationId = String(options.chanceOperationId ?? "").trim() || this.attackId;
     this.rangeProfile = getWeaponRangeProfile(weapon, actionKey, token, this.weaponFunctionId, {
@@ -4161,6 +4163,7 @@ export class WeaponAttackController {
       || options.reportedActionPointCostApplied === undefined
       ? (this.reportedActionPointCost === null ? null : true)
       : Boolean(options.reportedActionPointCostApplied);
+    this.actionPointSpendReceipt = null;
     this.ignoreReactionLock = Boolean(options.ignoreReactionLock);
     this.suppressGenericEventReactions = Boolean(options.suppressGenericEventReactions);
     this.captureOnly = Boolean(options.captureOnly);
@@ -4251,6 +4254,7 @@ export class WeaponAttackController {
     this.reactionTargetKeys = new Set();
     this.attackedTargetActorUuids = new Set();
     this.attackedTargetTokenUuids = new Set();
+    this.preExistingUnconsciousTargetActorUuids = new Set();
     this.dodgeExposure = createDodgeAttackExposureTracker();
     this.burstTargetPreview = createBurstTargetPreviewState();
     this.burstPreviewStabilizeTimeout = null;
@@ -4403,9 +4407,12 @@ export class WeaponAttackController {
       weaponUuid: this.weapon?.uuid ?? "",
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
+      stealthAttack: Boolean(this.stealthAttack),
       attackId: this.attackId,
       selectedLimbKey: String(this.selectedLimbKey ?? ""),
       selectedTargetActorUuid: this.selectedTarget?.actor?.uuid ?? "",
+      preExistingUnconsciousTargetActorUuids: Array.from(this.preExistingUnconsciousTargetActorUuids),
+      actionPointSpendReceipt: this.actionPointSpendReceipt,
       actionPointCost,
       actionPointCostApplied,
       targetActorUuids: Array.from(this.attackedTargetActorUuids),
@@ -4449,6 +4456,7 @@ export class WeaponAttackController {
       || this.deferWeaponNoiseDetection
     ) return false;
     this.weaponNoiseDetectionResolved = true;
+    if (this.getWeaponActionModifierState().getOption("preventStealthDetection")) return true;
     await resolveWeaponNoiseDetection(this.token, { noiseLevel: this.weaponNoiseLevel });
     return true;
   }
@@ -4616,6 +4624,7 @@ export class WeaponAttackController {
       weaponAttackId: this.attackId,
       ...(this.processing || this.attackCommitted ? { chanceOperationId: this.chanceOperationId } : {}),
       weaponActionKey: this.actionKey,
+      stealthAttack: this.stealthAttack,
       weaponData,
       attackModifier: this.attackModifier,
       weaponActionModifierState: this.getWeaponActionModifierState(),
@@ -4679,6 +4688,7 @@ export class WeaponAttackController {
       weaponActionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
+      stealthAttack: Boolean(this.stealthAttack),
       attackModifier: this.attackModifier,
       controller: this,
       weaponAttackId: this.attackId,
@@ -5034,6 +5044,9 @@ export class WeaponAttackController {
   async resolveTargetReactions(target) {
     if (this.interruptForIncapacitation()) return true;
     if (this.attackCanceledByReaction || !target?.actor || !this.token?.actor || !this.weapon) return false;
+    if (target.actor.statuses?.has?.("unconscious")) {
+      this.preExistingUnconsciousTargetActorUuids.add(String(target.actor.uuid ?? "").trim());
+    }
     const targetKey = String(target.actor.uuid ?? target.document?.uuid ?? target.id ?? "");
     if (!targetKey) return false;
     const reactionKey = `${this.attackId}:${targetKey}`;
@@ -5395,6 +5408,7 @@ export class WeaponAttackController {
       this.weaponFunctionId,
       committedActionPointSpend
     );
+    this.actionPointSpendReceipt = committedActionPointSpend?.receipt ?? null;
     this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
     this.weaponNoiseAttempted = weaponAttempted;
     this.interruptForIncapacitation();

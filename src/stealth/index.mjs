@@ -18,3 +18,10 @@ export {
   setWeaponNoisePreview
 } from "./visualization.mjs";
 export { resolveWeaponNoiseDetection } from "./weapon-noise.mjs";
+export {
+  getShadowEffectData,
+  getShadowSourcesForTarget,
+  getShadowStealthBonus,
+  registerShadowEffectIndexHooks,
+  SHADOW_EFFECT_FLAG_KEY
+} from "./shadow.mjs";

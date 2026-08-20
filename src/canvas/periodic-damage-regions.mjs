@@ -6,6 +6,13 @@ import { getCombatSettings, getDamageTypeSettings } from "../settings/accessors.
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger, toOptionalFiniteNumber } from "../utils/numbers.mjs";
 import { createPeriodicDamageEffectSyncScheduler } from "./periodic-damage-effect-sync-scheduler.mjs";
+import { getRegionSourceActor, regionBehaviorTargetsActor } from "./region-targeting.mjs";
+import {
+  getPeriodicDamageBehaviors,
+  getPeriodicDamageSceneSet,
+  getPeriodicDamageScenes,
+  invalidatePeriodicDamageScene
+} from "./periodic-region-index.mjs";
 
 const BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const CLOCK_FLAG_KEY = "periodicDamage";
@@ -69,9 +76,7 @@ const SCENE_EFFECT_PATHS = [
 let movementQueue = Promise.resolve();
 let effectSyncScheduler = null;
 let hooksRegistered = false;
-let periodicSceneIndex = null;
 let lastActiveGmId = null;
-const periodicBehaviorsByScene = new WeakMap();
 const pendingDamageGroups = new Map();
 
 export function registerPeriodicDamageRegionHooks() {
@@ -93,6 +98,7 @@ export function registerPeriodicDamageRegionHooks() {
   Hooks.on("updateScene", onUpdatePeriodicDamageScene);
   Hooks.on("deleteScene", onDeletePeriodicDamageScene);
   Hooks.on("updateActor", onUpdatePeriodicDamageActor);
+  Hooks.on("updateSetting", onUpdatePeriodicDamageSetting);
   Hooks.on("updateWorldTime", onPeriodicDamageWorldTimeUpdate);
   Hooks.on("userConnected", onPeriodicDamageUserConnection);
   Hooks.on("updateUser", onPeriodicDamageUserUpdate);
@@ -211,6 +217,7 @@ async function processTokenMovement(tokenDocument, movement, { documentMovement 
       if (!isBehaviorCurrentlyActive(region, behavior)) continue;
       const entries = getDamageEntries(behavior.system);
       if (!entries.length) continue;
+      if (!regionBehaviorTargetsActor(region, behavior, tokenDocument.actor)) continue;
       const cost = measureTheoreticalMovementSegmentsCost(tokenDocument, segments, {
         measureOptions: movement.measureOptions
       });
@@ -411,10 +418,12 @@ function collectDesiredRegionEffects(tokensByScene) {
   for (const [scene, tokens] of tokensByScene) {
     if (!tokens.length) continue;
     for (const { region, behavior } of getPeriodicDamageBehaviors(scene)) {
-      if (!isBehaviorCurrentlyActive(region, behavior) || !getDamageEntries(behavior.system).length) continue;
+      if (!isBehaviorCurrentlyActive(region, behavior) || !regionBehaviorHasManagedEffect(behavior.system)) continue;
       for (const token of tokens) {
         const actor = token.actor;
-        if (!actor?.uuid || !isTokenInsideRegion(token, region)) continue;
+        if (!actor?.uuid
+          || !isTokenInsideRegion(token, region)
+          || !regionBehaviorTargetsActor(region, behavior, actor)) continue;
         const actorEffects = desired.get(actor.uuid) ?? new Map();
         actorEffects.set(behavior.uuid, { region, behavior });
         desired.set(actor.uuid, actorEffects);
@@ -548,39 +557,6 @@ function asDocumentArray(value) {
   return [value];
 }
 
-function getPeriodicDamageBehaviors(scene) {
-  if (!scene) return [];
-  const cached = periodicBehaviorsByScene.get(scene);
-  if (cached) return cached;
-  const behaviors = [];
-  for (const region of scene.regions?.contents ?? scene.regions ?? []) {
-    for (const behavior of region.behaviors?.contents ?? region.behaviors ?? []) {
-      if (behavior.type === BEHAVIOR_TYPE) behaviors.push({ region, behavior });
-    }
-  }
-  periodicBehaviorsByScene.set(scene, behaviors);
-  return behaviors;
-}
-
-function getPeriodicDamageScenes() {
-  return Array.from(getPeriodicDamageSceneSet());
-}
-
-function getPeriodicDamageSceneSet() {
-  if (!periodicSceneIndex) {
-    periodicSceneIndex = new Set();
-    for (const scene of game.scenes?.contents ?? game.scenes ?? []) {
-      if (getPeriodicDamageBehaviors(scene).length) periodicSceneIndex.add(scene);
-    }
-  }
-  return periodicSceneIndex;
-}
-
-function invalidatePeriodicDamageScene(scene) {
-  if (scene) periodicBehaviorsByScene.delete(scene);
-  periodicSceneIndex = null;
-}
-
 function buildRegionEffectData(region, behavior, actor) {
   const intervalSeconds = Math.max(1, toInteger(behavior.system?.intervalSeconds) || 6);
   const damageTypes = new Map(getDamageTypeSettings().map(entry => [entry.key, entry]));
@@ -589,15 +565,20 @@ function buildRegionEffectData(region, behavior, actor) {
     const label = String(damageTypes.get(entry.damageTypeKey)?.label ?? entry.damageTypeKey);
     return `<p><strong>${escapeHtml(label)}:</strong> ${amount} ${escapeHtml(game.i18n.format("FALLOUTMAW.RegionBehavior.PeriodicDamage.AreaEffectDamageTiming", { seconds: intervalSeconds }))}</p>`;
   }).join("");
+  const effectChanges = getRegionEffectChanges(behavior.system);
+  const effectName = String(behavior.system?.effectName ?? "").trim()
+    || game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.AreaEffectName");
+  const effectImg = String(behavior.system?.effectImg ?? "").trim() || EFFECT_IMG;
 
   return {
-    name: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.AreaEffectName"),
-    img: EFFECT_IMG,
+    name: effectName,
+    img: effectImg,
     description: damageLines,
     origin: behavior.uuid,
     disabled: false,
     transfer: false,
     showIcon: CONST.ACTIVE_EFFECT_SHOW_ICON.ALWAYS,
+    system: { changes: effectChanges },
     flags: {
       [SYSTEM_ID]: {
         [EFFECT_FLAG_KEY]: {
@@ -616,7 +597,26 @@ function regionEffectNeedsUpdate(effect, desired) {
     || effect.origin !== desired.origin
     || effect.disabled !== desired.disabled
     || effect.showIcon !== desired.showIcon
+    || !foundry.utils.equals(effect.system?.changes ?? [], desired.system?.changes ?? [])
     || effect.getFlag(SYSTEM_ID, EFFECT_FLAG_KEY)?.regionUuid !== desired.flags[SYSTEM_ID][EFFECT_FLAG_KEY].regionUuid;
+}
+
+function regionBehaviorHasManagedEffect(system = {}) {
+  return getDamageEntries(system).length > 0 || getRegionEffectChanges(system).length > 0;
+}
+
+function getRegionEffectChanges(system = {}) {
+  return (Array.isArray(system.effectChanges) ? system.effectChanges : [])
+    .map(change => ({
+      key: String(change?.key ?? "").trim(),
+      type: ["add", "multiply", "override", "upgrade", "downgrade"].includes(change?.type)
+        ? change.type
+        : "add",
+      value: String(change?.value ?? "0").trim() || "0",
+      phase: String(change?.phase ?? "initial").trim() || "initial",
+      priority: Number.isInteger(Number(change?.priority)) ? Number(change.priority) : null
+    }))
+    .filter(change => change.key);
 }
 
 function getDamageEntries(system = {}) {
@@ -768,8 +768,22 @@ function onDeletePeriodicDamageScene(scene) {
   }
 }
 
-function onUpdatePeriodicDamageActor(actor) {
+function onUpdatePeriodicDamageActor(actor, changes = {}) {
   requestPeriodicDamageActorEffectSync([actor]);
+  if (!hasChangedPath(changes, [
+    `flags.${SYSTEM_ID}.factionBelongs`,
+    `flags.${SYSTEM_ID}.factionRelations`
+  ])) return;
+  const scenes = getPeriodicDamageScenes().filter(scene => getPeriodicDamageBehaviors(scene)
+    .some(({ region, behavior }) => getRegionSourceActor(region, behavior)?.uuid === actor.uuid));
+  if (scenes.length) requestPeriodicDamageSceneEffectSync(scenes);
+}
+
+function onUpdatePeriodicDamageSetting(setting) {
+  const key = String(setting?.key ?? "");
+  if (!key.includes("faction")) return;
+  const scenes = getPeriodicDamageScenes();
+  if (scenes.length) requestPeriodicDamageSceneEffectSync(scenes);
 }
 
 function onPeriodicDamageWorldTimeUpdate() {

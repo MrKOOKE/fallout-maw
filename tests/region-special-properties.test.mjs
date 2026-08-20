@@ -83,6 +83,29 @@ test("smoke path cost attenuates intersecting and overlapping regions", () => {
   assert.equal(calculateSmokePathCost({ x: 0, y: 0, elevation: 0 }, { x: 10, y: 0, elevation: 0 }, { scene, elevation: 0 }), Infinity);
 });
 
+test("smoke recipient relations use the Region source actor factions", () => {
+  const sourceActor = createFactionActor("Actor.source", "Исследователи");
+  const allyActor = createFactionActor("Actor.ally", "Исследователи");
+  const neutralActor = createFactionActor("Actor.neutral", "Поселенцы");
+  const region = createSmokeRegion("relations", 100);
+  const behavior = region.behaviors.contents[0];
+  behavior.system.targetRelations = ["neutral", "enemy"];
+  region.attachment = { token: "source-token" };
+  region.parent = {
+    tokens: {
+      get: tokenId => tokenId === "source-token" ? { actor: sourceActor } : null
+    }
+  };
+  const scene = createScene([region]);
+  const from = { x: 0, y: 0, elevation: 0 };
+  const to = { x: 10, y: 0, elevation: 0 };
+
+  assert.equal(calculateSmokePathCost(from, to, { scene, elevation: 0, targetActor: sourceActor }), 10);
+  assert.equal(calculateSmokePathCost(from, to, { scene, elevation: 0, targetActor: allyActor }), 10);
+  assert.equal(calculateSmokePathCost(from, to, { scene, elevation: 0, targetActor: neutralActor }), Infinity);
+  assert.equal(calculateSmokePathCost(from, to, { scene, elevation: 0 }), Infinity);
+});
+
 test("smoke path intervals use the native Region segmentizer", () => {
   const region = createSmokeRegion("circle", 50);
   region.shapes[0].radius = 2;
@@ -1126,6 +1149,13 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
 
 function createScene(regions) {
   return { regions: { contents: regions } };
+}
+
+function createFactionActor(uuid, faction) {
+  return {
+    uuid,
+    getFlag: (_scope, key) => key === "factionBelongs" ? [faction] : undefined
+  };
 }
 
 function createSmokeRegion(id, densityPercent) {

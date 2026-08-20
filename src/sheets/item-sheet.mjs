@@ -135,6 +135,9 @@ import {
   normalizeEmergencyOperationsSettings,
   normalizeExperimentalSurgerySettings,
   normalizeInconspicuousSettings,
+  normalizeShadowSettings,
+  normalizeSandmanSettings,
+  normalizeNightmareSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
@@ -7411,6 +7414,15 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedInconspicuousSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous
     ? prepareInconspicuousSettingsForDisplay(entry?.fixedSettings, entry, item)
     : null;
+  const fixedShadowSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow
+    ? prepareShadowSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedSandmanSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman
+    ? normalizeSandmanSettings(entry?.fixedSettings)
+    : null;
+  const fixedNightmareSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare
+    ? prepareNightmareSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7498,6 +7510,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedExperimentalSurgerySettings,
     fixedEmergencyOperationsSettings,
     fixedInconspicuousSettings,
+    fixedShadowSettings,
+    fixedSandmanSettings,
+    fixedNightmareSettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
@@ -8132,6 +8147,29 @@ function prepareInconspicuousSettingsForDisplay(settings = {}, abilityFunction =
       { value: "false", label: "Не атакован", selected: !attacked },
       { value: "true", label: "Атакован", selected: attacked }
     ]
+  };
+}
+
+function prepareShadowSettingsForDisplay(settings = {}) {
+  const normalized = normalizeShadowSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareNightmareSettingsForDisplay(settings = {}) {
+  const normalized = normalizeNightmareSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
   };
 }
 
@@ -10217,6 +10255,33 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         submitData,
         `${functionPath}.${functionIndex}.fixedSettings.stealthBonusDurationSeconds`,
         stealthBonusDurationSeconds
+      );
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-shadow-duration-amount]")?.value,
+        row.querySelector("[data-fixed-shadow-duration-unit]")?.value
+      );
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-shadow-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-shadow-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-nightmare-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-nightmare-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(
+        submitData,
+        `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`,
+        overloadDurationSeconds
       );
       continue;
     }

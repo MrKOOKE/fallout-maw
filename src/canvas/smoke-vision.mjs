@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getSmokeRuntimeProperties } from "../utils/region-special-properties.mjs";
 import { toOptionalFiniteNumber } from "../utils/numbers.mjs";
+import { regionBehaviorTargetsActor } from "./region-targeting.mjs";
 import {
   actorHasSmokePerceptionChange,
   effectHasSmokePerceptionChange,
@@ -42,7 +43,7 @@ export function registerSmokeVisionHooks() {
   Hooks.on("createRegion", document => refreshForDocument(document));
   Hooks.on("deleteRegion", document => refreshForDocument(document));
   Hooks.on("updateRegion", (document, changed) => {
-    if (hasAnyChangedPath(changed, ["shapes", "elevation", "hidden", "visibility", "levels"])) {
+    if (hasAnyChangedPath(changed, ["shapes", "elevation", "hidden", "visibility", "levels", "attachment"])) {
       refreshForDocument(document);
     }
   });
@@ -53,6 +54,8 @@ export function registerSmokeVisionHooks() {
     if (hasAnyChangedPath(changed, [
       "disabled",
       "type",
+      "system.targetRelations",
+      "system.sourceActorUuid",
       "system.regionSpecialProperties",
       "system.delaySeconds",
       "system.durationSeconds",
@@ -85,9 +88,14 @@ export function registerSmokeVisionHooks() {
     if (!pendingSmokePerceptionEffectUpdates.delete(effect)) return;
     refreshVisionForSmokePerceptionEffect(effect, { allowMissingChange: true });
   });
-  Hooks.on("updateActor", actor => {
+  Hooks.on("updateActor", (actor, changed = {}) => {
     if (actorHasSmokePerceptionChange(actor)) refreshVisionForSmokePerceptionActor(actor);
+    if (hasAnyChangedPath(changed, [
+      `flags.${SYSTEM_ID}.factionBelongs`,
+      `flags.${SYSTEM_ID}.factionRelations`
+    ])) refreshVisionForSmokeTargetRelations();
   });
+  Hooks.on(`${SYSTEM_ID}.factionSettingsChanged`, () => refreshVisionForSmokeTargetRelations());
   Hooks.on("updateItem", item => {
     const effect = Array.from(item?.effects ?? []).find(effectHasSmokePerceptionChange);
     if (effect) {
@@ -139,6 +147,12 @@ function refreshVisionForSmokePerceptionActor(actor) {
   if (!getSmokeRegionIndex(canvas?.scene)?.hasVisionSmoke) return;
   if (!actor || !(canvas?.tokens?.placeables ?? []).some(token => token?.actor === actor)) return;
   Hooks.callAll?.(`${SYSTEM_ID}.smokePerceptionChanged`, actor);
+  canvas?.perception?.update?.({ initializeVision: true, refreshVision: true });
+}
+
+function refreshVisionForSmokeTargetRelations() {
+  if (!getSmokeRegionIndex(canvas?.scene)?.hasVisionSmoke) return;
+  sourceConstraintCache = new WeakMap();
   canvas?.perception?.update?.({ initializeVision: true, refreshVision: true });
 }
 
@@ -268,11 +282,19 @@ export function getSmokeRegionRevision(scene = canvas?.scene) {
   return getSmokeRegionIndex(scene)?.revision ?? 0;
 }
 
-export function getSmokeRegionsAlongRay(from, to, { scene = canvas?.scene, elevation = null } = {}) {
-  return getSmokeRegionsInBounds(getSegmentBounds(from, to), { scene, elevation });
+export function getSmokeRegionsAlongRay(from, to, {
+  scene = canvas?.scene,
+  elevation = null,
+  targetActor = null
+} = {}) {
+  return getSmokeRegionsInBounds(getSegmentBounds(from, to), { scene, elevation, targetActor });
 }
 
-export function getSmokeRegionsInBounds(bounds, { scene = canvas?.scene, elevation = null } = {}) {
+export function getSmokeRegionsInBounds(bounds, {
+  scene = canvas?.scene,
+  elevation = null,
+  targetActor = null
+} = {}) {
   const index = getSmokeRegionIndex(scene);
   if (!index?.hasVisionSmoke) return [];
   const candidates = new Set();
@@ -286,16 +308,22 @@ export function getSmokeRegionsInBounds(bounds, { scene = canvas?.scene, elevati
     .map(candidate => index.entries[candidate])
     .filter(entry => entry?.smoke?.density > EPSILON)
     .filter(entry => entry && (!entry.bounds || boundsIntersect(entry.bounds, bounds)))
-    .filter(entry => isRegionOnElevation(entry.region, elevation));
+    .filter(entry => isRegionOnElevation(entry.region, elevation))
+    .filter(entry => !targetActor || regionBehaviorTargetsActor(entry.region, entry.behavior, targetActor));
 }
 
-export function calculateSmokePathCost(from, to, { scene = canvas?.scene, elevation = null } = {}) {
-  return measureSmokePath(from, to, { scene, elevation }).cost;
+export function calculateSmokePathCost(from, to, {
+  scene = canvas?.scene,
+  elevation = null,
+  targetActor = null
+} = {}) {
+  return measureSmokePath(from, to, { scene, elevation, targetActor }).cost;
 }
 
 export function measureSmokePath(from, to, {
   scene = canvas?.scene,
   elevation = null,
+  targetActor = null,
   budget = Infinity,
   regionCandidates = null,
   densityMultiplier = 1,
@@ -307,6 +335,7 @@ export function measureSmokePath(from, to, {
   const profile = buildSmokePathProfile(from, to, {
     scene,
     elevation,
+    targetActor,
     regionCandidates,
     densityMultiplier,
     densityAdjustment,
@@ -326,6 +355,7 @@ export function measureSmokePath(from, to, {
 function buildSmokePathProfile(from, to, {
   scene = canvas?.scene,
   elevation = null,
+  targetActor = null,
   regionCandidates = null,
   densityMultiplier = 1,
   densityAdjustment = 0,
@@ -335,6 +365,7 @@ function buildSmokePathProfile(from, to, {
   return buildSmokePathProfiles(from, to, {
     scene,
     elevation,
+    targetActor,
     regionCandidates,
     densityMultipliers: [densityMultiplier],
     densityAdjustment,
@@ -346,6 +377,7 @@ function buildSmokePathProfile(from, to, {
 function buildSmokePathProfiles(from, to, {
   scene = canvas?.scene,
   elevation = null,
+  targetActor = null,
   regionCandidates = null,
   densityMultipliers = [1],
   densityAdjustment = 0,
@@ -363,7 +395,11 @@ function buildSmokePathProfiles(from, to, {
     ? null
     : elevation;
   const segmentBounds = getSegmentBounds(start, end);
-  const regions = (regionCandidates ?? getSmokeRegionsAlongRay(start, end, { scene, elevation: queryElevation }))
+  const regions = (regionCandidates ?? getSmokeRegionsAlongRay(start, end, {
+    scene,
+    elevation: queryElevation,
+    targetActor
+  }))
     .filter(entry => !entry.bounds || boundsIntersect(entry.bounds, segmentBounds))
     .filter(entry => isRegionOnElevation(entry.region, queryElevation));
   if (!regions.length) return multipliers.map(() => ({
@@ -859,9 +895,8 @@ function buildSmokeVisionConstraint(source, radius, budget) {
   if (!radius || budget === null) return null;
   const { x, y, elevation } = source.data;
   const revision = getSmokeRegionRevision(canvas?.scene);
-  const perceptionPercent = getActorSmokePerceptionPercent(
-    source.object?.actor ?? source.object?.document?.actor
-  );
+  const targetActor = source.object?.actor ?? source.object?.document?.actor ?? null;
+  const perceptionPercent = getActorSmokePerceptionPercent(targetActor);
   const densityAdjustment = perceptionPercent / 100;
   const cachedEntries = sourceConstraintCache.get(source) ?? [];
   const bounds = {
@@ -870,7 +905,10 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     width: radius * 2,
     height: radius * 2
   };
-  const regionCandidates = getSmokeRegionsInBounds(bounds, { elevation }).filter(requiresRayAttenuation);
+  const regionCandidates = getSmokeRegionsInBounds(bounds, {
+    elevation,
+    targetActor
+  }).filter(requiresRayAttenuation);
   if (!regionCandidates.length) return null;
   const lightCandidates = getSmokeDispersionCandidates(bounds, { elevation });
   const lightSignature = getSmokeLightCandidateSignature(lightCandidates);
@@ -882,6 +920,7 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     && entry.elevation === elevation
     && entry.radius === radius
     && entry.budget === budget
+    && entry.targetActorUuid === (targetActor?.uuid ?? "")
     && entry.perceptionPercent === perceptionPercent);
   if (cached) return cached.constraint;
   const origin = { x, y, elevation };
@@ -959,6 +998,7 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     elevation,
     radius,
     budget,
+    targetActorUuid: targetActor?.uuid ?? "",
     perceptionPercent,
     constraint
   });
@@ -1233,15 +1273,15 @@ function patchBasicSightRange(mode) {
       : visionSource.object.getLightRadius(detectionMode.range);
     const index = getSmokeRegionIndex(canvas?.scene);
     if (!hasRayAttenuationSmoke(index)) return true;
+    const targetActor = visionSource.object?.actor ?? visionSource.object?.document?.actor ?? null;
     const origin = { x: visionSource.data.x, y: visionSource.data.y, elevation: visionSource.data.elevation };
     const rayElevation = getSmokeRayElevation(origin, test.point);
     const regionCandidates = getSmokeRegionsAlongRay(origin, test.point, {
-      elevation: rayElevation
+      elevation: rayElevation,
+      targetActor
     }).filter(requiresRayAttenuation);
     if (!regionCandidates.length) return true;
-    const densityAdjustment = getActorSmokeDensityAdjustment(
-      visionSource.object?.actor ?? visionSource.object?.document?.actor
-    );
+    const densityAdjustment = getActorSmokeDensityAdjustment(targetActor);
     return isSmokePathVisible(
         origin,
         test.point,
@@ -1266,6 +1306,7 @@ function patchLightPerceptionRange(mode) {
     if (!original.call(this, visionSource, detectionMode, target, test)) return false;
     const index = getSmokeRegionIndex(canvas?.scene);
     if (!isTokenVisibilityTarget(target) || !hasRayAttenuationSmoke(index)) return true;
+    const targetActor = visionSource.object?.actor ?? visionSource.object?.document?.actor ?? null;
     const origin = {
       x: visionSource.data.x,
       y: visionSource.data.y,
@@ -1273,12 +1314,11 @@ function patchLightPerceptionRange(mode) {
     };
     const rayElevation = getSmokeRayElevation(origin, test.point);
     const regionCandidates = getSmokeRegionsAlongRay(origin, test.point, {
-      elevation: rayElevation
+      elevation: rayElevation,
+      targetActor
     }).filter(requiresRayAttenuation);
     if (!regionCandidates.length) return true;
-    const densityAdjustment = getActorSmokeDensityAdjustment(
-      visionSource.object?.actor ?? visionSource.object?.document?.actor
-    );
+    const densityAdjustment = getActorSmokeDensityAdjustment(targetActor);
     const measurement = measureSmokePath(origin, test.point, {
       elevation: rayElevation,
       chargeClearDistance: false,

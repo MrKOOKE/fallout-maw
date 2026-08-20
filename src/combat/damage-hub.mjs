@@ -18,6 +18,8 @@ import { withQueuedReactionOpportunityWave } from "./reaction-hub.mjs";
 import { advanceWorldTime, registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
+import { regionBehaviorTargetsActor } from "../canvas/region-targeting.mjs";
+import { getPeriodicDamageScenes } from "../canvas/periodic-region-index.mjs";
 import {
   CONSTRUCT_PART_MITIGATION_LIMB_KEY,
   DAMAGE_MITIGATION_MODES,
@@ -5554,8 +5556,7 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
 async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
   const batches = [];
   const previousTime = Math.max(0, (Number(now) || 0) - Math.max(0, Number(deltaTime) || 0));
-  const scene = globalThis.canvas?.scene;
-  if (scene) {
+  for (const scene of getPeriodicDamageScenes()) {
     for (const region of scene.regions?.contents ?? []) {
       if (region.hidden) continue;
       for (const behavior of region.behaviors?.contents ?? []) {
@@ -5674,7 +5675,7 @@ function buildRegionPeriodicDamageRequests(region, behavior, entries = [], tickT
     .filter(Number.isFinite);
   if (!times.length) times.push(Number(game.time?.worldTime) || 0);
   const requests = [];
-  for (const token of getTokensInsideRegion(region)) {
+  for (const token of getTokensInsideRegion(region, behavior)) {
     if (!token.actor) continue;
     const limbKey = selectRandomDamageLimbKey(token.actor);
     for (const worldTime of times) {
@@ -5718,12 +5719,12 @@ function getRegionPeriodicDamageEntries(system = {}) {
     : [];
 }
 
-function getTokensInsideRegion(region) {
+function getTokensInsideRegion(region, behavior = null) {
   const scene = region?.parent;
   if (!scene) return [];
   return (scene.tokens?.contents ?? [])
     .filter(token => {
-      if (!token?.actor) return false;
+      if (!token?.actor || !regionBehaviorTargetsActor(region, behavior, token.actor)) return false;
       try {
         return token.testInsideRegion(region);
       } catch (_error) {
@@ -5774,8 +5775,7 @@ async function preserveRegionPeriodicDamage(deltaTime) {
   const elapsed = Math.max(0, Number(deltaTime) || 0);
   if (!elapsed) return;
 
-  const scene = globalThis.canvas?.scene;
-  if (scene) {
+  for (const scene of getPeriodicDamageScenes()) {
     for (const region of scene.regions?.contents ?? []) {
       for (const behavior of region.behaviors?.contents ?? []) {
         if (behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;

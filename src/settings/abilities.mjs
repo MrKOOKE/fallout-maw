@@ -204,7 +204,9 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   experimentalSurgery: "experimentalSurgery",
   emergencyOperations: "emergencyOperations",
   inconspicuous: "inconspicuous",
-  shadow: "shadow"
+  shadow: "shadow",
+  sandman: "sandman",
+  nightmare: "nightmare"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -2245,7 +2247,45 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
     return normalizeShadowSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
+    return normalizeSandmanSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare) {
+    return normalizeNightmareSettings(value);
+  }
   return {};
+}
+
+/** "Кошмар": stealth incapacitation fear and a mobile darkness emanation. */
+export function normalizeNightmareSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 100)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 200)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200)),
+    witnessRadiusMeters: Math.max(0, toInteger(value?.witnessRadiusMeters ?? 20)),
+    witnessDifficultyFormula: String(value?.witnessDifficultyFormula ?? "50+stealth").trim() || "50+stealth",
+    fearDurationSeconds: Math.max(0, toInteger(value?.fearDurationSeconds ?? 24)),
+    incomingDamagePercent: Math.max(0, toInteger(value?.incomingDamagePercent ?? 20)),
+    outgoingDamagePercentPenalty: Math.max(0, toInteger(value?.outgoingDamagePercentPenalty ?? 20)),
+    actionPointPenalty: Math.max(0, toInteger(value?.actionPointPenalty ?? 2)),
+    movementPointPenalty: Math.max(0, toInteger(value?.movementPointPenalty ?? 4)),
+    allSkillsPercentPenalty: Math.max(0, toInteger(value?.allSkillsPercentPenalty ?? 25)),
+    darknessRadiusMeters: Math.max(0, toInteger(value?.darknessRadiusMeters ?? 50)),
+    darknessAbsorptionPercent: Math.max(0, Math.min(100, toInteger(value?.darknessAbsorptionPercent ?? 99))),
+    darknessDurationSeconds: Math.max(0, toInteger(value?.darknessDurationSeconds ?? 24))
+  };
+}
+
+/** "Песочный человек": stealth kill/knockout charges and a charged next attack. */
+export function normalizeSandmanSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
+    maxCharges: Math.max(1, toInteger(value?.maxCharges ?? 6)),
+    knockoutCharges: Math.max(0, toInteger(value?.knockoutCharges ?? 1)),
+    killCharges: Math.max(0, toInteger(value?.killCharges ?? 3)),
+    damagePercentBonus: Math.max(0, toInteger(value?.damagePercentBonus ?? 50)),
+    restoreCooldownSeconds: Math.max(0, toInteger(value?.restoreCooldownSeconds ?? 6))
+  };
 }
 
 /** "Тень": a short target-specific stealth bonus with action-point conversion. */

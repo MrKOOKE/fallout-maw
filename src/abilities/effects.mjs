@@ -82,6 +82,7 @@ import { getActiveSceneWorldTimeActors } from "../time/world-time-actor-index.mj
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "./deus-ex-machina-progress-runtime.mjs";
 import { tokenMatchesRegionPresenceCondition } from "./region-presence-condition.mjs";
+import { SHADOW_EFFECT_FLAG_KEY } from "../stealth/shadow.mjs";
 import {
   ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
   getActiveApplicationEffectAuraDescriptor,
@@ -267,6 +268,7 @@ export function registerAbilityEffectHooks() {
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
+      || effect?.getFlag?.(SYSTEM_ID, SHADOW_EFFECT_FLAG_KEY)
       || isTriggerOnlyActiveApplicationAuraEffect(effect)
     ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
@@ -289,6 +291,7 @@ export function registerAbilityEffectHooks() {
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
+      || effect?.getFlag?.(SYSTEM_ID, SHADOW_EFFECT_FLAG_KEY)
       || isTriggerOnlyActiveApplicationAuraEffect(effect)
     ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
@@ -315,6 +318,7 @@ export function registerAbilityEffectHooks() {
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
+      || effect?.getFlag?.(SYSTEM_ID, SHADOW_EFFECT_FLAG_KEY)
       || isTriggerOnlyActiveApplicationAuraEffect(effect)
     ) return;
     const managed = isManagedProjectionEffect(effect);

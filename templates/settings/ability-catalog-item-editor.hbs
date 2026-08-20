@@ -1196,6 +1196,88 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedShadowSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Тень</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.shadow.activationEnergyCost" value="{{fixedShadowSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Бонус к Скрытности</span><input type="number" data-field="fixed.shadow.stealthBonus" value="{{fixedShadowSettings.stealthBonus}}" min="0" step="1"></label>
+          <label><span>Длительность</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" data-field="fixed.shadow.durationAmount" value="{{fixedShadowSettings.durationAmount}}" min="0" step="1">
+            <select data-field="fixed.shadow.durationUnit">{{#each fixedShadowSettings.durationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" data-field="fixed.shadow.overloadEnergyCost" value="{{fixedShadowSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" data-field="fixed.shadow.overloadDurationAmount" value="{{fixedShadowSettings.overloadDurationAmount}}" min="0" step="1">
+            <select data-field="fixed.shadow.overloadDurationUnit">{{#each fixedShadowSettings.overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedSandmanSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Песочный человек</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.sandman.activationEnergyCost" value="{{fixedSandmanSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Максимум зарядов</span><input type="number" data-field="fixed.sandman.maxCharges" value="{{fixedSandmanSettings.maxCharges}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Награды</strong>
+          <label><span>За вырубание</span><input type="number" data-field="fixed.sandman.knockoutCharges" value="{{fixedSandmanSettings.knockoutCharges}}" min="0" step="1"></label>
+          <label><span>За убийство</span><input type="number" data-field="fixed.sandman.killCharges" value="{{fixedSandmanSettings.killCharges}}" min="0" step="1"></label>
+          <label><span>Восстановление ОД, сек.</span><input type="number" data-field="fixed.sandman.restoreCooldownSeconds" value="{{fixedSandmanSettings.restoreCooldownSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Следующая атака из скрытности</strong>
+          <label><span>Бонус урона, %</span><input type="number" data-field="fixed.sandman.damagePercentBonus" value="{{fixedSandmanSettings.damagePercentBonus}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedNightmareSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Кошмар</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Свидетели вырубания/убийства из Скрытности</strong>
+          <label><span>Радиус, м</span><input type="number" data-field="fixed.nightmare.witnessRadiusMeters" value="{{fixedNightmareSettings.witnessRadiusMeters}}" min="0" step="1"></label>
+          <label><span>Сложность</span><input type="text" data-field="fixed.nightmare.witnessDifficultyFormula" value="{{fixedNightmareSettings.witnessDifficultyFormula}}" data-formula-autocomplete="all"></label>
+          <label><span>Ужас, сек.</span><input type="number" data-field="fixed.nightmare.fearDurationSeconds" value="{{fixedNightmareSettings.fearDurationSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Ужас</strong>
+          <label><span>Входящий урон, %</span><input type="number" data-field="fixed.nightmare.incomingDamagePercent" value="{{fixedNightmareSettings.incomingDamagePercent}}" min="0" step="1"></label>
+          <label><span>Штраф урона, %</span><input type="number" data-field="fixed.nightmare.outgoingDamagePercentPenalty" value="{{fixedNightmareSettings.outgoingDamagePercentPenalty}}" min="0" step="1"></label>
+          <label><span>Штраф ОД</span><input type="number" data-field="fixed.nightmare.actionPointPenalty" value="{{fixedNightmareSettings.actionPointPenalty}}" min="0" step="1"></label>
+          <label><span>Штраф ОП</span><input type="number" data-field="fixed.nightmare.movementPointPenalty" value="{{fixedNightmareSettings.movementPointPenalty}}" min="0" step="1"></label>
+          <label><span>Штраф всех навыков, %</span><input type="number" data-field="fixed.nightmare.allSkillsPercentPenalty" value="{{fixedNightmareSettings.allSkillsPercentPenalty}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.nightmare.activationEnergyCost" value="{{fixedNightmareSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Радиус тьмы, м</span><input type="number" data-field="fixed.nightmare.darknessRadiusMeters" value="{{fixedNightmareSettings.darknessRadiusMeters}}" min="0" step="1"></label>
+          <label><span>Поглощение света, %</span><input type="number" data-field="fixed.nightmare.darknessAbsorptionPercent" value="{{fixedNightmareSettings.darknessAbsorptionPercent}}" min="0" max="100" step="1"></label>
+          <label><span>Длительность, сек.</span><input type="number" data-field="fixed.nightmare.darknessDurationSeconds" value="{{fixedNightmareSettings.darknessDurationSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" data-field="fixed.nightmare.overloadEnergyCost" value="{{fixedNightmareSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность</span><div class="fallout-maw-split-number-field-control">
+            <input type="number" data-field="fixed.nightmare.overloadDurationAmount" value="{{fixedNightmareSettings.overloadDurationAmount}}" min="0" step="1">
+            <select data-field="fixed.nightmare.overloadDurationUnit">{{#each fixedNightmareSettings.overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </div></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

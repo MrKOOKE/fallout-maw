@@ -3,7 +3,7 @@
     <h2>{{localize "FALLOUTMAW.Common.Resources"}}</h2>
     <div class="fallout-maw-resource-grid">
       {{#each resources}}
-      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card">
+      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card{{#if oneTimeResource}} one-time-resource{{/if}}">
         <div class="fallout-maw-resource-card-header">
           <span class="fallout-maw-resource-name">{{label}}</span>
           {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-label">{{localize "FALLOUTMAW.Actor.ConsciousnessRecoveryTarget" value=recoveryTarget}}</span>{{/if}}
@@ -12,8 +12,9 @@
             {{#if maxLabel}}<span class="fallout-maw-resource-max">/ {{maxLabel}}</span>{{/if}}
           </span>
         </div>
-        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{#if oneTimeResource}}{{meterValue}}{{else}}{{value}}{{/if}}" aria-valuemax="{{#if oneTimeResource}}{{meterMax}}{{else}}{{max}}{{/if}}">
           <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+          {{#if oneTimeResource}}<span class="fallout-maw-resource-meter-once-fill" style="{{oneTimeFillStyle}}" aria-label="Одноразовый ресурс"></span>{{/if}}
           {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-marker" style="{{recoveryTargetStyle}}" title="{{localize 'FALLOUTMAW.Actor.ConsciousnessRecoveryTarget' value=recoveryTarget}}" aria-label="{{localize 'FALLOUTMAW.Actor.ConsciousnessRecoveryTarget' value=recoveryTarget}}"></span>{{/if}}
         </div>
       </div>

@@ -1,5 +1,11 @@
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
+import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
+import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import {
+  REGION_TARGET_RELATIONS,
+  normalizeRegionTargetRelations
+} from "../canvas/region-targeting.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -17,6 +23,8 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     actions: {
       addDamageEntry: this.#onAddDamageEntry,
       deleteDamageEntry: this.#onDeleteDamageEntry,
+      addEffectChange: this.#onAddEffectChange,
+      deleteEffectChange: this.#onDeleteEffectChange,
       addRegionSpecialProperty: this.#onAddRegionSpecialProperty,
       deleteRegionSpecialProperty: this.#onDeleteRegionSpecialProperty
     }
@@ -39,6 +47,8 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const damageEntries = normalizeDamageEntries(system.damageEntries);
     const regionSpecialProperties = normalizeRegionSpecialProperties(system.regionSpecialProperties);
+    const targetRelations = normalizeRegionTargetRelations(system.targetRelations);
+    const effectChanges = normalizeRegionEffectChanges(system.effectChanges);
 
     return {
       ...context,
@@ -50,6 +60,12 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
         index,
         damageTypeChoices: buildDamageTypeChoices(damageTypes, entry.damageTypeKey)
       })),
+      targetRelationChoices: [
+        { key: "ally", label: "Союзники" },
+        { key: "neutral", label: "Нейтралы" },
+        { key: "enemy", label: "Враги" }
+      ].map(entry => ({ ...entry, checked: targetRelations.includes(entry.key) })),
+      effectChanges: effectChanges.map((change, index) => ({ ...change, index })),
       regionSpecialProperties: regionSpecialProperties.map((property, index) => prepareRegionSpecialPropertyRow(property, index)),
       buttons: this._getButtons()
     };
@@ -61,6 +77,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings()
     });
+    activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens({ includePeriodicHealing: true }));
     this.form?.addEventListener("change", event => {
       if (!event.target?.matches?.("[data-region-special-property-type]")) return;
       PeriodicDamageRegionBehaviorConfig.#onRegionSpecialPropertyTypeChange.call(this, event);
@@ -71,6 +88,11 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const data = foundry.utils.expandObject(formData.object ?? {});
     const system = data.system ?? {};
     system.damageEntries = normalizeDamageEntries(system.damageEntries);
+    system.targetRelations = normalizeRegionTargetRelationFormValue(system.targetRelations);
+    system.effectChanges = normalizeRegionEffectChanges(system.effectChanges);
+    system.sourceActorUuid = String(system.sourceActorUuid ?? "").trim();
+    system.effectName = String(system.effectName ?? "").trim();
+    system.effectImg = String(system.effectImg ?? "").trim();
     system.regionSpecialProperties = normalizeRegionSpecialProperties(system.regionSpecialProperties);
     system.intervalSeconds = Math.max(1, toInteger(system.intervalSeconds) || 6);
     system.delaySeconds = Math.max(0, toInteger(system.delaySeconds));
@@ -100,6 +122,22 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const index = Number(row?.dataset.damageEntryIndex);
     if (Number.isInteger(index) && index >= 0) entries.splice(index, 1);
     this.#renderDamageEntries(entries);
+  }
+
+  static async #onAddEffectChange(event) {
+    event.preventDefault();
+    const changes = this.#getFormEffectChanges();
+    changes.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    this.#renderEffectChanges(changes);
+  }
+
+  static async #onDeleteEffectChange(event) {
+    event.preventDefault();
+    const changes = this.#getFormEffectChanges();
+    const row = event.target.closest("[data-effect-change-index]");
+    const index = Number(row?.dataset.effectChangeIndex);
+    if (Number.isInteger(index) && index >= 0) changes.splice(index, 1);
+    this.#renderEffectChanges(changes);
   }
 
   static async #onAddRegionSpecialProperty(event) {
@@ -147,6 +185,25 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     });
   }
 
+  #getFormEffectChanges() {
+    const formData = new foundry.applications.ux.FormDataExtended(this.form);
+    const data = foundry.utils.expandObject(formData.object ?? {});
+    return normalizeRegionEffectChanges(data.system?.effectChanges, { keepEmpty: true });
+  }
+
+  #renderEffectChanges(changes = []) {
+    const container = this.form?.querySelector(".fallout-maw-region-effect-change-list");
+    if (!container) return;
+    container.innerHTML = changes.length
+      ? changes.map((change, index) => renderEffectChangeRow(change, index)).join("")
+      : `<p class="fallout-maw-empty-list">Изменения не настроены.</p>`;
+    activateFormulaAutocomplete(container, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
+    activateEffectKeyAutocomplete(container, buildEffectKeyTokens({ includePeriodicHealing: true }));
+  }
+
   #getFormRegionSpecialProperties() {
     const formData = new foundry.applications.ux.FormDataExtended(this.form);
     const data = foundry.utils.expandObject(formData.object ?? {});
@@ -182,6 +239,47 @@ function normalizeDamageEntries(entries = []) {
       amount: normalizeDamageFormula(entry?.amount)
     }))
     .filter(entry => entry.damageTypeKey || isFormulaTextConfigured(entry.amount));
+}
+
+function normalizeRegionTargetRelationFormValue(value = {}) {
+  if (Array.isArray(value)) return normalizeRegionTargetRelations(value);
+  const selected = REGION_TARGET_RELATIONS.filter(relation => Boolean(value?.[relation]));
+  return selected.length ? selected : [...REGION_TARGET_RELATIONS];
+}
+
+function normalizeRegionEffectChanges(value = [], { keepEmpty = false } = {}) {
+  const entries = Array.isArray(value) ? value : Object.values(value ?? {});
+  return entries
+    .map(change => ({
+      key: String(change?.key ?? "").trim(),
+      type: ["add", "multiply", "override", "upgrade", "downgrade"].includes(change?.type)
+        ? change.type
+        : "add",
+      value: String(change?.value ?? "0").trim() || "0",
+      phase: String(change?.phase ?? "initial").trim() || "initial",
+      priority: String(change?.priority ?? "").trim() === "" ? null : toInteger(change.priority)
+    }))
+    .filter(change => keepEmpty || change.key);
+}
+
+function renderEffectChangeRow(change, index) {
+  const typeOptions = [
+    ["add", "Сложение"],
+    ["multiply", "Умножение"],
+    ["override", "Замена"],
+    ["upgrade", "Повышение"],
+    ["downgrade", "Понижение"]
+  ].map(([value, label]) => `<option value="${value}" ${change.type === value ? "selected" : ""}>${label}</option>`).join("");
+  return `
+    <div class="fallout-maw-settings-row fallout-maw-region-effect-change-row" data-effect-change-index="${index}">
+      <input type="text" name="system.effectChanges.${index}.key" value="${escapeHtml(change.key)}" data-effect-key-autocomplete>
+      <select name="system.effectChanges.${index}.type">${typeOptions}</select>
+      <input type="text" name="system.effectChanges.${index}.value" value="${escapeHtml(change.value)}" data-formula-autocomplete="all">
+      <input type="hidden" name="system.effectChanges.${index}.phase" value="${escapeHtml(change.phase)}">
+      <input type="number" name="system.effectChanges.${index}.priority" value="${change.priority ?? ""}" step="1">
+      <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteEffectChange" title="${escapeHtml(game.i18n.localize("FALLOUTMAW.Common.Delete"))}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+  `;
 }
 
 function renderDamageEntryRow(entry, index, damageTypes = []) {

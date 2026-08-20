@@ -44,6 +44,8 @@ import {
   normalizeExperimentalSurgerySettings,
   normalizeInconspicuousSettings,
   normalizeShadowSettings,
+  normalizeSandmanSettings,
+  normalizeNightmareSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
@@ -170,10 +172,22 @@ import {
 } from "../rolls/one-time-skill-modifiers.mjs";
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
-import { getShadowStealthBonus, SHADOW_EFFECT_FLAG_KEY } from "../stealth/shadow.mjs";
+import {
+  getShadowEffectData,
+  getShadowSourcesForTarget,
+  getShadowStealthBonus,
+  registerShadowEffectIndexHooks,
+  SHADOW_EFFECT_FLAG_KEY
+} from "../stealth/shadow.mjs";
+import {
+  buildNightmareFearChanges,
+  hasMaximumNightmareFearDuration,
+  selectNightmareWitnessSkill
+} from "./nightmare.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import {
   canSpendCombatActionPoints,
+  grantActorReactionPoints,
   getActorActiveCombat,
   isActorInActiveCombat,
   refundCombatActionPointReceipt,
@@ -320,6 +334,8 @@ const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const HEIGHTENED_CONCENTRATION_EFFECT_SOURCE = "heightenedConcentration";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const INCONSPICUOUS_EFFECT_FLAG_KEY = "inconspicuous";
+const NIGHTMARE_FEAR_EFFECT_FLAG_KEY = "nightmareFear";
+const NIGHTMARE_REGION_FLAG_KEY = "nightmareRegion";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY = "knockOffBalance";
 const TO_THE_END_EFFECT_FLAG_KEY = "toTheEnd";
@@ -355,6 +371,7 @@ const activeApplicationAuthorityRequestsById = new Map();
 const actorEnergyMutationQueue = new Map();
 const activeApplicationEffectSyncTimers = new Map();
 const whereAreYouGoingSuppressedReactors = new Map();
+const STEALTH_INCAPACITATIONS = Symbol("falloutMawStealthIncapacitations");
 
 const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   Object.freeze({
@@ -721,6 +738,35 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.inconspicuous,
       fixedSettings: normalizeInconspicuousSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.shadow,
+    label: "Тень",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.shadow,
+      fixedSettings: normalizeShadowSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.sandman,
+    label: "Песочный человек",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.sandman,
+      fixedSettings: normalizeSandmanSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.nightmare,
+    label: "Кошмар",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.nightmare,
+      fixedSettings: normalizeNightmareSettings()
+    })
   })
 ]);
 
@@ -745,6 +791,14 @@ export function registerFixedAbilityFunctionHooks() {
 function registerFixedAbilityRuntimeHooks() {
   if (fixedAbilityRuntimeHooksRegistered || !areFixedAbilityFunctionsEnabled()) return;
   fixedAbilityRuntimeHooksRegistered = true;
+
+  registerShadowEffectIndexHooks();
+  registerSystemEventObserver({
+    id: "fallout-maw.fixed.shadow.resourceSpent",
+    eventKeys: ["fallout-maw.combat.resource.spent"],
+    priority: 150,
+    observe: observeShadowResourceSpent
+  });
 
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
@@ -783,6 +837,8 @@ function registerFixedAbilityRuntimeHooks() {
     void consumeAllOrNothingResultEffects(context);
     void consumeLethalAttackPreparationEffects(context);
     void processReaperAttackResolution(context);
+    void processSandmanAttackResolution(context);
+    void processNightmareAttackResolution(context);
     void updateVirtuosoLastWeapon(context);
     void processKeepAwayAttackResolution(context);
   }));
@@ -800,12 +856,15 @@ function registerFixedAbilityRuntimeHooks() {
     requestRicochetWeaponActionModifiers(context);
     requestKeepAwayWeaponActionModifiers(context);
     requestLethalAttackWeaponActionModifiers(context);
+    requestSandmanWeaponActionModifiers(context);
   }));
   Hooks.on("fallout-maw.weaponActionResolved", runFixedAbilityRuntimeHandler(context => {
     void processAtRandomAttackResolution(context);
   }));
   Hooks.on("fallout-maw.modifySkillCheck", runFixedAbilityRuntimeHandler(check => {
     applyFourLeafCloverCriticalBonus(check);
+    applyShadowStealthBonus(check);
+    applyNightmareStealthCriticalFailureImmunity(check);
   }));
   Hooks.on("fallout-maw.skillCheckResolved", runFixedAbilityRuntimeHandler(outcome => {
     void updateFourLeafCloverCharges(outcome);
@@ -957,6 +1016,19 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: getFixedFunctionStateKey(entry),
           label: "Память",
           value: `${getAnatomyStudyMemoryUsage(knowledge)} / ${getAnatomyStudyMemoryCapacity(abilityItem.parent, entry.fixedSettings)}`
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
+        const settings = normalizeSandmanSettings(entry.fixedSettings);
+        const stateKey = getFixedFunctionStateKey(entry);
+        const charges = Math.min(
+          settings.maxCharges,
+          Math.max(0, toInteger(state[stateKey]?.charges))
+        );
+        return {
+          key: stateKey,
+          label: "Накоплено зарядов",
+          value: `${charges} / ${settings.maxCharges}`
         };
       }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
@@ -1239,6 +1311,24 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations) {
     const used = await useEmergencyOperations(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
+    const used = await useShadow(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
+    const used = await useSandman(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare) {
+    const used = await useNightmare(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -4388,6 +4478,239 @@ function selectLookTarget({ actor = null, sourceToken = null, abilityName = "С�
     noneWarning: `${abilityName}: нет видимых целей.`,
     instructions: `${abilityName}: выберите одну цель в пределах видимости. ЛКМ сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.`
   }).then(selection => selection ? [selection] : []);
+}
+
+async function useShadow(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const sourceToken = getActorSceneToken(actor);
+  if (!sourceToken) {
+    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    return false;
+  }
+
+  const settings = normalizeShadowSettings(abilityFunction.fixedSettings);
+  if (findActiveShadowEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    return false;
+  }
+
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+
+  const selection = await requestCustomActorTokenSelection({
+    sourceActor: actor,
+    sourceToken,
+    includeSelf: false,
+    title: abilityName,
+    noneWarning: `${abilityName}: нет видимых врагов или нейтральных целей.`,
+    instructions: `${abilityName}: выберите врага или нейтральную цель в пределах видимости.`,
+    getReason: ({ actor: targetActor }) => (
+      isShadowTargetAllowed(actor, targetActor) ? "" : "Союзники не могут быть целью."
+    )
+  });
+  const targetToken = selection?.token ?? null;
+  const targetActor = targetToken?.actor ?? selection?.actor ?? null;
+  if (!targetToken || !targetActor || !isShadowTargetAllowed(actor, targetActor)) return false;
+
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+
+  const startTime = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: abilityName,
+    img: abilityItem.img || "icons/svg/mystery-man.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: settings.durationSeconds,
+      startTime
+    },
+    system: { changes: [] },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [SHADOW_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.shadow,
+          sourceTokenUuid: sourceToken.document?.uuid ?? sourceToken.uuid ?? "",
+          targetActorUuid: targetActor.uuid,
+          targetTokenUuid: targetToken.document?.uuid ?? targetToken.uuid ?? "",
+          stealthBonus: settings.stealthBonus,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Цель: ${targetActor.name}. На ${formatDuration(settings.durationSeconds)}: +${settings.stealthBonus} к проверкам Скрытности против неё. Пока вы видите цель, её траты ОД дают вам столько же ОР.`
+  );
+  return true;
+}
+
+async function useSandman(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeSandmanSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const currentState = state[stateKey] ?? {};
+  const charges = Math.min(settings.maxCharges, Math.max(0, toInteger(currentState.charges)));
+  if (currentState.pending) {
+    ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
+    return false;
+  }
+  if (charges <= 0) {
+    ui.notifications.warn(`${abilityName}: нет накопленных зарядов.`);
+    return false;
+  }
+
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  state[stateKey] = {
+    ...currentState,
+    fixedKey: abilityFunction.fixedKey,
+    charges: 0,
+    pending: true,
+    spentCharges: charges
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Потрачено зарядов: ${charges}. Следующая атака из скрытности получит +${settings.damagePercentBonus}% к урону и не вызовет обнаружение.`
+  );
+  return true;
+}
+
+async function useNightmare(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const sourceToken = getActorSceneToken(actor);
+  const sourceTokenDocument = sourceToken?.document ?? sourceToken;
+  if (!sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
+    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    return false;
+  }
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для создания области.`);
+    return false;
+  }
+
+  const settings = normalizeNightmareSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  const created = await requestNightmareRegionOperation({
+    sourceActorUuid: actor.uuid,
+    sourceTokenUuid: sourceTokenDocument.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    settings,
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!created) {
+    await refundEnergy(actor, energyCost);
+    ui.notifications.warn(`${abilityName}: не удалось создать область тьмы.`);
+    return false;
+  }
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  return true;
+}
+
+function isShadowTargetAllowed(sourceActor = null, targetActor = null) {
+  if (!sourceActor || !targetActor || sourceActor.uuid === targetActor.uuid) return false;
+  return getActiveApplicationTargetRelation(sourceActor, targetActor) !== "ally";
+}
+
+function findActiveShadowEffect(actor, abilityItem, abilityFunction) {
+  const abilityItemId = String(abilityItem?.id ?? "").trim();
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  const functionId = String(abilityFunction?.id ?? "").trim();
+  return Array.from(actor?.effects ?? []).find(effect => {
+    const data = getShadowEffectData(effect);
+    if (!data) return false;
+    if (String(data.abilityItemId ?? "").trim() !== abilityItemId) return false;
+    if (functionId && String(data.functionId ?? "").trim() !== functionId) return false;
+    return !abilitySourceId || !data.abilitySourceId || String(data.abilitySourceId).trim() === abilitySourceId;
+  }) ?? null;
+}
+
+function getShadowEffectToken(effectData, tokenKey, actor) {
+  const tokenUuid = String(effectData?.[tokenKey] ?? "").trim();
+  const tokenDocument = tokenUuid ? fromUuidSync(tokenUuid) : null;
+  return tokenDocument?.object
+    ?? tokenDocument
+    ?? getActorSceneToken(actor);
+}
+
+function findShadowEffectForTarget(actor, targetActorUuid) {
+  const targetUuid = String(targetActorUuid ?? "").trim();
+  if (!targetUuid) return null;
+  return Array.from(actor?.effects ?? []).find(effect => {
+    const data = getShadowEffectData(effect);
+    return String(data?.targetActorUuid ?? "").trim() === targetUuid;
+  }) ?? null;
+}
+
+async function observeShadowResourceSpent({ event = null, data = null } = {}) {
+  if (!game.user?.isActiveGM) return;
+  if (event?.outcome?.spent === false) return;
+  const resources = data?.resources ?? event?.data?.resources ?? {};
+  const spentActionPoints = Math.max(0, toInteger(resources.actionPoints));
+  if (!spentActionPoints) return;
+
+  const targetActorUuid = String(data?.actorUuid ?? event?.data?.actorUuid ?? event?.source?.actorUuid ?? "").trim();
+  if (!targetActorUuid) return;
+  const targetActor = fromUuidSync(targetActorUuid);
+  if (!targetActor) return;
+
+  for (const sourceActor of getShadowSourcesForTarget(targetActorUuid)) {
+    const effect = findShadowEffectForTarget(sourceActor, targetActorUuid);
+    if (!effect || !sourceActor?.isOwner) continue;
+    const effectData = getShadowEffectData(effect);
+    const sourceToken = getShadowEffectToken(effectData, "sourceTokenUuid", sourceActor);
+    const targetToken = getShadowEffectToken(effectData, "targetTokenUuid", targetActor);
+    if (!sourceToken || !targetToken) continue;
+    if (!canTokenPhysicallySeeTarget(sourceToken, targetToken)) continue;
+    await grantActorReactionPoints(sourceActor, spentActionPoints);
+  }
 }
 
 async function useToTheEnd(actor, abilityItem, abilityFunction) {
@@ -8286,6 +8609,24 @@ function requestLethalAttackWeaponActionModifiers(context = {}) {
   }
 }
 
+function requestSandmanWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || context?.stealthAttack !== true || !context?.modifierState) return;
+
+  for (const entry of getActorSandmanEntries(actor)) {
+    const state = getFixedAbilityState(entry.abilityItem);
+    const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+    if (!state[stateKey]?.pending) continue;
+    context.modifierState.addCombatValue("damagePercent", entry.settings.damagePercentBonus);
+    context.modifierState.setOption("preventStealthDetection", true);
+    context.modifierState.addSpendRequirement({
+      source: "sandman",
+      label: getAbilityDisplayName(entry.abilityItem),
+      spend: () => consumeSandmanPreparation(entry.abilityItem, entry.abilityFunction)
+    });
+  }
+}
+
 function requestRicochetWeaponActionModifiers(context = {}) {
   const actor = context?.actor ?? null;
   if (!actor || String(context?.actionKey ?? "") !== "snapshot" || !context?.modifierState) return;
@@ -8528,6 +8869,16 @@ async function requestCurseAndBlessingAttackResolution(context = {}) {
 
 function handleFixedAbilitySocketMessage(message = {}) {
   if (message?.scope !== FIXED_ABILITY_SOCKET_SCOPE) return;
+  if (message.action === "createNightmareRegion") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processNightmareRegionSocketRequest(message);
+    return;
+  }
+  if (message.action === "applyNightmareFear") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processNightmareFearSocketRequest(message);
+    return;
+  }
   if (message.action === "resolveCurseAndBlessingAttack") {
     if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
     void processCurseAndBlessingAttackResolution({
@@ -8614,6 +8965,233 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.applied));
   }
+  if (message.action === "nightmareRegionResult" || message.action === "nightmareFearResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
+  }
+}
+
+async function requestNightmareRegionOperation(payload = {}) {
+  if (game.user?.isGM) return processNightmareRegionOperation(payload);
+  return requestNightmareSocketOperation("createNightmareRegion", payload);
+}
+
+async function requestNightmareFearOperation(payload = {}) {
+  if (game.user?.isGM) return processNightmareFearOperation(payload);
+  return requestNightmareSocketOperation("applyNightmareFear", payload);
+}
+
+async function requestNightmareSocketOperation(action, payload = {}) {
+  const gm = getResponsibleGM();
+  if (!gm) return false;
+  const requestId = foundry.utils.randomID();
+  const promise = new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action,
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? "",
+    requestId,
+    payload
+  });
+  return promise;
+}
+
+async function processNightmareRegionSocketRequest(message = {}) {
+  const applied = await processNightmareRegionOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "nightmareRegionResult",
+    targetUserId: message.senderUserId,
+    requestId: message.requestId,
+    result: { applied }
+  });
+}
+
+async function processNightmareFearSocketRequest(message = {}) {
+  const applied = await processNightmareFearOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "nightmareFearResult",
+    targetUserId: message.senderUserId,
+    requestId: message.requestId,
+    result: { applied }
+  });
+}
+
+async function processNightmareRegionOperation({
+  sourceActorUuid = "",
+  sourceTokenUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  senderUserId = ""
+} = {}) {
+  if (!game.user?.isGM) return false;
+  const actor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const token = fromUuidSync(String(sourceTokenUuid ?? "").trim());
+  const abilityItem = actor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare);
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!actor || !token || token.actor?.uuid !== actor.uuid || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const scene = token.parent;
+  if (!scene?.regions || token.documentName !== "Token") return false;
+  const settings = normalizeNightmareSettings(abilityFunction.fixedSettings);
+  const oldRegions = Array.from(scene.regions?.contents ?? scene.regions ?? []).filter(region => {
+    const data = region.getFlag?.(SYSTEM_ID, NIGHTMARE_REGION_FLAG_KEY);
+    return String(data?.sourceActorUuid ?? "") === actor.uuid
+      && String(data?.abilityItemId ?? "") === abilityItem.id
+      && String(data?.functionId ?? "") === abilityFunction.id;
+  });
+  for (const region of oldRegions) await region.delete();
+
+  const now = Number(game.time?.worldTime) || 0;
+  const durationSeconds = settings.darknessDurationSeconds;
+  const regionClass = globalThis.getDocumentClass?.("Region") ?? globalThis.Region;
+  if (!regionClass?.createTokenEmanation || durationSeconds <= 0 || settings.darknessRadiusMeters <= 0) return false;
+  const created = await regionClass.createTokenEmanation(token, settings.darknessRadiusMeters, {
+    name: `${getAbilityDisplayName(abilityItem)}: тьма`,
+    color: "#171024",
+    visibility: CONST.REGION_VISIBILITY.ALWAYS,
+    highlightMode: "shapes",
+    displayMeasurements: false,
+    restriction: { enabled: true, type: "light", priority: 0 },
+    flags: {
+      [SYSTEM_ID]: {
+        [NIGHTMARE_REGION_FLAG_KEY]: {
+          sourceActorUuid: actor.uuid,
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          expiresAt: now + durationSeconds
+        }
+      }
+    },
+    behaviors: [
+      {
+        name: "Поглощение света",
+        type: "adjustDarknessLevel",
+        system: {
+          mode: 0,
+          modifier: 1
+        }
+      },
+      {
+        name: "Ужас",
+        type: "fallout-maw.periodicDamage",
+        system: {
+          damageEntries: [],
+          regionSpecialProperties: [{
+            type: "smoke",
+            smoke: {
+              thickness: "1",
+              densityPercent: String(settings.darknessAbsorptionPercent)
+            }
+          }],
+          targetRelations: ["neutral", "enemy"],
+          sourceActorUuid: actor.uuid,
+          effectName: "Ужас",
+          effectImg: abilityItem.img || "icons/svg/terror.svg",
+          effectChanges: buildNightmareFearChanges(settings),
+          intervalSeconds: 6,
+          delaySeconds: 0,
+          durationSeconds,
+          radiusDeltaMeters: 0,
+          deleteRegionWhenExpired: true
+        },
+        flags: {
+          [SYSTEM_ID]: {
+            periodicDamage: {
+              startedAt: now,
+              activateAt: now,
+              expiresAt: now + durationSeconds,
+              nextTickTime: now + 6
+            }
+          }
+        }
+      }
+    ]
+  });
+  return Boolean(created);
+}
+
+async function processNightmareFearOperation({
+  sourceActorUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  targetActorUuids = [],
+  senderUserId = ""
+} = {}) {
+  if (!game.user?.isGM) return false;
+  const sourceActor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const abilityItem = sourceActor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare);
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sourceActor || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !sourceActor.testUserPermission(sender, "OWNER")) return false;
+
+  const settings = normalizeNightmareSettings(abilityFunction.fixedSettings);
+  const now = Number(game.time?.worldTime) || 0;
+  const changes = buildNightmareFearChanges(settings);
+  let applied = 0;
+  const targetUuids = Array.isArray(targetActorUuids) ? targetActorUuids : [targetActorUuids];
+  for (const uuid of Array.from(new Set(targetUuids.map(value => String(value ?? "").trim()).filter(Boolean)))) {
+    const target = fromUuidSync(uuid);
+    if (!target?.isOwner || getActiveApplicationTargetRelation(sourceActor, target) === "ally") continue;
+    if (hasMaximumNightmareFearDuration(target, settings.fearDurationSeconds, now)) continue;
+    const effectData = {
+      type: "base",
+      name: "Ужас",
+      img: abilityItem.img || "icons/svg/terror.svg",
+      description: `Ужас, вызванный способностью «${foundry.utils.escapeHTML(getAbilityDisplayName(abilityItem))}».`,
+      origin: abilityItem.uuid,
+      transfer: false,
+      disabled: false,
+      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+      duration: { seconds: settings.fearDurationSeconds, startTime: now },
+      system: { changes },
+      flags: {
+        [SYSTEM_ID]: {
+          kind: "temporary",
+          [NIGHTMARE_FEAR_EFFECT_FLAG_KEY]: {
+            sourceActorUuid: sourceActor.uuid,
+            abilityItemId: abilityItem.id,
+            abilitySourceId: getAbilitySourceId(abilityItem),
+            functionId: abilityFunction.id
+          }
+        }
+      }
+    };
+    const existing = Array.from(target.effects ?? []).find(effect => {
+      const flag = effect.getFlag?.(SYSTEM_ID, NIGHTMARE_FEAR_EFFECT_FLAG_KEY);
+      return flag?.sourceActorUuid === sourceActor.uuid
+        && flag?.abilityItemId === abilityItem.id
+        && flag?.functionId === abilityFunction.id;
+    });
+    if (existing) await existing.update(effectData, { animate: false });
+    else await target.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false });
+    applied += 1;
+  }
+  return applied > 0;
 }
 
 async function processCurseAndBlessingAttackResolution({ attackerUuid = "", targetUuids = [], senderUserId = "" } = {}) {
@@ -9135,6 +9713,241 @@ async function processReaperAttackResolution(context = {}) {
   }
 }
 
+async function processSandmanAttackResolution(context = {}) {
+  if (context?.canceledByReaction || context?.stealthAttack !== true) return;
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = actorUuid ? fromUuidSync(actorUuid) : null;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+
+  const entries = getActorSandmanEntries(actor);
+  if (!entries.length) return;
+
+  const { killed, knockedOut } = collectStealthAttackIncapacitations(context);
+  if (!killed.size && !knockedOut.size) return;
+
+  const now = Number(game.time?.worldTime) || 0;
+  const chargeGain = Math.max(
+    0,
+    killed.size * Math.max(0, toInteger(entries[0].settings.killCharges))
+      + knockedOut.size * Math.max(0, toInteger(entries[0].settings.knockoutCharges))
+  );
+  const cooldownSeconds = Math.max(0, toInteger(entries[0].settings.restoreCooldownSeconds));
+  const hasRecentRestore = entries.some(entry => {
+    const last = Number(getFixedAbilityState(entry.abilityItem)[getFixedFunctionStateKey(entry.abilityFunction)]?.lastKillRestoreAt);
+    return Number.isFinite(last) && now - last < cooldownSeconds;
+  });
+  let restored = 0;
+  const actionPointCost = Math.max(0, toInteger(context?.actionPointCost));
+  if (killed.size && actionPointCost > 0 && !hasRecentRestore && cooldownSeconds >= 0) {
+    restored = context?.actionPointSpendReceipt?.resourceKey === "actionPoints"
+      ? await refundCombatActionPointReceipt(actor, context.actionPointSpendReceipt, {
+        chainRef: context?.chainRef
+      })
+      : await restoreReaperActionPoints(actor, actionPointCost);
+  }
+
+  for (const entry of entries) {
+    const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+    const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+    const current = state[stateKey] ?? {};
+    const settings = entry.settings;
+    const currentCharges = Math.min(settings.maxCharges, Math.max(0, toInteger(current.charges)));
+    const nextCharges = Math.min(settings.maxCharges, currentCharges + chargeGain);
+    const nextState = {
+      ...current,
+      fixedKey: entry.abilityFunction.fixedKey,
+      charges: nextCharges
+    };
+    if (restored > 0 && !hasRecentRestore) nextState.lastKillRestoreAt = now;
+    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, {
+      ...state,
+      [stateKey]: nextState
+    });
+    const messages = [];
+    if (chargeGain > 0) messages.push(`получено зарядов: ${chargeGain}`);
+    if (restored > 0) messages.push(`восстановлено ОД: ${restored}`);
+    if (messages.length) await createAbilityChatMessage(actor, entry.abilityItem, messages.join(", ") + ".");
+  }
+}
+
+async function processNightmareAttackResolution(context = {}) {
+  if (context?.canceledByReaction || context?.stealthAttack !== true) return;
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = actorUuid ? fromUuidSync(actorUuid) : null;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+
+  const entries = getActorNightmareEntries(actor);
+  if (!entries.length) return;
+  const incapacitations = collectStealthAttackIncapacitations(context);
+  if (!incapacitations.killed.size && !incapacitations.knockedOut.size) return;
+
+  // This is intentionally set before the first await: the attack controller
+  // reads it immediately afterwards while resolving stealth detection.
+  context.modifierState?.setOption?.("preventStealthDetection", true);
+
+  const victims = [...new Set([...incapacitations.killed, ...incapacitations.knockedOut])]
+    .map(uuid => ({
+      actor: fromUuidSync(uuid),
+      token: incapacitations.targetTokens.get(uuid) ?? null
+    }))
+    .filter(entry => entry.actor && entry.token);
+  if (!victims.length) return;
+
+  for (const entry of entries) {
+    const difficulty = evaluateActorFormula(entry.settings.witnessDifficultyFormula, actor, {
+      minimum: 0,
+      context: "nightmare witness difficulty"
+    });
+    const worldTime = Number(game.time?.worldTime) || 0;
+    const witnesses = collectNightmareWitnesses(actor, victims, entry.settings.witnessRadiusMeters)
+      .filter(witness => !hasMaximumNightmareFearDuration(
+        witness.actor,
+        entry.settings.fearDurationSeconds,
+        worldTime
+      ));
+    const failedActorUuids = [];
+    for (const witness of witnesses) {
+      const skillKey = selectNightmareWitnessSkill(witness.actor);
+      const outcome = await requestSkillCheck({
+        actor: witness.actor,
+        skillKey,
+        data: {
+          difficulty,
+          actorToken: witness.token,
+          targetActor: witness.victim.actor,
+          targetToken: witness.victim.token,
+          allowImplicitTarget: false
+        },
+        animate: false,
+        createMessage: true,
+        prompt: false,
+        requester: "nightmareWitness"
+      });
+      if (!isSuccessfulSkillCheck(outcome)) failedActorUuids.push(witness.actor.uuid);
+    }
+    if (failedActorUuids.length) {
+      await requestNightmareFearOperation({
+        sourceActorUuid: actor.uuid,
+        abilityItemId: entry.abilityItem.id,
+        abilityFunctionId: entry.abilityFunction.id,
+        targetActorUuids: failedActorUuids,
+        senderUserId: game.user?.id ?? ""
+      });
+    }
+  }
+}
+
+function collectNightmareWitnesses(sourceActor, victims = [], radiusMeters = 0) {
+  const witnesses = new Map();
+  const tokens = canvas?.tokens?.placeables ?? [];
+  for (const token of tokens) {
+    const actor = token?.actor;
+    if (!actor?.uuid
+      || actor.uuid === sourceActor?.uuid
+      || isActorUnableToAct(actor)
+      || getActiveApplicationTargetRelation(sourceActor, actor) === "ally") continue;
+    for (const victim of victims) {
+      if (actor.uuid === victim.actor?.uuid) continue;
+      if (measureActiveApplicationTokenDistance(token, victim.token) > radiusMeters) continue;
+      if (!canTokenPhysicallySeeTarget(token, victim.token)) continue;
+      witnesses.set(actor.uuid, { actor, token, victim });
+      break;
+    }
+  }
+  return Array.from(witnesses.values());
+}
+
+function getActorNightmareEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.nightmare) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeNightmareSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
+}
+
+function flattenSandmanDamageResults(results = []) {
+  return (Array.isArray(results) ? results : [results]).flat(Infinity).filter(Boolean);
+}
+
+function collectStealthAttackIncapacitations(context = {}) {
+  if (context?.[STEALTH_INCAPACITATIONS]) return context[STEALTH_INCAPACITATIONS];
+  const killed = new Set(
+    (context?.killedTargetUuids ?? [])
+      .map(uuid => String(uuid ?? "").trim())
+      .filter(Boolean)
+  );
+  const preExistingUnconscious = new Set(
+    (context?.preExistingUnconsciousTargetActorUuids ?? [])
+      .map(uuid => String(uuid ?? "").trim())
+      .filter(Boolean)
+  );
+  const damagedActors = new Map();
+  for (const result of flattenSandmanDamageResults(context?.damageResults)) {
+    if (result?.mode && result.mode !== "damage") continue;
+    if ((Number(result?.healthDelta) || 0) <= 0 && (Number(result?.limbDelta) || 0) <= 0) continue;
+    const targetUuid = String(result?.actor?.uuid ?? result?.actorUuid ?? "").trim();
+    if (!targetUuid) continue;
+    damagedActors.set(targetUuid, result?.actor ?? fromUuidSync(targetUuid));
+  }
+
+  const knockedOut = new Set();
+  for (const [targetUuid, target] of damagedActors) {
+    if (killed.has(targetUuid) || preExistingUnconscious.has(targetUuid)) continue;
+    const freshTarget = fromUuidSync(targetUuid) ?? target;
+    if (freshTarget?.statuses?.has?.("unconscious")) knockedOut.add(targetUuid);
+  }
+
+  const targetTokens = new Map();
+  for (const uuid of context?.targetTokenUuids ?? []) {
+    const token = fromUuidSync(String(uuid ?? "").trim());
+    if (token?.actor?.uuid) targetTokens.set(token.actor.uuid, token.object ?? token);
+  }
+  const result = { killed, knockedOut, targetTokens };
+  try {
+    Object.defineProperty(context, STEALTH_INCAPACITATIONS, { value: result, configurable: true });
+  } catch (_error) {
+    // Some third-party wrappers freeze hook contexts; caching is optional.
+  }
+  return result;
+}
+
+async function consumeSandmanPreparation(abilityItem, abilityFunction) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const current = state[stateKey] ?? {};
+  if (!current.pending) return true;
+  state[stateKey] = {
+    ...current,
+    fixedKey: abilityFunction.fixedKey,
+    pending: false,
+    spentCharges: 0
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  return true;
+}
+
+function getActorSandmanEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.sandman) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeSandmanSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
+}
+
 async function processAtRandomAttackResolution(context = {}) {
   const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
   const actor = context?.actor ?? (actorUuid ? fromUuidSync(actorUuid) : null);
@@ -9610,6 +10423,32 @@ function applyFourLeafCloverCriticalBonus(check = {}) {
   const charges = getActorFourLeafCloverCharges(actor);
   if (charges <= 0) return;
   check.criticalSuccessBonus = Math.max(0, toInteger(check.criticalSuccessBonus)) + charges;
+}
+
+function applyShadowStealthBonus(check = {}) {
+  if (String(check?.skill?.key ?? "").trim() !== "stealth") return;
+  const bonus = getShadowStealthBonus(check.actor, check.targetActor);
+  if (bonus <= 0) return;
+  check.situationalModifier = toInteger(check.situationalModifier) + bonus;
+  check.modifiers?.push?.({
+    source: ABILITY_FIXED_FUNCTION_KEYS.shadow,
+    label: "Тень",
+    value: bonus
+  });
+}
+
+function applyNightmareStealthCriticalFailureImmunity(check = {}) {
+  if (check?.requester !== "weaponAttack"
+    || check?.stealthAttack !== true
+    || !ATTACKING_WEAPON_ACTION_KEYS.includes(String(check?.weaponActionKey ?? ""))) return;
+  if (!getActorNightmareEntries(check.actor).length) return;
+  check.disabledResults ??= {};
+  check.disabledResults.criticalFailure = true;
+  check.modifiers?.push?.({
+    source: ABILITY_FIXED_FUNCTION_KEYS.nightmare,
+    label: "Кошмар: критический провал исключён",
+    value: 0
+  });
 }
 
 async function updateFourLeafCloverCharges(outcome = {}) {

@@ -90,6 +90,7 @@ import {
   isLimbDestroyed
 } from "../combat/damage-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
+import { decorateActionPointHudEntry } from "../combat/reaction-resources.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   getActorRootInventoryGridOptions,
@@ -286,6 +287,8 @@ import {
   normalizeRicochetSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeShadowSettings,
+  normalizeSandmanSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 import { findOneTimeUseStudiedEffect, isOneTimeUseRepeatBlocked } from "../items/one-time-use.mjs";
@@ -657,11 +660,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         value: toInteger(actor.system?.characteristics?.[characteristic.key]),
         sourceValue: toInteger(sourceSystem.characteristics?.[characteristic.key] ?? actor.system?.characteristics?.[characteristic.key])
       })),
-      resources: resourceSettings.map(resource => prepareDisplayIndicatorEntry({
-        ...resource,
-        data: actor.system.resources?.[resource.key],
-        inputName: `system.resources.${resource.key}.value`
-      })),
+      resources: resourceSettings
+        .map(resource => prepareDisplayIndicatorEntry({
+          ...resource,
+          data: actor.system.resources?.[resource.key],
+          inputName: `system.resources.${resource.key}.value`
+        }))
+        .map(entry => decorateActionPointHudEntry(actor, entry)),
       needs: needSettings.map(need => prepareDisplayIndicatorEntry({
         ...need,
         data: actor.system.needs?.[need.key],
@@ -5149,6 +5154,8 @@ function buildAbilityResourceCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -5195,6 +5202,25 @@ function buildAbilityResourceCostRows(item, actor = null) {
       ["Стоимость действия", `${Math.max(0, toInteger(settings.actionPointCost))} ОД`],
       ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} энергии на ${formatDurationShort(settings.overloadDurationSeconds)}`],
       ["Объём памяти", formatActorFormulaForDisplay(settings.memoryFormula, actor, { includeValues: true })]
+    ];
+  }
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
+    const settings = normalizeShadowSettings(entry.fixedSettings);
+    const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
+    return [
+      ["Активация: базовый расход", `${activationBase} энергии`],
+      ["Активация: итог", `${renderAbilityEnergyCostTotal(item, actor, entry, activationBase)} энергии`],
+      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} энергии на ${formatDurationShort(settings.overloadDurationSeconds)}`],
+      ["Эффект", `+${Math.max(0, toInteger(settings.stealthBonus))} к Скрытности на ${formatDurationShort(settings.durationSeconds)}`]
+    ];
+  }
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
+    const settings = normalizeSandmanSettings(entry.fixedSettings);
+    const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
+    return [
+      ["Активация: базовый расход", `${activationBase} энергии`],
+      ["Активация: итог", `${renderAbilityEnergyCostTotal(item, actor, entry, activationBase)} энергии`],
+      ["Эффект", `+${Math.max(0, toInteger(settings.damagePercentBonus))}% к урону, без обнаружения`]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {

@@ -84,6 +84,9 @@ import {
   normalizeEmergencyOperationsSettings,
   normalizeExperimentalSurgerySettings,
   normalizeInconspicuousSettings,
+  normalizeShadowSettings,
+  normalizeSandmanSettings,
+  normalizeNightmareSettings,
   normalizeSpecialMixSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
@@ -2824,6 +2827,52 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.shadow.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.shadow.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.shadow.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.shadow.overloadDurationUnit']")?.value
+      ),
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.shadow.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.shadow.durationUnit']")?.value
+      ),
+      stealthBonus: row.querySelector("[data-field='fixed.shadow.stealthBonus']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.sandman.activationEnergyCost']")?.value,
+      maxCharges: row.querySelector("[data-field='fixed.sandman.maxCharges']")?.value,
+      knockoutCharges: row.querySelector("[data-field='fixed.sandman.knockoutCharges']")?.value,
+      killCharges: row.querySelector("[data-field='fixed.sandman.killCharges']")?.value,
+      restoreCooldownSeconds: row.querySelector("[data-field='fixed.sandman.restoreCooldownSeconds']")?.value,
+      damagePercentBonus: row.querySelector("[data-field='fixed.sandman.damagePercentBonus']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.nightmare.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.nightmare.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.nightmare.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.nightmare.overloadDurationUnit']")?.value
+      ),
+      witnessRadiusMeters: row.querySelector("[data-field='fixed.nightmare.witnessRadiusMeters']")?.value,
+      witnessDifficultyFormula: row.querySelector("[data-field='fixed.nightmare.witnessDifficultyFormula']")?.value,
+      fearDurationSeconds: row.querySelector("[data-field='fixed.nightmare.fearDurationSeconds']")?.value,
+      incomingDamagePercent: row.querySelector("[data-field='fixed.nightmare.incomingDamagePercent']")?.value,
+      outgoingDamagePercentPenalty: row.querySelector("[data-field='fixed.nightmare.outgoingDamagePercentPenalty']")?.value,
+      actionPointPenalty: row.querySelector("[data-field='fixed.nightmare.actionPointPenalty']")?.value,
+      movementPointPenalty: row.querySelector("[data-field='fixed.nightmare.movementPointPenalty']")?.value,
+      allSkillsPercentPenalty: row.querySelector("[data-field='fixed.nightmare.allSkillsPercentPenalty']")?.value,
+      darknessRadiusMeters: row.querySelector("[data-field='fixed.nightmare.darknessRadiusMeters']")?.value,
+      darknessAbsorptionPercent: row.querySelector("[data-field='fixed.nightmare.darknessAbsorptionPercent']")?.value,
+      darknessDurationSeconds: row.querySelector("[data-field='fixed.nightmare.darknessDurationSeconds']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -3358,6 +3407,15 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedInconspicuousSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous
     ? prepareInconspicuousSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedShadowSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow
+    ? prepareShadowSettingsForDisplay(normalized.fixedSettings)
+    : null;
+  const fixedSandmanSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman
+    ? normalizeSandmanSettings(normalized.fixedSettings)
+    : null;
+  const fixedNightmareSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare
+    ? prepareNightmareSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3436,6 +3494,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedExperimentalSurgerySettings,
     fixedEmergencyOperationsSettings,
     fixedInconspicuousSettings,
+    fixedShadowSettings,
+    fixedSandmanSettings,
+    fixedNightmareSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,
@@ -4499,6 +4560,29 @@ function prepareInconspicuousSettingsForDisplay(settings = {}) {
     ...normalized,
     stealthBonusDurationAmount: duration.amount,
     stealthBonusDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareShadowSettingsForDisplay(settings = {}) {
+  const normalized = normalizeShadowSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareNightmareSettingsForDisplay(settings = {}) {
+  const normalized = normalizeNightmareSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
   };
 }
 

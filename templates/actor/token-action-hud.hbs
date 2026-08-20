@@ -65,7 +65,7 @@
       <div class="fallout-maw-token-hud-collapsible">
         <div class="fallout-maw-token-hud-collapsible-inner fallout-maw-token-hud-meter-list">
           {{#each resources}}
-          <div class="fallout-maw-token-hud-meter-card" data-token-hud-resource-card data-resource-key="{{key}}">
+          <div class="fallout-maw-token-hud-meter-card{{#if oneTimeResource}} one-time-resource{{/if}}" data-token-hud-resource-card data-resource-key="{{key}}">
             <div class="fallout-maw-token-hud-meter-header">
               <span>{{label}}</span>
               {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-label">{{localize "FALLOUTMAW.Actor.ConsciousnessRecoveryTarget" value=recoveryTarget}}</span>{{/if}}
@@ -78,8 +78,9 @@
               <strong>{{valueLabel}}{{#if maxLabel}} / {{maxLabel}}{{/if}}</strong>
               {{/if}}
             </div>
-            <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}" data-resource-limited="{{blockedAmount}}">
+            <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{#if oneTimeResource}}{{meterValue}}{{else}}{{value}}{{/if}}" aria-valuemax="{{#if oneTimeResource}}{{meterMax}}{{else}}{{max}}{{/if}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{#if oneTimeResource}}{{meterValue}}{{else}}{{value}}{{/if}}" data-resource-max="{{#if oneTimeResource}}{{meterMax}}{{else}}{{max}}{{/if}}" data-resource-limited="{{blockedAmount}}">
               <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+              {{#if oneTimeResource}}<span class="fallout-maw-resource-meter-once-fill" style="{{oneTimeFillStyle}}" aria-label="Одноразовый ресурс"></span>{{/if}}
               {{#if blockedAmount}}<span class="fallout-maw-resource-meter-blocked" style="{{blockedStyle}}" aria-hidden="true"></span>{{/if}}
               {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-marker" style="{{recoveryTargetStyle}}" title="{{localize 'FALLOUTMAW.Actor.ConsciousnessRecoveryTarget' value=recoveryTarget}}" aria-label="{{localize 'FALLOUTMAW.Actor.ConsciousnessRecoveryTarget' value=recoveryTarget}}"></span>{{/if}}
               <span class="fallout-maw-resource-meter-preview" aria-hidden="true"></span>
