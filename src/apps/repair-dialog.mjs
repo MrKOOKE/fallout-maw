@@ -31,6 +31,11 @@ import {
   selectToolByPolicy
 } from "../utils/tool-selection-policy.mjs";
 import { analyzeMassRepairToolAvailability } from "../utils/repair-tool-availability.mjs";
+import {
+  applyToolWorkflowEfficiencyBonus,
+  createToolWorkflowModifierResolver,
+  resolveToolWorkflowModifiers
+} from "../utils/tool-workflow-modifiers.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import {
@@ -327,6 +332,7 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
           return {
             uid: `${item.id}:${toolKey}`,
             id: item.id,
+            uuid: item.uuid,
             name: item.name,
             img: normalizeImagePath(item.img, "icons/svg/item-bag.svg"),
             toolKey,
@@ -347,6 +353,7 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
 }
 
 function prepareRepairableItems(items, instruments, activeItemId, sourceActor = null) {
+  const resolveToolModifiers = createToolWorkflowModifierResolver(sourceActor);
   return items.map(item => {
     const availableInstruments = item.recoveryMethods.flatMap((method, methodIndex) => {
       const requiredClass = String(method.toolClass ?? "D");
@@ -355,7 +362,13 @@ function prepareRepairableItems(items, instruments, activeItemId, sourceActor = 
         .filter(instrument => instrument.toolKey === method.toolKey)
         .map(instrument => {
           const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
-          const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
+          const toolModifiers = classAccepted
+            ? resolveToolModifiers(createRepairToolWorkflowContext(instrument, instrument, method))
+            : null;
+          const efficiency = applyToolWorkflowEfficiencyBonus(
+            calculateBaseEfficiency(instrument.toolClass, requiredClass),
+            toolModifiers?.efficiencyPercentBonus
+          );
           const usable = classAccepted && instrument.supplyValue > 0 && instrument.requirementMet && threshold.met;
           return {
             ...instrument,
@@ -602,6 +615,7 @@ async function runRepairChecks({
   targetContext,
   targetToken = null,
   repairItem,
+  instrument = null,
   method,
   tool,
   initialValue,
@@ -616,6 +630,8 @@ async function runRepairChecks({
     ? await fromUuid(targetContext.actorUuid).catch(() => null)
     : null);
   const targetActor = targetDocument?.documentName === "Actor" ? targetDocument : null;
+  const toolWorkflowContext = createRepairToolWorkflowContext(instrument, tool, method);
+  const toolWorkflowModifiers = resolveToolWorkflowModifiers(sourceActor, toolWorkflowContext);
   const toolSupplyCostPercent = getActorToolSupplyCostPercent(sourceActor, tool.toolKey, {
     requester: "repair",
     actorToken: sourceToken?.object ?? sourceToken,
@@ -661,6 +677,7 @@ async function runRepairChecks({
           actorToken: sourceToken?.object ?? sourceToken,
           targetActor,
           targetToken: targetToken?.object ?? targetToken,
+          toolContext: toolWorkflowContext.toolContext,
           allowImplicitTarget: false,
           chanceOperationId: checkOperationId,
           systemEventOperationId: operationId
@@ -692,6 +709,7 @@ async function runRepairChecks({
       valueForCheck,
       missingValue: remainingValue,
       resultKey,
+      efficiencyPercentBonus: toolWorkflowModifiers.efficiencyPercentBonus,
       toolSupplyCostPercent,
       craftingSettings
     });
@@ -748,11 +766,15 @@ function calculateRepairResult({
   valueForCheck,
   missingValue,
   resultKey,
+  efficiencyPercentBonus = 0,
   toolSupplyCostPercent = 0,
   craftingSettings = getCraftingSettings()
 }) {
   const targetValue = Math.min(valueForCheck, missingValue);
-  let efficiency = calculateBaseEfficiency(tool.toolClass, method.toolClass);
+  let efficiency = applyToolWorkflowEfficiencyBonus(
+    calculateBaseEfficiency(tool.toolClass, method.toolClass),
+    efficiencyPercentBonus
+  );
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
 
   const productiveChargesNeeded = Math.max(1, Math.ceil(targetValue * (100 / Math.max(1, efficiency))));
@@ -969,6 +991,7 @@ async function resolveRepairOnAuthorityOperation({
     targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
     targetToken,
     repairItem: snapshotRepairableItem(item, contextToolKey),
+    instrument,
     method,
     tool,
     initialValue,
@@ -1097,6 +1120,10 @@ function createRepairInputFingerprint({
   const toolResource = getToolResourceState(instrument, { ...tool, toolKey: method?.toolKey });
   const toolSkillKey = String(tool?.skillKey ?? "");
   const repairSettings = getCraftingSettings().repair ?? {};
+  const toolWorkflowModifiers = resolveToolWorkflowModifiers(
+    sourceActor,
+    createRepairToolWorkflowContext(instrument, tool, method)
+  );
   return JSON.stringify({
     conditionMax: Math.max(0, toInteger(condition.max)),
     method: method ? {
@@ -1116,6 +1143,9 @@ function createRepairInputFingerprint({
       ? toInteger(sourceActor?.system?.skills?.[toolSkillKey]?.value)
       : null,
     repairSkillValue: toInteger(sourceActor?.system?.skills?.[DEFAULT_REPAIR_SKILL_KEY]?.value),
+    toolWorkflowModifiers: {
+      efficiencyPercentBonus: Number(toolWorkflowModifiers.efficiencyPercentBonus) || 0
+    },
     repairSettings: {
       mode: String(repairSettings.mode ?? ""),
       failureToolCostIncreasePercent: toInteger(repairSettings.failureToolCostIncreasePercent),
@@ -1173,6 +1203,20 @@ function getEffectiveRepairToolFunction(item, toolKey) {
     resource,
     resourceValue: resource.available ? resource.value : 0,
     resourceMax: resource.max
+  };
+}
+
+function createRepairToolWorkflowContext(instrument, tool, method) {
+  return {
+    requester: "repair",
+    skillKey: DEFAULT_REPAIR_SKILL_KEY,
+    toolContext: {
+      itemId: String(instrument?.id ?? ""),
+      itemUuid: String(instrument?.uuid ?? ""),
+      toolKey: String(tool?.toolKey ?? method?.toolKey ?? ""),
+      toolClass: String(tool?.toolClass ?? "D"),
+      requiredClass: String(method?.toolClass ?? "D")
+    }
   };
 }
 

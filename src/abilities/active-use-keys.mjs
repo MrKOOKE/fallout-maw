@@ -50,6 +50,7 @@ import {
   getToolSupplyCostEffectKey,
   isToolSupplyCostEffectKey
 } from "../utils/tool-supply-effect-keys.mjs";
+import { WEAPON_REQUIREMENT_PERCENT_EFFECT_KEY } from "../items/requirement-modifiers.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -109,7 +110,8 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   "system.healing.incomingPercent",
   "system.healing.outgoingPercent",
   STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
-  ...Object.values(FIRST_AID_EFFECT_KEYS)
+  ...Object.values(FIRST_AID_EFFECT_KEYS),
+  WEAPON_REQUIREMENT_PERCENT_EFFECT_KEY
 ]);
 
 const SKILL_CHANGE_KEY_PATTERN = /^system\.skills\.[^.]+\.(?:bonus|bonusPercent|advantage|disadvantage|criticalSuccessChance|criticalFailureChance)$/;
@@ -189,6 +191,7 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     if (postureAction) keys.add(`system.postures.${postureAction}.weaponActionCost`);
   }
   if (includeCheck) {
+    keys.add(WEAPON_REQUIREMENT_PERCENT_EFFECT_KEY);
     for (const key of WEAPON_CHECK_COMBAT_KEYS) {
       if (key === "system.combat.burstStability" && actionKey !== "burst") continue;
       keys.add(key);

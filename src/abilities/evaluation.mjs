@@ -102,8 +102,10 @@ export function getAbilityEffectProjectionFromNormalizedFunctions(
 ) {
   const changes = [];
   const pureChangeIndexes = [];
+  const fixedFunctionsEnabled = getActiveRulesProfile().fixedAbilityFunctionsEnabled !== false;
   for (const entry of normalizedFunctions ?? []) {
-    if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.fixed].includes(entry.type)) continue;
+    if (entry.type === ABILITY_FUNCTION_TYPES.fixed && !fixedFunctionsEnabled) continue;
     for (const change of getConditionalFunctionChanges(actor, entry, context)) {
       if (!change.key || change.value === "") continue;
       const index = changes.length;

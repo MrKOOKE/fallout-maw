@@ -1,3 +1,5 @@
+import { getAdjustedEquipmentRequirement } from "./requirement-modifiers.mjs";
+
 export const EQUIPMENT_REQUIREMENT_MOVEMENT_POINT_RESOURCE_KEY = "movementPoints";
 export const EQUIPMENT_REQUIREMENT_SKILL_POINTS_PER_MOVEMENT_POINT = 5;
 
@@ -23,7 +25,7 @@ export function isActiveDamageMitigationRequirementItem(item = null) {
 
 export function calculateEquipmentRequirementMovementPointPenalty(actor = null, itemOrSystem = null) {
   return getDamageMitigationRequirements(itemOrSystem).reduce((total, requirement) => {
-    const target = getEquipmentRequirementTarget(requirement);
+    const target = getEquipmentRequirementTarget(requirement, actor);
     if (!target) return total;
     const current = getActorEquipmentRequirementValue(actor, target);
     const deficit = Math.max(0, target.required - current);
@@ -47,10 +49,10 @@ export function buildEquipmentRequirementMovementPointChange(actor = null, itemO
   };
 }
 
-function getEquipmentRequirementTarget(requirement = {}) {
+function getEquipmentRequirementTarget(requirement = {}, actor = null) {
   const type = String(requirement?.type ?? "") === "skill" ? "skill" : "characteristic";
   const key = String(requirement?.key ?? "").trim();
-  const required = Math.max(0, toInteger(requirement?.value));
+  const { required } = getAdjustedEquipmentRequirement(actor, { ...requirement, type, key });
   return key && required ? { type, key, required } : null;
 }
 

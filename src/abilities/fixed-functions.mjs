@@ -39,6 +39,9 @@ import {
   normalizeFullForceSettings,
   normalizeGrapplingMasterSettings,
   normalizeGoodEnoughSettings,
+  normalizeCorrespondingToolApproachSettings,
+  normalizePerfectFitSettings,
+  normalizeQualityServiceSettings,
   normalizeAnatomyStudySettings,
   normalizeEmergencyOperationsSettings,
   normalizeExperimentalSurgerySettings,
@@ -66,7 +69,11 @@ import {
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 export { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
+import { createCorrespondingToolApproachResolver } from "./corresponding-tool-approach.mjs";
+import { registerToolWorkflowModifierProvider } from "../utils/tool-workflow-modifiers.mjs";
 import { openAnatomyStudyApplication } from "../apps/anatomy-study.mjs";
+import { openPerfectFitApplication } from "../apps/perfect-fit.mjs";
+import { openQualityServiceApplication } from "../apps/quality-service.mjs";
 import {
   ANATOMY_STUDY_BONUS_KEYS,
   buildAnatomyStudyKnowledgeUpdate,
@@ -202,8 +209,23 @@ import {
 import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
-  getActorEnergy
+  getActorEnergy,
+  getActorAvailableEnergy
 } from "../combat/energy-resource.mjs";
+import {
+  PERFECT_FIT_MAINTAINED_EFFECTS,
+  buildPerfectFitGrantEffectData,
+  buildPerfectFitHoldEffectData
+} from "./perfect-fit.mjs";
+import { MAINTAINED_TARGET_EFFECT_SYNC_OPTION } from "./maintained-target-effects.mjs";
+import {
+  QUALITY_SERVICE_MAINTAINED_EFFECTS,
+  buildQualityServiceGrantEffectData,
+  buildQualityServiceHoldEffectData,
+  getQualityServiceTier
+} from "./quality-service.mjs";
+import { syncActorAbilityEffects } from "./effects.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { areTokensAdjacent, areTokensAdjacentAt, resolveKnockback } from "../combat/active-actions.mjs";
 import {
   createMovementOptions,
@@ -369,6 +391,46 @@ const activeApplicationAuthorityOperations = new Map();
 const activeApplicationAuthorityRequestsByUse = new Map();
 const activeApplicationAuthorityRequestsById = new Map();
 const actorEnergyMutationQueue = new Map();
+const maintainedTargetOperationLock = createActorOperationLock();
+const MAINTAINED_TARGET_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    fixedKey: ABILITY_FIXED_FUNCTION_KEYS.perfectFit,
+    effects: PERFECT_FIT_MAINTAINED_EFFECTS,
+    openApplication: openPerfectFitApplication,
+    getProfile(fixedSettings) {
+      const settings = normalizePerfectFitSettings(fixedSettings);
+      return {
+        id: "default",
+        holdEnergy: settings.holdEnergy,
+        equipmentRequirementPercent: settings.equipmentRequirementPercent,
+        weaponRequirementPercent: settings.weaponRequirementPercent
+      };
+    },
+    buildGrant(context, profile) {
+      return buildPerfectFitGrantEffectData({ ...context, ...profile });
+    },
+    buildHold(context, profile) {
+      return buildPerfectFitHoldEffectData({ ...context, ...profile });
+    }
+  }),
+  Object.freeze({
+    fixedKey: ABILITY_FIXED_FUNCTION_KEYS.qualityService,
+    effects: QUALITY_SERVICE_MAINTAINED_EFFECTS,
+    openApplication: openQualityServiceApplication,
+    getProfile(fixedSettings, profileId) {
+      return getQualityServiceTier(fixedSettings, profileId);
+    },
+    buildGrant(context, profile) {
+      return buildQualityServiceGrantEffectData({ ...context, tier: profile });
+    },
+    buildHold(context, profile) {
+      return buildQualityServiceHoldEffectData({ ...context, tier: profile });
+    }
+  })
+]);
+const MAINTAINED_TARGET_DEFINITIONS_BY_KEY = new Map(
+  MAINTAINED_TARGET_DEFINITIONS.map(definition => [definition.fixedKey, definition])
+);
 const activeApplicationEffectSyncTimers = new Map();
 const whereAreYouGoingSuppressedReactors = new Map();
 const STEALTH_INCAPACITATIONS = Symbol("falloutMawStealthIncapacitations");
@@ -693,6 +755,34 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
+    label: "Всему свой подход",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
+      fixedSettings: normalizeCorrespondingToolApproachSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.perfectFit,
+    label: "Идеальная подгонка",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.perfectFit,
+      fixedSettings: normalizePerfectFitSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.qualityService,
+    label: "Качественное обслуживание",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.qualityService,
+      fixedSettings: normalizeQualityServiceSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy,
     label: "Изучение анатомии",
     active: true,
@@ -773,8 +863,10 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
 let fixedAbilityRuntimeHooksRegistered = false;
 let fixedAbilitySocketRegistered = false;
 let fixedAbilitySocketLifecycleRegistered = false;
+let correspondingToolApproachProviderRegistered = false;
 
 export function registerFixedAbilityFunctionHooks() {
+  registerCorrespondingToolApproachProvider();
   Hooks.on("updateActor", (actor, _changes, options = {}) => {
     if (
       !options?.falloutMawDocumentMigration
@@ -788,11 +880,43 @@ export function registerFixedAbilityFunctionHooks() {
   registerFixedAbilityRuntimeHooks();
 }
 
+function registerCorrespondingToolApproachProvider() {
+  if (correspondingToolApproachProviderRegistered) return;
+  correspondingToolApproachProviderRegistered = true;
+  registerToolWorkflowModifierProvider(
+    `fixed:${ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach}`,
+    actor => areFixedAbilityFunctionsEnabled()
+      ? createCorrespondingToolApproachResolver(actor)
+      : null,
+    { priority: 100 }
+  );
+}
+
 function registerFixedAbilityRuntimeHooks() {
   if (fixedAbilityRuntimeHooksRegistered || !areFixedAbilityFunctionsEnabled()) return;
   fixedAbilityRuntimeHooksRegistered = true;
 
   registerShadowEffectIndexHooks();
+  Hooks.on("deleteActiveEffect", runFixedAbilityRuntimeHandler((effect, options = {}) => {
+    void cleanupMaintainedTargetLinkedEffect(effect, options);
+  }));
+  Hooks.on("updateActiveEffect", runFixedAbilityRuntimeHandler((effect, changes = {}, options = {}) => {
+    if (changes?.disabled === true) void cleanupDisabledMaintainedTargetEffect(effect, options);
+  }));
+  Hooks.on("deleteItem", runFixedAbilityRuntimeHandler((item, options = {}) => {
+    void cleanupMaintainedTargetAbilityItemHolds(item, options);
+  }));
+  Hooks.on("updateItem", runFixedAbilityRuntimeHandler((item, changes = {}, options = {}) => {
+    if (maintainedTargetAbilityUpdateMayAffectHolds(changes)) {
+      void reconcileMaintainedTargetAbilityItemHolds(item, options);
+    }
+  }));
+  Hooks.on("deleteActor", runFixedAbilityRuntimeHandler((actor, options = {}) => {
+    void cleanupMaintainedTargetDeletedActorLinks(actor, options);
+  }));
+  Hooks.on("deleteToken", runFixedAbilityRuntimeHandler((token, options = {}) => {
+    if (!token?.actorLink) void cleanupMaintainedTargetDeletedActorLinks(token?.actor, options);
+  }));
   registerSystemEventObserver({
     id: "fallout-maw.fixed.shadow.resourceSpent",
     eventKeys: ["fallout-maw.combat.resource.spent"],
@@ -1016,6 +1140,21 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: getFixedFunctionStateKey(entry),
           label: "Память",
           value: `${getAnatomyStudyMemoryUsage(knowledge)} / ${getAnatomyStudyMemoryCapacity(abilityItem.parent, entry.fixedSettings)}`
+        };
+      }
+      const maintainedTargetDefinition = MAINTAINED_TARGET_DEFINITIONS_BY_KEY.get(entry.fixedKey);
+      if (maintainedTargetDefinition) {
+        const holds = maintainedTargetDefinition.effects.getHolds(abilityItem.parent, {
+          abilityItemId: abilityItem.id,
+          functionId: entry.id
+        });
+        const energy = holds.reduce((total, effect) => (
+          total + Math.max(0, toInteger(maintainedTargetDefinition.effects.getHoldData(effect)?.holdEnergy))
+        ), 0);
+        return {
+          key: getFixedFunctionStateKey(entry),
+          label: "Удержание",
+          value: `${holds.length} целей · ${energy} энергии`
         };
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
@@ -1293,6 +1432,12 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
     const used = await useAnatomyStudy(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (MAINTAINED_TARGET_DEFINITIONS_BY_KEY.has(abilityFunction.fixedKey)) {
+    const used = await useMaintainedTargetAbility(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -1639,6 +1784,376 @@ function formatSpecialMixInventoryError(error) {
     return "в инвентаре недостаточно места или грузоподъёмности для нового препарата.";
   }
   return "не удалось подготовить смешивание выбранных препаратов.";
+}
+
+async function useMaintainedTargetAbility(actor, abilityItem, abilityFunction) {
+  const definition = MAINTAINED_TARGET_DEFINITIONS_BY_KEY.get(abilityFunction?.fixedKey);
+  if (!definition) return false;
+  definition.openApplication({
+    actor,
+    abilityItem,
+    abilityFunction,
+    sourceToken: getActorSceneToken(actor),
+    onAdd: ({ targetActor, tierId = "" }) => addMaintainedTargetHold(
+      actor, abilityItem, abilityFunction, targetActor, tierId
+    ),
+    onRelease: ({ effectId }) => releaseMaintainedTargetHold(actor, abilityItem, abilityFunction, effectId)
+  });
+  return true;
+}
+
+async function addMaintainedTargetHold(actor, abilityItem, abilityFunction, targetActor, profileId = "") {
+  const applied = await requestMaintainedTargetOperation({
+    mode: "add",
+    fixedKey: abilityFunction?.fixedKey ?? "",
+    profileId,
+    sourceActorUuid: actor?.uuid ?? "",
+    abilityItemId: abilityItem?.id ?? "",
+    abilityFunctionId: abilityFunction?.id ?? "",
+    targetActorUuid: targetActor?.uuid ?? "",
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!applied) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не удалось включить удержание.`);
+    return false;
+  }
+  await createAbilityChatMessage(actor, abilityItem, `${targetActor?.name ?? "Цель"}: бонус передан.`);
+  return true;
+}
+
+async function releaseMaintainedTargetHold(actor, abilityItem, abilityFunction, effectId) {
+  const released = await requestMaintainedTargetOperation({
+    mode: "remove",
+    fixedKey: abilityFunction?.fixedKey ?? "",
+    sourceActorUuid: actor?.uuid ?? "",
+    abilityItemId: abilityItem?.id ?? "",
+    abilityFunctionId: abilityFunction?.id ?? "",
+    holdEffectId: String(effectId ?? ""),
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!released) ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не удалось отключить удержание.`);
+  return released;
+}
+
+async function requestMaintainedTargetOperation(payload = {}) {
+  if (game.user?.isActiveGM) return processMaintainedTargetOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  const promise = new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "manageMaintainedTarget",
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? "",
+    requestId,
+    payload
+  });
+  return promise;
+}
+
+async function processMaintainedTargetSocketRequest(message = {}) {
+  const applied = await processMaintainedTargetOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "maintainedTargetResult",
+    targetUserId: message.senderUserId ?? "",
+    requestId: message.requestId,
+    result: { applied: Boolean(applied) }
+  });
+}
+
+async function processMaintainedTargetOperation(payload = {}) {
+  if (!game.user?.isActiveGM) return false;
+  const definition = MAINTAINED_TARGET_DEFINITIONS_BY_KEY.get(String(payload.fixedKey ?? ""));
+  const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? ""));
+  const abilityItem = sourceActor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === String(payload.abilityFunctionId ?? "") && entry.fixedKey === definition?.fixedKey);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!definition || !sourceActor || !abilityItem || !abilityFunction || !sender) return false;
+  if (!sender.isGM && !sourceActor.testUserPermission(sender, "OWNER")) return false;
+
+  const mode = String(payload.mode ?? "");
+  if (mode === "remove") {
+    const preliminaryHold = sourceActor.effects?.get(String(payload.holdEffectId ?? ""));
+    const preliminaryData = definition.effects.getHoldData(preliminaryHold);
+    const targetActor = preliminaryData
+      ? await fromUuid(String(preliminaryData.targetActorUuid ?? ""))
+      : null;
+    return maintainedTargetOperationLock.runMany([sourceActor, targetActor], null, async () => {
+      const holdEffect = sourceActor.effects?.get(String(payload.holdEffectId ?? ""));
+      const hold = definition.effects.getHoldData(holdEffect);
+      if (!holdEffect || !hold
+        || String(hold.abilityItemId ?? "") !== abilityItem.id
+        || String(hold.functionId ?? "") !== abilityFunction.id) return false;
+      await deleteMaintainedTargetPair(definition, sourceActor, holdEffect);
+      return true;
+    });
+  }
+
+  if (mode !== "add") return false;
+  const targetActor = await fromUuid(String(payload.targetActorUuid ?? ""));
+  if (!targetActor || targetActor.uuid === sourceActor.uuid) return false;
+  if (!["character", "construct"].includes(String(targetActor.type ?? ""))) return false;
+  return maintainedTargetOperationLock.runMany([sourceActor, targetActor], null, async () => {
+    if (isActorInActiveCombat(sourceActor)) return false;
+    if (definition.effects.getHolds(sourceActor, {
+      abilityItemId: abilityItem.id,
+      functionId: abilityFunction.id
+    }).some(effect => definition.effects.getHoldData(effect)?.targetActorUuid === targetActor.uuid)) return false;
+    if (definition.effects.findGrant(targetActor)) return false;
+
+    const profile = definition.getProfile(abilityFunction.fixedSettings, payload.profileId);
+    if (!profile || !canActorSpendEnergy(sourceActor, profile.holdEnergy)) return false;
+
+    const effectContext = { sourceActor, abilityItem, abilityFunction, targetActor };
+    const [grantEffect] = await targetActor.createEmbeddedDocuments("ActiveEffect", [
+      definition.buildGrant(effectContext, profile)
+    ], { animate: false, [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true });
+    if (!grantEffect) return false;
+    try {
+      const [holdEffect] = await sourceActor.createEmbeddedDocuments("ActiveEffect", [
+        definition.buildHold({ ...effectContext, targetEffectId: grantEffect.id }, profile)
+      ], { animate: false, [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true });
+      if (!holdEffect) throw new Error("Maintained target hold effect was not created.");
+    } catch (error) {
+      await targetActor.deleteEmbeddedDocuments("ActiveEffect", [grantEffect.id], {
+        animate: false,
+        [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+      });
+      throw error;
+    }
+    await syncActorAbilityEffects(targetActor);
+    return true;
+  });
+}
+
+async function deleteMaintainedTargetPair(definition, sourceActor, holdEffect) {
+  const hold = definition?.effects.getHoldData(holdEffect);
+  if (!definition || !sourceActor || !holdEffect || !hold) return false;
+  const targetActor = await fromUuid(String(hold.targetActorUuid ?? ""));
+  const grant = targetActor ? definition.effects.findGrant(targetActor, {
+    sourceActorUuid: sourceActor.uuid,
+    abilityItemId: hold.abilityItemId,
+    functionId: hold.functionId,
+    includeInactive: true
+  }) : null;
+  if (grant) await targetActor.deleteEmbeddedDocuments("ActiveEffect", [grant.id], {
+    animate: false,
+    [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+  });
+  if (sourceActor.effects?.get(holdEffect.id)) {
+    await sourceActor.deleteEmbeddedDocuments("ActiveEffect", [holdEffect.id], {
+      animate: false,
+      [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+    });
+  }
+  if (targetActor) await syncActorAbilityEffects(targetActor);
+  return true;
+}
+
+function getMaintainedTargetEffectDescriptor(effect) {
+  for (const definition of MAINTAINED_TARGET_DEFINITIONS) {
+    const hold = definition.effects.getHoldData(effect);
+    if (hold) return { definition, kind: "hold", data: hold };
+    const grant = definition.effects.getGrantData(effect);
+    if (grant) return { definition, kind: "grant", data: grant };
+  }
+  return null;
+}
+
+async function cleanupMaintainedTargetLinkedEffect(effect, options = {}) {
+  if (options?.[MAINTAINED_TARGET_EFFECT_SYNC_OPTION] || !game.user?.isActiveGM) return;
+  const descriptor = getMaintainedTargetEffectDescriptor(effect);
+  if (!descriptor) return;
+  const { definition, kind, data } = descriptor;
+  if (kind === "hold") {
+    const targetActor = await fromUuid(String(data.targetActorUuid ?? ""));
+    const grant = targetActor ? definition.effects.findGrant(targetActor, {
+      sourceActorUuid: effect?.parent?.uuid,
+      abilityItemId: data.abilityItemId,
+      functionId: data.functionId,
+      includeInactive: true
+    }) : null;
+    if (grant) await targetActor.deleteEmbeddedDocuments("ActiveEffect", [grant.id], {
+      animate: false,
+      [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+    });
+    if (targetActor) await syncActorAbilityEffects(targetActor);
+    return;
+  }
+  const sourceActor = await fromUuid(String(data.sourceActorUuid ?? ""));
+  const holdEffect = definition.effects.getHolds(sourceActor, {
+    abilityItemId: data.abilityItemId,
+    functionId: data.functionId
+  }).find(candidate => definition.effects.getHoldData(candidate)?.targetActorUuid === effect?.parent?.uuid);
+  if (holdEffect) await sourceActor.deleteEmbeddedDocuments("ActiveEffect", [holdEffect.id], {
+    animate: false,
+    [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+  });
+}
+
+async function cleanupMaintainedTargetAbilityItemHolds(item, options = {}) {
+  if (options?.[MAINTAINED_TARGET_EFFECT_SYNC_OPTION] || !game.user?.isActiveGM || item?.type !== "ability") return;
+  const sourceActor = item.parent;
+  if (!sourceActor) return;
+  for (const definition of MAINTAINED_TARGET_DEFINITIONS) {
+    for (const holdEffect of definition.effects.getHolds(sourceActor, { abilityItemId: item.id, includeInactive: true })) {
+      await deleteMaintainedTargetPair(definition, sourceActor, holdEffect);
+    }
+  }
+}
+
+async function reconcileMaintainedTargetAbilityItemHolds(item, options = {}) {
+  if (options?.[MAINTAINED_TARGET_EFFECT_SYNC_OPTION] || !game.user?.isActiveGM || item?.type !== "ability") return;
+  const sourceActor = item.parent;
+  if (!sourceActor) return;
+  const functionsById = new Map(normalizeAbilityFunctions(item.system?.functions ?? [])
+    .filter(entry => MAINTAINED_TARGET_DEFINITIONS_BY_KEY.has(entry.fixedKey))
+    .map(entry => [entry.id, entry]));
+  const entries = MAINTAINED_TARGET_DEFINITIONS.flatMap(definition => (
+    definition.effects.getHolds(sourceActor, { abilityItemId: item.id, includeInactive: true })
+      .map(holdEffect => ({ definition, holdEffect }))
+  ));
+  if (!entries.length) return;
+
+  await maintainedTargetOperationLock.run(sourceActor, null, async () => {
+    for (const { definition, holdEffect } of entries) {
+      const hold = definition.effects.getHoldData(holdEffect);
+      const abilityFunction = functionsById.get(String(hold?.functionId ?? ""));
+      const targetActor = hold ? await fromUuid(String(hold.targetActorUuid ?? "")) : null;
+      const grant = targetActor && hold ? definition.effects.findGrant(targetActor, {
+        sourceActorUuid: sourceActor.uuid,
+        abilityItemId: item.id,
+        functionId: hold.functionId
+      }) : null;
+      if (!hold || abilityFunction?.fixedKey !== definition.fixedKey || !targetActor || !grant || holdEffect.disabled) {
+        await deleteMaintainedTargetPair(definition, sourceActor, holdEffect);
+        continue;
+      }
+      const profile = definition.getProfile(abilityFunction.fixedSettings, hold.tierId);
+      const previousEnergy = Math.max(0, toInteger(hold.holdEnergy));
+      if (!profile || getActorAvailableEnergy(sourceActor) + previousEnergy < profile.holdEnergy) {
+        await deleteMaintainedTargetPair(definition, sourceActor, holdEffect);
+        continue;
+      }
+      const effectContext = { sourceActor, abilityItem: item, abilityFunction, targetActor };
+      const grantData = definition.buildGrant(effectContext, profile);
+      const holdData = definition.buildHold({ ...effectContext, targetEffectId: grant.id }, profile);
+      await grant.update({
+        name: grantData.name,
+        img: grantData.img,
+        "system.changes": grantData.system.changes,
+        [`flags.${SYSTEM_ID}.${definition.effects.grantFlagKey}`]: grantData.flags[SYSTEM_ID][definition.effects.grantFlagKey]
+      }, { [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true });
+      await holdEffect.update({
+        name: holdData.name,
+        img: holdData.img,
+        [`flags.${SYSTEM_ID}.damageEffect`]: holdData.flags[SYSTEM_ID].damageEffect,
+        [`flags.${SYSTEM_ID}.${definition.effects.holdFlagKey}`]: holdData.flags[SYSTEM_ID][definition.effects.holdFlagKey]
+      }, { [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true });
+      await syncActorAbilityEffects(targetActor);
+    }
+  });
+}
+
+function maintainedTargetAbilityUpdateMayAffectHolds(changes = {}) {
+  return Object.keys(foundry.utils.flattenObject(changes ?? {})).some(path => (
+    path === "name"
+    || path === "img"
+    || path === "system.functions"
+    || path.startsWith("system.functions.")
+  ));
+}
+
+async function cleanupDisabledMaintainedTargetEffect(effect, options = {}) {
+  if (options?.[MAINTAINED_TARGET_EFFECT_SYNC_OPTION] || !game.user?.isActiveGM) return;
+  const descriptor = getMaintainedTargetEffectDescriptor(effect);
+  if (!descriptor) return;
+  if (descriptor.kind === "hold") {
+    await deleteMaintainedTargetPair(descriptor.definition, effect.parent, effect);
+    return;
+  }
+  await cleanupMaintainedTargetLinkedEffect(effect, options);
+  if (effect.parent?.effects?.get(effect.id)) {
+    await effect.parent.deleteEmbeddedDocuments("ActiveEffect", [effect.id], {
+      animate: false,
+      [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+    });
+    await syncActorAbilityEffects(effect.parent);
+  }
+}
+
+async function cleanupMaintainedTargetDeletedActorLinks(actor, options = {}) {
+  if (options?.[MAINTAINED_TARGET_EFFECT_SYNC_OPTION] || !game.user?.isActiveGM || !actor) return;
+  const deletionsByActorUuid = new Map();
+  const queueDeletion = (targetActor, effectId, { syncActorEffects = false } = {}) => {
+    const actorUuid = String(targetActor?.uuid ?? "");
+    const id = String(effectId ?? "");
+    if (!actorUuid || !id) return;
+    const entry = deletionsByActorUuid.get(actorUuid) ?? {
+      actor: targetActor,
+      effectIds: new Set(),
+      syncActorEffects: false
+    };
+    entry.effectIds.add(id);
+    entry.syncActorEffects ||= syncActorEffects;
+    deletionsByActorUuid.set(actorUuid, entry);
+  };
+
+  const lookups = [];
+  for (const definition of MAINTAINED_TARGET_DEFINITIONS) {
+    for (const holdEffect of definition.effects.getHolds(actor, { includeInactive: true })) {
+      const hold = definition.effects.getHoldData(holdEffect);
+      lookups.push((async () => {
+        const targetActor = await fromUuid(String(hold?.targetActorUuid ?? ""));
+        const grant = targetActor ? definition.effects.findGrant(targetActor, {
+          sourceActorUuid: actor.uuid,
+          abilityItemId: hold?.abilityItemId,
+          functionId: hold?.functionId,
+          includeInactive: true
+        }) : null;
+        if (grant) queueDeletion(targetActor, grant.id, { syncActorEffects: true });
+      })());
+    }
+    for (const effect of actor.effects ?? []) {
+      const grant = definition.effects.getGrantData(effect);
+      if (!grant) continue;
+      lookups.push((async () => {
+        const sourceActor = await fromUuid(String(grant.sourceActorUuid ?? ""));
+        const holdEffect = definition.effects.getHolds(sourceActor, {
+          abilityItemId: grant.abilityItemId,
+          functionId: grant.functionId,
+          includeInactive: true
+        }).find(candidate => definition.effects.getHoldData(candidate)?.targetActorUuid === actor.uuid);
+        if (holdEffect) queueDeletion(sourceActor, holdEffect.id);
+      })());
+    }
+  }
+  await Promise.all(lookups);
+  await Promise.all(Array.from(deletionsByActorUuid.values(), async entry => {
+    const effectIds = Array.from(entry.effectIds)
+      .filter(id => entry.actor.effects?.get?.(id));
+    if (!effectIds.length) return;
+    await entry.actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, {
+      animate: false,
+      [MAINTAINED_TARGET_EFFECT_SYNC_OPTION]: true
+    });
+    if (entry.syncActorEffects) await syncActorAbilityEffects(entry.actor);
+  }));
 }
 
 async function useAnatomyStudy(actor, abilityItem, abilityFunction) {
@@ -8907,6 +9422,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processKnockOffBalanceDebuffSocketRequest(message);
     return;
   }
+  if (message.action === "manageMaintainedTarget") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processMaintainedTargetSocketRequest(message);
+    return;
+  }
   if (message.action === "performLookResourceLoss") {
     if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
     void processLookResourceLossSocketRequest(message);
@@ -8942,6 +9462,14 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pending.resolve(Boolean(message.result?.applied));
   }
   if (message.action === "knockOffBalanceDebuffResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
+  }
+  if (message.action === "maintainedTargetResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;

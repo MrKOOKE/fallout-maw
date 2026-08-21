@@ -31,15 +31,16 @@ import { createDefaultInventorySize } from "../../settings/creature-options.mjs"
 import { prepareActorOrganismDevelopmentLimitBase } from "../../races/organism-development.mjs";
 import { resourceField } from "./resources.mjs";
 import {
-  CONSTRUCT_PART_MITIGATION_LIMB_KEY,
-  DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
   getConditionFunction,
   getConstructPartFunction,
-  getConditionWeakeningData,
-  getDamageMitigationFunction,
   hasItemFunction
 } from "../../utils/item-functions.mjs";
+import {
+  buildEmptyLimbDamageMap,
+  buildEquippedItemDamageMitigation,
+  expandLimbDamageMapSelectors
+} from "../../items/damage-mitigation-preparation.mjs";
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { getSkillAdvancementMultiplierChanges } from "../../abilities/evaluation.mjs";
 import {
@@ -52,7 +53,6 @@ import { getActorEffectChangeEntries } from "../../documents/actor-effect-prepar
 import {
   getActorGearItems,
   getConstructPartLimbKey,
-  getConstructPartSlotId,
   getConstructPartSlots,
   getConstructPartTypeLabel,
   getInstalledConstructPartsBySlot
@@ -140,6 +140,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       healing: new SchemaField({
         incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         outgoingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+      }),
+      requirements: new SchemaField({
+        equipmentPercent: new NumberField({ required: true, initial: 0, persisted: false }),
+        weaponPercent: new NumberField({ required: true, initial: 0, persisted: false })
+      }),
+      equipmentEffectiveness: new SchemaField({
+        protectionPercent: new NumberField({ required: true, initial: 0, persisted: false }),
+        bonusPercent: new NumberField({ required: true, initial: 0, persisted: false })
       }),
       firstAid: new SchemaField({
         incomingEffectivenessPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
@@ -435,7 +443,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const itemMitigation = buildEquippedItemDamageMitigation(
       getActorGearItems(this.parent),
       this.limbs,
-      damageTypeSettings
+      damageTypeSettings,
+      this.parent
     );
     const damageDefenseBonuses = expandLimbDamageMapSelectors(this.damageDefenseBonuses, this.limbs, damageTypeSettings);
     const damageResistanceBonuses = expandLimbDamageMapSelectors(this.damageResistanceBonuses, this.limbs, damageTypeSettings);
@@ -1039,15 +1048,6 @@ function normalizeProficiencyMap(currentProficiencies = {}, proficiencySettings 
   );
 }
 
-function buildEmptyLimbDamageMap(limbs = {}, damageTypeSettings = []) {
-  return Object.fromEntries(
-    Object.keys(limbs ?? {}).map(limbKey => [
-      limbKey,
-      Object.fromEntries(damageTypeSettings.map(damageType => [damageType.key, 0]))
-    ])
-  );
-}
-
 function evaluateLimbMaximums(settings = [], characteristicSettings = [], skillSettings = [], characteristics = {}, skills = {}) {
   return Object.fromEntries(
     settings.map(setting => {
@@ -1081,45 +1081,6 @@ function buildLimbDamageDefenseMap(limbs = {}, defenseValues = {}) {
   return Object.fromEntries(
     Object.keys(limbs ?? {}).map(limbKey => [limbKey, { ...defenseValues }])
   );
-}
-
-function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings = []) {
-  const defenses = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
-  const resistances = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
-  const limbKeys = new Set(Object.keys(limbs ?? {}));
-  const damageTypeKeys = new Set(damageTypeSettings.map(damageType => damageType.key));
-
-  for (const item of items ?? []) {
-    const isConstructPart = item.type === "gear"
-      && hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
-      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart;
-    if (item.type !== "gear" || (!item.system?.equipped && !isConstructPart) || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
-    const mitigation = getDamageMitigationFunction(item);
-    const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
-    const weakening = getConditionWeakeningData(item);
-    const weakeningRatio = weakening.active ? weakening.ratio : 1;
-    const constructPartLimbKey = isConstructPart
-      ? getConstructPartLimbKey(getConstructPartSlotId(item))
-      : "";
-
-    for (const [rawLimbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
-      const limbKey = rawLimbKey === CONSTRUCT_PART_MITIGATION_LIMB_KEY && constructPartLimbKey
-        ? constructPartLimbKey
-        : rawLimbKey;
-      if (!limbKeys.has(limbKey)) continue;
-      for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
-        if (!damageTypeKeys.has(damageTypeKey)) continue;
-        const baseValue = toInteger(entry?.value);
-        const value = baseValue > 0 ? Math.floor(baseValue * weakeningRatio) : baseValue;
-        if (!value) continue;
-
-        if (mode === DAMAGE_MITIGATION_MODES.resistance) resistances[limbKey][damageTypeKey] += value;
-        else defenses[limbKey][damageTypeKey] += value;
-      }
-    }
-  }
-
-  return { defenses, resistances };
 }
 
 function mergeLimbDamageMaps(base = {}, ...bonuses) {
@@ -1178,39 +1139,6 @@ function getConstructPartLimbData(actor) {
     };
   }
   return { settings, source };
-}
-
-function expandLimbDamageMapSelectors(source = {}, limbs = {}, damageTypeSettings = []) {
-  const result = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
-  const limbKeys = Object.keys(limbs ?? {});
-  const damageTypeKeys = damageTypeSettings.map(damageType => damageType.key).filter(Boolean);
-
-  for (const [limbSelector, damageEntries] of Object.entries(source ?? {})) {
-    const selectedLimbs = isAllSelector(limbSelector)
-      ? limbKeys
-      : limbKeys.includes(limbSelector) ? [limbSelector] : [];
-    if (!selectedLimbs.length) continue;
-
-    for (const [damageTypeSelector, value] of Object.entries(damageEntries ?? {})) {
-      const selectedDamageTypes = isAllSelector(damageTypeSelector)
-        ? damageTypeKeys
-        : damageTypeKeys.includes(damageTypeSelector) ? [damageTypeSelector] : [];
-      const bonus = toInteger(value);
-      if (!selectedDamageTypes.length || !bonus) continue;
-
-      for (const limbKey of selectedLimbs) {
-        for (const damageTypeKey of selectedDamageTypes) {
-          result[limbKey][damageTypeKey] += bonus;
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-function isAllSelector(value) {
-  return String(value ?? "").trim() === "all";
 }
 
 function synchronizeAggregateHealthResource(resources = {}, limbs = {}) {

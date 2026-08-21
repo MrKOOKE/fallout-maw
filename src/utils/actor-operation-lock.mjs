@@ -45,6 +45,22 @@ export function createActorOperationLock() {
     return next;
   }
 
+  /** Serialize one atomic operation across several actors without lock-order deadlocks. */
+  function runMany(actors, chainRef, operation) {
+    const unique = new Map();
+    for (const actor of actors ?? []) {
+      const actorKey = String(actor?.uuid ?? actor?.id ?? "").trim();
+      if (actorKey && !unique.has(actorKey)) unique.set(actorKey, actor);
+    }
+    const ordered = Array.from(unique.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, actor]) => actor);
+    const acquire = index => index >= ordered.length
+      ? Promise.resolve().then(operation)
+      : run(ordered[index], chainRef, () => acquire(index + 1));
+    return acquire(0);
+  }
+
   function isRootActive(actorKey, rootId) {
     return (activeRootsByActor.get(actorKey)?.get(rootId) ?? 0) > 0;
   }
@@ -66,7 +82,7 @@ export function createActorOperationLock() {
     if (!roots.size) activeRootsByActor.delete(actorKey);
   }
 
-  return Object.freeze({ run });
+  return Object.freeze({ run, runMany });
 }
 
 function getOperationRootId(chainRef) {

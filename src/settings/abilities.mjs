@@ -9,6 +9,10 @@ import {
   createAttackActionSettings,
   normalizeAttackActionSettings
 } from "../abilities/attack-action-settings.mjs";
+import { buildRequirementPercentModifierChanges } from "../items/requirement-modifiers.mjs";
+import { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
+
+export { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
 
 export {
   createAttackActionSettings,
@@ -199,6 +203,9 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   heightenedConcentration: "heightenedConcentration",
   grapplingMaster: "grapplingMaster",
   goodEnough: "goodEnough",
+  correspondingToolApproach: "correspondingToolApproach",
+  perfectFit: "perfectFit",
+  qualityService: "qualityService",
   anatomyStudy: "anatomyStudy",
   specialMix: "specialMix",
   experimentalSurgery: "experimentalSurgery",
@@ -953,9 +960,19 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   const attackSettings = type === ABILITY_FUNCTION_TYPES.attackAction
     ? normalizeAttackActionSettings(value?.attackSettings ?? value?.settings)
     : null;
-  const changes = isLegacy
+  const fixedKey = type === ABILITY_FUNCTION_TYPES.fixed ? normalizeFixedFunctionKey(value?.fixedKey) : "";
+  const fixedSettings = type === ABILITY_FUNCTION_TYPES.fixed
+    ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
+    : {};
+  let changes = isLegacy
     ? legacyFunctionToChanges(value)
     : normalizeAbilityChanges(value?.changes ?? value?.effects);
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.perfectFit) {
+    changes = normalizeAbilityChanges(buildRequirementPercentModifierChanges({
+      equipmentPercent: fixedSettings.equipmentRequirementPercent,
+      weaponPercent: fixedSettings.weaponRequirementPercent
+    }));
+  }
   conditions = finalizeTrialPrimaryChangeCompatibility(conditions, changes);
   const penalties = normalizeAbilityChanges(value?.penalties);
   const legacyActiveDuration = type === ABILITY_FUNCTION_TYPES.activeApplication
@@ -979,10 +996,8 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     includeInPureValues: type === ABILITY_FUNCTION_TYPES.effectChanges
       && Boolean(value?.includeInPureValues)
       && hasAdvancementPureValueFunctionChanges({ changes, penalties }),
-    fixedKey: type === ABILITY_FUNCTION_TYPES.fixed ? normalizeFixedFunctionKey(value?.fixedKey) : "",
-    fixedSettings: type === ABILITY_FUNCTION_TYPES.fixed
-      ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
-      : {},
+    fixedKey,
+    fixedSettings,
     activeSettings,
     ...(attackSettings ? { attackSettings } : {}),
     // Legacy storage is intentionally cleared after its rows have been migrated
@@ -2229,6 +2244,15 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.goodEnough) {
     return normalizeGoodEnoughSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach) {
+    return normalizeCorrespondingToolApproachSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.perfectFit) {
+    return normalizePerfectFitSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.qualityService) {
+    return normalizeQualityServiceSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
     return normalizeAnatomyStudySettings(value);
   }
@@ -2375,6 +2399,27 @@ export function normalizeGoodEnoughSettings(value = {}) {
           : 10
     ),
     freeConditionThreshold: Math.max(0, Math.min(100, toInteger(value?.freeConditionThreshold ?? 90)))
+  };
+}
+
+/** "Всему свой подход": contextual bonuses from a tool of the exact required class. */
+export function normalizeCorrespondingToolApproachSettings(value = {}) {
+  return {
+    skillBonus: Math.max(0, toInteger(value?.skillBonus ?? 20)),
+    repairEfficiencyPercentBonus: Math.max(0, toNumber(value?.repairEfficiencyPercentBonus ?? 20))
+  };
+}
+
+/** "Идеальная подгонка": general item requirement modifiers with maintained sharing. */
+export function normalizePerfectFitSettings(value = {}) {
+  return {
+    equipmentRequirementPercent: Math.max(-100, toNumber(
+      value?.equipmentRequirementPercent ?? -50
+    )),
+    weaponRequirementPercent: Math.max(-100, toNumber(
+      value?.weaponRequirementPercent ?? -50
+    )),
+    holdEnergy: Math.max(0, toInteger(value?.holdEnergy ?? 10))
   };
 }
 

@@ -81,6 +81,9 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
   normalizeAnatomyStudySettings,
+  normalizeCorrespondingToolApproachSettings,
+  normalizePerfectFitSettings,
+  normalizeQualityServiceSettings,
   normalizeEmergencyOperationsSettings,
   normalizeExperimentalSurgerySettings,
   normalizeInconspicuousSettings,
@@ -2760,6 +2763,33 @@ function readFixedFunctionSettings(row) {
       advantageCount: row.querySelector("[data-field='fixed.heightenedConcentration.advantageCount']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach) {
+    return {
+      skillBonus: row.querySelector("[data-field='fixed.correspondingToolApproach.skillBonus']")?.value,
+      repairEfficiencyPercentBonus: row.querySelector("[data-field='fixed.correspondingToolApproach.repairEfficiencyPercentBonus']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.perfectFit) {
+    return {
+      equipmentRequirementPercent: row.querySelector("[data-field='fixed.perfectFit.equipmentRequirementPercent']")?.value,
+      weaponRequirementPercent: row.querySelector("[data-field='fixed.perfectFit.weaponRequirementPercent']")?.value,
+      holdEnergy: row.querySelector("[data-field='fixed.perfectFit.holdEnergy']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.qualityService) {
+    return {
+      tiers: ["10", "20", "40"].map(id => ({
+        id,
+        holdEnergy: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.holdEnergy']`)?.value,
+        damagePercent: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.damagePercent']`)?.value,
+        criticalChance: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.criticalChance']`)?.value,
+        criticalDamagePercent: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.criticalDamagePercent']`)?.value,
+        accuracy: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.accuracy']`)?.value,
+        protectionPercent: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.protectionPercent']`)?.value,
+        equipmentBonusPercent: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.equipmentBonusPercent']`)?.value
+      }))
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
     return {
       energyCost: row.querySelector("[data-field='fixed.anatomyStudy.energyCost']")?.value,
@@ -3392,6 +3422,15 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedCorrespondingToolApproachSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach
+    ? normalizeCorrespondingToolApproachSettings(normalized.fixedSettings)
+    : null;
+  const fixedPerfectFitSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.perfectFit
+    ? normalizePerfectFitSettings(normalized.fixedSettings)
+    : null;
+  const fixedQualityServiceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.qualityService
+    ? normalizeQualityServiceSettings(normalized.fixedSettings)
+    : null;
   const fixedAnatomyStudySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
     ? prepareAnatomyStudySettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3489,6 +3528,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedLookSettings,
     fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
+    fixedCorrespondingToolApproachSettings,
+    fixedPerfectFitSettings,
+    fixedQualityServiceSettings,
     fixedAnatomyStudySettings,
     fixedSpecialMixSettings,
     fixedExperimentalSurgerySettings,

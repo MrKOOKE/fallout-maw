@@ -164,11 +164,18 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     try {
       const outcome = await requestSkillCheck({
         actor: this.#hackerActor,
-        skillKey: "repair",
+        skillKey: "lockpicking",
         data: {
           difficulty: selectedMethod.difficulty,
           allowImplicitTarget: false,
-          targetActor: this.#target?.documentName === "Actor" ? this.#target : null
+          targetActor: this.#target?.documentName === "Actor" ? this.#target : null,
+          toolContext: {
+            itemId: selectedCandidate.itemId,
+            itemUuid: selectedCandidate.itemUuid,
+            toolKey: selectedMethod.toolKey,
+            toolClass: selectedCandidate.toolClass,
+            requiredClass: selectedMethod.toolClass
+          }
         },
         animate: false,
         createMessage: true,
@@ -708,6 +715,7 @@ function getHackingToolCandidates(actor, methods, target = null) {
           toolCost,
           baseToolCost: method.toolCost,
           itemId: item.id,
+          itemUuid: item.uuid,
           name: item.name,
           toolClass: normalizeToolClass(tool.toolClass),
           resourceMode: resource.mode,

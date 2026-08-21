@@ -13,6 +13,7 @@ import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
 import { isSkillAdvancementMultiplierEffectKey } from "../advancement/skill-multiplier-effects.mjs";
 import { isToolSupplyCostEffectKey } from "./tool-supply-effect-keys.mjs";
+import { scaleEquippedItemEffectChange } from "../items/equipment-effectiveness.mjs";
 import {
   getActorApplicableEffects,
   getActorEffectChangeEntries
@@ -203,23 +204,18 @@ export function prepareActorEffectChangeForApplication(actor, change = {}, optio
 
 function prepareActorEffectChangeValue(actor, change = {}, options = {}) {
   const item = getItemFreeSettingsEffectSourceItem(actor, change?.effect);
-  if (!item) return prepareEffectChangeForApplication(actor, change, options);
-  if (isItemBrokenByCondition(item)) return null;
+  if (item && isItemBrokenByCondition(item)) return null;
 
-  const prepared = prepareEffectChangeForApplication(actor, change, options);
-  if (!item.system?.functions?.freeSettings?.useConditionWeakening) return prepared;
-
-  const weakening = getConditionWeakeningData(item);
-  if (!weakening.active || weakening.ratio >= 1) return prepared;
-
-  const value = Number(prepared?.value);
-  if (!Number.isFinite(value)) return prepared;
-
-  const ratio = Math.max(0, Math.min(1, Number(weakening.ratio) || 0));
-  return {
-    ...prepared,
-    value: Math.trunc(value * ratio)
-  };
+  let prepared = prepareEffectChangeForApplication(actor, change, options);
+  if (item?.system?.functions?.freeSettings?.useConditionWeakening) {
+    const weakening = getConditionWeakeningData(item);
+    const value = Number(prepared?.value);
+    if (weakening.active && weakening.ratio < 1 && Number.isFinite(value)) {
+      const ratio = Math.max(0, Math.min(1, Number(weakening.ratio) || 0));
+      prepared = { ...prepared, value: Math.trunc(value * ratio) };
+    }
+  }
+  return scaleEquippedItemEffectChange(actor, prepared);
 }
 
 export function evaluateActorEffectChangeBaseNumber(actor, change = {}, {

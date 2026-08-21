@@ -21055,6 +21055,11 @@ label.checkbox.fallout-maw-ability-change-choice {
   align-items: center;
 }
 
+.fallout-maw-anatomy-study-header.fallout-maw-maintained-target-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .fallout-maw-anatomy-study-header > img {
   width: 54px;
   height: 54px;
@@ -21222,6 +21227,128 @@ label.checkbox.fallout-maw-ability-change-choice {
   background: rgba(135, 69, 46, 0.24);
 }
 
+.fallout-maw-maintained-target-list {
+  display: grid;
+  gap: 4px;
+}
+
+.fallout-maw-maintained-target-row {
+  display: grid;
+  grid-template-columns: 34px minmax(110px, 0.65fr) minmax(0, 1.35fr) auto 30px;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 2px 3px 2px 2px;
+  border: 1px solid rgba(184, 164, 134, 0.28);
+  border-radius: 4px;
+  background: rgba(38, 31, 31, 0.72);
+}
+
+.fallout-maw-maintained-target-row > img {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--anatomy-accent);
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+.fallout-maw-maintained-target-row > strong,
+.fallout-maw-maintained-target-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-maintained-target-summary {
+  color: #aa9d8e;
+  font-size: 0.82em;
+}
+
+.fallout-maw-maintained-target-energy {
+  color: #d6c5ad;
+  white-space: nowrap;
+}
+
+.fallout-maw-maintained-target-row > button {
+  width: 30px;
+  height: 32px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: #bca58c;
+  background: transparent;
+}
+
+.fallout-maw-maintained-target-row > button:hover {
+  color: #f1c091;
+  background: rgba(135, 69, 46, 0.24);
+}
+
+.fallout-maw-quality-tier-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 6px;
+}
+
+.fallout-maw-quality-tier {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 7px 8px;
+  overflow: visible;
+  border: 1px solid rgba(184, 164, 134, 0.32);
+  text-align: left;
+  white-space: normal;
+  background: rgba(38, 31, 31, 0.72);
+}
+
+.fallout-maw-quality-tier strong {
+  color: #eadfce;
+}
+
+.fallout-maw-quality-tier span {
+  display: block;
+  color: #aa9d8e;
+  font-size: 0.75em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-quality-settings-row {
+  padding-top: 0.65rem;
+  border-top: 1px solid color-mix(in srgb, var(--fallout-maw-border) 65%, transparent);
+}
+
+.fallout-maw-quality-settings-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.fallout-maw-mitigation-current-value {
+  cursor: help;
+  text-decoration: underline dotted rgba(232, 223, 210, 0.5);
+  text-underline-offset: 3px;
+}
+
+.fallout-maw-mitigation-current-value.positive {
+  color: #8fcf86;
+}
+
+.fallout-maw-mitigation-current-value.negative {
+  color: #d78878;
+}
+
+.fallout-maw-quality-tier[aria-pressed="true"] {
+  border-color: var(--anatomy-accent);
+  background: rgba(116, 84, 43, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(228, 189, 103, 0.22);
+}
+
 .fallout-maw-anatomy-empty {
   margin: 4px 0;
   color: #aa9d8e;
@@ -21252,6 +21379,18 @@ label.checkbox.fallout-maw-ability-change-choice {
   }
 
   .fallout-maw-anatomy-bonus-list {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-maintained-target-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto 30px;
+  }
+
+  .fallout-maw-maintained-target-summary {
+    display: none;
+  }
+
+  .fallout-maw-quality-tier-list {
     grid-template-columns: 1fr;
   }
 }

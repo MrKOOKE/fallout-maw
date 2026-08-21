@@ -190,6 +190,7 @@ import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { getActorAvailableEnergy } from "./energy-resource.mjs";
 import { isCombatResourceCostActive } from "./resource-cost-policy.mjs";
+import { getAdjustedWeaponRequirement } from "../items/requirement-modifiers.mjs";
 import { getActorResourceLimitAmount } from "./resource-limits.mjs";
 import {
   getAbilityAttackActionKey,
@@ -15916,7 +15917,7 @@ function getAimedChanceClass(chance) {
 function getWeaponRequirementDifficultyPenalty(actor, weapon, weaponFunctionId = "") {
   const requirements = getWeaponAttackData(weapon, weaponFunctionId)?.requirements ?? [];
   return requirements.reduce((total, requirement) => {
-    const required = Math.max(0, toInteger(requirement?.value));
+    const { required } = getAdjustedWeaponRequirement(actor, requirement);
     if (!required) return total;
     const current = getActorRequirementValue(actor, requirement);
     const deficit = Math.max(0, required - current);

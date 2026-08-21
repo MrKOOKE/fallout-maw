@@ -140,3 +140,20 @@ test("actor-facing mitigation still chooses among every enabled set by actor rac
   assert.deepEqual(humanTables.map(table => table.id), [humanId]);
   assert.deepEqual(robotTables.map(table => table.id), [robotId]);
 });
+
+test("actor-facing mitigation may prepare contextual cells without changing editor values", () => {
+  const choices = buildDamageMitigationLimbSetChoices(createMitigationItem(), CREATURE_OPTIONS);
+  const humanId = choices.find(choice => choice.races.some(race => race.id === "human")).id;
+  const item = createMitigationItem([humanId]);
+  const preparedTables = buildDamageMitigationTables(item, CREATURE_OPTIONS, DAMAGE_TYPES, {
+    actorRaceId: "human",
+    prepareCell: cell => ({ baseValue: cell.value, value: cell.value * 2, tooltipHTML: "breakdown" })
+  });
+  const preparedHead = preparedTables[0].rows[0].cells.find(cell => cell.limbKey === "head");
+  assert.equal(preparedHead.baseValue, 7);
+  assert.equal(preparedHead.value, 14);
+  assert.equal(preparedHead.tooltipHTML, "breakdown");
+
+  const editorTables = buildDamageMitigationTables(item, CREATURE_OPTIONS, DAMAGE_TYPES, { limbSetId: humanId });
+  assert.equal(editorTables[0].rows[0].cells.find(cell => cell.limbKey === "head")?.value, 7);
+});

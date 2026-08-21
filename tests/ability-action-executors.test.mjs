@@ -529,6 +529,32 @@ test("actor operation locks re-enter the same root but serialize independent roo
   assert.deepEqual(order, ["first-start", "reentrant", "first-end", "independent"]);
 });
 
+test("multi-actor operation locks use one stable order", async () => {
+  const lock = createActorOperationLock();
+  const actorA = { uuid: "Actor.a" };
+  const actorB = { uuid: "Actor.b" };
+  const order = [];
+  let release;
+  let markStarted;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { markStarted = resolve; });
+  const first = lock.runMany([actorB, actorA], null, async () => {
+    order.push("first-start");
+    markStarted();
+    await gate;
+    order.push("first-end");
+  });
+  await started;
+  const second = lock.runMany([actorA, actorB], null, async () => {
+    order.push("second");
+  });
+  await Promise.resolve();
+  assert.deepEqual(order, ["first-start"]);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(order, ["first-start", "first-end", "second"]);
+});
+
 test("movement settlement waits for transitively resumed hook operations", async () => {
   const token = { uuid: "Scene.test.Token.settlement" };
   let releaseFirst;

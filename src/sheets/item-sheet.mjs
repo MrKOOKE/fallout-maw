@@ -131,6 +131,9 @@ import {
   normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeGoodEnoughSettings,
+  normalizeCorrespondingToolApproachSettings,
+  normalizePerfectFitSettings,
+  normalizeQualityServiceSettings,
   normalizeAnatomyStudySettings,
   normalizeEmergencyOperationsSettings,
   normalizeExperimentalSurgerySettings,
@@ -7399,6 +7402,15 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedGoodEnoughSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.goodEnough
     ? normalizeGoodEnoughSettings(entry?.fixedSettings)
     : null;
+  const fixedCorrespondingToolApproachSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach
+    ? normalizeCorrespondingToolApproachSettings(entry?.fixedSettings)
+    : null;
+  const fixedPerfectFitSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.perfectFit
+    ? normalizePerfectFitSettings(entry?.fixedSettings)
+    : null;
+  const fixedQualityServiceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.qualityService
+    ? normalizeQualityServiceSettings(entry?.fixedSettings)
+    : null;
   const fixedAnatomyStudySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy
     ? prepareAnatomyStudySettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -7505,6 +7517,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
     fixedGoodEnoughSettings,
+    fixedCorrespondingToolApproachSettings,
+    fixedPerfectFitSettings,
+    fixedQualityServiceSettings,
     fixedAnatomyStudySettings,
     fixedSpecialMixSettings,
     fixedExperimentalSurgerySettings,

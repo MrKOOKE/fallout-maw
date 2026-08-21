@@ -49,6 +49,11 @@ import {
   hasDamageMitigationRequirements,
   isActiveDamageMitigationRequirementItem
 } from "../items/equipment-requirements.mjs";
+import { EQUIPMENT_REQUIREMENT_PERCENT_EFFECT_KEY } from "../items/requirement-modifiers.mjs";
+import {
+  PERFECT_FIT_EFFECT_SYNC_OPTION,
+  PERFECT_FIT_GRANT_FLAG_KEY
+} from "./perfect-fit.mjs";
 import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS,
@@ -258,6 +263,7 @@ export function registerAbilityEffectHooks() {
   }
   Hooks.on("createActiveEffect", (effect, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
+    if (options?.[PERFECT_FIT_EFFECT_SYNC_OPTION] === true) return;
     if (getActiveApplicationEffectFlag(effect)) {
       invalidateActorPotentialAuraSource(getActiveEffectOwningActor(effect));
     }
@@ -276,6 +282,7 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("updateActiveEffect", (effect, changes = {}, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
+    if (options?.[PERFECT_FIT_EFFECT_SYNC_OPTION] === true) return;
     const changedPaths = getChangedActiveEffectPaths(changes);
     const mechanicalUpdate = activeEffectUpdateNeedsAuraStateSync(effect, changes, changedPaths);
     if (
@@ -306,6 +313,7 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
+    if (options?.[PERFECT_FIT_EFFECT_SYNC_OPTION] === true) return;
     if (getActiveApplicationEffectFlag(effect)) {
       invalidateActorPotentialAuraSource(getActiveEffectOwningActor(effect));
     }
@@ -2231,9 +2239,11 @@ function isManagedProjectionEffect(effect = null) {
 }
 
 function effectMayChangeEquipmentRequirementValues(effect = null) {
+  if (effect?.getFlag?.(SYSTEM_ID, PERFECT_FIT_GRANT_FLAG_KEY)) return true;
   return (effect?.system?.changes ?? []).some(change => {
     const key = String(change?.key ?? "").trim();
-    return key === "system.characteristics"
+    return key === EQUIPMENT_REQUIREMENT_PERCENT_EFFECT_KEY
+      || key === "system.characteristics"
       || key.startsWith("system.characteristics.")
       || key === "system.skills"
       || key.startsWith("system.skills.")

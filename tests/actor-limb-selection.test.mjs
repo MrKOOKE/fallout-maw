@@ -40,8 +40,9 @@ test("actor limb left click immediately rerenders mitigation for the selected li
   assert.doesNotMatch(clickHandler, /openLimbDamageDialog/);
   assert.doesNotMatch(clickHandler, /game\.user\?\.isGM/);
 
-  assert.match(actorSheetSource, /actor\.system\.damageResistances\?\.\[activeLimbKey\]/);
-  assert.match(actorSheetSource, /actor\.system\.damageDefenses\?\.\[activeLimbKey\]/);
+  assert.match(actorSheetSource, /const damageMitigationDisplay = prepareActorDamageMitigationDisplay\(actor,\s*activeLimbKey/);
+  assert.match(actorSheetSource, /damageResistances:\s*damageMitigationDisplay\.resistances/);
+  assert.match(actorSheetSource, /damageDefenses:\s*damageMitigationDisplay\.defenses/);
 });
 
 test("actor limb right click opens management for the GM only", () => {

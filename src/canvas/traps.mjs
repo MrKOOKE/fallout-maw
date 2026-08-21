@@ -1911,7 +1911,17 @@ class TrapDisarmDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       const outcome = await requestSkillCheck({
         actor: this.#actor,
         skillKey: "traps",
-        data: { difficulty: disarm.difficulty, allowImplicitTarget: false },
+        data: {
+          difficulty: disarm.difficulty,
+          allowImplicitTarget: false,
+          toolContext: {
+            itemId: selectedTool.itemId,
+            itemUuid: selectedTool.item?.uuid,
+            toolKey: selectedTool.toolKey,
+            toolClass: selectedTool.toolClass,
+            requiredClass: disarm.toolClass
+          }
+        },
         animate: false,
         createMessage: true,
         prompt: false,

@@ -53,10 +53,10 @@ export function buildDamageMitigationTables(
   itemOrSystem,
   creatureOptions = {},
   damageTypeSettings = [],
-  { actorRaceId = "", limbSetId = "" } = {}
+  { actorRaceId = "", limbSetId = "", prepareCell = null } = {}
 ) {
   if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) {
-    return [buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings)];
+    return [buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings, { prepareCell })];
   }
 
   const limbSets = getCompatibleDamageMitigationLimbSets(itemOrSystem, creatureOptions);
@@ -76,7 +76,7 @@ export function buildDamageMitigationTables(
       ? [editorGroup]
       : limbSets.filter(group => selectedIds.has(group.id));
 
-  return groups.map(group => buildDamageMitigationTableForGroup(group, entries, damageTypeSettings));
+  return groups.map(group => buildDamageMitigationTableForGroup(group, entries, damageTypeSettings, { prepareCell }));
 }
 
 function isRaceCompatibleWithEquipmentRequirement(race, requirement) {
@@ -101,7 +101,7 @@ export function getLimbShortLabel(label = "") {
   return `${takeChars(words[0], 2)}${words.slice(1).map(word => takeChars(word, 1).toLocaleUpperCase()).join("")}`;
 }
 
-function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSettings = []) {
+function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSettings = [], { prepareCell = null } = {}) {
   const visibleDamageTypes = damageTypeSettings.filter(damageType => !damageType?.locked && !damageType?.system);
   const limbs = group.limbs.map(limb => ({
     key: limb.key,
@@ -122,12 +122,20 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
       damageTypeIconClass: buildDamageTypeIconClass(damageType),
       damageTypeIconStyle: buildDamageTypeIconStyle(damageType),
       cells: limbs.map((limb, columnIndex) => {
-        const value = Number(entries?.[limb.key]?.[damageType.key]?.value) || 0;
-        return {
+        const baseCell = {
           limbKey: limb.key,
+          limbLabel: limb.label,
           damageTypeKey: damageType.key,
+          damageTypeLabel: damageType.label || damageType.key,
           rowIndex,
           columnIndex,
+          value: Number(entries?.[limb.key]?.[damageType.key]?.value) || 0
+        };
+        const prepared = typeof prepareCell === "function" ? prepareCell(baseCell) : null;
+        const value = Number(prepared?.value ?? baseCell.value) || 0;
+        return {
+          ...baseCell,
+          ...(prepared && typeof prepared === "object" ? prepared : {}),
           value,
           valueClass: getMitigationValueClass(value)
         };
@@ -136,7 +144,7 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
   };
 }
 
-function buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings = []) {
+function buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings = [], { prepareCell = null } = {}) {
   const part = getConstructPartFunction(itemOrSystem);
   const label = String(part.partType ?? "").trim() || String(itemOrSystem?.name ?? "").trim() || "Деталь";
   const group = {
@@ -147,7 +155,7 @@ function buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSetting
       shortLabel: getLimbShortLabel(label)
     }]
   };
-  return buildDamageMitigationTableForGroup(group, getDamageMitigationFunction(itemOrSystem)?.entries ?? {}, damageTypeSettings);
+  return buildDamageMitigationTableForGroup(group, getDamageMitigationFunction(itemOrSystem)?.entries ?? {}, damageTypeSettings, { prepareCell });
 }
 
 export function buildDamageTypeIconStyle(damageType = {}) {

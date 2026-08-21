@@ -88,6 +88,14 @@ import {
   ALL_TOOL_SUPPLY_COST_EFFECT_KEY,
   getToolSupplyCostEffectKey
 } from "./tool-supply-effect-keys.mjs";
+import {
+  EQUIPMENT_REQUIREMENT_PERCENT_EFFECT_KEY,
+  WEAPON_REQUIREMENT_PERCENT_EFFECT_KEY
+} from "../items/requirement-modifiers.mjs";
+import {
+  EQUIPMENT_BONUS_EFFECTIVENESS_PERCENT_EFFECT_KEY,
+  PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY
+} from "../items/equipment-effectiveness.mjs";
 
 export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
@@ -152,6 +160,8 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
       path: "system.load.bonus",
       group: game.i18n.localize("FALLOUTMAW.Common.Load")
     }),
+    ...buildRequirementModifierEffectKeyTokens(),
+    ...buildEquipmentEffectivenessEffectKeyTokens(),
     createEffectKeyToken({
       code: "inventoryWidth",
       key: "inventoryWidth",
@@ -227,6 +237,46 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildRequirementModifierEffectKeyTokens() {
+  const group = "Требования предметов";
+  return [
+    createEffectKeyToken({
+      code: "equipmentRequirementPercent",
+      key: "equipmentRequirementPercent",
+      label: "Требования снаряжения, изменение, %",
+      path: EQUIPMENT_REQUIREMENT_PERCENT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "weaponRequirementPercent",
+      key: "weaponRequirementPercent",
+      label: "Требования оружия, изменение, %",
+      path: WEAPON_REQUIREMENT_PERCENT_EFFECT_KEY,
+      group
+    })
+  ].filter(Boolean);
+}
+
+export function buildEquipmentEffectivenessEffectKeyTokens() {
+  const group = "Эффективность снаряжения";
+  return [
+    createEffectKeyToken({
+      code: "protectionEffectivenessPercent",
+      key: "protectionEffectivenessPercent",
+      label: "Эффективность защиты, %",
+      path: PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "equipmentBonusEffectivenessPercent",
+      key: "equipmentBonusEffectivenessPercent",
+      label: "Бонусы снаряжения, протезов и имплантов, %",
+      path: EQUIPMENT_BONUS_EFFECTIVENESS_PERCENT_EFFECT_KEY,
+      group
+    })
+  ].filter(Boolean);
 }
 
 export function buildDetectionModeRangeEffectKeyTokens() {

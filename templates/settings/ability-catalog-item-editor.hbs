@@ -1062,6 +1062,50 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedCorrespondingToolApproachSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Всему свой подход</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Подходящий инструмент</strong>
+          <label><span>Бонус к Взлому / Обезвреживанию</span><input type="number" data-field="fixed.correspondingToolApproach.skillBonus" value="{{fixedCorrespondingToolApproachSettings.skillBonus}}" min="0" step="1"></label>
+          <label><span>Эффективность Ремонта, %</span><input type="number" data-field="fixed.correspondingToolApproach.repairEfficiencyPercentBonus" value="{{fixedCorrespondingToolApproachSettings.repairEfficiencyPercentBonus}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedPerfectFitSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Идеальная подгонка</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Пассивный бонус и удержание</strong>
+          <label><span>Изменение требований снаряжения, %</span><input type="number" data-field="fixed.perfectFit.equipmentRequirementPercent" value="{{fixedPerfectFitSettings.equipmentRequirementPercent}}" min="-100" step="1"></label>
+          <label><span>Изменение требований оружия, %</span><input type="number" data-field="fixed.perfectFit.weaponRequirementPercent" value="{{fixedPerfectFitSettings.weaponRequirementPercent}}" min="-100" step="1"></label>
+          <label><span>Удержание цели, энергия</span><input type="number" data-field="fixed.perfectFit.holdEnergy" value="{{fixedPerfectFitSettings.holdEnergy}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedQualityServiceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Качественное обслуживание</h3>
+      <div class="fallout-maw-fixed-settings">
+        {{#each fixedQualityServiceSettings.tiers}}
+        <div class="fallout-maw-fixed-settings-row fallout-maw-quality-settings-row">
+          <strong>Набор {{id}}</strong>
+          <label><span>Удержание цели, энергия</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.holdEnergy" value="{{holdEnergy}}" min="0" step="1"></label>
+          <label><span>Урон, %</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.damagePercent" value="{{damagePercent}}" step="1"></label>
+          <label><span>Шанс на крит, %</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.criticalChance" value="{{criticalChance}}" step="1"></label>
+          <label><span>Критический урон, %</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.criticalDamagePercent" value="{{criticalDamagePercent}}" step="1"></label>
+          <label><span>Точность</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.accuracy" value="{{accuracy}}" step="1"></label>
+          <label><span>Эффективность защиты, %</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.protectionPercent" value="{{protectionPercent}}" step="1"></label>
+          <label><span>Бонусы снаряжения / протезов / имплантов, %</span><input type="number" data-field="fixed.qualityService.tiers.{{id}}.equipmentBonusPercent" value="{{equipmentBonusPercent}}" step="1"></label>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedAnatomyStudySettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Изучение анатомии</h3>

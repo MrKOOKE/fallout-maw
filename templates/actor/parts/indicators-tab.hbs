@@ -263,7 +263,7 @@
       {{#each damageResistances}}
       <div class="fallout-maw-inline-stat">
         <span>{{label}}:</span>
-        <strong>{{value}}</strong>
+        <strong class="fallout-maw-mitigation-current-value {{changeClass}}" data-tooltip-html="{{tooltipHTML}}" data-tooltip-class="fallout-maw-effect-tooltip fallout-maw-item-value-breakdown-tooltip" data-tooltip-direction="RIGHT">{{value}}</strong>
       </div>
       {{/each}}
     </div>
@@ -275,7 +275,7 @@
       {{#each damageDefenses}}
       <div class="fallout-maw-inline-stat">
         <span>{{label}}:</span>
-        <strong>{{value}}</strong>
+        <strong class="fallout-maw-mitigation-current-value {{changeClass}}" data-tooltip-html="{{tooltipHTML}}" data-tooltip-class="fallout-maw-effect-tooltip fallout-maw-item-value-breakdown-tooltip" data-tooltip-direction="RIGHT">{{value}}</strong>
       </div>
       {{/each}}
     </div>

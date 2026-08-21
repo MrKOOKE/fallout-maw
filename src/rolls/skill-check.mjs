@@ -9,6 +9,10 @@ import {
   normalizeAttackEffectiveRange
 } from "../utils/attack-distance.mjs";
 import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
+import {
+  normalizeToolWorkflowToolContext,
+  resolveToolWorkflowModifiers
+} from "../utils/tool-workflow-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   applySkillBonusPercent,
@@ -695,6 +699,7 @@ function createSkillCheckEventContext(actor, skill, data = {}, { source = {}, ra
     ?? rawData?.itemUuid
     ?? rawData?.sourceItemUuid
     ?? data.weaponData?.uuid
+    ?? data.toolContext?.itemUuid
     ?? ""
   ).trim();
   return {
@@ -760,6 +765,7 @@ function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = ""
     chanceOperationId: String(data.chanceOperationId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     weaponData: serializeWeaponContextData(data.weaponData ?? outcome?.check?.weaponData),
+    toolContext: normalizeToolWorkflowToolContext(data.toolContext ?? outcome?.check?.toolContext),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     attackDistanceMeters: normalizeAttackDistanceMeters(data.attackDistanceMeters),
     effectiveRange: normalizeAttackEffectiveRange(data.effectiveRange),
@@ -782,6 +788,7 @@ function serializeSkillCheckRequest(data = {}) {
     weaponActionKey: String(data.weaponActionKey ?? ""),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     weaponData: serializeWeaponContextData(data.weaponData),
+    toolContext: normalizeToolWorkflowToolContext(data.toolContext),
     attackDistanceMeters: normalizeAttackDistanceMeters(data.attackDistanceMeters),
     effectiveRange: normalizeAttackEffectiveRange(data.effectiveRange),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
@@ -1468,6 +1475,7 @@ function normalizeRequestData(data, requester = "") {
     targetToken: data.targetToken ?? null,
     targetActor: data.targetActor ?? null,
     weaponData: data.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
+    toolContext: normalizeToolWorkflowToolContext(data.toolContext),
     attackDistanceMeters: normalizeAttackDistanceMeters(data.attackDistanceMeters),
     effectiveRange: normalizeAttackEffectiveRange(data.effectiveRange),
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
@@ -1588,6 +1596,7 @@ function createMutableCheck(actor, skill, data) {
   const contextualSmartFudgeResult = requester === "weaponAttack"
     ? SMART_FUDGE_RESULT_ORDER.find(result => Number(contextual[`smartFudge:${result}`]) > 0) ?? ""
     : "";
+  const toolWorkflowModifiers = resolveToolWorkflowModifiers(actor, context);
   return {
     actor,
     skill: {
@@ -1596,7 +1605,9 @@ function createMutableCheck(actor, skill, data) {
         min: skill.min,
         max: skill.max,
         capResult: !skill.developmentLimitPureOnly
-      }) + toInteger(contextual["skillCheckAction:bonus"])
+      })
+        + toInteger(contextual["skillCheckAction:bonus"])
+        + toInteger(toolWorkflowModifiers.skillBonus)
     },
     difficulty: toInteger(data.difficulty ?? DEFAULT_CHECK.difficulty),
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
@@ -1622,7 +1633,13 @@ function createMutableCheck(actor, skill, data) {
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
     skillCheckMode: getActiveRulesProfile().skillCheckMode,
-    modifiers: [],
+    modifiers: toolWorkflowModifiers.sources
+      .filter(source => toInteger(source.skillBonus) !== 0)
+      .map(source => ({
+        source: source.source,
+        label: source.label,
+        value: toInteger(source.skillBonus)
+      })),
     ...context
   };
 }
@@ -1639,6 +1656,7 @@ function resolveSkillCheckContext(actor, data = {}) {
     targetToken: selectedTargetToken,
     targetActor,
     weaponData: data?.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
+    toolContext: normalizeToolWorkflowToolContext(data?.toolContext),
     attackDistanceMeters: normalizeAttackDistanceMeters(data?.attackDistanceMeters),
     effectiveRange: normalizeAttackEffectiveRange(data?.effectiveRange),
     weaponActionKey: String(data?.weaponActionKey ?? "").trim(),

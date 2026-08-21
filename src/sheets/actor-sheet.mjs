@@ -130,6 +130,10 @@ import {
 } from "../utils/first-aid-scaling.mjs";
 import { getActorFirstAidModifiers } from "../items/first-aid-modifiers.mjs";
 import { getFirstAidActionPointCost } from "../items/first-aid-action-cost.mjs";
+import {
+  getAdjustedEquipmentRequirement,
+  getAdjustedWeaponRequirement
+} from "../items/requirement-modifiers.mjs";
 import { FIRST_AID_ACTION_POINT_COST_EFFECT_KEY } from "../items/first-aid-effect-keys.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
@@ -249,6 +253,10 @@ import {
   buildParallelPercentAttribution,
   createItemValueAttributionStep
 } from "../utils/item-value-attribution.mjs";
+import {
+  createActorEffectSnapshot,
+  getActorEffectChangeEntries
+} from "../documents/actor-effect-preparation-index.mjs";
 import { decomposePreparedSkillValue } from "../utils/skill-value-attribution.mjs";
 import { buildAbilityTooltipCostGroups } from "../utils/ability-tooltip-costs.mjs";
 import { actorHasAbility, grantAbilityItemData, grantCatalogAbility } from "../abilities/purchase.mjs";
@@ -304,6 +312,7 @@ import { dropActorInventoryItem } from "../items/dropped-items.mjs";
 import {
   createConstructPartSlotFromItem,
   ensureConstructPartSlots,
+  getActorGearItems,
   getConstructPartLimbKey,
   getConstructPartSlot,
   getConstructPartSlotId,
@@ -313,6 +322,11 @@ import {
   isConstructPartCompatibleWithSlot,
   isInstalledConstructPartItem
 } from "../utils/construct-parts.mjs";
+import {
+  buildEquippedItemDamageMitigation,
+  prepareEquipmentDamageMitigationValue
+} from "../items/damage-mitigation-preparation.mjs";
+import { PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY } from "../items/equipment-effectiveness.mjs";
 import {
   getItemInteractionState,
   resolveActorInteractionToken
@@ -619,6 +633,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const limbSilhouette = prepareSheetLimbSilhouette(getActorConfiguredLimbSilhouette(actor, race), displayLimbs, activeLimbKey);
 
     this.#activeLimbKey = activeLimbKey;
+    const damageMitigationDisplay = prepareActorDamageMitigationDisplay(actor, activeLimbKey, damageTypeSettings, {
+      defenseLabel: game.i18n.localize("FALLOUTMAW.Common.DamageDefenses"),
+      resistanceLabel: game.i18n.localize("FALLOUTMAW.Common.DamageResistances")
+    });
 
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
@@ -715,14 +733,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       developmentPointEntries: prepareDevelopmentPointEntries(actor.system?.development, actor.system?.proficiencies),
       researches: prepareResearchesForDisplay(actor.system?.researches, skillSettings, actor.system?.skills),
       organismDevelopment: prepareOrganismDevelopmentForDisplay(actor),
-      damageResistances: damageTypeSettings.map(damageType => ({
-        ...damageType,
-        value: toInteger(actor.system.damageResistances?.[activeLimbKey]?.[damageType.key])
-      })),
-      damageDefenses: damageTypeSettings.map(damageType => ({
-        ...damageType,
-        value: toInteger(actor.system.damageDefenses?.[activeLimbKey]?.[damageType.key])
-      })),
+      damageResistances: damageMitigationDisplay.resistances,
+      damageDefenses: damageMitigationDisplay.defenses,
       limbSilhouette,
       traumas: prepareTraumaEntries(actor, {
         characteristicSettings,
@@ -5974,6 +5986,8 @@ function scaleFirstAidTooltipEffectChange(value = 0, multiplier = 1) {
 function buildDamageMitigationTooltipSection(item, actor) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation, { ignoreBroken: true })) return "";
   const mitigation = getDamageMitigationFunction(item);
+  const mitigationActive = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
+  const weakening = getConditionWeakeningData(item);
   const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
   const modeLabel = mode === DAMAGE_MITIGATION_MODES.resistance
     ? game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance")
@@ -5983,8 +5997,35 @@ function buildDamageMitigationTooltipSection(item, actor) {
   if (requirements.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.EquipmentRequirements"), {
     html: renderTooltipValueTokens(requirements)
   }]);
+  const effectSnapshot = actor ? createActorEffectSnapshot(actor) : null;
+  const protectionEffectSources = collectActorPreparedPathAttribution(
+    actor,
+    PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY,
+    {
+      preparedValue: actor?.system?.equipmentEffectiveness?.protectionPercent,
+      suffix: "%",
+      effectSource: "effect",
+      includePreparedResidual: false,
+      snapshot: effectSnapshot
+    }
+  ).sources.filter(source => source.attributionKind === "activeEffect");
   const tableHTML = renderDamageMitigationTooltipTables(buildDamageMitigationTables(item, getCreatureOptions(), getDamageTypeSettings(), {
-    actorRaceId: actor?.system?.creature?.raceId ?? ""
+    actorRaceId: actor?.system?.creature?.raceId ?? "",
+    prepareCell: cell => {
+      const prepared = prepareEquipmentDamageMitigationValue(item, actor, cell.value, {
+        mitigationActive,
+        weakening
+      });
+      return {
+        ...prepared,
+        tooltipHTML: prepared.baseValue || prepared.value
+          ? renderItemValueBreakdownTooltipHTML(buildDamageMitigationCellBreakdown(item, actor, cell, prepared, {
+            modeLabel,
+            protectionEffectSources
+          }))
+          : ""
+      };
+    }
   }));
   const content = `${renderTooltipFunctionGrid(rows)}${tableHTML}`;
   if (!content.trim()) return "";
@@ -6013,7 +6054,7 @@ function renderDamageMitigationTooltipTables(tables = []) {
                 ${renderDamageTypeIcon(row)}
               </span>
               ${row.cells.map(cell => `
-                <span class="tooltip-mitigation-cell tooltip-mitigation-value mitigation-value-${escapeAttribute(cell.valueClass)}">${escapeHTML(formatNumber(cell.value))}</span>
+                <span class="tooltip-mitigation-cell tooltip-mitigation-value mitigation-value-${escapeAttribute(cell.valueClass)}${cell.tooltipHTML ? " fallout-maw-item-value-attribution" : ""}"${cell.tooltipHTML ? ` data-item-value-breakdown data-tooltip-html="${escapeAttribute(cell.tooltipHTML)}" data-tooltip-class="fallout-maw-effect-tooltip fallout-maw-item-value-breakdown-tooltip" data-tooltip-direction="RIGHT"` : ""}>${escapeHTML(formatNumber(cell.value))}</span>
               `).join("")}
             `).join("")}
           </div>
@@ -6021,6 +6062,49 @@ function renderDamageMitigationTooltipTables(tables = []) {
       `).join("")}
     </div>
   `;
+}
+
+function buildDamageMitigationCellBreakdown(item, actor, cell = {}, prepared = {}, {
+  modeLabel = "Защита",
+  protectionEffectSources = []
+} = {}) {
+  const baseValue = toInteger(prepared.baseValue);
+  const weakenedValue = toInteger(prepared.weakenedValue);
+  const value = toInteger(prepared.value);
+  const protectionPercent = Number(prepared.protectionPercent) || 0;
+  const sources = [];
+  if (weakenedValue !== baseValue) sources.push({
+    name: "Состояние предмета",
+    img: item?.img,
+    operation: "override",
+    value: weakenedValue,
+    before: baseValue,
+    after: weakenedValue
+  });
+  const breakdown = {
+    title: `${modeLabel}: ${String(cell.damageTypeLabel ?? cell.damageTypeKey)} — ${String(cell.limbLabel ?? cell.limbKey)}`,
+    actorName: actor?.name,
+    img: item?.img,
+    base: {
+      name: "Значение предмета",
+      img: item?.img,
+      value: baseValue
+    },
+    sources,
+    total: weakenedValue,
+    formatValue: formatNumber
+  };
+  if (weakenedValue > 0 && protectionPercent) appendParallelPercentSources(
+    breakdown,
+    mergeActorEffectAttributionSources(protectionEffectSources, { suffix: "%" }),
+    {
+      round: Math.floor,
+      total: value,
+      contributionUnit: "защиты"
+    }
+  );
+  else breakdown.total = value;
+  return breakdown;
 }
 
 function renderDamageTypeIcon(damageType = {}) {
@@ -7327,6 +7411,155 @@ function buildWeaponResourceCostAttributions(item, actor, baseData = {}, data = 
   return breakdowns;
 }
 
+function prepareActorDamageMitigationDisplay(actor, limbKey = "", damageTypeSettings = [], {
+  defenseLabel = "Защита",
+  resistanceLabel = "Сопротивление"
+} = {}) {
+  const limbs = actor?.system?.limbs ?? {};
+  const itemMitigation = buildEquippedItemDamageMitigation(
+    getActorGearItems(actor),
+    limbs,
+    damageTypeSettings,
+    actor,
+    { includeSources: true }
+  );
+  const effectSources = collectActorDamageMitigationEffectSources(actor, limbKey, damageTypeSettings);
+  return {
+    defenses: prepareActorDamageMitigationEntries(actor, limbKey, damageTypeSettings, {
+      mode: "defenses",
+      label: defenseLabel,
+      preparedValues: actor?.system?.damageDefenses,
+      itemSources: itemMitigation.defenseSources,
+      effectSources: effectSources.defenses,
+      protectionEffectSources: effectSources.protection
+    }),
+    resistances: prepareActorDamageMitigationEntries(actor, limbKey, damageTypeSettings, {
+      mode: "resistances",
+      label: resistanceLabel,
+      preparedValues: actor?.system?.damageResistances,
+      itemSources: itemMitigation.resistanceSources,
+      effectSources: effectSources.resistances,
+      protectionEffectSources: effectSources.protection
+    })
+  };
+}
+
+function prepareActorDamageMitigationEntries(actor, limbKey = "", damageTypeSettings = [], {
+  mode = "defenses",
+  label = "Защита",
+  preparedValues = {},
+  itemSources = {},
+  effectSources = {},
+  protectionEffectSources = []
+} = {}) {
+  const limbLabel = String(actor?.system?.limbs?.[limbKey]?.label ?? limbKey);
+  return damageTypeSettings.map(damageType => {
+    const value = toInteger(preparedValues?.[limbKey]?.[damageType.key]);
+    const sources = itemSources?.[limbKey]?.[damageType.key] ?? [];
+    const activeEffectSources = effectSources?.[damageType.key] ?? [];
+    const activeEffectBonus = activeEffectSources.reduce((sum, source) => sum + toInteger(source?.value), 0);
+    const itemValue = sources.reduce((sum, source) => sum + toInteger(source?.value), 0);
+    const weakenedItemValue = sources.reduce((sum, source) => sum + toInteger(source?.weakenedValue), 0);
+    const attributedProtectionSources = itemValue !== weakenedItemValue
+      ? buildProtectionEffectAttributionSources(protectionEffectSources, weakenedItemValue, itemValue)
+      : [];
+    const splitProtection = attributedProtectionSources.length > 0;
+    const baseValue = value - itemValue - activeEffectBonus;
+    const baseline = baseValue + sources.reduce((sum, source) => sum + toInteger(source?.baseValue), 0);
+    const change = value - baseline;
+    const breakdown = {
+      title: `${label}: ${damageType.label}${limbLabel ? ` — ${limbLabel}` : ""}`,
+      actorName: actor?.name,
+      img: actor?.img,
+      base: {
+        name: mode === "resistances" ? "Базовое сопротивление" : "Базовая защита",
+        img: actor?.img,
+        value: baseValue
+      },
+      sources: sources.map(source => ({
+        name: source.name,
+        img: source.img,
+        operation: "add",
+        value: toInteger(splitProtection ? source.weakenedValue : source.value),
+        detailLabels: buildDamageMitigationItemSourceDetails(source)
+      })),
+      total: value,
+      formatValue: formatNumber
+    };
+    breakdown.sources.push(...attributedProtectionSources);
+    breakdown.sources.push(...activeEffectSources);
+    return {
+      ...damageType,
+      value,
+      changeClass: change > 0 ? "positive" : change < 0 ? "negative" : "",
+      tooltipHTML: renderItemValueBreakdownTooltipHTML(breakdown)
+    };
+  });
+}
+
+function collectActorDamageMitigationEffectSources(actor, limbKey = "", damageTypeSettings = []) {
+  const result = { defenses: {}, resistances: {}, protection: [] };
+  if (!actor || !limbKey || !damageTypeSettings.length) return result;
+  const snapshot = createActorEffectSnapshot(actor);
+  const formulaData = buildActorFormulaData(actor, { stage: "prepared" });
+  const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor);
+  const sourcesByPath = new Map();
+  const getPathSources = (path, { suffix = "" } = {}) => {
+    const cached = sourcesByPath.get(path);
+    if (cached) return cached;
+    const sources = collectActorPreparedPathAttribution(actor, path, {
+      preparedValue: foundry.utils.getProperty(actor, path),
+      suffix,
+      effectSource: "effect",
+      includePreparedResidual: false,
+      snapshot,
+      formulaData,
+      suppressedIds
+    }).sources.filter(source => source.attributionKind === "activeEffect");
+    sourcesByPath.set(path, sources);
+    return sources;
+  };
+  result.protection = mergeActorEffectAttributionSources(
+    getPathSources(PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY, { suffix: "%" }),
+    { suffix: "%" }
+  );
+  const modes = [
+    ["defenses", "system.damageDefenseBonuses"],
+    ["resistances", "system.damageResistanceBonuses"]
+  ];
+  for (const [mode, root] of modes) {
+    for (const damageType of damageTypeSettings) {
+      const paths = [
+        `${root}.all.all`,
+        `${root}.all.${damageType.key}`,
+        `${root}.${limbKey}.all`,
+        `${root}.${limbKey}.${damageType.key}`
+      ];
+      const sources = paths.flatMap(path => getPathSources(path));
+      result[mode][damageType.key] = mergeActorEffectAttributionSources(sources);
+    }
+  }
+  return result;
+}
+
+function buildProtectionEffectAttributionSources(effectSources = [], baseValue = 0, total = 0) {
+  const breakdown = { sources: [], total: toInteger(baseValue) };
+  appendParallelPercentSources(breakdown, effectSources, {
+    round: Math.floor,
+    total,
+    contributionUnit: "защиты"
+  });
+  return breakdown.sources;
+}
+
+function buildDamageMitigationItemSourceDetails(source = {}) {
+  const details = [];
+  const baseValue = toInteger(source.baseValue);
+  const weakenedValue = toInteger(source.weakenedValue);
+  if (weakenedValue !== baseValue) details.push(`Состояние предмета: ${formatNumber(baseValue)} → ${formatNumber(weakenedValue)}`);
+  return details;
+}
+
 function buildWeaponDataFieldAttribution({
   item,
   actor,
@@ -7730,10 +7963,15 @@ function collectActorPreparedPathAttribution(actor, path = "", {
   preparedValue = 0,
   suffix = "",
   expandEffectKeys = false,
-  integer = true
+  integer = true,
+  effectSource = "origin",
+  includePreparedResidual = true,
+  snapshot = null,
+  formulaData = null,
+  suppressedIds = null
 } = {}) {
   if (!actor || !path) return emptyCombatAttribution();
-  const preparedFormulaData = buildActorFormulaData(actor, { stage: "prepared" });
+  const preparedFormulaData = formulaData ?? buildActorFormulaData(actor, { stage: "prepared" });
   const normalize = value => integer ? toInteger(value) : (Number(value) || 0);
   let running = normalize(foundry.utils.getProperty(actor?._source ?? {}, path));
   const sources = [];
@@ -7742,12 +7980,15 @@ function collectActorPreparedPathAttribution(actor, path = "", {
     img: actor.img,
     operation: "add",
     value: running,
-    valueLabel: `${formatSignedNumber(running)}${suffix}`
+    valueLabel: `${formatSignedNumber(running)}${suffix}`,
+    attributionKind: "base"
   });
 
   for (const { effect, change, applicationPhase } of collectActorEffectAttributionChanges(actor, path, {
     expandEffectKeys,
-    formulaData: preparedFormulaData
+    formulaData: preparedFormulaData,
+    snapshot,
+    suppressedIds
   })) {
     const stage = applicationPhase === "initial" ? "initial-active-effect" : "prepared";
     const amount = evaluateActorEffectChangeNumber(actor, { ...change, effect }, {
@@ -7760,28 +8001,48 @@ function collectActorPreparedPathAttribution(actor, path = "", {
     const delta = operationStep.after - running;
     running = operationStep.after;
     if (!delta) continue;
-    const document = getTooltipEffectSourceDocument(effect);
+    const document = effectSource === "effect" ? effect : getTooltipEffectSourceDocument(effect);
     sources.push({
       name: document?.name ?? effect?.name,
       img: document?.img ?? effect?.img,
       operation: "add",
       value: delta,
-      valueLabel: formatConfiguredAttributionOperation(change.type, amount, delta, suffix)
+      valueLabel: formatConfiguredAttributionOperation(change.type, amount, delta, suffix),
+      attributionKind: "activeEffect",
+      effectId: String(effect?.uuid ?? effect?.id ?? "")
     });
   }
 
   const expected = normalize(preparedValue);
-  if (expected !== running) {
+  if (includePreparedResidual && expected !== running) {
     sources.push({
       name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedActor", "Подготовленные данные персонажа"),
       img: actor.img,
       operation: "add",
       value: expected - running,
-      valueLabel: `${formatSignedNumber(expected - running)}${suffix}`
+      valueLabel: `${formatSignedNumber(expected - running)}${suffix}`,
+      attributionKind: "prepared"
     });
     running = expected;
   }
   return { value: running, sources };
+}
+
+function mergeActorEffectAttributionSources(sources = [], { suffix = "" } = {}) {
+  const merged = new Map();
+  for (const source of sources ?? []) {
+    const value = Number(source?.value) || 0;
+    if (!value) continue;
+    const key = String(source?.effectId ?? "").trim()
+      || `${String(source?.name ?? "")}\u0000${String(source?.img ?? "")}`;
+    const current = merged.get(key);
+    if (current) current.value += value;
+    else merged.set(key, { ...source, operation: "add", value });
+  }
+  return Array.from(merged.values()).map(source => ({
+    ...source,
+    valueLabel: `${formatSignedNumber(source.value)}${suffix}`
+  }));
 }
 
 function collectActorConditionLossMultiplierAttribution(actor, context = null) {
@@ -7881,21 +8142,26 @@ function collectActorConditionLossMultiplierAttribution(actor, context = null) {
 
 function collectActorEffectAttributionChanges(actor, path = "", {
   expandEffectKeys = false,
-  formulaData = null
+  formulaData = null,
+  snapshot = null,
+  suppressedIds = null
 } = {}) {
   const entries = [];
-  const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor);
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  const suppressedEffectIds = suppressedIds ?? getActorSuppressedTraumaDiseaseIds(actor);
+  const candidates = expandEffectKeys
+    ? Array.from(snapshot?.effects ?? actor?.allApplicableEffects?.() ?? actor?.effects ?? [])
+      .flatMap(effect => (effect?.system?.changes ?? effect?.changes ?? []).map(change => ({ effect, change })))
+    : getActorEffectChangeEntries(actor, path, { snapshot });
+  for (const candidate of candidates) {
+    const effect = candidate.effect;
     if (effect?.disabled || effect?.active === false) continue;
-    if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedIds)) continue;
-    for (const originalChange of effect?.system?.changes ?? effect?.changes ?? []) {
-      const changes = expandEffectKeys
-        ? expandActorEffectChangeKeys(actor, originalChange)
-        : [originalChange];
-      for (const change of changes) {
-        if (String(change?.key ?? "").trim() !== path) continue;
-        entries.push({ effect, change });
-      }
+    if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedEffectIds)) continue;
+    const changes = expandEffectKeys
+      ? expandActorEffectChangeKeys(actor, candidate.change)
+      : [candidate.change];
+    for (const change of changes) {
+      if (String(change?.key ?? "").trim() !== path) continue;
+      entries.push({ effect, change });
     }
   }
   const routeInitialToFinal = entries.some(entry => (
@@ -8492,12 +8758,16 @@ function getWeaponRequirementLabels(data = {}, actor = null, item = null) {
 function getWeaponRequirementLabel(requirement = {}, actor = null, item = null) {
   const type = String(requirement?.type ?? "") === "skill" ? "skill" : "characteristic";
   const key = String(requirement?.key ?? "").trim();
-  const required = Math.max(0, toInteger(requirement?.value));
+  const adjusted = item?.type === "gear"
+    ? getAdjustedEquipmentRequirement(actor, { ...requirement, type, key })
+    : getAdjustedWeaponRequirement(actor, { ...requirement, type, key });
+  const required = adjusted.required;
   if (!key || !required) return "";
   const label = type === "skill" ? getSkillLabel(key) : getCharacteristicLabel(key);
   if (!actor) return `${label} ${required}`;
   const current = getActorWeaponRequirementValue(actor, { type, key });
-  const text = `${label} ${current}/${required}`;
+  const baseLabel = adjusted.baseRequired !== required ? ` (база ${adjusted.baseRequired})` : "";
+  const text = `${label} ${current}/${required}${baseLabel}`;
   return {
     html: renderChangedTooltipSpan(text, current >= required, buildWeaponRequirementAttribution(item, actor, {
       type,
