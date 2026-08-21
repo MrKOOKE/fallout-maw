@@ -3,6 +3,9 @@ export const STEALTH_ATTACK_CRITICAL_CHANCE_EFFECT_KEY = "system.stealth.attackB
 export const STEALTH_ATTACK_DAMAGE_PERCENT_EFFECT_KEY = "system.stealth.attackBonuses.damagePercent";
 export const STEALTH_ATTACK_CRITICAL_DAMAGE_PERCENT_EFFECT_KEY = "system.stealth.attackBonuses.criticalDamagePercent";
 export const STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY = "system.stealth.illuminationPenaltyPercent";
+export const STEALTH_MOVEMENT_THRESHOLD_PERCENT_EFFECT_KEY = "system.stealth.movementThresholdPercent";
+export const NOISE_LEVEL_FLAT_EFFECT_KEY = "system.stealth.noiseLevelFlat";
+export const NOISE_LEVEL_PERCENT_EFFECT_KEY = "system.stealth.noiseLevelPercent";
 
 export const STEALTH_ATTACK_BONUS_EFFECT_KEYS = Object.freeze({
   accuracy: STEALTH_ATTACK_ACCURACY_EFFECT_KEY,

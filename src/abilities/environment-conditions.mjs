@@ -2,8 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { STEALTH_SETTINGS_SETTING } from "../settings/constants.mjs";
 import {
   createDefaultStealthSettings,
-  normalizeStealthSettings,
-  STEALTH_LIGHT_LEVELS
+  normalizeStealthSettings
 } from "../stealth/settings.mjs";
 import { analyzeTokenLighting } from "../stealth/lighting.mjs";
 
@@ -62,8 +61,22 @@ export function getActorIlluminationLevel(actor, context = {}) {
 }
 
 export function normalizeIlluminationLevel(value = "") {
-  const key = String(value ?? "").trim();
-  return STEALTH_LIGHT_LEVELS.some(level => level.key === key) ? key : "normal";
+  const levels = getCurrentStealthSettings().difficultyLevels ?? [];
+  const key = formatIlluminationThreshold(value);
+  const matched = levels.find(level => formatIlluminationThreshold(level?.threshold) === key);
+  return formatIlluminationThreshold(matched?.threshold ?? levels.at(-1)?.threshold ?? 0);
+}
+
+export function getIlluminationLevelChoices(selected = "") {
+  const selectedKey = normalizeIlluminationLevel(selected);
+  return (getCurrentStealthSettings().difficultyLevels ?? []).map(level => {
+    const value = formatIlluminationThreshold(level?.threshold);
+    return {
+      value,
+      label: String(level?.label ?? "").trim() || `Степень ${value}`,
+      selected: value === selectedKey
+    };
+  });
 }
 
 function getActorLighting(actor, context = {}) {
@@ -74,7 +87,7 @@ function getActorLighting(actor, context = {}) {
   const measurement = analyzeTokenLighting(token);
   const value = {
     illuminationPercent: clampPercent(measurement.illuminationPercent),
-    illuminationLevel: getStealthLightLevelKey(measurement.effectiveDarkness)
+    illuminationLevel: getStealthDifficultyThresholdKey(measurement.effectiveDarkness)
   };
   tokenLightingCache.set(token, { revision: lightingRevision, value });
   return value;
@@ -101,18 +114,18 @@ function resolveActorToken(actor, explicitTokens = []) {
   return actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
-function getStealthLightLevelKey(effectiveDarkness) {
+function getStealthDifficultyThresholdKey(effectiveDarkness) {
   const settings = getCurrentStealthSettings();
   const levels = Array.isArray(settings.difficultyLevels) ? settings.difficultyLevels : [];
   const entry = levels.find(level => effectiveDarkness >= Number(level?.threshold))
     ?? levels.at(-1)
     ?? { threshold: 0 };
-  const threshold = Number(entry.threshold) || 0;
-  if (threshold >= 1) return "blackout";
-  if (threshold >= 0.75) return "dark";
-  if (threshold >= 0.5) return "dim";
-  if (threshold >= 0.2) return "shadow";
-  return "normal";
+  return formatIlluminationThreshold(entry.threshold);
+}
+
+function formatIlluminationThreshold(value) {
+  const number = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(number) ? String(Math.min(1, Math.max(0, number))) : "";
 }
 
 function getCurrentStealthSettings() {

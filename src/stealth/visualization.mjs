@@ -12,6 +12,7 @@ import {
   getRuntimeStealthSettings,
   isActorStealthed
 } from "./rules.mjs";
+import { getActorAdjustedNoiseLevel } from "./noise.mjs";
 
 const STEALTH_DETECTION_LAYER = "falloutMawStealthDetectionZones";
 const STEALTH_DETECTION_HOVER_LAYER = "falloutMawStealthDetectionHoverZone";
@@ -83,7 +84,7 @@ export function setWeaponNoisePreview(token, sourceId, noiseLevel) {
   setDetectionVisualizationSource(
     token.id,
     `${WEAPON_SOURCE_PREFIX}${normalizedSourceId}`,
-    normalizeNoiseLevel(noiseLevel)
+    normalizeNoiseLevel(getActorAdjustedNoiseLevel(token.actor, noiseLevel))
   );
 }
 
@@ -150,7 +151,7 @@ function hasWeaponVisualizationSource(sources) {
 }
 
 function normalizeNoiseLevel(value) {
-  return Math.max(0, Math.trunc(Number(value) || 0));
+  return Math.max(0, Number(value) || 0);
 }
 
 function removeAllDetectionVisualizationSources(tokenId, {

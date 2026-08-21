@@ -1525,6 +1525,23 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedPhantomSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Фантом</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedPhantomSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Время фантома, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.phantomDurationSeconds" value="{{fixedPhantomSettings.phantomDurationSeconds}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedPhantomSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedPhantomSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

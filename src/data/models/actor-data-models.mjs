@@ -130,6 +130,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       }),
       stealth: new SchemaField({
         illuminationPenaltyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        movementThresholdPercent: new NumberField({ required: true, initial: 0, persisted: false }),
+        noiseLevelFlat: new NumberField({ required: true, initial: 0, persisted: false }),
+        noiseLevelPercent: new NumberField({ required: true, initial: 0, persisted: false }),
         attackBonuses: new SchemaField({
           accuracy: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
           criticalChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),

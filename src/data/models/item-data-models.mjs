@@ -557,8 +557,7 @@ function abilityConditionField() {
     illuminationLevel: new StringField({
       required: true,
       blank: false,
-      choices: ["normal", "shadow", "dim", "dark", "blackout"],
-      initial: "normal"
+      initial: "0"
     }),
     damageTypeKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
       required: true,

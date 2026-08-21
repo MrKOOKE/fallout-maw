@@ -246,7 +246,7 @@ export function buildWeaponNoiseZone(noiseSource, {
     || typeof grid?.getCenterPoint !== "function"
   ) return null;
 
-  const normalizedNoise = normalizeWeaponNoiseLevel(noiseLevel);
+  const normalizedNoise = normalizeWeaponNoiseRadius(noiseLevel);
   const sourceToken = noiseSource?.document ? noiseSource : null;
   const origin = normalizePoint(sourceToken ? getTokenCenter(sourceToken) : noiseSource);
   const sourceSpaces = getWeaponNoiseSourceOffsets(sourceToken, origin, grid);
@@ -347,7 +347,7 @@ export function testWeaponNoiseZoneContact(observerToken, observerOrigin, noiseO
   }
 
   return testStealthDetectionPoint(observerToken, observerOrigin, noiseOrigin, {
-    rangeBonus: weaponNoiseToRangeBonus(noiseLevel),
+    rangeBonus: weaponNoiseToRangeBonus(noiseLevel, { preserveFraction: true }),
     snapTargetToGrid: false,
     settings
   });
@@ -367,8 +367,10 @@ export function isPointInsideObserverZone(
  * gridless fallback. On gridded scenes the same scale constructs a source-owned
  * set of cells instead of expanding observer ranges.
  */
-export function weaponNoiseToRangeBonus(noiseLevel) {
-  const normalizedNoise = normalizeWeaponNoiseLevel(noiseLevel);
+export function weaponNoiseToRangeBonus(noiseLevel, { preserveFraction = false } = {}) {
+  const normalizedNoise = preserveFraction
+    ? normalizeWeaponNoiseRadius(noiseLevel)
+    : normalizeWeaponNoiseLevel(noiseLevel);
   const gridSize = Math.max(1, Number(globalThis.canvas?.grid?.size) || 100);
   return pixelsToSceneDistance(normalizedNoise * gridSize);
 }
@@ -801,6 +803,10 @@ function normalizeRangeBonus(value) {
 
 function normalizeWeaponNoiseLevel(value) {
   return Math.max(0, Math.trunc(Number(value) || 0));
+}
+
+function normalizeWeaponNoiseRadius(value) {
+  return Math.max(0, Number(value) || 0);
 }
 
 function normalizeRangeCachePart(value) {

@@ -161,7 +161,9 @@ export function openStealthWindow(token) {
   return requestWindowRender(app);
 }
 
-export async function toggleActorStealth(actor, active = !isActorStealthed(actor)) {
+export async function toggleActorStealth(actor, active = !isActorStealthed(actor), {
+  skipEntryDetection = false
+} = {}) {
   if (!actor) return false;
   if (!canControlStealth(actor)) {
     ui.notifications.warn(`Нет прав на управление скрытностью актёра ${actor.name}.`);
@@ -169,7 +171,7 @@ export async function toggleActorStealth(actor, active = !isActorStealthed(actor
   }
   if (isActorStealthed(actor) === Boolean(active)) return true;
   await actor.toggleStatusEffect(getStealthStatusId(), { active: Boolean(active) });
-  if (active) await resolveStealthEntryDetection(actor);
+  if (active && !skipEntryDetection) await resolveStealthEntryDetection(actor);
   synchronizeActorStealthState(actor);
   queueStealthedTokenVisibilityRefresh();
   queueStealthRefresh({ actor });

@@ -72,8 +72,11 @@ import {
   SKILL_CHECK_ACTIONS
 } from "../rolls/skill-check-action-effects.mjs";
 import {
+  NOISE_LEVEL_FLAT_EFFECT_KEY,
+  NOISE_LEVEL_PERCENT_EFFECT_KEY,
   STEALTH_ATTACK_BONUS_EFFECT_KEYS,
-  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
+  STEALTH_MOVEMENT_THRESHOLD_PERCENT_EFFECT_KEY
 } from "../stealth/effect-keys.mjs";
 import {
   FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
@@ -1036,13 +1039,37 @@ export function buildStealthAttackBonusEffectKeyTokens() {
 }
 
 export function buildStealthEffectKeyTokens() {
-  return [createEffectKeyToken({
-    code: "stealthIlluminationPenaltyPercent",
-    key: "stealthIlluminationPenaltyPercent",
-    label: game.i18n.localize("FALLOUTMAW.Effects.StealthIlluminationPenaltyPercent"),
-    path: STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
-    group: game.i18n.localize("FALLOUTMAW.Effects.StealthGroup")
-  })].filter(Boolean);
+  const group = game.i18n.localize("FALLOUTMAW.Effects.StealthGroup");
+  return [
+    createEffectKeyToken({
+      code: "stealthIlluminationPenaltyPercent",
+      key: "stealthIlluminationPenaltyPercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.StealthIlluminationPenaltyPercent"),
+      path: STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "stealthMovementThresholdPercent",
+      key: "stealthMovementThresholdPercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.StealthMovementThresholdPercent"),
+      path: STEALTH_MOVEMENT_THRESHOLD_PERCENT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "noiseLevelFlat",
+      key: "noiseLevelFlat",
+      label: game.i18n.localize("FALLOUTMAW.Effects.NoiseLevelFlat"),
+      path: NOISE_LEVEL_FLAT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "noiseLevelPercent",
+      key: "noiseLevelPercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.NoiseLevelPercent"),
+      path: NOISE_LEVEL_PERCENT_EFFECT_KEY,
+      group
+    })
+  ].filter(Boolean);
 }
 
 export function buildSkillCheckDisabledResultEffectKeyTokens() {

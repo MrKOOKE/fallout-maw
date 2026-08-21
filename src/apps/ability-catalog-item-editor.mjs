@@ -2,7 +2,10 @@ import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getDamageTypeSettings, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
-import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
+import {
+  getIlluminationLevelChoices,
+  normalizeIlluminationLevel
+} from "../abilities/environment-conditions.mjs";
 import {
   REGION_SPECIAL_PROPERTY_PENDING,
   REGION_SPECIAL_PROPERTY_SMOKE,
@@ -90,6 +93,7 @@ import {
   normalizeShadowSettings,
   normalizeSandmanSettings,
   normalizeNightmareSettings,
+  normalizePhantomSettings,
   normalizeSpecialMixSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
@@ -2903,6 +2907,14 @@ function readFixedFunctionSettings(row) {
       darknessDurationSeconds: row.querySelector("[data-field='fixed.nightmare.darknessDurationSeconds']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.phantom.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.phantom.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.phantom.overloadDurationSeconds']")?.value,
+      phantomDurationSeconds: row.querySelector("[data-field='fixed.phantom.phantomDurationSeconds']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -3140,7 +3152,8 @@ function readAbilityConditions(root) {
       chanceFormula: row.querySelector("[data-field='conditionChanceFormula']")?.value ?? "100",
       timeFrom: row.querySelector("[data-field='conditionTimeFrom']")?.value ?? "00:00",
       timeTo: row.querySelector("[data-field='conditionTimeTo']")?.value ?? "23:59",
-      illuminationLevel: row.querySelector("[data-field='conditionIlluminationLevel']")?.value ?? "normal",
+      illuminationLevel: row.querySelector("[data-field='conditionIlluminationLevel']")?.value
+        ?? normalizeIlluminationLevel(),
       damageTypeKeys: readFieldValues(row, "[data-field='conditionRegionDamageType']"),
       regionSpecialPropertyTypes: readFieldValues(row, "[data-field='conditionRegionSpecialProperty']"),
       operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
@@ -3455,6 +3468,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedNightmareSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare
     ? prepareNightmareSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedPhantomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom
+    ? normalizePhantomSettings(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3539,6 +3555,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedShadowSettings,
     fixedSandmanSettings,
     fixedNightmareSettings,
+    fixedPhantomSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,
@@ -4940,13 +4957,8 @@ function buildConditionDisplayGroups(conditions = []) {
   }));
 }
 
-function buildIlluminationLevelChoices(selected = "normal") {
-  const key = STEALTH_LIGHT_LEVELS.some(level => level.key === selected) ? selected : "normal";
-  return STEALTH_LIGHT_LEVELS.map(level => ({
-    value: level.key,
-    label: level.label,
-    selected: level.key === key
-  }));
+function buildIlluminationLevelChoices(selected = "") {
+  return getIlluminationLevelChoices(selected);
 }
 
 function prepareAcquisitionRequirementForDisplay(requirement, { characteristicSettings = [], skillSettings = [] } = {}) {

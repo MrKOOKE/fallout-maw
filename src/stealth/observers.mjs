@@ -16,6 +16,7 @@ const SIGHT_DETECTION_MODE_IDS = new Set([
   "seeInvisibility"
 ]);
 const SIGHT_DETECTION_TYPE = 0;
+const observerExclusionProviders = new Map();
 
 const allyCache = new Map();
 let factionMatrix = null;
@@ -25,7 +26,21 @@ export function isValidStealthObserver(hiddenToken, observerToken) {
   if (hiddenToken.id === observerToken.id) return false;
   if (hiddenToken.actor.uuid === observerToken.actor.uuid) return false;
   if (isStealthObserverIncapacitated(observerToken)) return false;
+  for (const provider of observerExclusionProviders.values()) {
+    if (provider(hiddenToken, observerToken) === true) return false;
+  }
   return !areActorsStealthAlliesCached(hiddenToken.actor, observerToken.actor);
+}
+
+export function registerStealthObserverExclusionProvider(id = "", provider = null) {
+  const key = String(id ?? "").trim();
+  if (!key || typeof provider !== "function") return false;
+  observerExclusionProviders.set(key, provider);
+  return true;
+}
+
+export function unregisterStealthObserverExclusionProvider(id = "") {
+  return observerExclusionProviders.delete(String(id ?? "").trim());
 }
 
 export function isStealthObserverIncapacitated(observerToken) {

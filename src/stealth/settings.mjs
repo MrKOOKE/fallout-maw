@@ -1,11 +1,3 @@
-export const STEALTH_LIGHT_LEVELS = Object.freeze([
-  { key: "normal", label: "Обычный свет" },
-  { key: "shadow", label: "Тень" },
-  { key: "dim", label: "Тускло" },
-  { key: "dark", label: "Темно" },
-  { key: "blackout", label: "Темнота" }
-]);
-
 export const DEFAULT_STEALTH_SETTINGS = Object.freeze({
   difficulty: Object.freeze({
     skillKey: "naturalist"

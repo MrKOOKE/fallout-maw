@@ -51,12 +51,15 @@ globalThis.game = {
 };
 
 const {
+  NOISE_LEVEL_FLAT_EFFECT_KEY,
+  NOISE_LEVEL_PERCENT_EFFECT_KEY,
   STEALTH_ATTACK_ACCURACY_EFFECT_KEY,
   STEALTH_ATTACK_BONUS_EFFECT_KEYS,
   STEALTH_ATTACK_CRITICAL_CHANCE_EFFECT_KEY,
   STEALTH_ATTACK_CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
   STEALTH_ATTACK_DAMAGE_PERCENT_EFFECT_KEY,
-  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
+  STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
+  STEALTH_MOVEMENT_THRESHOLD_PERCENT_EFFECT_KEY
 } = await import("../src/stealth/effect-keys.mjs");
 const {
   buildSmokePerceptionEffectKeyToken,
@@ -118,6 +121,22 @@ test("stealth illumination penalty modifier is localized and participates only i
   assert.equal(getSkillCheckActiveUseKeys("firstAid", { requester: "stealth" }).has(
     STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY
   ), false);
+});
+
+test("movement accumulation and both noise modifiers are ordinary localized effect keys", () => {
+  const tokens = buildStealthEffectKeyTokens().slice(1);
+
+  assert.deepEqual(tokens.map(token => token.path), [
+    STEALTH_MOVEMENT_THRESHOLD_PERCENT_EFFECT_KEY,
+    NOISE_LEVEL_FLAT_EFFECT_KEY,
+    NOISE_LEVEL_PERCENT_EFFECT_KEY
+  ]);
+  assert.deepEqual(tokens.map(token => token.label), [
+    "Изменение накопления расстояния до проверки скрытности, %",
+    "Изменение уровня шума, м",
+    "Изменение уровня шума, %"
+  ]);
+  assert.equal(tokens.every(token => token.group === "Скрытность"), true);
 });
 
 test("actor schema exposes four transient signed stealth attack deltas", async () => {

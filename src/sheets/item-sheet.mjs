@@ -11,7 +11,7 @@ import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
-import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
+import { getIlluminationLevelChoices } from "../abilities/environment-conditions.mjs";
 import { hasAdvancementPureValueFunctionChanges } from "../advancement/pure-value-keys.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
@@ -141,6 +141,7 @@ import {
   normalizeShadowSettings,
   normalizeSandmanSettings,
   normalizeNightmareSettings,
+  normalizePhantomSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
@@ -7435,6 +7436,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedNightmareSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare
     ? prepareNightmareSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedPhantomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom
+    ? normalizePhantomSettings(entry?.fixedSettings)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7528,6 +7532,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedShadowSettings,
     fixedSandmanSettings,
     fixedNightmareSettings,
+    fixedPhantomSettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
@@ -8506,13 +8511,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   };
 }
 
-function buildAbilityIlluminationLevelChoices(selected = "normal") {
-  const key = STEALTH_LIGHT_LEVELS.some(level => level.key === selected) ? selected : "normal";
-  return STEALTH_LIGHT_LEVELS.map(level => ({
-    value: level.key,
-    label: level.label,
-    selected: level.key === key
-  }));
+function buildAbilityIlluminationLevelChoices(selected = "") {
+  return getIlluminationLevelChoices(selected);
 }
 
 function buildAbilityConditionDisplayGroups(conditions = []) {

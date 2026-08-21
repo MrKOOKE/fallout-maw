@@ -22,6 +22,7 @@ globalThis.Hooks = { on: () => undefined };
 const {
   collectStealthMovementInterruptions,
   commitStealthMovementCollection,
+  evaluateAutoDetectionMovementThreshold,
   getMovementWaypointKey,
   getOriginalMovementWaypoints,
   normalizeMovementStateFlag,
@@ -43,6 +44,14 @@ afterEach(() => {
   configureStealthRuleSettingsProvider();
   invalidateStealthRuleCache();
   delete globalThis.canvas;
+});
+
+test("movement accumulation threshold applies the actor percent after the configured base", () => {
+  const actor = createActor("Actor.soft-step");
+  actor.system.stealth = { movementThresholdPercent: 50 };
+  assert.equal(evaluateAutoDetectionMovementThreshold(actor, {
+    autoDetection: { movementThresholdFormula: "4" }
+  }), 6);
 });
 
 test("one route sample aggregates simultaneous observer checks without mutating persistent state", () => {

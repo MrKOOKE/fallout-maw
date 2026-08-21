@@ -14,6 +14,7 @@ import {
 } from "../settings/abilities.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { isActorInActiveCombat } from "../combat/combat-membership.mjs";
+import { getActorAdjustedNoiseLevel } from "./noise.mjs";
 
 const weaponNoiseDetectionQueues = new Map();
 
@@ -76,6 +77,8 @@ async function resolveWeaponNoiseDetectionNow(attackerToken, noiseLevel) {
     || !hiddenToken?.actor
     || !isActorStealthed(hiddenToken.actor)
   ) return false;
+
+  noiseLevel = getActorAdjustedNoiseLevel(hiddenToken.actor, noiseLevel);
 
   const hiddenPoint = getTokenCenter(hiddenToken);
   const noiseZone = buildWeaponNoiseZone(hiddenToken, { noiseLevel });

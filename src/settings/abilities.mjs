@@ -213,7 +213,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   inconspicuous: "inconspicuous",
   shadow: "shadow",
   sandman: "sandman",
-  nightmare: "nightmare"
+  nightmare: "nightmare",
+  phantom: "phantom"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -2277,7 +2278,20 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare) {
     return normalizeNightmareSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom) {
+    return normalizePhantomSettings(value);
+  }
   return {};
+}
+
+/** "Фантом": guaranteed stealth with a short-lived decoy. */
+export function normalizePhantomSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 40)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 60)),
+    phantomDurationSeconds: Math.max(1, toInteger(value?.phantomDurationSeconds ?? 12))
+  };
 }
 
 /** "Кошмар": stealth incapacitation fear and a mobile darkness emanation. */

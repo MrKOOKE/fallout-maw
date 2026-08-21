@@ -686,7 +686,12 @@ export function evaluateAutoDetectionMovementThreshold(actor, settings = getRunt
     "ОП": movementPointsMax
   });
   try {
-    return Math.max(1, evaluateFormula(settings.autoDetection?.movementThresholdFormula ?? "1", movementThresholdFormulaData));
+    const base = Math.max(1, evaluateFormula(
+      settings.autoDetection?.movementThresholdFormula ?? "1",
+      movementThresholdFormulaData
+    ));
+    const percent = Number(actor?.system?.stealth?.movementThresholdPercent) || 0;
+    return Math.max(1, base * Math.max(0, 1 + (percent / 100)));
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Stealth auto-detection movement threshold formula failed: ${error.message}`);
     return 1;

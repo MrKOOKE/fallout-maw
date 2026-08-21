@@ -49,6 +49,7 @@ import {
   normalizeShadowSettings,
   normalizeSandmanSettings,
   normalizeNightmareSettings,
+  normalizePhantomSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
@@ -191,6 +192,10 @@ import {
   hasMaximumNightmareFearDuration,
   selectNightmareWitnessSkill
 } from "./nightmare.mjs";
+import {
+  createPhantomForActor,
+  registerPhantomRuntimeHooks
+} from "./phantom.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import {
   canSpendCombatActionPoints,
@@ -857,6 +862,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.nightmare,
       fixedSettings: normalizeNightmareSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.phantom,
+    label: "Фантом",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.phantom,
+      fixedSettings: normalizePhantomSettings()
+    })
   })
 ]);
 
@@ -897,6 +911,7 @@ function registerFixedAbilityRuntimeHooks() {
   fixedAbilityRuntimeHooksRegistered = true;
 
   registerShadowEffectIndexHooks();
+  registerPhantomRuntimeHooks();
   Hooks.on("deleteActiveEffect", runFixedAbilityRuntimeHandler((effect, options = {}) => {
     void cleanupMaintainedTargetLinkedEffect(effect, options);
   }));
@@ -1474,6 +1489,12 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.nightmare) {
     const used = await useNightmare(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom) {
+    const used = await usePhantom(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -5166,6 +5187,58 @@ async function useNightmare(actor, abilityItem, abilityFunction) {
     energyCost: settings.overloadEnergyCost,
     durationSeconds: settings.overloadDurationSeconds
   });
+  return true;
+}
+
+async function usePhantom(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const sourceToken = getActorSceneToken(actor);
+  const sourceTokenDocument = sourceToken?.document ?? sourceToken;
+  if (!sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
+    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    return false;
+  }
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для создания фантома.`);
+    return false;
+  }
+
+  const settings = normalizePhantomSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  const created = await requestPhantomOperation({
+    sourceActorUuid: actor.uuid,
+    sourceTokenUuid: sourceTokenDocument.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!created) {
+    await refundEnergy(actor, energyCost);
+    ui.notifications.warn(`${abilityName}: не удалось создать фантом.`);
+    return false;
+  }
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Создан фантом на ${formatDuration(settings.phantomDurationSeconds)}. Вы гарантированно вошли в скрытность.`
+  );
   return true;
 }
 
@@ -9384,6 +9457,11 @@ async function requestCurseAndBlessingAttackResolution(context = {}) {
 
 function handleFixedAbilitySocketMessage(message = {}) {
   if (message?.scope !== FIXED_ABILITY_SOCKET_SCOPE) return;
+  if (message.action === "createPhantom") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processPhantomSocketRequest(message);
+    return;
+  }
   if (message.action === "createNightmareRegion") {
     if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
     void processNightmareRegionSocketRequest(message);
@@ -9493,7 +9571,7 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.applied));
   }
-  if (message.action === "nightmareRegionResult" || message.action === "nightmareFearResult") {
+  if (["nightmareRegionResult", "nightmareFearResult", "phantomResult"].includes(message.action)) {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;
@@ -9503,17 +9581,22 @@ function handleFixedAbilitySocketMessage(message = {}) {
   }
 }
 
+async function requestPhantomOperation(payload = {}) {
+  if (game.user?.isGM) return processPhantomOperation(payload);
+  return requestFixedAbilitySocketOperation("createPhantom", payload);
+}
+
 async function requestNightmareRegionOperation(payload = {}) {
   if (game.user?.isGM) return processNightmareRegionOperation(payload);
-  return requestNightmareSocketOperation("createNightmareRegion", payload);
+  return requestFixedAbilitySocketOperation("createNightmareRegion", payload);
 }
 
 async function requestNightmareFearOperation(payload = {}) {
   if (game.user?.isGM) return processNightmareFearOperation(payload);
-  return requestNightmareSocketOperation("applyNightmareFear", payload);
+  return requestFixedAbilitySocketOperation("applyNightmareFear", payload);
 }
 
-async function requestNightmareSocketOperation(action, payload = {}) {
+async function requestFixedAbilitySocketOperation(action, payload = {}) {
   const gm = getResponsibleGM();
   if (!gm) return false;
   const requestId = foundry.utils.randomID();
@@ -9561,6 +9644,48 @@ async function processNightmareFearSocketRequest(message = {}) {
     requestId: message.requestId,
     result: { applied }
   });
+}
+
+async function processPhantomSocketRequest(message = {}) {
+  const applied = await processPhantomOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "phantomResult",
+    targetUserId: message.senderUserId,
+    requestId: message.requestId,
+    result: { applied }
+  });
+}
+
+async function processPhantomOperation({
+  sourceActorUuid = "",
+  sourceTokenUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  senderUserId = ""
+} = {}) {
+  if (!game.user?.isGM) return false;
+  const actor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const token = fromUuidSync(String(sourceTokenUuid ?? "").trim());
+  const abilityItem = actor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom);
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!actor || !token || token.actor?.uuid !== actor.uuid || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const settings = normalizePhantomSettings(abilityFunction.fixedSettings);
+  const created = await createPhantomForActor({
+    sourceActor: actor,
+    sourceToken: token,
+    abilityItem,
+    abilityFunction,
+    durationSeconds: settings.phantomDurationSeconds
+  });
+  return Boolean(created);
 }
 
 async function processNightmareRegionOperation({
