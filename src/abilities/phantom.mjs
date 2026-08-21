@@ -6,12 +6,14 @@ import {
   registerStealthObserverExclusionProvider
 } from "../stealth/observers.mjs";
 import { toggleActorStealth } from "../stealth/controller.mjs";
+import { registerTokenTargetAlphaProvider } from "../canvas/token-target-alpha.mjs";
 
 export const PHANTOM_FLAG_KEY = "phantom";
 export const PHANTOM_EXPIRY_EFFECT_FLAG_KEY = "phantomExpiry";
 
 const PHANTOM_OBSERVER_PROVIDER_ID = "fixed.phantom";
 const PHANTOM_DAMAGE_HANDLER_ID = "fallout-maw.fixed.phantom";
+const PHANTOM_ALPHA_PROVIDER_ID = "fallout-maw.fixed.phantom";
 const PHANTOM_ALLY_ALPHA = 0.4;
 const PHANTOM_VISIBILITY_CACHE_LIMIT = 1000;
 const PHANTOM_CLEANUP_OPTION = "falloutMawPhantomCleanup";
@@ -27,17 +29,13 @@ export function registerPhantomRuntimeHooks() {
   hooksRegistered = true;
   registerStealthObserverExclusionProvider(PHANTOM_OBSERVER_PROVIDER_ID, observerSeesActivePhantom);
   registerDamageAppliedHandler(PHANTOM_DAMAGE_HANDLER_ID, onDamageApplied);
+  registerTokenTargetAlphaProvider(PHANTOM_ALPHA_PROVIDER_ID, getPhantomTokenTargetAlpha);
 
   Hooks.on("canvasReady", () => {
     rebuildCurrentScenePhantomIndex();
-    refreshAllPhantomAppearances();
   });
   Hooks.on("canvasTearDown", clearPhantomCanvasState);
-  Hooks.on("drawToken", token => {
-    indexPhantomToken(token);
-    refreshPhantomAppearance(token);
-  });
-  Hooks.on("refreshToken", token => refreshPhantomAppearance(token));
+  Hooks.on("drawToken", indexPhantomToken);
   Hooks.on("createToken", document => {
     invalidatePhantomVisibility();
     indexPhantomToken(document?.object ?? document);
@@ -46,7 +44,6 @@ export function registerPhantomRuntimeHooks() {
     invalidatePhantomVisibility();
     const token = document?.object ?? document;
     indexPhantomToken(token);
-    refreshPhantomAppearance(token);
   });
   Hooks.on("deleteToken", (document, options = {}) => {
     invalidatePhantomVisibility();
@@ -73,18 +70,11 @@ export function registerPhantomRuntimeHooks() {
     ) void deletePhantomActor(effect.parent);
   });
   Hooks.on("sightRefresh", invalidatePhantomVisibility);
-  Hooks.on("controlToken", refreshAllPhantomAppearances);
+  Hooks.on("initializeVisionSources", requestPhantomTargetAlphaRefresh);
   Hooks.on("updateActor", (_actor, changes = {}) => {
-    if (phantomTokensBySourceActor.size && actorPerspectiveChanged(changes)) refreshAllPhantomAppearances();
+    if (phantomTokensBySourceActor.size && actorPhantomViewChanged(changes)) requestPhantomTargetAlphaRefresh();
   });
-  Hooks.on("updateUser", (user, changes = {}) => {
-    if (
-      phantomTokensBySourceActor.size
-      && user?.id === game.user?.id
-      && Object.hasOwn(changes, "character")
-    ) refreshAllPhantomAppearances();
-  });
-  Hooks.on(`${SYSTEM_ID}.factionSettingsChanged`, refreshAllPhantomAppearances);
+  Hooks.on(`${SYSTEM_ID}.factionSettingsChanged`, requestPhantomTargetAlphaRefresh);
 }
 
 export async function createPhantomForActor({
@@ -202,7 +192,9 @@ export function buildPhantomTokenData(sourceToken, phantomActor, phantomData = {
     displayBars: sourceToken?.displayBars ?? CONST.TOKEN_DISPLAY_MODES.NONE,
     bar1,
     bar2,
-    alpha: Number.isFinite(Number(sourceToken?.alpha)) ? Number(sourceToken.alpha) : 1,
+    // The persisted TokenDocument is opaque. Source/allied viewpoints receive
+    // local translucency through FalloutMaWToken._getTargetAlpha.
+    alpha: 1,
     texture,
     sight: { enabled: false },
     detectionModes: {},
@@ -278,42 +270,47 @@ function clearPhantomCanvasState() {
   invalidatePhantomVisibility();
 }
 
-function refreshAllPhantomAppearances() {
-  for (const token of canvas?.tokens?.placeables ?? []) refreshPhantomAppearance(token);
-}
-
-function refreshPhantomAppearance(token) {
+function getPhantomTokenTargetAlpha(token, baseAlpha = 1) {
   const phantomData = getPhantomData(token?.document ?? token);
-  if (!phantomData) return;
+  if (!phantomData) return baseAlpha;
   const sourceActor = resolvePhantomSourceActor(phantomData);
-  const alpha = isLocalUserPhantomAlly(sourceActor) ? PHANTOM_ALLY_ALPHA : 1;
-  token.alpha = alpha;
-  if (token.mesh) {
-    const documentAlpha = Number(token.document?.alpha);
-    token.mesh.alpha = alpha * (Number.isFinite(documentAlpha) ? documentAlpha : 1);
-  }
+  return localViewRecognizesPhantom(sourceActor)
+    ? Math.min(baseAlpha, PHANTOM_ALLY_ALPHA)
+    : baseAlpha;
 }
 
-function isLocalUserPhantomAlly(sourceActor) {
-  const user = game.user;
-  if (!sourceActor || !user) return false;
-  if (hasExplicitActorOwnership(sourceActor, user)) return true;
+function localViewRecognizesPhantom(sourceActor) {
+  if (!sourceActor) return false;
 
-  const controlledActors = (canvas?.tokens?.controlled ?? [])
-    .map(token => token?.actor)
-    .filter(Boolean);
-  if (controlledActors.length) {
-    return controlledActors.some(actor => (
-      actor.uuid === sourceActor.uuid
-      || areActorsStealthAlliesCached(sourceActor, actor)
-    ));
+  // Foundry has already resolved control, actor permissions and free-view state
+  // into the client's active vision sources. If at least one current viewpoint
+  // is the source actor or its ally, that combined local view recognizes the copy.
+  let hasActorVisionSource = false;
+  for (const visionSource of canvas?.effects?.visionSources ?? []) {
+    if (!visionSource?.active) continue;
+    const observerActor = visionSource?.object?.actor ?? visionSource?.object?.document?.actor;
+    if (!observerActor) continue;
+    hasActorVisionSource = true;
+    if (actorsArePhantomAllies(sourceActor, observerActor)) return true;
   }
+  if (hasActorVisionSource) return false;
 
-  const character = user.character;
-  return Boolean(character && (
-    character.uuid === sourceActor.uuid
-    || areActorsStealthAlliesCached(sourceActor, character)
+  // With no active source Foundry gives a GM unrestricted scene vision. Preserve
+  // that omniscient view without pretending that GM ownership makes every actor
+  // an ally. A non-GM free view is resolved from explicit OBSERVER rights only.
+  if (game.user?.isGM) return true;
+  return (canvas?.tokens?.placeables ?? []).some(observerToken => (
+    hasExplicitActorObservation(observerToken?.actor, game.user)
+    && actorsArePhantomAllies(sourceActor, observerToken.actor)
   ));
+}
+
+function actorsArePhantomAllies(sourceActor, observerActor) {
+  if (!sourceActor || !observerActor) return false;
+  const sourceBaseActor = sourceActor?.parent?.baseActor ?? sourceActor;
+  const observerBaseActor = observerActor?.parent?.baseActor ?? observerActor;
+  return sourceBaseActor?.uuid === observerBaseActor?.uuid
+    || areActorsStealthAlliesCached(sourceActor, observerActor);
 }
 
 function resolvePhantomSourceActor(phantomData = {}) {
@@ -323,20 +320,32 @@ function resolvePhantomSourceActor(phantomData = {}) {
     ?? null;
 }
 
-function hasExplicitActorOwnership(actor, user) {
-  const ownership = actor?.ownership ?? actor?._source?.ownership ?? {};
-  const level = Number(ownership?.[user?.id] ?? ownership?.default);
-  const ownerLevel = Number(globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER) || 3;
-  return Number.isFinite(level) && level >= ownerLevel;
+function requestPhantomTargetAlphaRefresh() {
+  for (const token of phantomTokensBySourceActor.values()) {
+    token?.renderFlags?.set?.({ refreshState: true });
+  }
 }
 
-function actorPerspectiveChanged(changes = {}) {
+function hasExplicitActorObservation(actor, user) {
+  if (!actor || !user?.id) return false;
+  const baseActor = actor?.parent?.baseActor ?? actor;
+  const ownership = baseActor?._source?.ownership ?? baseActor?.ownership ?? {};
+  const level = Number(ownership[user.id] ?? ownership.default);
+  const observerLevel = Number(CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER);
+  return Number.isFinite(level) && level >= observerLevel;
+}
+
+function actorPhantomViewChanged(changes = {}) {
   const paths = Object.keys(foundry.utils.flattenObject(changes));
-  const factionRoot = `flags.${SYSTEM_ID}.faction`;
+  const belongsRoot = `flags.${SYSTEM_ID}.factionBelongs`;
+  const relationsRoot = `flags.${SYSTEM_ID}.factionRelations`;
   return paths.some(path => (
     path === "ownership"
     || path.startsWith("ownership.")
-    || path.startsWith(factionRoot)
+    || path === belongsRoot
+    || path.startsWith(`${belongsRoot}.`)
+    || path === relationsRoot
+    || path.startsWith(`${relationsRoot}.`)
   ));
 }
 

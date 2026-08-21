@@ -5234,11 +5234,6 @@ async function usePhantom(actor, abilityItem, abilityFunction) {
     energyCost: settings.overloadEnergyCost,
     durationSeconds: settings.overloadDurationSeconds
   });
-  await createAbilityChatMessage(
-    actor,
-    abilityItem,
-    `Создан фантом на ${formatDuration(settings.phantomDurationSeconds)}. Вы гарантированно вошли в скрытность.`
-  );
   return true;
 }
 
@@ -9674,8 +9669,8 @@ async function processPhantomOperation({
   const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
     .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom);
   const sender = game.users?.get(String(senderUserId ?? ""));
-  if (!actor || !token || token.actor?.uuid !== actor.uuid || !abilityItem || !abilityFunction) return false;
-  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+  if (!actor || !token || token.actor?.uuid !== actor.uuid || !abilityItem || !abilityFunction || !sender) return false;
+  if (!sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
 
   const settings = normalizePhantomSettings(abilityFunction.fixedSettings);
   const created = await createPhantomForActor({
