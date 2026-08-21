@@ -66,7 +66,8 @@ import {
   buildDamageBarrierEffectKeyTokens,
   buildReverseInteractionEffectKeyTokens,
   buildStealthAttackBonusEffectKeyTokens,
-  buildSkillCheckActionEffectKeyTokens
+  buildSkillCheckActionEffectKeyTokens,
+  buildToolSupplyCostEffectKeyTokens
 } from "../utils/effect-key-tokens.mjs";
 import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
@@ -9441,6 +9442,9 @@ function buildEffectPathLabelMap({
     STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY,
     game.i18n.localize("FALLOUTMAW.Effects.StealthIlluminationPenaltyPercent")
   );
+  for (const token of buildToolSupplyCostEffectKeyTokens()) {
+    if (token?.path && token?.label) map.set(token.path, token.label);
+  }
   for (const token of buildSkillCheckActionEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }

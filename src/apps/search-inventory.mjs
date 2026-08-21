@@ -103,6 +103,7 @@ import {
   ITEM_FUNCTIONS
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getActorToolSupplyCost } from "../utils/tool-supply-cost.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
@@ -5276,7 +5277,12 @@ function createButcheringToolSpendPlan(actor, stages = []) {
     if (requirement.enabled !== true) continue;
     const toolKey = String(requirement.toolKey ?? "").trim();
     const requiredClass = normalizeButcheringToolClass(requirement.toolClass);
-    const supplyCost = Math.max(1, toInteger(requirement.supplyCost) || 1);
+    const supplyCost = getActorToolSupplyCost(
+      actor,
+      toolKey,
+      Math.max(1, toInteger(requirement.supplyCost) || 1),
+      { requester: "butchering" }
+    );
     const candidates = getButcheringToolCandidates(actor, {
       toolKey,
       toolClass: requiredClass,

@@ -83,6 +83,10 @@ import {
   syncInventoryVirtualCell
 } from "../utils/inventory-grid-dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  applyToolSupplyCostPercent,
+  getActorToolSupplyCostPercent
+} from "../utils/tool-supply-cost.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getEnabledToolFunctions, getToolResourceState } from "../utils/item-functions.mjs";
@@ -4507,6 +4511,16 @@ function getCraftToolRequirements(nodes = [], { actor = null, index = null } = {
       });
     }
   }
+  const sourceActor = actor ?? index?.actor ?? null;
+  for (const requirement of requirements) {
+    requirement.baseQuantity = requirement.quantity;
+    requirement.quantity = getCraftToolSupplyCost(
+      sourceActor,
+      index,
+      requirement.toolKey,
+      requirement.quantity
+    );
+  }
   return requirements;
 }
 
@@ -4572,7 +4586,12 @@ function getCraftToolNodeAvailabilityScore(node = {}, { actor = null, index = nu
       key: getCraftToolRequirementKey(tool),
       toolKey: tool.toolKey,
       toolClass: tool.toolClass,
-      quantity: Math.max(1, toInteger(node.quantity) || 1)
+      quantity: getCraftToolSupplyCost(
+        actor,
+        index,
+        tool.toolKey,
+        Math.max(1, toInteger(node.quantity) || 1)
+      )
     };
     const candidates = index
       ? getIndexedActorCraftToolCandidates(index, requirement, supplyByItemTool)
@@ -4591,7 +4610,12 @@ function reserveCraftToolNodeAvailability(node = {}, { actor = null, index = nul
       key: getCraftToolRequirementKey(tool),
       toolKey: tool.toolKey,
       toolClass: tool.toolClass,
-      quantity: Math.max(1, toInteger(node.quantity) || 1)
+      quantity: getCraftToolSupplyCost(
+        actor,
+        index,
+        tool.toolKey,
+        Math.max(1, toInteger(node.quantity) || 1)
+      )
     };
     const candidates = index
       ? getIndexedActorCraftToolCandidates(index, requirement, supplyByItemTool)
@@ -4764,7 +4788,20 @@ function createCraftAvailabilityIndex(actor = null) {
       tools: getEnabledToolFunctions(item)
     });
   }
-  return { items };
+  return { actor, items, toolSupplyCostPercentByKey: new Map() };
+}
+
+function getCraftToolSupplyCost(actor = null, index = null, toolKey = "", baseCost = 0) {
+  const sourceActor = actor ?? index?.actor ?? null;
+  if (!sourceActor) return applyToolSupplyCostPercent(baseCost, 0);
+  const key = String(toolKey ?? "").trim();
+  const cache = index?.toolSupplyCostPercentByKey;
+  let percent = cache?.get(key);
+  if (percent === undefined) {
+    percent = getActorToolSupplyCostPercent(sourceActor, key, { requester: "craft" });
+    cache?.set(key, percent);
+  }
+  return applyToolSupplyCostPercent(baseCost, percent);
 }
 
 function getActorOwnedCraftRequirementsFromIndex(index = null, requirements = []) {
@@ -6370,7 +6407,7 @@ function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, ava
   const requirements = mode === CRAFT_MODE_DISASSEMBLY
     ? getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode), { includeRoot: true })
     : getCraftRequirements(getCraftMaterialRequirementNodes(nodes, links, mode, { actor, index }));
-  const toolRequirements = getCraftToolRequirements(nodes, { index });
+  const toolRequirements = getCraftToolRequirements(nodes, { actor, index });
   const ownedByRequirement = getActorOwnedCraftRequirementsFromIndex(index, requirements);
   const toolAvailability = createCraftToolRequirementAvailabilityPlan(index, toolRequirements);
   return requirements.filter(requirement => (ownedByRequirement.get(requirement.key) ?? 0) < requirement.quantity).length

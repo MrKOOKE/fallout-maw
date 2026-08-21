@@ -5,6 +5,7 @@ import { getEnabledToolFunctions, getToolResourceState } from "../utils/item-fun
 import { toInteger } from "../utils/numbers.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
+import { getActorToolSupplyCost } from "../utils/tool-supply-cost.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const HACKING_SOCKET = `system.${SYSTEM_ID}`;
@@ -113,7 +114,7 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const context = await super._prepareContext(options);
     const methods = this.#localMethods ?? getHackingTargetMethods(this.#target);
     const unlocked = this.#unlocked || !isHackingTargetLocked(this.#target);
-    const candidates = getHackingToolCandidates(this.#hackerActor, methods);
+    const candidates = getHackingToolCandidates(this.#hackerActor, methods, this.#target);
     if (!this.#selectedCandidateKey || !candidates.some(candidate => candidate.candidateKey === this.#selectedCandidateKey)) {
       this.#selectedCandidateKey = String(candidates[0]?.candidateKey ?? "");
     }
@@ -151,7 +152,7 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (this.#attemptInFlight || !isHackingTargetLocked(this.#target)) return undefined;
     const methods = this.#localMethods ?? getHackingTargetMethods(this.#target);
-    const selectedCandidate = getHackingToolCandidates(this.#hackerActor, methods)
+    const selectedCandidate = getHackingToolCandidates(this.#hackerActor, methods, this.#target)
       .find(candidate => candidate.candidateKey === this.#selectedCandidateKey);
     const selectedMethod = methods.find(method => method.id === selectedCandidate?.methodId);
     if (!selectedCandidate || !selectedMethod || selectedMethod.attemptsRemaining <= 0) {
@@ -478,7 +479,7 @@ async function applyHackingResultLocked({
   const methods = getHackingTargetMethods(target);
   const method = methods.find(entry => entry.id === methodId);
   if (!method || method.attemptsRemaining <= 0) throw new Error("Попытки этого метода исчерпаны.");
-  const candidate = getHackingToolCandidates(hackerActor, [method])
+  const candidate = getHackingToolCandidates(hackerActor, [method], target)
     .find(entry => entry.itemId === toolItemId);
   if (!candidate) {
     throw new Error("Подходящий инструмент больше недоступен.");
@@ -489,10 +490,11 @@ async function applyHackingResultLocked({
     .find(tool => String(tool.toolKey ?? "") === method.toolKey);
   const toolResource = toolFunction?.resource ?? getToolResourceState(toolItem, toolFunction);
   const currentSupply = toolResource.available ? toolResource.value : 0;
-  if (!toolItem || !toolFunction || currentSupply < method.toolCost) {
+  const toolCost = candidate.toolCost;
+  if (!toolItem || !toolFunction || currentSupply < toolCost) {
     throw new Error("Запаса инструмента недостаточно для попытки.");
   }
-  const remainingSupply = currentSupply - method.toolCost;
+  const remainingSupply = currentSupply - toolCost;
   const previousMethods = foundry.utils.deepClone(methods);
   const previousDoorState = target.ds;
   method.attemptsRemaining = Math.max(0, method.attemptsRemaining - 1);
@@ -553,7 +555,7 @@ async function applyHackingResultLocked({
     : `не смог вскрыть замок на объекте <strong>${escapeHTML(getHackingTargetName(target))}</strong> методом «${escapeHTML(getToolLabel(method.toolKey))}». Осталось попыток: ${method.attemptsRemaining}`;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: hackerActor }),
-    content: `<p><strong>${escapeHTML(hackerActor.name)}</strong> ${resultText}. Расход инструмента: ${method.toolCost}; осталось: ${remainingSupply}.</p>`
+    content: `<p><strong>${escapeHTML(hackerActor.name)}</strong> ${resultText}. Расход инструмента: ${toolCost}; осталось: ${remainingSupply}.</p>`
   });
   if (success) ui.notifications.info(`${getHackingTargetName(target)}: замок вскрыт.`);
   else if (method.attemptsRemaining <= 0) ui.notifications.warn(`${getToolLabel(method.toolKey)}: попытки закончились.`);
@@ -682,11 +684,16 @@ function hackingMethodsEqual(left, right) {
   return JSON.stringify(normalizeHackingMethods(left)) === JSON.stringify(normalizeHackingMethods(right));
 }
 
-function getHackingToolCandidates(actor, methods) {
+function getHackingToolCandidates(actor, methods, target = null) {
   if (!actor) return [];
   const tools = actor.items?.contents ?? [];
   return methods.flatMap(method => {
     if (method.attemptsRemaining <= 0 || !method.toolKey) return [];
+    const toolCost = getActorToolSupplyCost(actor, method.toolKey, method.toolCost, {
+      requester: "hacking",
+      targetActor: target?.documentName === "Actor" ? target : target?.actor ?? null,
+      targetToken: target?.actor ? target : null
+    });
     return tools.flatMap(item => getEnabledToolFunctions(item)
       .filter(tool => String(tool.toolKey ?? "") === method.toolKey)
       .map(tool => {
@@ -698,7 +705,8 @@ function getHackingToolCandidates(actor, methods) {
           methodId: method.id,
           methodLabel: getToolLabel(method.toolKey),
           attemptsRemaining: method.attemptsRemaining,
-          toolCost: method.toolCost,
+          toolCost,
+          baseToolCost: method.toolCost,
           itemId: item.id,
           name: item.name,
           toolClass: normalizeToolClass(tool.toolClass),
@@ -707,7 +715,7 @@ function getHackingToolCandidates(actor, methods) {
           supplyMax
         };
       })
-      .filter(tool => isToolClassAtLeast(tool.toolClass, method.toolClass) && tool.supplyValue >= method.toolCost));
+      .filter(tool => isToolClassAtLeast(tool.toolClass, method.toolClass) && tool.supplyValue >= toolCost));
   }).sort((left, right) => {
     const methodDelta = left.methodLabel.localeCompare(right.methodLabel);
     if (methodDelta) return methodDelta;

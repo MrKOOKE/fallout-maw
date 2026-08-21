@@ -12,6 +12,7 @@ import { getActorFormulaApplicationPhase } from "./actor-formulas.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
 import { isSkillAdvancementMultiplierEffectKey } from "../advancement/skill-multiplier-effects.mjs";
+import { isToolSupplyCostEffectKey } from "./tool-supply-effect-keys.mjs";
 import {
   getActorApplicableEffects,
   getActorEffectChangeEntries
@@ -180,6 +181,7 @@ export function expandActorEffectChangeKeys(actor, change = {}) {
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
   if (isDamageBarrierEffectKey(change?.key)) return null;
   if (isPeriodicHealingEffectKey(change?.key)) return null;
+  if (isToolSupplyCostEffectKey(change?.key)) return null;
   const prepared = prepareActorEffectChangeValue(actor, change, options);
   if (!prepared) return null;
   if (isReverseEffectKey(prepared.key)) return null;

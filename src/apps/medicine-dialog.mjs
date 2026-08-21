@@ -45,6 +45,10 @@ import {
   groupToolSelectionOptions,
   selectToolByPolicy
 } from "../utils/tool-selection-policy.mjs";
+import {
+  applyToolSupplyCostPercent,
+  getActorToolSupplyCostPercent
+} from "../utils/tool-supply-cost.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import { transferItemBetweenActors } from "./search-inventory.mjs";
@@ -2643,6 +2647,17 @@ async function runTreatmentChecks({
   const targetActor = targetToken?.actor ?? (String(targetContext?.actorUuid ?? "")
     ? await fromUuid(String(targetContext.actorUuid))
     : null);
+  const toolSupplyCostPercent = noTool ? 0 : getActorToolSupplyCostPercent(
+    sourceActor,
+    tool.toolKey,
+    {
+      requester: "medicine",
+      actorToken: sourceToken?.object ?? sourceToken,
+      targetActor,
+      targetToken: targetToken?.object ?? targetToken,
+      chanceOperationId: operationId
+    }
+  );
 
   for (let index = 1; index <= totalChecks; index += 1) {
     const remainingProgress = Math.max(0, maxProgress - currentProgress);
@@ -2705,6 +2720,7 @@ async function runTreatmentChecks({
       missingProgress: remainingProgress,
       resultKey: String(outcome.result?.key ?? "failure"),
       toolEfficiencyPercentBonus,
+      toolSupplyCostPercent,
       healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetActor, targetContext, {
         sourceToken,
         targetToken,
@@ -2800,7 +2816,7 @@ function validateInstrumentForTreatment(actor, treatment, tool, { allowedToolCla
   return { ok: true, message: "" };
 }
 
-function calculateTreatmentResult({ treatmentTarget, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1, toolEfficiencyPercentBonus = 0 }) {
+function calculateTreatmentResult({ treatmentTarget, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1, toolEfficiencyPercentBonus = 0, toolSupplyCostPercent = 0 }) {
   const targetProgress = Math.min(progressForCheck, missingProgress);
   let efficiency = applyEmergencyOperationsToolEfficiency(
     calculateBaseEfficiency(tool.toolClass, treatmentTarget.healingToolClass),
@@ -2809,9 +2825,11 @@ function calculateTreatmentResult({ treatmentTarget, tool, availableCharges, pro
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
   else if (resultKey === "failure") efficiency *= 0.5;
 
-  const chargesNeeded = Math.max(1, Math.ceil(targetProgress * (100 / Math.max(1, efficiency))));
+  const productiveChargesNeeded = Math.max(1, Math.ceil(targetProgress * (100 / Math.max(1, efficiency))));
+  const chargesNeeded = applyToolSupplyCostPercent(productiveChargesNeeded, toolSupplyCostPercent);
   const chargesUsed = Math.min(chargesNeeded, availableCharges);
-  const normalProgress = Math.max(0, Math.ceil(chargesUsed * (efficiency / 100)));
+  const productiveChargesUsed = productiveChargesNeeded * Math.min(1, chargesUsed / chargesNeeded);
+  const normalProgress = Math.max(0, Math.ceil(productiveChargesUsed * (efficiency / 100)));
   const progressMultiplier = resultKey === "criticalSuccess" ? 2 : resultKey === "criticalFailure" ? 0.5 : 1;
   const progress = Math.min(missingProgress, Math.max(0, Math.floor(normalProgress * progressMultiplier * Math.max(0, Number(healingMultiplier) || 0))));
   return { progress, chargesUsed, efficiency };

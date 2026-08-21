@@ -58,7 +58,8 @@ import {
   getProficiencySettings,
   getResourceSettings,
   getSkillAdvancementSettings,
-  getSkillSettings
+  getSkillSettings,
+  getToolSettings
 } from "../settings/accessors.mjs";
 import { getCoverBonusPercentEffectKey } from "../settings/cover.mjs";
 import {
@@ -83,6 +84,10 @@ import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.
 import {
   getDetectionModeRangeEffectKeyDescriptors
 } from "../canvas/vision-effect-keys.mjs";
+import {
+  ALL_TOOL_SUPPLY_COST_EFFECT_KEY,
+  getToolSupplyCostEffectKey
+} from "./tool-supply-effect-keys.mjs";
 
 export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
@@ -195,6 +200,7 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     }),
     buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
+    ...buildToolSupplyCostEffectKeyTokens(),
     ...buildPostureEffectKeyTokens(),
     ...buildActionBlockEffectKeyTokens(),
     ...buildActionPenetrationEffectKeyTokens(),
@@ -551,6 +557,32 @@ export function buildActionCostEffectKeyTokens() {
       label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidActionPointCost"),
       path: FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
       group: "Стоимость"
+    })
+  ].filter(Boolean);
+}
+
+export function buildToolSupplyCostEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.ToolsGroup");
+  return [
+    createEffectKeyToken({
+      code: "toolSupplyCost:all",
+      key: "toolSupplyCost.all",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AllToolSupplyCostPercent"),
+      path: ALL_TOOL_SUPPLY_COST_EFFECT_KEY,
+      group
+    }),
+    ...getToolSettings().map(tool => {
+      const toolKey = String(tool?.key ?? "").trim();
+      if (!toolKey) return null;
+      return createEffectKeyToken({
+        code: `toolSupplyCost:${toolKey}`,
+        key: `toolSupplyCost.${toolKey}`,
+        label: game.i18n.format("FALLOUTMAW.Effects.ToolSupplyCostPercent", {
+          tool: String(tool?.label ?? toolKey).trim() || toolKey
+        }),
+        path: getToolSupplyCostEffectKey(toolKey),
+        group
+      });
     })
   ].filter(Boolean);
 }

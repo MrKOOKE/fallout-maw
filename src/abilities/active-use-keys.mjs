@@ -45,6 +45,11 @@ import { isNeedChangeModifierEffectKey } from "../needs/need-change-effect-keys.
 import { getConfiguredWeaponProficiencyKeys } from "../utils/item-functions.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { STEALTH_ILLUMINATION_PENALTY_PERCENT_EFFECT_KEY } from "../stealth/effect-keys.mjs";
+import {
+  ALL_TOOL_SUPPLY_COST_EFFECT_KEY,
+  getToolSupplyCostEffectKey,
+  isToolSupplyCostEffectKey
+} from "../utils/tool-supply-effect-keys.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -278,6 +283,15 @@ export function getHealingResolutionActiveUseKeys({ direction = "incoming" } = {
   ]);
 }
 
+/** Effect keys read while calculating one tool-supply expenditure. */
+export function getToolSupplyCostActiveUseKeys(toolKey = "") {
+  const specificKey = getToolSupplyCostEffectKey(toolKey);
+  return new Set([
+    ALL_TOOL_SUPPLY_COST_EFFECT_KEY,
+    specificKey
+  ].filter(Boolean));
+}
+
 /** Effect keys read while resolving one first-aid application. */
 export function getFirstAidResolutionActiveUseKeys({
   direction = "incoming",
@@ -335,6 +349,7 @@ export function isActiveUseEffectKey(key = "") {
     || COMBAT_ACTION_EDGE_KEY_PATTERN.test(sourcePath)
     || DAMAGE_MITIGATION_KEY_PATTERN.test(sourcePath)
     || DAMAGE_BARRIER_KEY_PATTERN.test(sourcePath)
+    || isToolSupplyCostEffectKey(sourcePath)
     || POSTURE_WEAPON_ACTION_COST_KEY_PATTERN.test(sourcePath)
     || POSTURE_MOVEMENT_COST_KEY_PATTERN.test(sourcePath);
 }

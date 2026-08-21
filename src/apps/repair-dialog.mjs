@@ -20,6 +20,10 @@ import {
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
+import {
+  applyToolSupplyCostPercent,
+  getActorToolSupplyCostPercent
+} from "../utils/tool-supply-cost.mjs";
 import { executeAtomicActorItemUpdates } from "../utils/atomic-actor-item-updates.mjs";
 import {
   groupToolSelectionOptions,
@@ -612,6 +616,13 @@ async function runRepairChecks({
     ? await fromUuid(targetContext.actorUuid).catch(() => null)
     : null);
   const targetActor = targetDocument?.documentName === "Actor" ? targetDocument : null;
+  const toolSupplyCostPercent = getActorToolSupplyCostPercent(sourceActor, tool.toolKey, {
+    requester: "repair",
+    actorToken: sourceToken?.object ?? sourceToken,
+    targetActor,
+    targetToken: targetToken?.object ?? targetToken,
+    chanceOperationId: operationId
+  });
   const craftingSettings = getCraftingSettings();
   const thresholdMode = isSkillThresholdMode(craftingSettings.repair.mode);
   let currentValue = initialValue;
@@ -681,6 +692,7 @@ async function runRepairChecks({
       valueForCheck,
       missingValue: remainingValue,
       resultKey,
+      toolSupplyCostPercent,
       craftingSettings
     });
     if (repair.chargesUsed <= 0) break;
@@ -736,6 +748,7 @@ function calculateRepairResult({
   valueForCheck,
   missingValue,
   resultKey,
+  toolSupplyCostPercent = 0,
   craftingSettings = getCraftingSettings()
 }) {
   const targetValue = Math.min(valueForCheck, missingValue);
@@ -744,9 +757,11 @@ function calculateRepairResult({
 
   const productiveChargesNeeded = Math.max(1, Math.ceil(targetValue * (100 / Math.max(1, efficiency))));
   const costMultiplier = getRepairToolCostMultiplier(craftingSettings, resultKey);
-  const chargesNeeded = Math.max(1, Math.ceil(productiveChargesNeeded * costMultiplier));
+  const baseChargesNeeded = Math.max(1, Math.ceil(productiveChargesNeeded * costMultiplier));
+  const chargesNeeded = applyToolSupplyCostPercent(baseChargesNeeded, toolSupplyCostPercent);
   const chargesUsed = Math.min(chargesNeeded, availableCharges);
-  const productiveChargesUsed = chargesUsed / costMultiplier;
+  const baseChargesUsed = baseChargesNeeded * Math.min(1, chargesUsed / chargesNeeded);
+  const productiveChargesUsed = baseChargesUsed / costMultiplier;
   const normalCondition = Math.max(0, Math.ceil(productiveChargesUsed * (efficiency / 100)));
   const conditionMultiplier = resultKey === "criticalSuccess" ? 2 : resultKey === "criticalFailure" ? 0.5 : 1;
   const condition = Math.min(missingValue, Math.max(0, Math.floor(normalCondition * conditionMultiplier)));
