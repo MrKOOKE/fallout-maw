@@ -2,7 +2,8 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   CONTROLLED_MOVEMENT_INTERRUPTION_OPTION,
   createMovementOptions,
-  isControlledMovementInterruption
+  isControlledMovementInterruption,
+  SYSTEM_RELOCATION_OPTION
 } from "../canvas/movement-interruptions.mjs";
 import { trackSystemMovementOperation } from "../canvas/movement-settlement.mjs";
 import {
@@ -79,6 +80,10 @@ export function serializeMovementOperation(movement = {}) {
 }
 
 function onPreMoveToken(tokenDocument, movement, operation = {}) {
+  if (operation?.[SYSTEM_RELOCATION_OPTION]) {
+    beginMovementGateEpoch(tokenDocument);
+    return true;
+  }
   const gateResumeContext = getMovementResumeContext(
     tokenDocument,
     movement,
@@ -282,6 +287,7 @@ function onMoveToken(tokenDocument, movement, operation = {}, user = null) {
   if (!user?.isSelf || !tokenDocument?.actor || !movement) return;
   if (
     !isMovementOperationCompleted(movement)
+    || operation?.[SYSTEM_RELOCATION_OPTION]
     || operation?.[CONTROLLED_MOVEMENT_INTERRUPTION_OPTION]
     || isControlledMovementInterruption(tokenDocument, movement, operation)
   ) return;

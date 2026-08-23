@@ -104,9 +104,84 @@ globalThis.game = {
 const {
   ATTACK_TARGETING_TESTING,
   ORDINARY_WEAPON_ATTACK_TESTING,
+  WEAPON_ATTACK_LIFECYCLE_TESTING,
   WEAPON_CONDITION_WEAR_TESTING,
-  WeaponAttackController
+  WeaponAttackController,
+  registerWeaponAttackResolvedHandler,
+  registerWeaponAttackTerminalHandler
 } = await import("../src/combat/weapon-attack-controller.mjs");
+
+test("terminal attack handlers are outside the awaited resolved publication", async () => {
+  const order = [];
+  const previousCallAll = Hooks.callAll;
+  const unregisterResolved = registerWeaponAttackResolvedHandler("test.resolved", async () => {
+    order.push("resolved");
+  });
+  const unregisterTerminal = registerWeaponAttackTerminalHandler("test.terminal", async () => {
+    order.push("terminal");
+  });
+  Hooks.callAll = hook => {
+    if (hook === "fallout-maw.weaponAttackResolved") order.push("hook");
+  };
+  try {
+    await WEAPON_ATTACK_LIFECYCLE_TESTING.publishResolved({});
+    assert.deepEqual(order, ["resolved", "hook"]);
+    await WEAPON_ATTACK_LIFECYCLE_TESTING.runTerminal({});
+    assert.deepEqual(order, ["resolved", "hook", "terminal"]);
+  } finally {
+    unregisterResolved();
+    unregisterTerminal();
+    Hooks.callAll = previousCallAll;
+  }
+});
+
+test("a pending phantom deletion cannot keep the controller processing", async () => {
+  const previousUser = game.user;
+  let releaseDeletion;
+  let terminalStarted = false;
+  const deletion = new Promise(resolve => {
+    releaseDeletion = resolve;
+  });
+  const unregisterTerminal = registerWeaponAttackTerminalHandler("test.blockedDeletion", async () => {
+    terminalStarted = true;
+    await deletion;
+  });
+  const controller = Object.create(WeaponAttackController.prototype);
+  Object.assign(controller, {
+    processing: true,
+    destroyed: false,
+    pendingTerminalAttackOutcomes: [{
+      attackId: "attack-terminal-boundary",
+      attackerUuid: "Actor.attacker",
+      damageResults: [{
+        actorUuid: "Actor.phantom",
+        phantomDestroyed: true,
+        source: {
+          attackId: "attack-terminal-boundary",
+          targetTokenUuid: "Scene.scene.Token.phantom",
+          weaponAttackDamage: true
+        }
+      }]
+    }],
+    attackModifier: null,
+    finishAfterAttack: false,
+    finishRequested: false,
+    attackCanceledByReaction: false,
+    abortSkillCheckCollectors: async () => undefined,
+    canContinueAfterProcessing: () => true
+  });
+  game.user = gm;
+  try {
+    assert.equal(controller.completeProcessingCycle({ refresh: false }), false);
+    assert.equal(controller.processing, false);
+    assert.equal(terminalStarted, true);
+  } finally {
+    releaseDeletion();
+    await Promise.resolve();
+    unregisterTerminal();
+    game.user = previousUser;
+  }
+});
 
 test("impact condition wear uses one hit base plus total armor-blocked damage", () => {
   const summary = WEAPON_CONDITION_WEAR_TESTING.summarizeDamageResults([{
@@ -135,6 +210,88 @@ test("impact condition wear uses one hit base plus total armor-blocked damage", 
   });
   assert.equal(WEAPON_CONDITION_WEAR_TESTING.calculateConditionLoss(100, summary.blockedDamage, 2), 50);
   assert.equal(WEAPON_CONDITION_WEAR_TESTING.calculateConditionLoss(30, summary.blockedDamage, 2), 30);
+});
+
+test("a phantom hit does not cause weapon impact wear", () => {
+  assert.deepEqual(WEAPON_CONDITION_WEAR_TESTING.summarizeDamageResults([{
+    mode: "damage",
+    amount: 100,
+    mitigationBlocked: 50,
+    phantomDestroyed: true
+  }]), {
+    hit: false,
+    blockedDamage: 0,
+    multiplier: 0,
+    conditionLoss: 0
+  });
+});
+
+test("destroyed PIXI tokens are rejected before their position getter is read", () => {
+  let positionRead = false;
+  const token = {
+    actor: {},
+    destroyed: true,
+    transform: null,
+    get position() {
+      positionRead = true;
+      throw new Error("destroyed PIXI transform");
+    }
+  };
+  assert.equal(ATTACK_TARGETING_TESTING.getTokenShapeOffset(token), null);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackImpactTarget(token), false);
+  assert.equal(positionRead, false);
+});
+
+test("deleted aimed targets are removed from every live preview reference", () => {
+  const targetDocument = { uuid: "Scene.scene.Token.phantom" };
+  const target = { actor: {}, document: targetDocument, transform: {} };
+  const other = { actor: {}, document: { uuid: "Scene.scene.Token.other" }, transform: {} };
+  let previewRequested = 0;
+  const controller = Object.create(WeaponAttackController.prototype);
+  Object.assign(controller, {
+    token: { actor: {}, document: { uuid: "Scene.scene.Token.attacker" }, transform: {} },
+    abilityTrialSession: null,
+    selectedTarget: target,
+    hoveredTarget: target,
+    trajectoryAimTarget: target,
+    targets: [target, other],
+    burstTargetPreview: {
+      initialized: true,
+      targets: [target],
+      pendingTargets: [target],
+      burstRanges: new Map([[target, { min: 1, max: 1 }]]),
+      pendingBurstRanges: new Map([[target, { min: 1, max: 1 }]])
+    },
+    burstPreviewStabilizeTimeout: null,
+    rangeProfilesByTarget: new Map([[`${targetDocument.uuid}:1.000`, {}]]),
+    aimedMode: "limb",
+    hoveredLimbKey: "torso",
+    selectedLimbKey: "torso",
+    lockedGeometry: {},
+    pushStrengthMaximum: 0,
+    constrainedTarget: false,
+    processing: false,
+    destroyed: false,
+    finishRequested: false,
+    previewSuppressed: false,
+    shape: { clear() {} },
+    meleeDirectionPreview: { clear() {} },
+    clearTargetMarkers() {},
+    removeLimbMenu() {},
+    removeChanceMenu() {},
+    previewFrameScheduler: { request: () => { previewRequested += 1; } }
+  });
+
+  assert.equal(controller.handleTokenUnavailable(targetDocument, { matchUuid: true }), true);
+  assert.equal(controller.selectedTarget, null);
+  assert.equal(controller.hoveredTarget, null);
+  assert.equal(controller.trajectoryAimTarget, null);
+  assert.deepEqual(controller.targets, [other]);
+  assert.equal(controller.aimedMode, "aim");
+  assert.equal(controller.lockedGeometry, null);
+  assert.equal(controller.burstTargetPreview.targets.length, 0);
+  assert.equal(controller.rangeProfilesByTarget.size, 0);
+  assert.equal(previewRequested, 1);
 });
 
 test("ordinary impact condition wear derives its multiplier from the configured condition cost", async () => {

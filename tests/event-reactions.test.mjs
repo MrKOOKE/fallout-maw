@@ -292,6 +292,26 @@ test("active-scene reactor pool includes hidden tokens and deduplicates actors",
   assert.deepEqual(actors.map(actor => actor.uuid), ["Actor.A", "Actor.B"]);
 });
 
+test("phantom entities never enter the event reactor pool", () => {
+  const realActor = { uuid: "Actor.Real" };
+  const phantomActor = {
+    uuid: "Actor.Phantom",
+    flags: {
+      "fallout-maw": {
+        phantomEntity: { excludeFromMechanics: true }
+      }
+    }
+  };
+  const actors = collectActiveSceneReactorActors({
+    scene: { id: "scene" },
+    tokens: [
+      { actor: realActor },
+      { actor: phantomActor }
+    ]
+  });
+  assert.deepEqual(actors, [realActor]);
+});
+
 test("reactor pool includes off-scene semantic-event participants", async () => {
   const sceneActor = { uuid: "Actor.Scene" };
   const targetActor = { uuid: "Actor.Target" };

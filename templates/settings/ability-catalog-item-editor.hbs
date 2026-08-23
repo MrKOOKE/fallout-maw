@@ -1339,6 +1339,31 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedDanceOfThousandShadowsSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Танец тысячи теней</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.danceOfThousandShadows.activationEnergyCost" value="{{fixedDanceOfThousandShadowsSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность, сек.</span><input type="number" data-field="fixed.danceOfThousandShadows.durationSeconds" value="{{fixedDanceOfThousandShadowsSettings.durationSeconds}}" min="1" step="1"></label>
+          <label><span>Радиус, м</span><input type="number" data-field="fixed.danceOfThousandShadows.radiusMeters" value="{{fixedDanceOfThousandShadowsSettings.radiusMeters}}" min="0" step="1"></label>
+          <label><span>Обмен, ОП/ОД</span><input type="number" data-field="fixed.danceOfThousandShadows.swapPointCost" value="{{fixedDanceOfThousandShadowsSettings.swapPointCost}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>За каждое убийство</strong>
+          <label><span>Скрытность</span><input type="number" data-field="fixed.danceOfThousandShadows.stealthBonusPerKill" value="{{fixedDanceOfThousandShadowsSettings.stealthBonusPerKill}}" step="1"></label>
+          <label><span>Урон, %</span><input type="number" data-field="fixed.danceOfThousandShadows.damagePercentPerKill" value="{{fixedDanceOfThousandShadowsSettings.damagePercentPerKill}}" step="1"></label>
+          <label><span>Шанс крита, %</span><input type="number" data-field="fixed.danceOfThousandShadows.criticalChancePerKill" value="{{fixedDanceOfThousandShadowsSettings.criticalChancePerKill}}" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" data-field="fixed.danceOfThousandShadows.overloadEnergyCost" value="{{fixedDanceOfThousandShadowsSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность, сек.</span><input type="number" data-field="fixed.danceOfThousandShadows.overloadDurationSeconds" value="{{fixedDanceOfThousandShadowsSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

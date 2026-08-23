@@ -50,6 +50,7 @@ import {
   normalizeSandmanSettings,
   normalizeNightmareSettings,
   normalizePhantomSettings,
+  normalizeDanceOfThousandShadowsSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
@@ -163,6 +164,7 @@ import {
   ACTION_RESOURCE_KEY,
   MOVEMENT_RESOURCE_KEY,
   applyCombatMovementCostModifier,
+  getCombatMovementResourceState,
   hasActorCombatMovementInCurrentTurn
 } from "../combat/movement-resources.mjs";
 import {
@@ -196,6 +198,16 @@ import {
   createPhantomForActor,
   registerPhantomRuntimeHooks
 } from "./phantom.mjs";
+import { isPhantomEntity } from "./phantom-entity.mjs";
+import {
+  activateDanceOfThousandShadows,
+  findActiveDanceEffect,
+  getDanceEffectData,
+  getDancePhantomData,
+  getDancePhantomTokens,
+  registerDanceOfThousandShadowsRuntimeHooks,
+  swapWithDancePhantom
+} from "./dance-of-thousand-shadows.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import {
   canSpendCombatActionPoints,
@@ -871,6 +883,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.phantom,
       fixedSettings: normalizePhantomSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows,
+    label: "Танец тысячи теней",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows,
+      fixedSettings: normalizeDanceOfThousandShadowsSettings()
+    })
   })
 ]);
 
@@ -912,6 +933,7 @@ function registerFixedAbilityRuntimeHooks() {
 
   registerShadowEffectIndexHooks();
   registerPhantomRuntimeHooks();
+  registerDanceOfThousandShadowsRuntimeHooks();
   Hooks.on("deleteActiveEffect", runFixedAbilityRuntimeHandler((effect, options = {}) => {
     void cleanupMaintainedTargetLinkedEffect(effect, options);
   }));
@@ -927,9 +949,11 @@ function registerFixedAbilityRuntimeHooks() {
     }
   }));
   Hooks.on("deleteActor", runFixedAbilityRuntimeHandler((actor, options = {}) => {
+    if (isPhantomEntity(actor)) return;
     void cleanupMaintainedTargetDeletedActorLinks(actor, options);
   }));
   Hooks.on("deleteToken", runFixedAbilityRuntimeHandler((token, options = {}) => {
+    if (isPhantomEntity(token)) return;
     if (!token?.actorLink) void cleanupMaintainedTargetDeletedActorLinks(token?.actor, options);
   }));
   registerSystemEventObserver({
@@ -959,6 +983,7 @@ function registerFixedAbilityRuntimeHooks() {
   Hooks.on("sightRefresh", runFixedAbilityRuntimeHandler(() => scheduleOversightVisibilityRefresh()));
   Hooks.on("canvasReady", runFixedAbilityRuntimeHandler(() => scheduleOversightVisibilityRefresh()));
   Hooks.on("deleteToken", runFixedAbilityRuntimeHandler(token => {
+    if (isPhantomEntity(token)) return;
     void cleanupOversightToken(token);
   }));
   registerActorTurnEndHandler(runFixedAbilityRuntimeHandler(context => applyDefensiveTacticsAtTurnEnd(context)));
@@ -1495,6 +1520,12 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom) {
     const used = await usePhantom(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows) {
+    const used = await useDanceOfThousandShadows(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -3548,7 +3579,7 @@ function collectActiveApplicationTargetRows(sourceActor, abilityFunction, settin
     : null;
   const sourcePlaceable = sourceToken?.object ?? sourceToken ?? null;
   return (canvas?.tokens?.placeables ?? [])
-    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
     .map(token => {
       const isSelf = token.actor.uuid === sourceActor?.uuid;
       const relation = getActiveApplicationTargetRelation(sourceActor, token.actor);
@@ -3672,7 +3703,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     abilityItem?.id ?? ""
   )}:${String(abilityFunction?.id ?? "")}:${startTime}`;
   const plans = targets
-    .filter(target => target?.actor)
+    .filter(target => target?.actor && !isPhantomEntity(target?.token) && !isPhantomEntity(target.actor))
     .map(target => ({
       target,
       rawChanges: routesPrimaryChanges
@@ -3798,7 +3829,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     }
     if (hasItemMutations) {
       const actors = new Map(targets
-        .filter(target => target?.actor)
+        .filter(target => target?.actor && !isPhantomEntity(target?.token) && !isPhantomEntity(target.actor))
         .map(target => [String(target.actor.uuid ?? target.actor.id), target.actor]));
       for (const targetActor of actors.values()) {
         itemMutationResults.push(await applyActiveApplicationItemMutations(
@@ -4166,6 +4197,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
   const sourceSceneUuid = String(sourceTokenDocument.parent?.uuid ?? "").trim();
   if (!sourceSceneUuid || targetTokenDocuments.some(tokenDocument => (
     !tokenDocument?.actor
+    || isPhantomEntity(tokenDocument)
     || tokenDocument.documentName !== "Token"
     || String(tokenDocument.parent?.uuid ?? "") !== sourceSceneUuid
   ))) return false;
@@ -4482,7 +4514,7 @@ function hasActiveApplicationEffects(actor = null) {
 
 function collectCommandBasicsTargetRows(commander, command = "") {
   return (canvas.tokens?.placeables ?? [])
-    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
     .filter(token => token.actor.uuid !== commander?.uuid)
     .filter(token => isCommandBasicsAlly(commander, token.actor))
     .map(token => createCommandBasicsTargetRow(commander, token, command));
@@ -4706,7 +4738,7 @@ function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = "
 
 function collectKnockOffBalanceTargetRows(actor) {
   return (canvas.tokens?.placeables ?? [])
-    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
     .filter(token => token.actor.uuid !== actor?.uuid)
     .map(token => createKnockOffBalanceTargetRow(token));
 }
@@ -4855,7 +4887,7 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   const targets = (await Promise.all(targetActorUuids.map(uuid => fromUuid(uuid))))
-    .filter(target => target && getActorIntelligence(target) > 0);
+    .filter(target => target && !isPhantomEntity(target) && getActorIntelligence(target) > 0);
   if (!targets.length) return false;
 
   const skillDisadvantageCount = Math.max(1, toInteger(payload.skillDisadvantageCount ?? 2));
@@ -5237,6 +5269,210 @@ async function usePhantom(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function useDanceOfThousandShadows(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const sourceToken = getActorSceneToken(actor);
+  const sourceTokenDocument = sourceToken?.document ?? sourceToken;
+  if (!sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
+    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    return false;
+  }
+
+  const activeEffect = findActiveDanceEffect(actor);
+  if (activeEffect) {
+    return useDanceOfThousandShadowsSwap({
+      actor,
+      abilityItem,
+      abilityFunction,
+      sourceToken: sourceTokenDocument,
+      activeEffect
+    });
+  }
+
+  const authority = getResponsibleGM({
+    sceneId: sourceTokenDocument.parent?.id ?? "",
+    tokenDocuments: [sourceTokenDocument],
+    requireScene: true,
+    preferredUser: game.user
+  });
+  if (!game.user?.isGM && !authority) {
+    ui.notifications.warn(`${abilityName}: нет GM на текущей сцене для создания фантомов.`);
+    return false;
+  }
+
+  const settings = normalizeDanceOfThousandShadowsSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  const created = await requestDanceOfThousandShadowsActivation({
+    sourceActorUuid: actor.uuid,
+    sourceTokenUuid: sourceTokenDocument.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    senderUserId: game.user?.id ?? ""
+  }, authority);
+  if (!created) {
+    await refundEnergy(actor, energyCost);
+    ui.notifications.warn(`${abilityName}: не удалось создать фантомов.`);
+    return false;
+  }
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  return true;
+}
+
+async function useDanceOfThousandShadowsSwap({
+  actor,
+  abilityItem,
+  abilityFunction,
+  sourceToken,
+  activeEffect
+}) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeDanceOfThousandShadowsSettings(abilityFunction.fixedSettings);
+  const effectData = getDanceEffectData(activeEffect);
+  const selected = await requestDancePhantomSelection({
+    sourceToken,
+    effectData,
+    abilityName
+  });
+  const phantomToken = selected?.token?.document ?? selected?.token ?? null;
+  if (!phantomToken || getDancePhantomData(phantomToken)?.sessionId !== effectData?.sessionId) return false;
+
+  const authority = getResponsibleGM({
+    sceneId: sourceToken.parent?.id ?? "",
+    tokenDocuments: [sourceToken, phantomToken],
+    requireScene: true,
+    preferredUser: game.user
+  });
+  if (!game.user?.isGM && !authority) {
+    ui.notifications.warn(`${abilityName}: нет GM на текущей сцене для обмена.`);
+    return false;
+  }
+  await waitForCombatResourceSpending(actor);
+  if (!canSpendMovementThenActionPoints(actor, settings.swapPointCost, abilityName)) return false;
+  const swapped = await requestDanceOfThousandShadowsSwap({
+    sourceActorUuid: actor.uuid,
+    sourceTokenUuid: sourceToken.uuid,
+    phantomTokenUuid: phantomToken.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    senderUserId: game.user?.id ?? ""
+  }, authority);
+  if (!swapped) {
+    ui.notifications.warn(`${abilityName}: обмен не выполнен.`);
+    return false;
+  }
+  return true;
+}
+
+async function requestDancePhantomSelection({ sourceToken, effectData, abilityName }) {
+  const buildRows = () => getDancePhantomTokens(effectData)
+    .map(document => document.object)
+    .filter(Boolean)
+    .map(token => {
+      const visible = token.visible !== false
+        && token.renderable !== false
+        && canTokenPhysicallySeeTarget(sourceToken.object ?? sourceToken, token);
+      return {
+        token,
+        actor: token.actor,
+        actorUuid: token.actor?.uuid ?? "",
+        displayed: visible,
+        selectable: visible,
+        reason: visible ? "" : "Фантом не виден персонажу."
+      };
+    });
+  const selected = await requestCustomTokenSelection({
+    rows: buildRows(),
+    limit: 1,
+    title: abilityName,
+    noneWarning: `${abilityName}: нет доступных фантомов.`,
+    instructions: `${abilityName}: выберите фантом для обмена местами. ПКМ или Esc отменяет.`,
+    sourceToken,
+    refreshRows: buildRows,
+    getRowId: row => String(row?.token?.document?.uuid ?? ""),
+    getRowLabel: row => String(row?.token?.name ?? "Фантом")
+  });
+  return selected.at(0) ?? null;
+}
+
+function canSpendMovementThenActionPoints(actor, amount = 0, label = "") {
+  if (!isActorInActiveCombat(actor)) return true;
+  const cost = Math.max(0, toInteger(amount));
+  const state = getCombatMovementResourceState(actor);
+  if (state?.action?.key !== ACTION_RESOURCE_KEY) {
+    ui.notifications.warn(`${label}: обмен за ОП/ОД доступен только в ход персонажа.`);
+    return false;
+  }
+  if (!state || state.total >= cost) return true;
+  ui.notifications.warn(`${label}: не хватает ОП/ОД (${state.total} / ${cost}).`);
+  return false;
+}
+
+async function spendMovementThenActionPointsWithReceipt(actor, amount = 0) {
+  const cost = Math.max(0, toInteger(amount));
+  if (!isActorInActiveCombat(actor) || cost <= 0) {
+    return { spent: 0, movementSpent: 0, actionSpent: 0, actionReceipt: null };
+  }
+  const state = getCombatMovementResourceState(actor);
+  if (!state || state.action.key !== ACTION_RESOURCE_KEY || state.total < cost) return null;
+  const movementSpent = Math.min(cost, state.movement.value);
+  const actionSpent = Math.min(cost - movementSpent, state.action.value);
+  if (movementSpent > 0) {
+    const nextMovement = Math.max(0, state.movement.current - movementSpent);
+    await actor.update({
+      [`system.resources.${MOVEMENT_RESOURCE_KEY}.value`]: nextMovement,
+      [`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`]: Math.max(0, state.movement.max - nextMovement)
+    });
+  }
+  const actionTransaction = actionSpent > 0
+    ? await spendCombatActionPointsWithReceipt(actor, actionSpent, { suppressResourceNotification: true })
+    : { spent: 0, receipt: null };
+  if (actionTransaction.spent !== actionSpent) {
+    await refundMovementThenActionPoints(actor, {
+      movementSpent,
+      actionSpent: actionTransaction.spent,
+      actionReceipt: actionTransaction.receipt
+    });
+    return null;
+  }
+  return {
+    spent: movementSpent + actionSpent,
+    movementSpent,
+    actionSpent,
+    actionReceipt: actionTransaction.receipt,
+    actionResourceKey: actionTransaction.receipt?.resourceKey ?? state.action.key
+  };
+}
+
+async function refundMovementThenActionPoints(actor, receipt = {}) {
+  await refundCombatActionPointReceipt(actor, receipt.actionReceipt, { label: "обмена с фантомом" });
+  const movementSpent = Math.max(0, toInteger(receipt.movementSpent));
+  if (!movementSpent) return;
+  const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
+  if (!movement) return;
+  const maximum = Math.max(0, toInteger(movement.max));
+  const next = Math.min(maximum, Math.max(0, toInteger(movement.value)) + movementSpent);
+  await actor.update({
+    [`system.resources.${MOVEMENT_RESOURCE_KEY}.value`]: next,
+    [`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+  });
+}
+
 function isShadowTargetAllowed(sourceActor = null, targetActor = null) {
   if (!sourceActor || !targetActor || sourceActor.uuid === targetActor.uuid) return false;
   return getActiveApplicationTargetRelation(sourceActor, targetActor) !== "ally";
@@ -5377,7 +5613,7 @@ async function useToTheEnd(actor, abilityItem, abilityFunction) {
 function collectToTheEndTargets(actor, sourceToken, radiusMeters = 0) {
   const seen = new Set();
   return (canvas.tokens?.placeables ?? [])
-    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
     .filter(token => token.actor.uuid !== actor?.uuid)
     .filter(token => isCommandBasicsAlly(actor, token.actor))
     .filter(token => measureTokenDistanceMeters(sourceToken, token) <= radiusMeters)
@@ -5470,7 +5706,7 @@ async function processToTheEndOperation(payload = {}) {
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   const targets = (await Promise.all(targetActorUuids.map(uuid => fromUuid(uuid))))
-    .filter(target => target && target.uuid !== actor.uuid && isCommandBasicsAlly(actor, target));
+    .filter(target => target && !isPhantomEntity(target) && target.uuid !== actor.uuid && isCommandBasicsAlly(actor, target));
   if (!targets.length) return false;
 
   const healingAmount = Math.max(0, toInteger(payload.healingAmount));
@@ -5731,7 +5967,7 @@ async function processCommandBasicsDodgeOperation(payload = {}) {
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   const targets = (await Promise.all(targetActorUuids.map(uuid => fromUuid(uuid))))
-    .filter(target => target && isCommandBasicsAlly(actor, target));
+    .filter(target => target && !isPhantomEntity(target) && isCommandBasicsAlly(actor, target));
   if (!targets.length) return false;
 
   const dodgeBonus = Math.max(0, toInteger(payload.dodgeBonus));
@@ -7739,7 +7975,8 @@ async function requestCounterAttackReaction(context = {}) {
   const attackerTokenUuid = String(context?.tokenUuid ?? "").trim();
   const targetTokenUuids = Array.from(new Set((context?.targetTokenUuids ?? [])
     .map(uuid => String(uuid ?? "").trim())
-    .filter(Boolean)));
+    .filter(Boolean)
+    .filter(uuid => !isPhantomEntity(fromUuidSync(uuid)))));
   if (!attackerActorUuid || !attackerTokenUuid || !targetTokenUuids.length) return;
   const operation = () => requestReactionEvent(REACTION_EVENT_KEYS.weaponAttackResolved, {
     attackId: context?.attackId ?? "",
@@ -9457,6 +9694,16 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processPhantomSocketRequest(message);
     return;
   }
+  if (message.action === "createDanceOfThousandShadows") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processDanceOfThousandShadowsActivationSocketRequest(message);
+    return;
+  }
+  if (message.action === "swapDanceOfThousandShadows") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processDanceOfThousandShadowsSwapSocketRequest(message);
+    return;
+  }
   if (message.action === "createNightmareRegion") {
     if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
     void processNightmareRegionSocketRequest(message);
@@ -9566,7 +9813,13 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.applied));
   }
-  if (["nightmareRegionResult", "nightmareFearResult", "phantomResult"].includes(message.action)) {
+  if ([
+    "nightmareRegionResult",
+    "nightmareFearResult",
+    "phantomResult",
+    "danceOfThousandShadowsActivationResult",
+    "danceOfThousandShadowsSwapResult"
+  ].includes(message.action)) {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;
@@ -9581,6 +9834,16 @@ async function requestPhantomOperation(payload = {}) {
   return requestFixedAbilitySocketOperation("createPhantom", payload);
 }
 
+async function requestDanceOfThousandShadowsActivation(payload = {}, authority = null) {
+  if (game.user?.isGM) return processDanceOfThousandShadowsActivation(payload);
+  return requestFixedAbilitySocketOperation("createDanceOfThousandShadows", payload, { authority });
+}
+
+async function requestDanceOfThousandShadowsSwap(payload = {}, authority = null) {
+  if (game.user?.isGM) return processDanceOfThousandShadowsSwap(payload);
+  return requestFixedAbilitySocketOperation("swapDanceOfThousandShadows", payload, { authority });
+}
+
 async function requestNightmareRegionOperation(payload = {}) {
   if (game.user?.isGM) return processNightmareRegionOperation(payload);
   return requestFixedAbilitySocketOperation("createNightmareRegion", payload);
@@ -9591,8 +9854,8 @@ async function requestNightmareFearOperation(payload = {}) {
   return requestFixedAbilitySocketOperation("applyNightmareFear", payload);
 }
 
-async function requestFixedAbilitySocketOperation(action, payload = {}) {
-  const gm = getResponsibleGM();
+async function requestFixedAbilitySocketOperation(action, payload = {}, { authority = null } = {}) {
+  const gm = authority ?? getResponsibleGM();
   if (!gm) return false;
   const requestId = foundry.utils.randomID();
   const promise = new Promise(resolve => {
@@ -9655,6 +9918,44 @@ async function processPhantomSocketRequest(message = {}) {
   });
 }
 
+async function processDanceOfThousandShadowsActivationSocketRequest(message = {}) {
+  let applied = false;
+  try {
+    applied = await processDanceOfThousandShadowsActivation({
+      ...(message.payload ?? {}),
+      senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+    });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Dance of Thousand Shadows activation request failed`, error);
+  }
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "danceOfThousandShadowsActivationResult",
+    targetUserId: message.senderUserId,
+    requestId: message.requestId,
+    result: { applied }
+  });
+}
+
+async function processDanceOfThousandShadowsSwapSocketRequest(message = {}) {
+  let applied = false;
+  try {
+    applied = await processDanceOfThousandShadowsSwap({
+      ...(message.payload ?? {}),
+      senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+    });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Dance of Thousand Shadows swap request failed`, error);
+  }
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "danceOfThousandShadowsSwapResult",
+    targetUserId: message.senderUserId,
+    requestId: message.requestId,
+    result: { applied }
+  });
+}
+
 async function processPhantomOperation({
   sourceActorUuid = "",
   sourceTokenUuid = "",
@@ -9681,6 +9982,94 @@ async function processPhantomOperation({
     durationSeconds: settings.phantomDurationSeconds
   });
   return Boolean(created);
+}
+
+async function processDanceOfThousandShadowsActivation({
+  sourceActorUuid = "",
+  sourceTokenUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  senderUserId = ""
+} = {}) {
+  if (!game.user?.isGM) return false;
+  const actor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const token = fromUuidSync(String(sourceTokenUuid ?? "").trim());
+  const abilityItem = actor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows);
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (
+    !actor
+    || !token
+    || token.actor?.uuid !== actor.uuid
+    || token.parent?.id !== canvas?.scene?.id
+    || !abilityItem
+    || !abilityFunction
+    || !sender
+  ) return false;
+  if (!sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const effect = await activateDanceOfThousandShadows({
+    sourceActor: actor,
+    sourceToken: token,
+    abilityItem,
+    abilityFunction,
+    settings: normalizeDanceOfThousandShadowsSettings(abilityFunction.fixedSettings)
+  });
+  return Boolean(effect);
+}
+
+async function processDanceOfThousandShadowsSwap({
+  sourceActorUuid = "",
+  sourceTokenUuid = "",
+  phantomTokenUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  senderUserId = ""
+} = {}) {
+  if (!game.user?.isGM) return false;
+  const actor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const sourceToken = fromUuidSync(String(sourceTokenUuid ?? "").trim());
+  const phantomToken = fromUuidSync(String(phantomTokenUuid ?? "").trim());
+  const abilityItem = actor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows);
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  const effectData = getDanceEffectData(findActiveDanceEffect(actor));
+  if (
+    !actor
+    || !sourceToken
+    || !phantomToken
+    || sourceToken.actor?.uuid !== actor.uuid
+    || sourceToken.parent?.id !== canvas?.scene?.id
+    || phantomToken.parent?.id !== sourceToken.parent?.id
+    || getDancePhantomData(phantomToken)?.sessionId !== effectData?.sessionId
+    || !abilityItem
+    || !abilityFunction
+    || !sender
+  ) return false;
+  if (!sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+  const settings = normalizeDanceOfThousandShadowsSettings(abilityFunction.fixedSettings);
+  await waitForCombatResourceSpending(actor);
+  const receipt = await spendMovementThenActionPointsWithReceipt(actor, settings.swapPointCost);
+  if (!receipt) return false;
+  let swapped = false;
+  try {
+    swapped = await swapWithDancePhantom({ sourceActor: actor, sourceToken, phantomToken });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Dance of Thousand Shadows swap failed`, error);
+  }
+  if (!swapped) {
+    await refundMovementThenActionPoints(actor, receipt);
+    return false;
+  }
+  if (receipt.spent > 0) {
+    await notifyCombatResourcesSpent(actor, {
+      [MOVEMENT_RESOURCE_KEY]: receipt.movementSpent,
+      [receipt.actionResourceKey ?? ACTION_RESOURCE_KEY]: receipt.actionSpent
+    }, { type: "ability", label: getAbilityDisplayName(abilityItem) });
+  }
+  return true;
 }
 
 async function processNightmareRegionOperation({
@@ -9804,7 +10193,7 @@ async function processNightmareFearOperation({
   const targetUuids = Array.isArray(targetActorUuids) ? targetActorUuids : [targetActorUuids];
   for (const uuid of Array.from(new Set(targetUuids.map(value => String(value ?? "").trim()).filter(Boolean)))) {
     const target = fromUuidSync(uuid);
-    if (!target?.isOwner || getActiveApplicationTargetRelation(sourceActor, target) === "ally") continue;
+    if (!target?.isOwner || isPhantomEntity(target) || getActiveApplicationTargetRelation(sourceActor, target) === "ally") continue;
     if (hasMaximumNightmareFearDuration(target, settings.fearDurationSeconds, now)) continue;
     const effectData = {
       type: "base",
@@ -10491,6 +10880,7 @@ function collectNightmareWitnesses(sourceActor, victims = [], radiusMeters = 0) 
   for (const token of tokens) {
     const actor = token?.actor;
     if (!actor?.uuid
+      || isPhantomEntity(token)
       || actor.uuid === sourceActor?.uuid
       || isActorUnableToAct(actor)
       || getActiveApplicationTargetRelation(sourceActor, actor) === "ally") continue;

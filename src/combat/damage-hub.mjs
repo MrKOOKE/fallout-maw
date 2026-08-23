@@ -66,6 +66,7 @@ import {
   isPeriodicHealingEffectKey
 } from "./periodic-healing.mjs";
 import { getContextualAbilityChangeValue, getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import { getUnconsciousnessResistanceActiveUseKeys } from "../abilities/active-use-keys.mjs";
 import {
   commitPreparedActiveUseOperations,
@@ -758,8 +759,15 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
     const allowed = [];
     const cancelled = [];
     const beforeSnapshots = new Map();
+    let mechanicalRequestCount = 0;
     for (const [index, request] of normalized.entries()) {
       const actor = await fromUuid(request.actorUuid);
+      if (isPhantomEntity(actor)) {
+        allowed.push(request);
+        beforeSnapshots.set(request, { skipEvents: true, index });
+        continue;
+      }
+      mechanicalRequestCount += 1;
       const before = getDamageEventActorSnapshot(actor, request);
       const occurrenceBase = `damage:${scope.rootId}:${index}:${request.actorUuid}:${request.mode}`;
       const beforeKey = request.mode === MODE_HEALING
@@ -789,6 +797,12 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
           for (let remainingIndex = index + 1; remainingIndex < normalized.length; remainingIndex += 1) {
             const skippedRequest = normalized[remainingIndex];
             const skippedActor = await fromUuid(skippedRequest.actorUuid);
+            if (isPhantomEntity(skippedActor)) {
+              allowed.push(skippedRequest);
+              beforeSnapshots.set(skippedRequest, { skipEvents: true, index: remainingIndex });
+              continue;
+            }
+            mechanicalRequestCount += 1;
             const skippedBefore = getDamageEventActorSnapshot(skippedActor, skippedRequest);
             const skippedBase = `damage:${scope.rootId}:${remainingIndex}:${skippedRequest.actorUuid}:${skippedRequest.mode}`;
             const skippedResult = createCancelledDamageResult(skippedActor, skippedRequest, gate.control);
@@ -826,6 +840,7 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
     const applicationBreakdownIndexes = new WeakMap();
     for (const request of allowed) {
       const metadata = beforeSnapshots.get(request);
+      if (metadata?.skipEvents) continue;
       const result = findDamageEventResult(request, flatResults) ?? createFailedDamageResult(request, operationError);
       const applications = result?.damageApplications;
       let applicationBreakdownIndex = null;
@@ -842,11 +857,11 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
       });
     }
 
-    if (batch || normalized.length > 1) {
+    if (mechanicalRequestCount > 0 && (batch || mechanicalRequestCount > 1)) {
       await scope.emit("fallout-maw.damage.batch.resolved", {
         data: {
-          requestCount: normalized.length,
-          appliedCount: allowed.length,
+          requestCount: mechanicalRequestCount,
+          appliedCount: allowed.filter(request => !beforeSnapshots.get(request)?.skipEvents).length,
           cancelledCount: cancelled.length,
           inDamageHubOperation: true,
           damageHubOperationRef: getCurrentDamageHubOperationRef()
@@ -1175,13 +1190,16 @@ async function applyDamageCycleNow(requests = [], { chainRef = null, feedbackQue
     for (const [actorUuid, actorRequests] of grouped) {
       const actor = await fromUuid(actorUuid);
       if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
-      const actorResults = await queueActorDamageMutation(actorUuid, () => (
-        applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, {
-          createSummary: false,
-          deferredShockChecks,
-          feedbackQueue: pendingFeedback
-        })
-      ));
+      const applyActorRequests = () => applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, {
+        createSummary: false,
+        deferredShockChecks,
+        feedbackQueue: pendingFeedback
+      });
+      // Phantom damage is a terminal marker and never mutates Actor state, so
+      // it does not need to occupy the per-Actor mutation queue.
+      const actorResults = isPhantomEntity(actor)
+        ? await applyActorRequests()
+        : await queueActorDamageMutation(actorUuid, applyActorRequests);
       if (Array.isArray(actorResults)) results.push(...actorResults);
     }
 
@@ -1233,23 +1251,35 @@ export async function applyDamageRequestsInCurrentHubOperation(requests = [], lo
 }
 
 function serializeDamageCycleSocketResults(results = []) {
-  return results.flat(Infinity).filter(Boolean).map(result => ({
-    actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
-    amount: roundDamageAmount(result.amount),
-    delayedAmount: roundDamageAmount(result.delayedAmount),
-    preBarrierAmount: roundDamageAmount(result.preBarrierAmount),
-    barrierAbsorbed: roundDamageAmount(result.barrierAbsorbed),
-    amountAfterBarrier: roundDamageAmount(result.amountAfterBarrier ?? result.amount),
-    barrierDepletedCount: Array.isArray(result.barrierDepleted) ? result.barrierDepleted.length : 0,
-    mitigationBlocked: roundDamageAmount(result.mitigationBlocked),
-    healthDelta: roundDamageAmount(result.healthDelta),
-    resourceHealthDelta: roundDamageAmount(result.resourceHealthDelta),
-    limbDelta: roundDamageAmount(result.limbDelta),
-    mode: result.mode ?? MODE_DAMAGE,
-    scope: result.scope ?? "",
-    limbKey: result.limbKey ?? "",
-    damageTypeKey: result.damageTypeKey ?? ""
-  }));
+  return results.flat(Infinity).filter(Boolean).map(result => {
+    const phantomDestroyed = result.phantomDestroyed === true;
+    return {
+      actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
+      amount: roundDamageAmount(result.amount),
+      delayedAmount: roundDamageAmount(result.delayedAmount),
+      preBarrierAmount: roundDamageAmount(result.preBarrierAmount),
+      barrierAbsorbed: roundDamageAmount(result.barrierAbsorbed),
+      amountAfterBarrier: roundDamageAmount(result.amountAfterBarrier ?? result.amount),
+      barrierDepletedCount: Array.isArray(result.barrierDepleted) ? result.barrierDepleted.length : 0,
+      mitigationBlocked: roundDamageAmount(result.mitigationBlocked),
+      healthDelta: roundDamageAmount(result.healthDelta),
+      resourceHealthDelta: roundDamageAmount(result.resourceHealthDelta),
+      limbDelta: roundDamageAmount(result.limbDelta),
+      mode: result.mode ?? MODE_DAMAGE,
+      scope: result.scope ?? "",
+      limbKey: result.limbKey ?? "",
+      damageTypeKey: result.damageTypeKey ?? "",
+      ...(phantomDestroyed ? {
+        phantomDestroyed: true,
+        source: {
+          attackId: String(result.source?.attackId ?? ""),
+          attackerActorUuid: String(result.source?.attackerActorUuid ?? result.source?.attackerUuid ?? ""),
+          targetTokenUuid: String(result.source?.targetTokenUuid ?? ""),
+          weaponAttackDamage: result.source?.weaponAttackDamage === true
+        }
+      } : {})
+    };
+  });
 }
 
 function serializeEmbeddedDocumentSocketResults(documents = []) {
@@ -1286,11 +1316,14 @@ export async function applyDamageApplication(request = {}, options = {}) {
         async (allowedRequests, scope) => {
           const allowed = allowedRequests[0];
           if (!allowed) return undefined;
-          return queueActorDamageMutation(allowed.actorUuid, () => applyDamageApplicationNow(allowed, {
+          const operation = () => applyDamageApplicationNow(allowed, {
             ...options,
             chainRef: scope?.chainRef ?? null,
             feedbackQueue
-          }));
+          });
+          return isPhantomEntity(fromUuidSync(allowed.actorUuid))
+            ? operation()
+            : queueActorDamageMutation(allowed.actorUuid, operation);
         },
         { single: true }
       );
@@ -1384,6 +1417,38 @@ function createFailedExternalHealingResult(actor, request = {}, reason = "healin
   };
 }
 
+function createPhantomDamageResult(actor, data, scope = normalizeScope(data?.scope, data?.limbKey)) {
+  const amount = roundDamageAmount(data?.amount);
+  return {
+    actor,
+    actorUuid: String(actor?.uuid ?? data?.actorUuid ?? ""),
+    amount,
+    potentialAmount: amount,
+    preBarrierAmount: amount,
+    barrierAbsorbed: 0,
+    amountAfterBarrier: amount,
+    mitigationBlocked: 0,
+    healthDelta: 0,
+    resourceHealthDelta: 0,
+    limbDelta: 0,
+    mode: MODE_DAMAGE,
+    scope,
+    limbKey: String(data?.limbKey ?? ""),
+    damageTypeKey: String(data?.damageTypeKey ?? ""),
+    source: data?.source ?? {},
+    phantomDestroyed: amount > 0
+  };
+}
+
+async function finishPhantomDamageApplications(results = [], { createSummary = true } = {}) {
+  const applied = results.filter(result => result?.phantomDestroyed === true);
+  if (createSummary && applied.length) {
+    await publishDamageSummaryMessage(applied);
+    await notifyDamageApplied(applied);
+  }
+  return applied;
+}
+
 async function applyDamageApplicationNow(request = {}, {
   createSummary = true,
   damageBarrierLedger: suppliedDamageBarrierLedger = null,
@@ -1399,6 +1464,15 @@ async function applyDamageApplicationNow(request = {}, {
   const scope = normalizeScope(data.scope, data.limbKey);
   if (mode === MODE_DAMAGE && scope === SCOPE_ITEM_CONDITION) {
     return applyItemConditionDamageApplicationNow(actor, { ...data, scope }, { createSummary });
+  }
+  if (isPhantomEntity(actor)) {
+    if (mode !== MODE_DAMAGE) {
+      return { actor, amount: 0, healthDelta: 0, resourceHealthDelta: 0, limbDelta: 0, mode, scope };
+    }
+    const [result] = await finishPhantomDamageApplications([
+      createPhantomDamageResult(actor, data, scope)
+    ], { createSummary });
+    return result ?? createPhantomDamageResult(actor, data, scope);
   }
   if (mode === MODE_HEALING && isHealingBlocked(actor)) {
     await queueActorDamageStatusSync(actor);
@@ -1921,12 +1995,15 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
     try {
       return await executeDamageSystemEventWorkflow(
         normalizedRequests,
-        allowedRequests => queueActorDamageMutation(targetActorUuid, () => (
-          applyDamageApplicationsNow(
+        allowedRequests => {
+          const operation = () => applyDamageApplicationsNow(
             { actorUuid: targetActorUuid, requests: allowedRequests },
             { ...options, feedbackQueue }
-          )
-        )),
+          );
+          return isPhantomEntity(fromUuidSync(targetActorUuid))
+            ? operation()
+            : queueActorDamageMutation(targetActorUuid, operation);
+        },
         { batch: normalizedRequests.length > 1 }
       );
     } finally {
@@ -1964,6 +2041,12 @@ async function applyDamageApplicationsNow(
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
+  if (isPhantomEntity(actor)) {
+    const phantomResults = combineItemConditionDamagePackets(requests, actorUuid)
+      .filter(data => data.mode === MODE_DAMAGE && data.scope !== SCOPE_ITEM_CONDITION)
+      .map(data => createPhantomDamageResult(actor, data));
+    return finishPhantomDamageApplications(phantomResults, { createSummary });
+  }
   const hasBarrierEligibleDamage = requests.some(request => {
     const data = normalizeDamageRequest(request);
     return data.mode === MODE_DAMAGE && data.scope !== SCOPE_ITEM_CONDITION;

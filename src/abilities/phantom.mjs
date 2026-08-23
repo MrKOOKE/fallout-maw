@@ -1,18 +1,29 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerDamageAppliedHandler } from "../combat/damage-hub.mjs";
+import { registerWeaponAttackTerminalHandler } from "../combat/weapon-attack-controller.mjs";
 import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 import {
-  areActorsStealthAlliesCached,
   registerStealthObserverExclusionProvider
 } from "../stealth/observers.mjs";
 import { toggleActorStealth } from "../stealth/controller.mjs";
 import { registerTokenTargetAlphaProvider } from "../canvas/token-target-alpha.mjs";
+import {
+  PHANTOM_VISION_FLAG_KEY,
+  actorsArePhantomAllies,
+  hasExplicitActorObservation
+} from "../canvas/phantom-vision.mjs";
+import {
+  PHANTOM_ENTITY_FLAG_KEY,
+  buildPhantomEntityData,
+  isPhantomEntity
+} from "./phantom-entity.mjs";
 
 export const PHANTOM_FLAG_KEY = "phantom";
 export const PHANTOM_EXPIRY_EFFECT_FLAG_KEY = "phantomExpiry";
 
 const PHANTOM_OBSERVER_PROVIDER_ID = "fixed.phantom";
 const PHANTOM_DAMAGE_HANDLER_ID = "fallout-maw.fixed.phantom";
+const PHANTOM_WEAPON_TERMINAL_HANDLER_ID = "fallout-maw.fixed.phantom.weaponTerminal";
 const PHANTOM_ALPHA_PROVIDER_ID = "fallout-maw.fixed.phantom";
 const PHANTOM_ALLY_ALPHA = 0.4;
 const PHANTOM_VISIBILITY_CACHE_LIMIT = 1000;
@@ -29,7 +40,15 @@ export function registerPhantomRuntimeHooks() {
   hooksRegistered = true;
   registerStealthObserverExclusionProvider(PHANTOM_OBSERVER_PROVIDER_ID, observerSeesActivePhantom);
   registerDamageAppliedHandler(PHANTOM_DAMAGE_HANDLER_ID, onDamageApplied);
+  registerWeaponAttackTerminalHandler(PHANTOM_WEAPON_TERMINAL_HANDLER_ID, onWeaponAttackTerminal);
   registerTokenTargetAlphaProvider(PHANTOM_ALPHA_PROVIDER_ID, getPhantomTokenTargetAlpha);
+  Hooks.on("preCreateItem", item => !isPhantomEntity(item?.parent));
+  Hooks.on("preCreateActiveEffect", effect => (
+    !isPhantomEntity(effect?.parent) || isPhantomExpiryEffect(effect)
+  ));
+  Hooks.on("preCreateCombatant", combatant => (
+    !isPhantomEntity(combatant?.actor) && !isPhantomEntity(combatant?.token)
+  ));
 
   Hooks.on("canvasReady", () => {
     rebuildCurrentScenePhantomIndex();
@@ -51,13 +70,13 @@ export function registerPhantomRuntimeHooks() {
     if (options?.[PHANTOM_CLEANUP_OPTION] || !game.user?.isActiveGM) return;
     const actor = document?.actor;
     if (getPhantomData(actor)) void deletePhantomActor(actor);
-    else void deletePhantomsLinkedTo({ sourceTokenUuid: document?.uuid });
+    else void deletePhantomsLinked({ sourceTokenUuid: document?.uuid });
   });
   Hooks.on("deleteActor", (actor, options = {}) => {
     if (!game.user?.isActiveGM || options?.[PHANTOM_CLEANUP_OPTION]) return;
     const phantomData = getPhantomData(actor);
     if (phantomData) void deletePhantomToken(phantomData.phantomTokenUuid);
-    else void deletePhantomsLinkedTo({ sourceActorUuid: actor?.uuid });
+    else void deletePhantomsLinked({ sourceActorUuid: actor?.uuid });
   });
   Hooks.on("deleteActiveEffect", effect => {
     if (game.user?.isActiveGM && isPhantomExpiryEffect(effect)) void deletePhantomActor(effect.parent);
@@ -164,6 +183,7 @@ export function buildPhantomActorData(sourceActor, phantomData = {}) {
     system: sourceSystem,
     flags: {
       [SYSTEM_ID]: {
+        [PHANTOM_ENTITY_FLAG_KEY]: buildPhantomEntityData(),
         [PHANTOM_FLAG_KEY]: cloneData(phantomData),
         factionBelongs,
         factionRelations
@@ -176,6 +196,13 @@ export function buildPhantomTokenData(sourceToken, phantomActor, phantomData = {
   const texture = cloneData(sourceToken?.texture?.toObject?.() ?? sourceToken?.texture ?? {});
   const bar1 = cloneData(sourceToken?.bar1?.toObject?.() ?? sourceToken?.bar1 ?? {});
   const bar2 = cloneData(sourceToken?.bar2?.toObject?.() ?? sourceToken?.bar2 ?? {});
+  const sight = cloneData(sourceToken?._source?.sight ?? sourceToken?.sight?.toObject?.() ?? sourceToken?.sight ?? {});
+  const detectionModes = cloneData(
+    sourceToken?._source?.detectionModes
+      ?? sourceToken?.detectionModes?.toObject?.()
+      ?? sourceToken?.detectionModes
+      ?? []
+  );
   return {
     name: String(sourceToken?.name ?? sourceToken?.actor?.name ?? "Фантом"),
     actorId: phantomActor.id,
@@ -196,11 +223,20 @@ export function buildPhantomTokenData(sourceToken, phantomActor, phantomData = {
     // local translucency through FalloutMaWToken._getTargetAlpha.
     alpha: 1,
     texture,
-    sight: { enabled: false },
-    detectionModes: {},
+    sight,
+    detectionModes,
     hidden: false,
     locked: true,
-    flags: { [SYSTEM_ID]: { [PHANTOM_FLAG_KEY]: cloneData(phantomData) } }
+    flags: {
+      [SYSTEM_ID]: {
+        [PHANTOM_ENTITY_FLAG_KEY]: buildPhantomEntityData(),
+        [PHANTOM_FLAG_KEY]: cloneData(phantomData),
+        [PHANTOM_VISION_FLAG_KEY]: {
+          sourceActorUuid: String(phantomData?.sourceActorUuid ?? ""),
+          sourceTokenUuid: String(phantomData?.sourceTokenUuid ?? "")
+        }
+      }
+    }
   };
 }
 
@@ -279,7 +315,7 @@ function getPhantomTokenTargetAlpha(token, baseAlpha = 1) {
     : baseAlpha;
 }
 
-function localViewRecognizesPhantom(sourceActor) {
+export function localViewRecognizesPhantom(sourceActor) {
   if (!sourceActor) return false;
 
   // Foundry has already resolved control, actor permissions and free-view state
@@ -305,14 +341,6 @@ function localViewRecognizesPhantom(sourceActor) {
   ));
 }
 
-function actorsArePhantomAllies(sourceActor, observerActor) {
-  if (!sourceActor || !observerActor) return false;
-  const sourceBaseActor = sourceActor?.parent?.baseActor ?? sourceActor;
-  const observerBaseActor = observerActor?.parent?.baseActor ?? observerActor;
-  return sourceBaseActor?.uuid === observerBaseActor?.uuid
-    || areActorsStealthAlliesCached(sourceActor, observerActor);
-}
-
 function resolvePhantomSourceActor(phantomData = {}) {
   const sourceToken = fromUuidSync(String(phantomData?.sourceTokenUuid ?? ""));
   return sourceToken?.actor
@@ -324,15 +352,6 @@ function requestPhantomTargetAlphaRefresh() {
   for (const token of phantomTokensBySourceActor.values()) {
     token?.renderFlags?.set?.({ refreshState: true });
   }
-}
-
-function hasExplicitActorObservation(actor, user) {
-  if (!actor || !user?.id) return false;
-  const baseActor = actor?.parent?.baseActor ?? actor;
-  const ownership = baseActor?._source?.ownership ?? baseActor?.ownership ?? {};
-  const level = Number(ownership[user.id] ?? ownership.default);
-  const observerLevel = Number(CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER);
-  return Number.isFinite(level) && level >= observerLevel;
 }
 
 function actorPhantomViewChanged(changes = {}) {
@@ -354,10 +373,34 @@ async function onDamageApplied({ results = [] } = {}) {
   const actors = new Map();
   for (const result of results.flat(Infinity).filter(Boolean)) {
     if (result.mode && result.mode !== "damage") continue;
-    const actor = result.actor ?? fromUuidSync(String(result.actorUuid ?? ""));
+    if (result.phantomDestroyed !== true) continue;
+    if (isWeaponAttackDamageResult(result)) continue;
+    const actor = resolveDamageResultActor(result);
+    if (getPhantomData(actor)) actors.set(actor.uuid, actor);
+  }
+  for (const actor of actors.values()) void deletePhantomActor(actor);
+}
+
+async function onWeaponAttackTerminal({ damageResults = [] } = {}) {
+  if (!game.user?.isActiveGM) return;
+  const actors = new Map();
+  for (const result of damageResults.flat(Infinity).filter(Boolean)) {
+    if (result.phantomDestroyed !== true || !isWeaponAttackDamageResult(result)) continue;
+    const actor = resolveDamageResultActor(result);
     if (getPhantomData(actor)) actors.set(actor.uuid, actor);
   }
   await Promise.all(Array.from(actors.values(), actor => deletePhantomActor(actor)));
+}
+
+function isWeaponAttackDamageResult(result = {}) {
+  return result?.source?.weaponAttackDamage === true;
+}
+
+function resolveDamageResultActor(result = {}) {
+  const targetToken = fromUuidSync(String(result?.source?.targetTokenUuid ?? ""));
+  return result?.actor
+    ?? targetToken?.actor
+    ?? fromUuidSync(String(result?.actorUuid ?? ""));
 }
 
 async function deletePhantomsLinked({ sourceActorUuid = "", sourceTokenUuid = "" } = {}) {
@@ -381,9 +424,19 @@ async function deletePhantomActor(actor) {
   if (pendingPhantomCleanup.has(baseActor.uuid)) return false;
   pendingPhantomCleanup.add(baseActor.uuid);
   try {
-    await deletePhantomToken(getPhantomData(baseActor)?.phantomTokenUuid);
-    if (game.actors?.get(baseActor.id)) await baseActor.delete({ [PHANTOM_CLEANUP_OPTION]: true });
-    return true;
+    const cleanupOperations = [
+      deletePhantomToken(getPhantomData(baseActor)?.phantomTokenUuid)
+    ];
+    if (game.actors?.get(baseActor.id)) {
+      cleanupOperations.push(baseActor.delete({ [PHANTOM_CLEANUP_OPTION]: true }));
+    }
+    const results = await Promise.all(cleanupOperations.map(operation => (
+      Promise.resolve(operation).catch(error => {
+        console.error(`${SYSTEM_ID} | Phantom cleanup failed`, error);
+        return false;
+      })
+    )));
+    return results.some(Boolean);
   } finally {
     pendingPhantomCleanup.delete(baseActor.uuid);
   }
@@ -397,7 +450,10 @@ async function deletePhantomToken(uuid = "") {
 }
 
 function isPhantomExpiryEffect(effect) {
-  return Boolean(effect?.getFlag?.(SYSTEM_ID, PHANTOM_EXPIRY_EFFECT_FLAG_KEY) && getPhantomData(effect.parent));
+  const expiry = effect?.getFlag?.(SYSTEM_ID, PHANTOM_EXPIRY_EFFECT_FLAG_KEY)
+    ?? effect?.flags?.[SYSTEM_ID]?.[PHANTOM_EXPIRY_EFFECT_FLAG_KEY]
+    ?? effect?._source?.flags?.[SYSTEM_ID]?.[PHANTOM_EXPIRY_EFFECT_FLAG_KEY];
+  return Boolean(expiry && getPhantomData(effect?.parent));
 }
 
 function invalidatePhantomVisibility() {

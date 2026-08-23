@@ -21,6 +21,7 @@ import {
   startCanvasTargetSelectionSession
 } from "../canvas/target-selection-lifecycle.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
@@ -126,7 +127,7 @@ export async function commitGrappleFollowOrchestrations(orchestrations = []) {
 export async function useGrappleAction(token) {
   const tokenDocument = getTokenDocument(token);
   const actor = tokenDocument?.actor;
-  if (!tokenDocument || !actor?.isOwner || isActorUnableToAct(actor)) return undefined;
+  if (!tokenDocument || isPhantomEntity(tokenDocument) || !actor?.isOwner || isActorUnableToAct(actor)) return undefined;
 
   const grappleTargetId = getGrappleTargetId(tokenDocument);
   if (grappleTargetId) return requestUnlinkGrapple(tokenDocument, getSceneToken(tokenDocument, grappleTargetId));
@@ -140,7 +141,7 @@ export async function useGrappleAction(token) {
 export async function usePushAction(token) {
   const attackerDocument = getTokenDocument(token);
   const actor = attackerDocument?.actor;
-  if (!attackerDocument || !actor?.isOwner || isActorUnableToAct(actor)) return undefined;
+  if (!attackerDocument || isPhantomEntity(attackerDocument) || !actor?.isOwner || isActorUnableToAct(actor)) return undefined;
   return startPushTargetSelection(attackerDocument);
 }
 
@@ -185,7 +186,13 @@ export async function requestPushKnockback({ attackerToken = null, targetToken =
 export async function requestKnockback({ attackerToken = null, targetToken = null, distanceCells = 1, reason = "" } = {}) {
   const attackerDocument = getTokenDocument(attackerToken);
   const targetDocument = getTokenDocument(targetToken);
-  if (!attackerDocument || !targetDocument || attackerDocument.id === targetDocument.id) return false;
+  if (
+    !attackerDocument
+    || !targetDocument
+    || isPhantomEntity(attackerDocument)
+    || isPhantomEntity(targetDocument)
+    || attackerDocument.id === targetDocument.id
+  ) return false;
   return requestActiveActionGMOperation("knockback", {
     sceneId: attackerDocument.parent?.id ?? targetDocument.parent?.id ?? canvas.scene?.id ?? "",
     attackerTokenId: attackerDocument.id,
@@ -221,7 +228,13 @@ export async function resolveKnockback({
 } = {}) {
   const attackerDocument = getTokenDocument(attackerToken);
   const targetDocument = getTokenDocument(targetToken);
-  if (!attackerDocument || !targetDocument?.actor || attackerDocument.id === targetDocument.id) return null;
+  if (
+    !attackerDocument
+    || !targetDocument?.actor
+    || isPhantomEntity(attackerDocument)
+    || isPhantomEntity(targetDocument)
+    || attackerDocument.id === targetDocument.id
+  ) return null;
   const initialDifficulty = Math.max(0, toInteger(difficulty));
   const settings = getCombatSettings().knockback;
   const threshold = repeatThreshold ?? settings.repeatDifficultyThreshold;
@@ -260,7 +273,7 @@ export async function resolveKnockback({
 async function startGrappleTargetSelection(grapplerDocument) {
   const collectCandidates = () => (canvas.tokens?.placeables ?? [])
     .map(token => token.document)
-    .filter(document => document?.id !== grapplerDocument.id && document.actor && areTokensAdjacent(grapplerDocument, document));
+    .filter(document => document?.id !== grapplerDocument.id && document.actor && !isPhantomEntity(document) && areTokensAdjacent(grapplerDocument, document));
   const candidates = collectCandidates();
   if (!candidates.length) {
     ui.notifications.warn(localizeHud("NoAdjacentGrappleTarget"));
@@ -278,7 +291,7 @@ async function startGrappleTargetSelection(grapplerDocument) {
 async function startPushTargetSelection(attackerDocument) {
   const collectCandidates = () => (canvas.tokens?.placeables ?? [])
     .map(token => token.document)
-    .filter(document => document?.id !== attackerDocument.id && document.actor && areTokensAdjacent(attackerDocument, document));
+    .filter(document => document?.id !== attackerDocument.id && document.actor && !isPhantomEntity(document) && areTokensAdjacent(attackerDocument, document));
   const candidates = collectCandidates();
   if (!candidates.length) {
     ui.notifications.warn(localizeHud("NoAdjacentPushTarget"));
@@ -610,7 +623,7 @@ async function attemptPushDocuments({ sceneId = "", attackerTokenId = "", target
   const scene = getScene(sceneId);
   const attacker = scene?.tokens?.get(attackerTokenId);
   const target = scene?.tokens?.get(targetTokenId);
-  if (!scene || !attacker || !target || attacker.id === target.id) return false;
+  if (!scene || !attacker || !target || isPhantomEntity(attacker) || isPhantomEntity(target) || attacker.id === target.id) return false;
   return attemptPush(attacker, target, { selectedStrength });
 }
 
@@ -625,7 +638,7 @@ async function attemptGrappleDocuments({ sceneId = "", grapplerTokenId = "", tar
   const scene = getScene(sceneId);
   const grappler = scene?.tokens?.get(grapplerTokenId);
   const target = scene?.tokens?.get(targetTokenId);
-  if (!scene || !grappler || !target || grappler.id === target.id) return false;
+  if (!scene || !grappler || !target || isPhantomEntity(grappler) || isPhantomEntity(target) || grappler.id === target.id) return false;
   return attemptGrapple(grappler, target, { allowGmLocalPrompt: false });
 }
 
@@ -633,7 +646,7 @@ async function linkGrappleDocuments({ sceneId = "", grapplerTokenId = "", target
   const scene = getScene(sceneId);
   const grappler = scene?.tokens?.get(grapplerTokenId);
   const target = scene?.tokens?.get(targetTokenId);
-  if (!scene || !grappler || !target || grappler.id === target.id) return false;
+  if (!scene || !grappler || !target || isPhantomEntity(grappler) || isPhantomEntity(target) || grappler.id === target.id) return false;
 
   const updates = [];
   const clearedEffectActors = new Set();
@@ -770,7 +783,7 @@ async function knockbackDocument({ sceneId = "", attackerTokenId = "", targetTok
   const scene = getScene(sceneId);
   const attacker = scene?.tokens?.get(attackerTokenId);
   const target = scene?.tokens?.get(targetTokenId);
-  if (!attacker || !target) return false;
+  if (!attacker || !target || isPhantomEntity(attacker) || isPhantomEntity(target)) return false;
   const destination = getKnockbackDestination(attacker, target, distanceCells);
   if (!destination) return false;
   await breakGrappleRelationsForToken(scene, target.id);
@@ -796,7 +809,7 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
 }
 
 function onDeleteTokenGrapple(tokenDocument) {
-  if (!game.user?.isGM) return;
+  if (!game.user?.isGM || isPhantomEntity(tokenDocument)) return;
   void unlinkGrappleDocuments({
     sceneId: tokenDocument.parent?.id ?? tokenDocument.scene?.id ?? canvas.scene?.id ?? "",
     grapplerTokenId: tokenDocument.id,
@@ -807,11 +820,11 @@ function onDeleteTokenGrapple(tokenDocument) {
 function getGrappleCandidate(grapplerDocument) {
   const targets = [...(game.user?.targets ?? [])]
     .map(token => token.document)
-    .filter(document => document?.id !== grapplerDocument.id && document.actor);
+    .filter(document => document?.id !== grapplerDocument.id && document.actor && !isPhantomEntity(document));
   if (targets.length === 1) return targets[0];
   const adjacent = (canvas.tokens?.placeables ?? [])
     .map(token => token.document)
-    .filter(document => document?.id !== grapplerDocument.id && document.actor && areTokensAdjacent(grapplerDocument, document));
+    .filter(document => document?.id !== grapplerDocument.id && document.actor && !isPhantomEntity(document) && areTokensAdjacent(grapplerDocument, document));
   if (adjacent.length === 1) return adjacent[0];
   ui.notifications.warn(adjacent.length ? localizeHud("ChooseGrappleTarget") : localizeHud("NoAdjacentGrappleTarget"));
   return null;

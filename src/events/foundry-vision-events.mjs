@@ -6,6 +6,7 @@ import {
   VISION_EVENT_REACTION_KEYS
 } from "./event-reaction-index.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 
 const TOKEN_VISION_PATHS = [
   "x", "y", "elevation", "width", "height", "hidden", "sight", "detectionModes", "texture.scaleX", "texture.scaleY"
@@ -101,7 +102,11 @@ function visionTrackingWantedSync() {
 async function collectSceneTokens(sceneKey) {
   if (!isCurrentActiveGM() || !canvas?.ready || !canvas.scene) return [];
   if (getActiveSceneKey() !== String(sceneKey ?? "")) return [];
-  return (canvas.tokens?.placeables ?? []).filter(token => token?.actor && tokenDocumentUuid(token));
+  return (canvas.tokens?.placeables ?? []).filter(token => (
+    token?.actor
+    && !isPhantomEntity(token)
+    && tokenDocumentUuid(token)
+  ));
 }
 
 async function emitVisionTransition({ type, pair } = {}) {
@@ -151,7 +156,7 @@ async function flushVisionTransitions(sceneUuid, entries = []) {
 }
 
 function invalidateToken(token, { silent = false } = {}) {
-  if (!isCurrentActiveGM()) return null;
+  if (!isCurrentActiveGM() || isPhantomEntity(token)) return null;
   if (!visionTrackingWantedSync()) {
     void refreshVisionDemand().then(demanded => {
       if (demanded) invalidateToken(token, { silent });
@@ -169,6 +174,12 @@ function removeToken(token) {
   const sceneKey = getSceneKey(token?.parent ?? canvas?.scene);
   const tokenUuid = tokenDocumentUuid(token);
   if (!sceneKey || !tokenUuid) return null;
+  // A phantom was never a semantic LOS participant. Purge any stale pair
+  // silently instead of emitting target-lost events after its synthetic Actor
+  // UUID has already become unresolvable.
+  if (isPhantomEntity(token)) {
+    return physicalLosCache.removeToken(sceneKey, tokenUuid, { silent: true });
+  }
   if (!visionTrackingWantedSync()) {
     return physicalLosCache.removeToken(sceneKey, tokenUuid, { silent: true });
   }

@@ -245,6 +245,53 @@ export async function commitStealthMovementCollection(context = {}) {
   });
 }
 
+/**
+ * Seed the ordinary per-observer movement state after an instantaneous
+ * relocation. This skips only the entry check: later movement continues from
+ * the existing accumulator, or zero for a newly entered zone, through the
+ * regular interruption provider.
+ */
+export async function synchronizeStealthMovementStateAfterRelocation(
+  tokenDocument,
+  { skipEntryDetection = false } = {}
+) {
+  const hiddenToken = tokenDocument?.object;
+  if (!skipEntryDetection || !hiddenToken?.actor || !isActorStealthed(hiddenToken.actor)) return false;
+
+  const settings = getRuntimeStealthSettings();
+  if (!settings.autoDetection?.enabled || !globalThis.canvas?.ready) return false;
+  const descriptors = getMovementStealthPairDescriptors(tokenDocument)
+    .filter(descriptor => descriptor.mode === "hiddenMoving");
+  if (!descriptors.length) return false;
+
+  const stateUpdates = new Map();
+  const stateBaselines = new Map();
+  for (const descriptor of descriptors) {
+    const hiddenPoint = getTokenCenter(descriptor.hiddenToken);
+    const observerOrigin = getTokenCenter(descriptor.observerToken);
+    const pair = {
+      ...descriptor,
+      previous: { hiddenPoint, observerOrigin },
+      current: { hiddenPoint, observerOrigin }
+    };
+    const key = getDetectionMovementStateKey(pair);
+    const baseline = readPersistentPairState(pair, key);
+    stateBaselines.set(key, baseline);
+    const isInside = isPointInsideObserverZone(hiddenPoint, descriptor.observerToken, observerOrigin, settings);
+    stateUpdates.set(
+      key,
+      isInside ? (baseline.value ?? 0) : null
+    );
+  }
+
+  await commitStealthMovementCollection({
+    tokenDocument,
+    collection: { stateUpdates, stateBaselines, stateTransitions: [] },
+    selectedEvent: null
+  });
+  return true;
+}
+
 function serializeMovementStateEntries(entries = []) {
   return Object.fromEntries(entries.map(entry => [
     encodeMovementStateEntryKey(entry.key),

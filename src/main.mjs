@@ -31,7 +31,8 @@ import {
   FalloutMaWActor,
   FalloutMaWCombat,
   FalloutMaWCombatant,
-  FalloutMaWItem
+  FalloutMaWItem,
+  FalloutMaWTokenDocument
 } from "./documents/index.mjs";
 import { registerAdvancementMediaSocket } from "./advancement/media.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
@@ -159,6 +160,7 @@ Hooks.once("init", () => {
   CONFIG.Combat.documentClass = FalloutMaWCombat;
   CONFIG.Combatant.documentClass = FalloutMaWCombatant;
   CONFIG.Item.documentClass = FalloutMaWItem;
+  CONFIG.Token.documentClass = FalloutMaWTokenDocument;
   CONFIG.Token.objectClass = FalloutMaWToken;
   CONFIG.Canvas.layers.tokens.layerClass = FalloutMaWTokenLayer;
   CONFIG.Token.rulerClass = FalloutMaWTokenRuler;

@@ -1,4 +1,5 @@
 import { getActorFactionRelation } from "../settings/factions.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 
 export const REGION_TARGET_RELATIONS = Object.freeze(["ally", "neutral", "enemy"]);
 
@@ -22,7 +23,7 @@ export function getRegionSourceActor(region = null, behavior = null) {
 }
 
 export function regionBehaviorTargetsActor(region = null, behavior = null, targetActor = null) {
-  if (!targetActor) return false;
+  if (!targetActor || isPhantomEntity(targetActor)) return false;
   const accepted = normalizeRegionTargetRelations(behavior?.system?.targetRelations);
   if (accepted.length === REGION_TARGET_RELATIONS.length) return true;
 

@@ -3,6 +3,7 @@ import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { trackSystemMovementOperation } from "./movement-settlement.mjs";
 
 export const CONTROLLED_MOVEMENT_INTERRUPTION_OPTION = "falloutMawControlledMovementInterruption";
+export const SYSTEM_RELOCATION_OPTION = "falloutMawSystemRelocation";
 
 const providers = new Map();
 const pendingMovementKeys = new Set();
@@ -132,6 +133,13 @@ export function getMovementRouteWaypointProgress(tokenDocument, movement = {}) {
 function onPreMoveToken(tokenDocument, movement, options = {}) {
   const tokenKey = getTokenDocumentKey(tokenDocument);
   if (tokenKey) pendingAcceptedCollections.delete(tokenKey);
+  // Forced relocations (blinks, swaps, scripted teleports) have no traversed
+  // route. Let Foundry commit them atomically without collecting ordinary
+  // movement interruptions along the line between both positions.
+  if (options?.[SYSTEM_RELOCATION_OPTION]) {
+    beginMovementEpoch(tokenDocument);
+    return true;
+  }
   const controlledContext = getControlledMovementContext(tokenDocument, movement, options);
   if (controlledContext) {
     prepareControlledAtomicUpdates(tokenDocument, movement, options, controlledContext);
@@ -336,6 +344,7 @@ function setPropertyPath(target, path, value) {
 }
 
 function onMoveToken(tokenDocument, movement, options = {}) {
+  if (options?.[SYSTEM_RELOCATION_OPTION]) return;
   const tokenKey = getTokenDocumentKey(tokenDocument);
   const pending = tokenKey ? pendingAcceptedCollections.get(tokenKey) : null;
   const committedProviderIds = new Set();

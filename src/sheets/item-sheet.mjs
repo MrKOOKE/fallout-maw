@@ -142,6 +142,7 @@ import {
   normalizeSandmanSettings,
   normalizeNightmareSettings,
   normalizePhantomSettings,
+  normalizeDanceOfThousandShadowsSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
@@ -7439,6 +7440,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedPhantomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom
     ? normalizePhantomSettings(entry?.fixedSettings)
     : null;
+  const fixedDanceOfThousandShadowsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows
+    ? normalizeDanceOfThousandShadowsSettings(entry?.fixedSettings)
+    : null;
   const hasEventReaction = (entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.eventReaction);
   const hasToggleableCondition = (entry?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
@@ -7533,6 +7537,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedSandmanSettings,
     fixedNightmareSettings,
     fixedPhantomSettings,
+    fixedDanceOfThousandShadowsSettings,
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),

@@ -7,6 +7,7 @@ import {
 } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import { isPhantomEntity } from "./phantom-entity.mjs";
 
 export const AURA_GENERATED_EFFECT_FLAG_KEY = "auraGenerated";
 
@@ -46,7 +47,7 @@ export function resolveAbilityAuraState(actor, condition = {}, context = {}) {
     minimum: 1,
     context: "aura required count"
   });
-  if (!sourceToken || !actor || !canvas?.tokens) {
+  if (!sourceToken || !actor || !canvas?.tokens || isPhantomEntity(sourceToken) || isPhantomEntity(actor)) {
     return {
       sourceToken: null,
       primaryTargets: [],
@@ -91,7 +92,7 @@ export function getAuraGeneratedTargetTokens(actor, condition = {}, context = {}
 }
 
 export function auraTriggerTargetMatches(actor, condition = {}, targetToken = null, context = {}) {
-  if (!isAuraTriggerCondition(condition) || !targetToken?.actor) return false;
+  if (!isAuraTriggerCondition(condition) || !targetToken?.actor || isPhantomEntity(targetToken)) return false;
   const sourceToken = resolveActorToken(actor, context);
   if (!sourceToken || !auraSourceAllowed(actor, sourceToken, condition)) return false;
   if (targetToken.id === sourceToken.id && condition.auraIncludeSelf === false) return false;
@@ -108,7 +109,7 @@ export function getAuraGeneratedEffectFlag(effect = null) {
 function collectAuraTargets(sourceToken, condition = {}, { targetGroups = [], includeSelf = true } = {}) {
   const targets = [];
   for (const targetToken of canvas?.tokens?.placeables ?? []) {
-    if (!targetToken?.actor) continue;
+    if (!targetToken?.actor || isPhantomEntity(targetToken)) continue;
     if (!includeSelf && targetToken.id === sourceToken.id) continue;
     if (!auraTargetAllowed(sourceToken, targetToken, condition)) continue;
     if (!auraTargetRelationMatches(sourceToken.actor, targetToken.actor, targetGroups)) continue;

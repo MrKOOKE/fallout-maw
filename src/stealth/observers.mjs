@@ -1,4 +1,5 @@
 import { actorHasIncapacitatingStatus } from "../combat/incapacitation.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import {
   DEFAULT_FACTION_NAME,
   getActorFactionBelongs,
@@ -23,6 +24,7 @@ let factionMatrix = null;
 
 export function isValidStealthObserver(hiddenToken, observerToken) {
   if (!hiddenToken?.actor || !observerToken?.actor) return false;
+  if (isPhantomEntity(hiddenToken) || isPhantomEntity(observerToken)) return false;
   if (hiddenToken.id === observerToken.id) return false;
   if (hiddenToken.actor.uuid === observerToken.actor.uuid) return false;
   if (isStealthObserverIncapacitated(observerToken)) return false;

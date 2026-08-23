@@ -7,6 +7,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { hasLimitedEffectCopyCapacity } from "../abilities/limited-effect-copies.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import {
   canAccumulateEventReactionEffect,
   hasAbilityFunctionEventEffectOutput,
@@ -33,6 +34,7 @@ export function collectActiveSceneReactorActors({ scene = globalThis.canvas?.sce
     const token = candidate?.document ?? candidate;
     if (scene?.id && token?.parent?.id && token.parent.id !== scene.id) continue;
     const actor = candidate?.actor ?? token?.actor ?? null;
+    if (isPhantomEntity(candidate) || isPhantomEntity(token) || isPhantomEntity(actor)) continue;
     const actorUuid = String(actor?.uuid ?? "").trim();
     if (actorUuid && !actors.has(actorUuid)) actors.set(actorUuid, actor);
   }
@@ -48,6 +50,7 @@ export async function collectEventReactionReactorActors(envelope = {}, {
   const actors = new Map();
   const participants = await resolveEventReactionParticipants(envelope, resolveUuid);
   for (const actor of [participants.sourceActor, participants.targetActor]) {
+    if (isPhantomEntity(actor)) continue;
     const uuid = String(actor?.uuid ?? "").trim();
     if (uuid) actors.set(uuid, actor);
   }
@@ -107,6 +110,7 @@ export async function collectEventReactionCandidates({
   const seenActors = new Set();
   for (const reactorEntry of reactors ?? []) {
     const reactor = reactorEntry?.actor ?? reactorEntry?.document?.actor ?? reactorEntry;
+    if (isPhantomEntity(reactorEntry) || isPhantomEntity(reactor)) continue;
     const actorUuid = String(reactor?.uuid ?? "").trim();
     if (!actorUuid || seenActors.has(actorUuid)) continue;
     seenActors.add(actorUuid);

@@ -214,7 +214,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   shadow: "shadow",
   sandman: "sandman",
   nightmare: "nightmare",
-  phantom: "phantom"
+  phantom: "phantom",
+  danceOfThousandShadows: "danceOfThousandShadows"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -2281,6 +2282,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom) {
     return normalizePhantomSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows) {
+    return normalizeDanceOfThousandShadowsSettings(value);
+  }
   return {};
 }
 
@@ -2291,6 +2295,21 @@ export function normalizePhantomSettings(value = {}) {
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 60)),
     phantomDurationSeconds: Math.max(1, toInteger(value?.phantomDurationSeconds ?? 12))
+  };
+}
+
+/** "Танец тысячи теней": a timed field of decoys with kill scaling. */
+export function normalizeDanceOfThousandShadowsSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 100)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 200)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200)),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 18)),
+    radiusMeters: Math.max(0, toNumber(value?.radiusMeters ?? 20)),
+    swapPointCost: Math.max(0, toInteger(value?.swapPointCost ?? 1)),
+    stealthBonusPerKill: toNumber(value?.stealthBonusPerKill ?? 10),
+    damagePercentPerKill: toNumber(value?.damagePercentPerKill ?? 5),
+    criticalChancePerKill: toNumber(value?.criticalChancePerKill ?? 2)
   };
 }
 

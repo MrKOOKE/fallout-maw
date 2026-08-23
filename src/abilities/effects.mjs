@@ -63,6 +63,7 @@ import {
   ADVANCEMENT_PURE_EFFECT_FLAG_KEY,
   buildAdvancementPureEffectFlag
 } from "../advancement/pure-value-effects.mjs";
+import { isPhantomEntity } from "./phantom-entity.mjs";
 import {
   LIMITED_EFFECT_COPY_FLAG_KEY,
   buildLimitedEffectCopyFlag,
@@ -247,6 +248,7 @@ export function registerAbilityEffectHooks() {
     queueAuraStateSync();
   });
   Hooks.on("deleteToken", tokenDocument => {
+    if (isPhantomEntity(tokenDocument)) return;
     invalidateAbilityConditionLightingCache();
     queueIlluminationConditionEffectSync(tokenDocument);
     queueAuraStateSync();
@@ -1052,6 +1054,7 @@ function buildDesiredAuraGeneratedEffects() {
   for (const sourceToken of canvas?.tokens?.placeables ?? []) {
     const sourceActor = sourceToken?.actor;
     if (!sourceActor || !["character", "construct"].includes(sourceActor.type)) continue;
+    if (!actorHasPotentialAuraSource(sourceActor) || isPhantomEntity(sourceToken)) continue;
     let preparedSources = preparedSourcesByActorUuid.get(sourceActor.uuid);
     if (!preparedSources) {
       preparedSources = prepareAuraSourceFunctions(sourceActor);
@@ -1083,7 +1086,7 @@ function buildDesiredAuraGeneratedEffects() {
         if (!targets.length) continue;
         for (const targetToken of targets) {
           const targetActor = targetToken?.actor;
-          if (!targetActor) continue;
+          if (!targetActor || isPhantomEntity(targetToken)) continue;
           const conditionActor = source.kind === "activeEffect" ? targetActor : sourceActor;
           const formulaActor = (
             source.kind === "activeEffect"

@@ -94,6 +94,7 @@ import {
   normalizeSandmanSettings,
   normalizeNightmareSettings,
   normalizePhantomSettings,
+  normalizeDanceOfThousandShadowsSettings,
   normalizeSpecialMixSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
@@ -2915,6 +2916,19 @@ function readFixedFunctionSettings(row) {
       phantomDurationSeconds: row.querySelector("[data-field='fixed.phantom.phantomDurationSeconds']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.danceOfThousandShadows.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.danceOfThousandShadows.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.danceOfThousandShadows.overloadDurationSeconds']")?.value,
+      durationSeconds: row.querySelector("[data-field='fixed.danceOfThousandShadows.durationSeconds']")?.value,
+      radiusMeters: row.querySelector("[data-field='fixed.danceOfThousandShadows.radiusMeters']")?.value,
+      swapPointCost: row.querySelector("[data-field='fixed.danceOfThousandShadows.swapPointCost']")?.value,
+      stealthBonusPerKill: row.querySelector("[data-field='fixed.danceOfThousandShadows.stealthBonusPerKill']")?.value,
+      damagePercentPerKill: row.querySelector("[data-field='fixed.danceOfThousandShadows.damagePercentPerKill']")?.value,
+      criticalChancePerKill: row.querySelector("[data-field='fixed.danceOfThousandShadows.criticalChancePerKill']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -3471,6 +3485,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedPhantomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.phantom
     ? normalizePhantomSettings(normalized.fixedSettings)
     : null;
+  const fixedDanceOfThousandShadowsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows
+    ? normalizeDanceOfThousandShadowsSettings(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3556,6 +3573,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedSandmanSettings,
     fixedNightmareSettings,
     fixedPhantomSettings,
+    fixedDanceOfThousandShadowsSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,

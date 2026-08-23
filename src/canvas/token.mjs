@@ -43,6 +43,7 @@ import {
   isAbilityRoutePlanningInteractive
 } from "./ability-route-preview-state.mjs";
 import { resolveTokenTargetAlpha } from "./token-target-alpha.mjs";
+import { localViewReceivesPhantomVision } from "./phantom-vision.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -166,6 +167,16 @@ function waitForAbilityRoutePathReady(context, timeoutMs = 750) {
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  /** Let an allied illusion contribute sight without granting control of its actor. */
+  _isVisionSource() {
+    return super._isVisionSource() || (
+      canvas.visibility.tokenVision
+      && this.hasSight
+      && !this.document.hidden
+      && localViewReceivesPhantomVision(this.document)
+    );
+  }
+
   /** Apply client-local appearance through Foundry's native Token state refresh. */
   _getTargetAlpha() {
     return resolveTokenTargetAlpha(this, super._getTargetAlpha());

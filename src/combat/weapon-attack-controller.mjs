@@ -1,6 +1,7 @@
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import {
   getCombatVisualizationLayer,
   playWeaponAttackAnimations,
@@ -290,11 +291,33 @@ const ordinaryAttackActorQueues = new Map();
 const ordinaryAttackAuthoritySockets = new Map();
 const processingDelayedVolleyRegions = new Set();
 const weaponAttackResolvedHandlers = new Map();
+const weaponAttackTerminalHandlers = new Map();
+const liveWeaponAttackTargetControllers = new Set();
 const weaponResourceActorLock = createActorOperationLock();
 let activeAttack = null;
 let activeDualWeaponAttack = null;
 let activeCommandedAttack = null;
 let delayedVolleyProcessorRegistered = false;
+let weaponAttackTokenLifecycleHooksRegistered = false;
+
+function invalidateLiveWeaponAttackControllers(tokenOrDocument = null, options = {}) {
+  if (!tokenOrDocument) return;
+  for (const controller of Array.from(liveWeaponAttackTargetControllers)) {
+    controller.handleTokenUnavailable?.(tokenOrDocument, options);
+  }
+}
+
+function registerWeaponAttackTokenLifecycleHooks() {
+  if (weaponAttackTokenLifecycleHooksRegistered) return;
+  Hooks.on("deleteToken", tokenDocument => {
+    invalidateLiveWeaponAttackControllers(tokenDocument, { matchUuid: true });
+  });
+  Hooks.on("destroyToken", token => {
+    if (token?.isPreview || token?.document?.isPreview) return;
+    invalidateLiveWeaponAttackControllers(token);
+  });
+  weaponAttackTokenLifecycleHooksRegistered = true;
+}
 
 export function registerWeaponAttackResolvedHandler(id = "", handler = null) {
   const normalizedId = String(id ?? "").trim();
@@ -302,6 +325,20 @@ export function registerWeaponAttackResolvedHandler(id = "", handler = null) {
   weaponAttackResolvedHandlers.set(normalizedId, handler);
   return () => {
     if (weaponAttackResolvedHandlers.get(normalizedId) === handler) weaponAttackResolvedHandlers.delete(normalizedId);
+  };
+}
+
+/**
+ * Register destructive cleanup which runs only after the attack controller
+ * has released its processing state. Terminal work must never hold the attack
+ * UI open while Foundry waits for a Document deletion response.
+ */
+export function registerWeaponAttackTerminalHandler(id = "", handler = null) {
+  const normalizedId = String(id ?? "").trim();
+  if (!normalizedId || typeof handler !== "function") return () => undefined;
+  weaponAttackTerminalHandlers.set(normalizedId, handler);
+  return () => {
+    if (weaponAttackTerminalHandlers.get(normalizedId) === handler) weaponAttackTerminalHandlers.delete(normalizedId);
   };
 }
 
@@ -314,6 +351,82 @@ async function publishWeaponAttackResolved(context = {}) {
     }
   }
   Hooks.callAll(WEAPON_ATTACK_RESOLVED_HOOK, context);
+}
+
+async function runWeaponAttackTerminalHandlers(context = {}) {
+  await Promise.all(Array.from(weaponAttackTerminalHandlers, async ([id, handler]) => {
+    try {
+      await handler(context);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Weapon attack terminal handler '${id}' failed`, error);
+    }
+  }));
+}
+
+function dispatchWeaponAttackTerminalHandlers(context = {}) {
+  const damageResults = serializeWeaponAttackTerminalDamageResults(context?.damageResults);
+  if (!damageResults.length) return false;
+  const responsibleGM = getResponsibleGM();
+  if (game.user?.isActiveGM || responsibleGM?.id === game.user?.id) {
+    void runWeaponAttackTerminalHandlers(context);
+    return true;
+  }
+  if (!responsibleGM?.id) return false;
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "weaponAttackTerminal",
+    targetUserId: responsibleGM.id,
+    senderUserId: game.user?.id ?? "",
+    context: {
+      attackId: String(context?.attackId ?? ""),
+      attackerUuid: String(context?.attackerUuid ?? context?.actorUuid ?? ""),
+      damageResults
+    }
+  });
+  return true;
+}
+
+function serializeWeaponAttackTerminalDamageResults(results = []) {
+  return (Array.isArray(results) ? results : [results]).flat(Infinity)
+    .filter(result => (
+      result?.phantomDestroyed === true
+      && result?.source?.weaponAttackDamage === true
+    ))
+    .map(result => ({
+      actorUuid: String(result?.actor?.uuid ?? result?.actorUuid ?? ""),
+      mode: String(result?.mode ?? "damage"),
+      phantomDestroyed: true,
+      source: {
+        attackId: String(result?.source?.attackId ?? ""),
+        attackerActorUuid: String(
+          result?.source?.attackerActorUuid
+          ?? result?.source?.attackerUuid
+          ?? ""
+        ),
+        targetTokenUuid: String(result?.source?.targetTokenUuid ?? ""),
+        weaponAttackDamage: true
+      }
+    }));
+}
+
+function authorizeWeaponAttackTerminalContext(context = {}, sender = null) {
+  if (!sender?.active) return null;
+  const attackId = String(context?.attackId ?? "").trim();
+  const attackerUuid = String(context?.attackerUuid ?? "").trim();
+  const attacker = attackerUuid ? fromUuidSync(attackerUuid) : null;
+  if (!attackId || !attacker || (!sender.isGM && !attacker.testUserPermission?.(sender, "OWNER"))) return null;
+
+  const damageResults = [];
+  for (const result of serializeWeaponAttackTerminalDamageResults(context?.damageResults)) {
+    if (result.source.attackId !== attackId) continue;
+    if (result.source.attackerActorUuid && result.source.attackerActorUuid !== attackerUuid) continue;
+    const targetToken = fromUuidSync(result.source.targetTokenUuid);
+    const targetActor = targetToken?.actor ?? fromUuidSync(result.actorUuid);
+    if (!isPhantomEntity(targetToken) && !isPhantomEntity(targetActor)) continue;
+    damageResults.push({ ...result, actor: targetActor ?? null });
+  }
+  if (!damageResults.length) return null;
+  return { attackId, attackerUuid, actorUuid: attackerUuid, damageResults };
 }
 
 class WeaponActionModifierState {
@@ -486,6 +599,7 @@ export function registerWeaponAttackSocket() {
   game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
   Hooks.on("canvasReady", clearRemoteAttackPreviews);
   Hooks.on("canvasTearDown", clearWeaponAttackCanvasState);
+  registerWeaponAttackTokenLifecycleHooks();
   if (!delayedVolleyProcessorRegistered) {
     registerQueuedWorldTimeProcessor(processDelayedVolleyExplosions, { priority: 90 });
     Hooks.on("canvasReady", () => {
@@ -683,7 +797,9 @@ export const ATTACK_TARGETING_TESTING = Object.freeze({
   unaimedAttackDisadvantageCount: UNAIMED_ATTACK_DISADVANTAGE_COUNT,
   getUnseenAttackEdgeModifiers,
   getTrajectoryTargetEntries,
+  getTokenShapeOffset,
   isAttackImpactTarget,
+  isTokenPlaceableAvailable,
   isAttackTargetVisible,
   selectRandomMeleeDirection,
   getEnabledMeleeDirectionsFromSettings
@@ -693,6 +809,11 @@ export const WEAPON_CONDITION_WEAR_TESTING = Object.freeze({
   applyImpactConditionWear: applyWeaponImpactConditionWear,
   calculateConditionLoss: calculateWeaponImpactConditionLoss,
   summarizeDamageResults: summarizeWeaponImpactDamageResults
+});
+
+export const WEAPON_ATTACK_LIFECYCLE_TESTING = Object.freeze({
+  publishResolved: publishWeaponAttackResolved,
+  runTerminal: runWeaponAttackTerminalHandlers
 });
 
 function suspendWeaponAttackForNestedSelection(controller = activeAttack) {
@@ -1864,6 +1985,7 @@ class CommandedWeaponAttackController {
       this.targetSelectionSession = null;
       return;
     }
+    liveWeaponAttackTargetControllers.add(this);
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.addEventListener("keydown", this.events.keyDown, { capture: true });
@@ -1890,6 +2012,7 @@ class CommandedWeaponAttackController {
   destroy() {
     if (this.destroyed) return;
     this.finishTargetSelection();
+    liveWeaponAttackTargetControllers.delete(this);
     this.destroyed = true;
     this.previewFrameScheduler.destroy();
     canvas.stage.off("mousemove", this.events.move);
@@ -1905,6 +2028,47 @@ class CommandedWeaponAttackController {
     this.clearBroadcastPreviews();
     this.container.destroy({ children: true });
     if (activeCommandedAttack === this) activeCommandedAttack = null;
+  }
+
+  handleTokenUnavailable(tokenOrDocument = null, { matchUuid = false } = {}) {
+    if (this.destroyed || !tokenOrDocument) return false;
+    const matches = candidate => tokenLifecycleMatches(candidate, tokenOrDocument, { matchUuid });
+    if (this.entries.some(entry => matches(entry.token))) {
+      this.destroy();
+      return true;
+    }
+
+    const removedUuid = getTokenDocumentUuid(tokenOrDocument);
+    let changed = false;
+    for (const entry of this.entries) {
+      const targetRemoved = entry.targets.some(matches);
+      const hoveredRemoved = matches(entry.hoveredTarget);
+      const trajectoryRemoved = matches(entry.trajectoryAimTarget);
+      const lockedTargetRemoved = Boolean(removedUuid && entry.targetUuid === removedUuid);
+      const burstTargetRemoved = Array.from(entry.burstRanges.keys()).some(matches);
+      if (!targetRemoved && !hoveredRemoved && !trajectoryRemoved && !lockedTargetRemoved && !burstTargetRemoved) continue;
+
+      changed = true;
+      entry.targets = entry.targets.filter(target => !matches(target));
+      if (hoveredRemoved) entry.hoveredTarget = null;
+      if (trajectoryRemoved) entry.trajectoryAimTarget = null;
+      entry.burstRanges = new Map(Array.from(entry.burstRanges).filter(([target]) => !matches(target)));
+      if (lockedTargetRemoved) {
+        entry.pointer = null;
+        entry.geometry = null;
+        entry.lockedGeometry = null;
+        entry.targetUuid = "";
+        entry.selectedLimbKey = "";
+        entry.directionKey = "";
+        entry.mode = "current";
+        entry.locked = false;
+      }
+      entry.lastBroadcastPreviewState = null;
+      entry.lastTargetMarkerRenderState = null;
+      this.drawEntry(entry, performance.now());
+    }
+    if (changed && !this.processing && !this.destroyed) this.previewFrameScheduler.request();
+    return changed;
   }
 
   onMove(event) {
@@ -2616,6 +2780,10 @@ function clearWeaponAttackCanvasState() {
   if (attack && !attack.destroyed) attack.destroy();
   if (dualAttack && !dualAttack.destroyed) dualAttack.destroy();
   if (commandedAttack && !commandedAttack.destroyed) commandedAttack.destroy();
+  for (const controller of Array.from(liveWeaponAttackTargetControllers)) {
+    if (!controller.destroyed) controller.destroy();
+  }
+  liveWeaponAttackTargetControllers.clear();
   clearRemoteAttackPreviews();
 }
 
@@ -4247,6 +4415,7 @@ export class WeaponAttackController {
     this.lastResolvedAttackOutcome = null;
     this.attackCheckCount = 0;
     this.attackCheckEventSequence = 0;
+    this.pendingTerminalAttackOutcomes = [];
     this.weaponNoisePreviewSourceId = `weapon-attack:${this.attackId}`;
     this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
     this.weaponNoiseAttempted = false;
@@ -4297,6 +4466,80 @@ export class WeaponAttackController {
       this.targetSelectionSession = null;
       return false;
     }
+    liveWeaponAttackTargetControllers.add(this);
+    return true;
+  }
+
+  handleTokenUnavailable(tokenOrDocument = null, { matchUuid = false } = {}) {
+    if (this.destroyed || !tokenOrDocument) return false;
+    const matches = candidate => tokenLifecycleMatches(candidate, tokenOrDocument, { matchUuid });
+    if (matches(this.token)) {
+      this.finishRequested = true;
+      if (activeDualWeaponAttack && tokenLifecycleMatches(activeDualWeaponAttack.token, tokenOrDocument, { matchUuid })) {
+        activeDualWeaponAttack.destroy();
+        activeDualWeaponAttack = null;
+      }
+      if (!this.processing) {
+        if (activeAttack === this) activeAttack = null;
+        this.destroy();
+      } else {
+        this.suppressPreview();
+      }
+      return true;
+    }
+
+    const selectedRemoved = matches(this.selectedTarget);
+    const hoveredRemoved = matches(this.hoveredTarget);
+    const trajectoryRemoved = matches(this.trajectoryAimTarget);
+    const targetRemoved = this.targets.some(matches);
+    const burstState = this.burstTargetPreview;
+    const burstTargetRemoved = Boolean(
+      burstState?.targets?.some(matches)
+      || burstState?.pendingTargets?.some(matches)
+      || Array.from(burstState?.burstRanges?.keys?.() ?? []).some(matches)
+      || Array.from(burstState?.pendingBurstRanges?.keys?.() ?? []).some(matches)
+    );
+    const removedUuid = getTokenDocumentUuid(tokenOrDocument);
+    const trial = getSharedAbilityAttackTrialSession(this.abilityTrialSession);
+    const trialTargetRemoved = Boolean(removedUuid && trial?.targetObjects?.delete?.(removedUuid));
+    if (trialTargetRemoved && Array.isArray(trial.targetUuids)) {
+      trial.targetUuids = trial.targetUuids.filter(uuid => uuid !== removedUuid);
+    }
+    if (!selectedRemoved && !hoveredRemoved && !trajectoryRemoved && !targetRemoved && !burstTargetRemoved && !trialTargetRemoved) {
+      return false;
+    }
+
+    this.targets = this.targets.filter(target => !matches(target));
+    if (hoveredRemoved) this.hoveredTarget = null;
+    if (trajectoryRemoved) this.trajectoryAimTarget = null;
+    if (selectedRemoved) {
+      this.selectedTarget = null;
+      this.aimedMode = "aim";
+      this.hoveredLimbKey = "";
+      this.selectedLimbKey = "";
+      this.lockedGeometry = null;
+      this.pushStrengthMaximum = 0;
+      if (this.constrainedTarget) this.finishRequested = true;
+    }
+    if (removedUuid) {
+      for (const cacheKey of this.rangeProfilesByTarget.keys()) {
+        if (cacheKey.startsWith(`${removedUuid}:`)) this.rangeProfilesByTarget.delete(cacheKey);
+      }
+    }
+    if (burstTargetRemoved || targetRemoved) this.resetBurstTargetPreview();
+    this.removeLimbMenu();
+    this.removeChanceMenu();
+    this.shape.clear();
+    this.meleeDirectionPreview.clear();
+    this.clearTargetMarkers();
+    this.lastBroadcastPreviewState = null;
+
+    if (this.finishRequested && !this.processing) {
+      if (activeAttack === this) activeAttack = null;
+      this.destroy();
+      return true;
+    }
+    if (!this.processing && !this.previewSuppressed) this.previewFrameScheduler.request();
     return true;
   }
 
@@ -4376,6 +4619,7 @@ export class WeaponAttackController {
   async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
     if (!attempted) return;
     const resolvedDamageResults = Array.isArray(damageResults) ? damageResults : [];
+    const mechanicalSelectedTarget = isPhantomEntity(this.selectedTarget) ? null : this.selectedTarget;
     const impactConditionWear = this.skipBaseWeaponResourceCosts
       ? summarizeWeaponImpactDamageResults(resolvedDamageResults)
       : await applyWeaponImpactConditionWear(this.weapon, this.weaponFunctionId, resolvedDamageResults, {
@@ -4396,8 +4640,8 @@ export class WeaponAttackController {
     const outcome = {
       actor: this.token?.actor ?? null,
       actorToken: this.token,
-      targetActor: this.selectedTarget?.actor ?? null,
-      targetToken: this.selectedTarget ?? null,
+      targetActor: mechanicalSelectedTarget?.actor ?? null,
+      targetToken: mechanicalSelectedTarget,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
       weaponActionKey: this.actionKey,
       requester: "weaponAttack",
@@ -4411,7 +4655,7 @@ export class WeaponAttackController {
       stealthAttack: Boolean(this.stealthAttack),
       attackId: this.attackId,
       selectedLimbKey: String(this.selectedLimbKey ?? ""),
-      selectedTargetActorUuid: this.selectedTarget?.actor?.uuid ?? "",
+      selectedTargetActorUuid: mechanicalSelectedTarget?.actor?.uuid ?? "",
       preExistingUnconsciousTargetActorUuids: Array.from(this.preExistingUnconsciousTargetActorUuids),
       actionPointSpendReceipt: this.actionPointSpendReceipt,
       actionPointCost,
@@ -4433,6 +4677,7 @@ export class WeaponAttackController {
     this.lastResolvedAttackOutcome = outcome;
     await publishWeaponAttackResolved(outcome);
     await this.finalizeWeaponNoiseDetection();
+    (this.pendingTerminalAttackOutcomes ??= []).push(outcome);
     return outcome;
   }
 
@@ -4661,6 +4906,7 @@ export class WeaponAttackController {
       source: {
         ...(request?.source ?? {}),
         ...(attackId ? { attackId } : {}),
+        weaponAttackDamage: true,
         attackerActorUuid: request?.source?.attackerActorUuid ?? this.token?.actor?.uuid ?? "",
         attackerTokenUuid: request?.source?.attackerTokenUuid ?? this.token?.document?.uuid ?? "",
         weaponUuid: request?.source?.weaponUuid ?? this.weapon?.uuid ?? "",
@@ -5044,6 +5290,7 @@ export class WeaponAttackController {
 
   async resolveTargetReactions(target) {
     if (this.interruptForIncapacitation()) return true;
+    if (isPhantomEntity(target)) return false;
     if (this.attackCanceledByReaction || !target?.actor || !this.token?.actor || !this.weapon) return false;
     if (target.actor.statuses?.has?.("unconscious")) {
       this.preExistingUnconsciousTargetActorUuids.add(String(target.actor.uuid ?? "").trim());
@@ -5148,8 +5395,16 @@ export class WeaponAttackController {
     return true;
   }
 
+  flushPendingTerminalAttackOutcomes() {
+    const outcomes = this.pendingTerminalAttackOutcomes?.splice(0) ?? [];
+    for (const outcome of outcomes) void dispatchWeaponAttackTerminalHandlers(outcome);
+  }
+
   completeProcessingCycle({ refresh = true } = {}) {
-    if (this.destroyed) return true;
+    if (this.destroyed) {
+      this.flushPendingTerminalAttackOutcomes();
+      return true;
+    }
     this.processing = false;
     void this.abortSkillCheckCollectors();
     if (this.attackModifier?.finishAfterAttack || this.finishAfterAttack) this.finishRequested = true;
@@ -5170,6 +5425,7 @@ export class WeaponAttackController {
       this.attachInteractiveHandlers();
       this.resumePreview();
     }
+    this.flushPendingTerminalAttackOutcomes();
     return false;
   }
 
@@ -5524,6 +5780,7 @@ export class WeaponAttackController {
   destroy() {
     if (this.destroyed) return;
     this.finishTargetSelection();
+    liveWeaponAttackTargetControllers.delete(this);
     this.destroyed = true;
     this.previewFrameScheduler.destroy();
     this.clearWeaponNoisePreview();
@@ -5570,6 +5827,7 @@ export class WeaponAttackController {
       });
     }
     this.container.destroy({ children: true });
+    this.flushPendingTerminalAttackOutcomes();
   }
 
   getAttackOrigin() {
@@ -6814,7 +7072,7 @@ export class WeaponAttackController {
   }
 
   async requestAimedLimbSelectedReaction(target, limbKey = "") {
-    if (this.actionKey !== "aimedShot") return undefined;
+    if (this.actionKey !== "aimedShot" || isPhantomEntity(target)) return undefined;
     const attackDistanceContext = this.createWeaponAttackReactionContext(target);
     return this.requestReaction(REACTION_EVENT_KEYS.aimedAttackLimbSelected, {
       attackId: this.attackId,
@@ -9161,6 +9419,13 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
     settlePendingOrdinaryAttackRequest(payload, authenticatedSenderUserId);
     return;
   }
+  if (payload.action === "weaponAttackTerminal") {
+    if (!game.user?.isActiveGM || payload.targetUserId !== game.user.id) return;
+    const sender = game.users?.get?.(authenticatedSenderUserId) ?? null;
+    const context = authorizeWeaponAttackTerminalContext(payload.context, sender);
+    if (context) void runWeaponAttackTerminalHandlers(context);
+    return;
+  }
   if (payload.action === "completeAttack") {
     requestActiveWeaponAttackFinish(payload.attackId);
     removeRemoteAttackPreview(payload.attackId);
@@ -9172,7 +9437,11 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
     if (!pending) return;
     window.clearTimeout(pending.timeout);
     pendingRegionSocketRequests.delete(payload.requestId);
-    if (payload.ok) pending.resolve(payload.results ?? []);
+    if (payload.ok) {
+      pending.resolve(Array.isArray(payload.damageResults)
+        ? { damage: payload.damageResults, regions: payload.results ?? [] }
+        : payload.results ?? []);
+    }
     else pending.reject(new Error(payload.error || "Volley region socket request failed."));
     return;
   }
@@ -9193,7 +9462,11 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
   if (payload.action === "applyDamageAndCreateVolleyDamageRegions") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     void applyDamageAndCreateVolleyDamageRegions(payload.damageRequests, payload.regionRequests).then(results => {
-      respondVolleyRegionSocketRequest(payload, { ok: true, results: serializeRegionSocketResults(results.regions) });
+      respondVolleyRegionSocketRequest(payload, {
+        ok: true,
+        results: serializeRegionSocketResults(results.regions),
+        damageResults: serializeWeaponAttackTerminalDamageResults(results.damage)
+      });
     }).catch(error => {
       console.error("Fallout MaW | Volley damage and region socket request failed", error);
       respondVolleyRegionSocketRequest(payload, {
@@ -9286,7 +9559,12 @@ function clearRemoteAttackPreviews() {
   for (const attackId of Array.from(remoteAttackPreviews.keys())) removeRemoteAttackPreview(attackId);
 }
 
-function respondVolleyRegionSocketRequest(payload = {}, { ok = true, error = "", results = [] } = {}) {
+function respondVolleyRegionSocketRequest(payload = {}, {
+  ok = true,
+  error = "",
+  results = [],
+  damageResults = null
+} = {}) {
   if (!payload.requestId || !payload.senderUserId) return;
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
@@ -9296,7 +9574,8 @@ function respondVolleyRegionSocketRequest(payload = {}, { ok = true, error = "",
     requestId: payload.requestId,
     ok,
     error,
-    results
+    results,
+    ...(Array.isArray(damageResults) ? { damageResults } : {})
   });
 }
 
@@ -9427,7 +9706,9 @@ async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [
 
   try {
     const results = await promise;
-    return { damage: [], regions: results };
+    return Array.isArray(results)
+      ? { damage: [], regions: results }
+      : { damage: results?.damage ?? [], regions: results?.regions ?? [] };
   } catch (error) {
     console.error("Fallout MaW | Volley damage and region socket request failed", error);
     ui.notifications.warn("Нет ответа GM на обработку урона и областей.");
@@ -10033,7 +10314,7 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
         weaponData: source.weaponData
       })
       : summarizeWeaponImpactDamageResults(damageResults);
-    await publishWeaponAttackResolved({
+    const resolvedContext = {
       actor: contextualAttackerActor,
       actorToken: contextualAttackerToken,
       weaponData: source.weaponData ?? null,
@@ -10058,7 +10339,9 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
       chainRef: source.chainRef ?? null,
       damageHubOperationRef: String(source.damageHubOperationRef ?? ""),
       senderUserId: game.user?.id ?? ""
-    });
+    };
+    await publishWeaponAttackResolved(resolvedContext);
+    dispatchWeaponAttackTerminalHandlers(resolvedContext);
 
     await scene.deleteEmbeddedDocuments("Region", [region.id]);
     await deleteDelayedThrownItemDocuments(String(pending.id));
@@ -10189,6 +10472,24 @@ function isAttackSceneClient(tokenDocuments, { requirePlaceables = false } = {})
 
 function getTokenDocumentUuid(token = null) {
   return String(token?.document?.uuid ?? token?.uuid ?? "").trim();
+}
+
+function tokenLifecycleMatches(candidate = null, tokenOrDocument = null, { matchUuid = false } = {}) {
+  if (!candidate || !tokenOrDocument) return false;
+  if (candidate === tokenOrDocument) return true;
+  const candidateDocument = candidate?.document ?? null;
+  const removedDocument = tokenOrDocument?.document ?? null;
+  if (candidateDocument && (candidateDocument === tokenOrDocument || candidateDocument === removedDocument)) return true;
+  if (!matchUuid) return false;
+  const candidateUuid = getTokenDocumentUuid(candidate);
+  const removedUuid = getTokenDocumentUuid(tokenOrDocument);
+  return Boolean(candidateUuid && removedUuid && candidateUuid === removedUuid);
+}
+
+function isTokenPlaceableAvailable(token = null) {
+  if (!token || typeof token !== "object") return false;
+  if (token.destroyed === true || token.document?._destroyed === true) return false;
+  return token.transform !== null;
 }
 
 function normalizeTargetTokenUuidAllowlist(value = null) {
@@ -11125,6 +11426,7 @@ function summarizeWeaponImpactDamageResults(damageResults = []) {
   let totalBlockedDamage = 0;
   for (const result of damageResults.flat(Infinity).filter(Boolean)) {
     if ((result.mode && result.mode !== "damage") || result.cancelled || result.failed) continue;
+    if (result.phantomDestroyed === true) continue;
     const blocked = Math.max(0, Number(result.mitigationBlocked) || 0);
     const hasImpact = blocked > 0 || [
       result.amount,
@@ -13641,7 +13943,7 @@ function isAttackTargetVisible(target, targetTokenUuidAllowlist = null, attacker
 }
 
 function isAttackImpactTarget(target) {
-  if (!target?.actor || target?.document?.hidden === true) return false;
+  if (!isTokenPlaceableAvailable(target) || !target?.actor || target?.document?.hidden === true) return false;
   const secretDisposition = globalThis.CONST?.TOKEN_DISPOSITIONS?.SECRET;
   return secretDisposition === undefined || target.document?.disposition !== secretDisposition;
 }
@@ -14780,8 +15082,10 @@ function getTokenWorldPolygon(token) {
 }
 
 function getTokenShapeOffset(token) {
-  const x = Number(token?.position?.x);
-  const y = Number(token?.position?.y);
+  if (!isTokenPlaceableAvailable(token)) return null;
+  const position = token.position;
+  const x = Number(position?.x);
+  const y = Number(position?.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   return {
     x,
@@ -15280,6 +15584,19 @@ async function withWeaponDamagePreparedEvents(requests = [], operation) {
       const actor = request?.actor ?? (actorUuid ? await fromUuid(actorUuid) : null);
       if (!actorUuid || !actor) continue;
       const source = request?.source ?? {};
+      if (isPhantomEntity(actor)) {
+        prepared.push({
+          ...request,
+          source: {
+            ...source,
+            attackId,
+            weaponAttackDamage: true,
+            systemEventOperationId: String(source.systemEventOperationId ?? attackId),
+            chainRef: scope.chainRef
+          }
+        });
+        continue;
+      }
       const participants = {
         source: {
           actorUuid: String(source.attackerActorUuid ?? source.attackerUuid ?? ""),
@@ -15318,6 +15635,7 @@ async function withWeaponDamagePreparedEvents(requests = [], operation) {
         source: {
           ...(request.source ?? {}),
           attackId,
+          weaponAttackDamage: true,
           systemEventOperationId: String(request.source?.systemEventOperationId ?? attackId),
           chainRef: scope.chainRef
         }
@@ -15360,7 +15678,8 @@ function notifyWeaponAttackDamageResolved(requests = []) {
   for (const request of (Array.isArray(requests) ? requests : [requests]).filter(Boolean)) {
     const attackerUuid = String(request?.source?.attackerUuid ?? "").trim();
     const targetUuid = String(request?.actor?.uuid ?? request?.actorUuid ?? "").trim();
-    if (!attackerUuid || !targetUuid) continue;
+    const targetActor = request?.actor ?? (targetUuid ? fromUuidSync(targetUuid) : null);
+    if (!attackerUuid || !targetUuid || isPhantomEntity(targetActor)) continue;
     const targets = byAttacker.get(attackerUuid) ?? new Set();
     targets.add(targetUuid);
     byAttacker.set(attackerUuid, targets);

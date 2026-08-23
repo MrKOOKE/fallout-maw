@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { DROPPED_ITEMS_ACTOR_FLAG } from "../items/dropped-items.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
@@ -193,6 +194,7 @@ export async function syncLoadedActorNaturalRaceItems() {
 
 export async function syncActorNaturalRaceItems(actor) {
   if (!actor || !game.user?.isActiveGM) return;
+  if (isPhantomEntity(actor)) return;
   if (actor.getFlag?.(SYSTEM_ID, DROPPED_ITEMS_ACTOR_FLAG)) return;
   if (actor.type !== "character") return;
   if (naturalItemSyncActors.has(actor.uuid)) return;

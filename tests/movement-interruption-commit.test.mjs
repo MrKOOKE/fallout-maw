@@ -145,6 +145,30 @@ test("coordinator commits only the selected collection and skips cancelled selec
   ), true);
   assert.deepEqual(nativeHistoryBypassCalls, []);
 
+  const relocationCalls = [];
+  interruptions.registerMovementInterruptionProvider({
+    id: "test-system-relocation-bypass",
+    collect: ({ tokenDocument }) => {
+      if (tokenDocument.id !== "system-relocation") return [];
+      relocationCalls.push("collect");
+      return [{
+        eventId: "must-not-run",
+        type: "test",
+        routeOrder: 0,
+        waypoint: { x: 100, y: 0, elevation: 0 }
+      }];
+    },
+    synchronizeOnMove: true,
+    synchronize: () => relocationCalls.push("synchronize"),
+    execute: () => relocationCalls.push("execute")
+  });
+  const relocationToken = makeToken("system-relocation");
+  const relocationMovement = { id: "system-relocation-movement" };
+  const relocationOptions = { [interruptions.SYSTEM_RELOCATION_OPTION]: true };
+  assert.equal(preMoveToken(relocationToken, relocationMovement, relocationOptions), true);
+  moveToken(relocationToken, relocationMovement, relocationOptions);
+  assert.deepEqual(relocationCalls, []);
+
   const selectedCalls = [];
   const selectedCollection = {
     events: [{

@@ -21,6 +21,7 @@ import {
 } from "../utils/bulk-operation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { executeAbilityTrials, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY } from "./trial-runtime.mjs";
+import { isPhantomEntity } from "./phantom-entity.mjs";
 
 export { ACTIVE_APPLICATION_EFFECT_FLAG_KEY };
 
@@ -108,7 +109,7 @@ export function registerActiveEffectAuraHooks() {
     }, 0);
   });
   Hooks.on("deleteToken", tokenDocument => {
-    if (!indexedAuras.size) return;
+    if (!indexedAuras.size || isPhantomEntity(tokenDocument)) return;
     enqueueAuraRuntime(() => processTokenAuraChange(tokenDocument, { sourceMayHaveChanged: true }));
   });
   Hooks.on("updateToken", (tokenDocument, changes = {}) => {
@@ -139,7 +140,7 @@ export function registerActiveEffectAuraHooks() {
 }
 
 async function processActorAuraChange(actor = null) {
-  if (!indexedAuras.size) return;
+  if (!indexedAuras.size || isPhantomEntity(actor)) return;
   const actorUuid = String(actor?.uuid ?? "");
   if (!actorUuid) return;
   const token = (canvas?.tokens?.placeables ?? []).find(candidate => candidate?.actor?.uuid === actorUuid);
@@ -237,7 +238,7 @@ async function rebuildActiveAuraIndex() {
   indexedAurasByEffectUuid.clear();
   const actors = new Map();
   for (const token of canvas?.tokens?.placeables ?? []) {
-    if (token?.actor?.uuid) actors.set(token.actor.uuid, token.actor);
+    if (token?.actor?.uuid && !isPhantomEntity(token)) actors.set(token.actor.uuid, token.actor);
   }
   for (const actor of actors.values()) {
     for (const effect of actor.effects ?? []) indexActiveApplicationAuraEffect(effect, { rebuilding: true });
@@ -365,6 +366,7 @@ async function evaluateAllIndexedAuras(reason = "refresh") {
 async function processTokenAuraChange(tokenDocument = null, { sourceMayHaveChanged = false } = {}) {
   if (!game.user?.isActiveGM || !indexedAuras.size) return;
   const token = tokenDocument?.object ?? tokenDocument;
+  if (isPhantomEntity(tokenDocument) || isPhantomEntity(token)) return;
   const tokenUuid = String((tokenDocument?.document ?? tokenDocument)?.uuid ?? "");
   const actorUuid = String(token?.actor?.uuid ?? tokenDocument?.actor?.uuid ?? "");
   const now = getWorldTime();
@@ -394,7 +396,7 @@ async function evaluateAuraEntry(entry, { reason = "time", worldTime = getWorldT
   if (!isAuraEntryLive(entry, worldTime)) return;
   const sourceActor = entry.effect.parent;
   const sourceToken = resolveAuraSourceToken(entry);
-  if (!sourceActor || !sourceToken) return;
+  if (!sourceActor || !sourceToken || isPhantomEntity(sourceActor) || isPhantomEntity(sourceToken)) return;
 
   const currentTargets = uniqueActorTargets(getAuraGeneratedTargetTokens(sourceActor, entry.condition, {
     actorToken: sourceToken

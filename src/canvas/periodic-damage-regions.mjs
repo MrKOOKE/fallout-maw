@@ -7,6 +7,7 @@ import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-fo
 import { toInteger, toOptionalFiniteNumber } from "../utils/numbers.mjs";
 import { createPeriodicDamageEffectSyncScheduler } from "./periodic-damage-effect-sync-scheduler.mjs";
 import { getRegionSourceActor, regionBehaviorTargetsActor } from "./region-targeting.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import {
   getPeriodicDamageBehaviors,
   getPeriodicDamageSceneSet,
@@ -178,7 +179,7 @@ async function reconcilePeriodicDamageRegionEffects(actors, desiredByActor) {
 }
 
 function onMoveToken(tokenDocument, movement) {
-  if (!game.user?.isActiveGM || !tokenDocument?.actor || !movement) return;
+  if (!game.user?.isActiveGM || !tokenDocument?.actor || isPhantomEntity(tokenDocument) || !movement) return;
   const documentMovement = tokenDocument.movement;
   const routeFinished = documentMovement?.id === movement.id
     && (documentMovement.state === "completed" || documentMovement.state === "stopped");
@@ -637,6 +638,7 @@ function isTokenInsideRegion(token, region) {
 }
 
 function onPreUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
+  if (isPhantomEntity(token)) return;
   if (!hasChangedPath(changes, ["actorId", "actorLink"])) return;
   const snapshots = options[PREVIOUS_TOKEN_ACTORS_OPTION] ??= {};
   snapshots[token.uuid ?? token.id] = {
@@ -646,10 +648,12 @@ function onPreUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
 }
 
 function onCreatePeriodicDamageToken(token) {
+  if (isPhantomEntity(token)) return;
   requestPeriodicDamageTokenEffectSync(token);
 }
 
 function onUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
+  if (isPhantomEntity(token)) return;
   if (!hasChangedPath(changes, TOKEN_EFFECT_PATHS)) return;
   const associationChanged = hasChangedPath(changes, ["actorId", "actorLink"]);
   const sceneIsPeriodic = sceneHasPeriodicDamageBehavior(token?.parent);
@@ -672,6 +676,7 @@ function onUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
 }
 
 function onDeletePeriodicDamageToken(token) {
+  if (isPhantomEntity(token)) return;
   const baseActor = token?.baseActor;
   if (!baseActor) return;
   if (!sceneHasPeriodicDamageBehavior(token.parent)

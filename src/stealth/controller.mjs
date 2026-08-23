@@ -42,6 +42,7 @@ import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { getSmokeRegionRevision } from "../canvas/smoke-vision.mjs";
 import { getDetectionModeIdFromRangeEffectKey } from "../canvas/vision-effect-keys.mjs";
+import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import {
   canRenderDetectionVisualizationForLocalUser,
   cleanupAllStealthVisualizations,
@@ -141,7 +142,7 @@ export function registerStealthHooks() {
 
 export function openStealthWindow(token) {
   const resolvedToken = token ?? globalThis.canvas?.tokens?.controlled?.at(0) ?? null;
-  if (!resolvedToken?.actor) {
+  if (!resolvedToken?.actor || isPhantomEntity(resolvedToken)) {
     ui.notifications.warn("Для скрытности выберите токен с актёром.");
     return undefined;
   }
@@ -164,7 +165,7 @@ export function openStealthWindow(token) {
 export async function toggleActorStealth(actor, active = !isActorStealthed(actor), {
   skipEntryDetection = false
 } = {}) {
-  if (!actor) return false;
+  if (!actor || isPhantomEntity(actor)) return false;
   if (!canControlStealth(actor)) {
     ui.notifications.warn(`Нет прав на управление скрытностью актёра ${actor.name}.`);
     return false;
@@ -562,6 +563,7 @@ async function onTargetPointerDown(event) {
 }
 
 function onActorUpdated(actor, changes = {}) {
+  if (isPhantomEntity(actor)) return;
   const settings = getRuntimeStealthSettings();
   const factionRoots = [`flags.${SYSTEM_ID}.factionBelongs`, `flags.${SYSTEM_ID}.factionRelations`];
   const skillRoots = [
@@ -588,7 +590,7 @@ function onActorUpdated(actor, changes = {}) {
 
 function onActiveEffectChanged(effect, changes = null, operation = "update") {
   const actor = effect?.parent;
-  if (!actor || !effectAffectsStealth(effect, changes, operation)) return;
+  if (!actor || isPhantomEntity(actor) || !effectAffectsStealth(effect, changes, operation)) return;
   synchronizeActorStealthState(actor);
   invalidateStealthDetectionCache();
   queueStealthedTokenVisibilityRefresh();
@@ -596,7 +598,7 @@ function onActiveEffectChanged(effect, changes = null, operation = "update") {
 }
 
 function onTokenCreated(tokenDocument) {
-  if (!isDocumentInActiveScene(tokenDocument)) return;
+  if (!isDocumentInActiveScene(tokenDocument) || isPhantomEntity(tokenDocument)) return;
   if (tokenDocument?.actor && isActorStealthed(tokenDocument.actor)) queueStealthedTokenVisibilityRefresh();
   synchronizePersistentDetectionVisualization(tokenDocument?.object);
   const emitsLight = tokenEmitsLight(tokenDocument);
@@ -610,6 +612,7 @@ function onTokenCreated(tokenDocument) {
 }
 
 function onTokenRefreshed(token, flags = {}) {
+  if (isPhantomEntity(token)) return;
   synchronizePersistentDetectionVisualization(token);
   if (
     flags.refreshPosition
@@ -622,7 +625,7 @@ function onTokenRefreshed(token, flags = {}) {
 }
 
 function onTokenUpdated(tokenDocument, changes = {}) {
-  if (!isDocumentInActiveScene(tokenDocument)) return;
+  if (!isDocumentInActiveScene(tokenDocument) || isPhantomEntity(tokenDocument)) return;
   synchronizePersistentDetectionVisualization(tokenDocument?.object);
   const localVisibilityChanged = hasChangedPath(changes, ["hidden"]);
   const geometryChanged = hasChangedPath(changes, [
@@ -648,7 +651,7 @@ function onTokenUpdated(tokenDocument, changes = {}) {
 }
 
 function onTokenMoved(tokenDocument, movement = {}) {
-  if (!isDocumentInActiveScene(tokenDocument)) return;
+  if (!isDocumentInActiveScene(tokenDocument) || isPhantomEntity(tokenDocument)) return;
   const token = tokenDocument?.object;
   const emitsLight = tokenEmitsLight(tokenDocument);
   invalidateTargetDifficultyPreview();
@@ -684,6 +687,10 @@ function onControlledTokenChanged() {
 
 function onTokenDeleted(tokenDocument) {
   const tokenId = tokenDocument?.id;
+  if (isPhantomEntity(tokenDocument)) {
+    cleanupTokenStealth(tokenId);
+    return;
+  }
   const emittedLight = tokenEmitsLight(tokenDocument);
   cleanupTokenStealth(tokenId);
   if (isDocumentInActiveScene(tokenDocument)) {
@@ -838,7 +845,7 @@ function synchronizePersistentStealthVisualizations() {
 }
 
 function synchronizePersistentDetectionVisualization(token) {
-  if (!token?.id) return false;
+  if (!token?.id || isPhantomEntity(token)) return false;
   const controlled = globalThis.canvas?.tokens?.controlled ?? [];
   const active = controlled.length === 1
     && controlled[0]?.id === token.id
@@ -1094,6 +1101,7 @@ function getTokenAtClientPoint(event, excludedTokenId = "") {
   const point = activeCanvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
   const collisionTest = ({ t: token }) => token.id !== excludedTokenId
     && token.actor
+    && !isPhantomEntity(token)
     && token.visible !== false
     && token.renderable !== false
     && (token.hitArea?.contains
