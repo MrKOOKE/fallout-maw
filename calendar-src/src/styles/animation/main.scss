@@ -1,0 +1,69 @@
+@import "../variables";
+.fallout-maw-calendar{
+  &.window-app{
+    &.fallout-maw-calendar-compact-view{
+      .fallout-maw-calendar-main-wrapper {
+        .fallout-maw-calendar-side-drawer {
+          &.fallout-maw-calendar-animate {
+            &.fallout-maw-calendar-right{
+              transition: left 500ms, height 500ms;
+            }
+            &.fallout-maw-calendar-left{
+              transition: right 500ms, height 500ms;
+            }
+            &.fallout-maw-calendar-down{
+              transition: top 500ms, height 500ms;
+            }
+          }
+        }
+      }
+    }
+    .fallout-maw-calendar-main-wrapper{
+      .fallout-maw-calendar-controls{
+        &.fallout-maw-calendar-unit-controls{
+          .fallout-maw-calendar-control-group{
+            .fallout-maw-calendar-unit-list{
+              transition: max-height 500ms;
+            }
+          }
+        }
+      }
+      .fallout-maw-calendar-side-drawer{
+        &.fallout-maw-calendar-animate{
+          &.fallout-maw-calendar-right{
+            transition: left 500ms;
+          }
+          &.fallout-maw-calendar-left{
+            transition: right 500ms;
+          }
+          &.fallout-maw-calendar-down{
+            transition: top 500ms;
+          }
+        }
+      }
+      .fallout-maw-calendar-calendar-list{
+        .fallout-maw-calendar-animated-clock{
+          &.fallout-maw-calendar-animate{
+            svg{
+              #c_arm_s{
+                transform-origin: center;
+                animation: 2s linear infinite fallout-maw-calendar-clock-spin;
+              }
+              #c_arm_m{
+                transform-origin: center;
+                animation: 6s linear infinite fallout-maw-calendar-clock-spin;
+              }
+            }
+          }
+        }
+      }
+      .fallout-maw-calendar-note-search{
+        .fallout-maw-calendar-search-options{
+          &.fallout-maw-calendar-animate{
+            transition: max-height 500ms;
+          }
+        }
+      }
+    }
+  }
+}

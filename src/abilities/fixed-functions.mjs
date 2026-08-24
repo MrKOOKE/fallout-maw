@@ -51,6 +51,8 @@ import {
   normalizeNightmareSettings,
   normalizePhantomSettings,
   normalizeDanceOfThousandShadowsSettings,
+  normalizeLivingSteelSettings,
+  normalizePainLordSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
@@ -110,6 +112,7 @@ import {
   isCriticalLimb,
   isLimbDestroyed,
   registerDamageAppliedHandler,
+  registerFinalHealthDamageInterceptor,
   registerLethalDamagePreventionHandler,
   requestDamageApplications,
   restoreActorHealthCost,
@@ -208,6 +211,27 @@ import {
   registerDanceOfThousandShadowsRuntimeHooks,
   swapWithDancePhantom
 } from "./dance-of-thousand-shadows.mjs";
+import {
+  LIVING_STEEL_DAMAGE_INTERCEPTOR_ID,
+  actorHasLivingSteel,
+  abilityItemHasLivingSteel,
+  applyLivingSteelFinalHealthDamage,
+  cleanupLivingSteelEffectsForAbilityItem,
+  estimateLivingSteelFinalHealthDamage,
+  getLivingSteelAbilityProgressEntry,
+  registerLivingSteelEffectLifecycle,
+  reconcileLivingSteelEffectsForAbilityItem
+} from "./living-steel.mjs";
+import {
+  PAIN_LORD_DAMAGE_HANDLER_ID,
+  abilityItemHasPainLord,
+  cleanupPainLordEffectsForAbilityItem,
+  cleanupPainLordEffectsForSourceActor,
+  getPainLordAbilityProgressEntry,
+  painLordAbilityUpdateMayAffectEffects,
+  processPainLordDamageResults,
+  reconcilePainLordEffectsForAbilityItem
+} from "./pain-lord.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import {
   canSpendCombatActionPoints,
@@ -227,7 +251,9 @@ import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
   getActorEnergy,
-  getActorAvailableEnergy
+  getActorAvailableEnergy,
+  restoreActorEnergy,
+  runActorEnergyMutation
 } from "../combat/energy-resource.mjs";
 import {
   PERFECT_FIT_MAINTAINED_EFFECTS,
@@ -400,6 +426,7 @@ const ACTIVE_APPLICATION_AUTHORITY_CACHE_MS = 5 * 60 * 1000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+const PAIN_LORD_ITEM_UPDATE_RELEVANCE_OPTION = "falloutMawPainLordItemUpdateRelevant";
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead"
 });
@@ -407,7 +434,6 @@ const pendingFixedAbilitySocketRequests = new Map();
 const activeApplicationAuthorityOperations = new Map();
 const activeApplicationAuthorityRequestsByUse = new Map();
 const activeApplicationAuthorityRequestsById = new Map();
-const actorEnergyMutationQueue = new Map();
 const maintainedTargetOperationLock = createActorOperationLock();
 const MAINTAINED_TARGET_DEFINITIONS = Object.freeze([
   Object.freeze({
@@ -892,6 +918,24 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows,
       fixedSettings: normalizeDanceOfThousandShadowsSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.livingSteel,
+    label: "Живая сталь",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.livingSteel,
+      fixedSettings: normalizeLivingSteelSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.painLord,
+    label: "Владыка боли",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.painLord,
+      fixedSettings: normalizePainLordSettings()
+    })
   })
 ]);
 
@@ -901,6 +945,7 @@ let fixedAbilitySocketLifecycleRegistered = false;
 let correspondingToolApproachProviderRegistered = false;
 
 export function registerFixedAbilityFunctionHooks() {
+  registerLivingSteelEffectLifecycle();
   registerCorrespondingToolApproachProvider();
   Hooks.on("updateActor", (actor, _changes, options = {}) => {
     if (
@@ -934,27 +979,77 @@ function registerFixedAbilityRuntimeHooks() {
   registerShadowEffectIndexHooks();
   registerPhantomRuntimeHooks();
   registerDanceOfThousandShadowsRuntimeHooks();
+  registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
+    applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
+    apply: runFixedAbilityRuntimeHandler(applyLivingSteelFinalHealthDamage),
+    estimate: runFixedAbilityRuntimeHandler(estimateLivingSteelFinalHealthDamage)
+  });
   Hooks.on("deleteActiveEffect", runFixedAbilityRuntimeHandler((effect, options = {}) => {
     void cleanupMaintainedTargetLinkedEffect(effect, options);
   }));
   Hooks.on("updateActiveEffect", runFixedAbilityRuntimeHandler((effect, changes = {}, options = {}) => {
     if (changes?.disabled === true) void cleanupDisabledMaintainedTargetEffect(effect, options);
   }));
-  Hooks.on("deleteItem", runFixedAbilityRuntimeHandler((item, options = {}) => {
-    void cleanupMaintainedTargetAbilityItemHolds(item, options);
+  Hooks.on("createItem", runFixedAbilityRuntimeHandler((item, _options = {}, userId = "") => {
+    if (isInitiatingDocumentUser(userId) && abilityItemHasLivingSteel(item)) {
+      void reconcileLivingSteelEffectsForAbilityItem(item);
+    }
   }));
-  Hooks.on("updateItem", runFixedAbilityRuntimeHandler((item, changes = {}, options = {}) => {
+  Hooks.on("preUpdateItem", runFixedAbilityRuntimeHandler((item, changes = {}, options = {}) => {
+    if (abilityItemHasPainLord(item) && painLordAbilityUpdateMayAffectEffects(changes)) {
+      options[PAIN_LORD_ITEM_UPDATE_RELEVANCE_OPTION] = true;
+    }
+  }));
+  Hooks.on("deleteItem", runFixedAbilityRuntimeHandler((item, options = {}, userId = "") => {
+    void cleanupMaintainedTargetAbilityItemHolds(item, options);
+    if (isInitiatingDocumentUser(userId)) {
+      void cleanupLivingSteelEffectsForAbilityItem(item);
+    }
+    if (isPainLordEffectLifecycleAuthority(userId) && abilityItemHasPainLord(item)) {
+      void cleanupPainLordEffectsForAbilityItem(item);
+    }
+  }));
+  Hooks.on("updateItem", runFixedAbilityRuntimeHandler((item, changes = {}, options = {}, userId = "") => {
     if (maintainedTargetAbilityUpdateMayAffectHolds(changes)) {
       void reconcileMaintainedTargetAbilityItemHolds(item, options);
     }
+    if (isInitiatingDocumentUser(userId)) {
+      if (item?.type === "ability" && !abilityItemHasLivingSteel(item)) {
+        void cleanupLivingSteelEffectsForAbilityItem(item);
+      } else if (item?.type === "ability" && maintainedTargetAbilityUpdateMayAffectHolds(changes)) {
+        void reconcileLivingSteelEffectsForAbilityItem(item);
+      }
+    }
+    if (!isPainLordEffectLifecycleAuthority(userId)) return;
+    const painLordUpdateRelevant = Boolean(
+      options?.[PAIN_LORD_ITEM_UPDATE_RELEVANCE_OPTION]
+      || (abilityItemHasPainLord(item) && painLordAbilityUpdateMayAffectEffects(changes))
+    );
+    if (item?.type === "ability" && painLordUpdateRelevant) {
+      if (abilityItemHasPainLord(item)) void reconcilePainLordEffectsForAbilityItem(item);
+      else void cleanupPainLordEffectsForAbilityItem(item);
+    }
   }));
-  Hooks.on("deleteActor", runFixedAbilityRuntimeHandler((actor, options = {}) => {
+  Hooks.on("deleteActor", runFixedAbilityRuntimeHandler((actor, options = {}, userId = "") => {
     if (isPhantomEntity(actor)) return;
     void cleanupMaintainedTargetDeletedActorLinks(actor, options);
+    if (
+      isPainLordEffectLifecycleAuthority(userId)
+      && Array.from(actor?.items ?? []).some(abilityItemHasPainLord)
+    ) {
+      void cleanupPainLordEffectsForSourceActor(actor);
+    }
   }));
-  Hooks.on("deleteToken", runFixedAbilityRuntimeHandler((token, options = {}) => {
+  Hooks.on("deleteToken", runFixedAbilityRuntimeHandler((token, options = {}, userId = "") => {
     if (isPhantomEntity(token)) return;
     if (!token?.actorLink) void cleanupMaintainedTargetDeletedActorLinks(token?.actor, options);
+    if (
+      !token?.actorLink
+      && isPainLordEffectLifecycleAuthority(userId)
+      && Array.from(token?.actor?.items ?? []).some(abilityItemHasPainLord)
+    ) {
+      void cleanupPainLordEffectsForSourceActor(token.actor);
+    }
   }));
   registerSystemEventObserver({
     id: "fallout-maw.fixed.shadow.resourceSpent",
@@ -993,6 +1088,10 @@ function registerFixedAbilityRuntimeHooks() {
   registerDamageAppliedHandler(
     "fallout-maw.fixed.deusExMachinaProgress",
     runFixedAbilityRuntimeHandler(context => advanceDeusExMachinaProgressFromDamage(context?.results ?? []))
+  );
+  registerDamageAppliedHandler(
+    PAIN_LORD_DAMAGE_HANDLER_ID,
+    runFixedAbilityRuntimeHandler(context => processPainLordDamageResults(context?.results ?? []))
   );
   Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
     void requestCurseAndBlessingAttackResolution(context);
@@ -1209,6 +1308,12 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           label: "Накоплено зарядов",
           value: `${charges} / ${settings.maxCharges}`
         };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel) {
+        return getLivingSteelAbilityProgressEntry(abilityItem, entry);
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
+        return getPainLordAbilityProgressEntry(abilityItem, entry);
       }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
       const settings = normalizeDeusExMachinaSettings(entry.fixedSettings);
@@ -10354,18 +10459,9 @@ async function spendEnergy(actor, energyCost = 0, updateOptions = {}) {
 async function refundEnergy(actor, energyAmount = 0) {
   const amount = Math.max(0, toInteger(energyAmount));
   if (!amount) return true;
-  return runActorEnergyMutation(actor, async () => {
-    const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
-    if (!resource) return false;
-    const maximum = Math.max(0, toInteger(resource.max));
-    const nextValue = Math.min(maximum, getActorEnergy(actor) + amount);
-    const update = { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue };
-    if (Object.hasOwn(resource, "spent")) {
-      update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, maximum - nextValue);
-    }
-    await actor.update(update, { falloutMawAbilityResourceRefund: true });
-    return true;
-  });
+  if (!actor?.system?.resources?.[ENERGY_RESOURCE_KEY]) return false;
+  await restoreActorEnergy(actor, amount, { falloutMawAbilityResourceRefund: true });
+  return true;
 }
 
 async function spendEnergyNow(actor, cost = 0, updateOptions = {}) {
@@ -10383,20 +10479,6 @@ async function spendEnergyNow(actor, cost = 0, updateOptions = {}) {
   return true;
 }
 
-function runActorEnergyMutation(actor, operation) {
-  const actorUuid = String(actor?.uuid ?? "");
-  if (!actorUuid) return operation();
-  const previous = actorEnergyMutationQueue.get(actorUuid) ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(operation)
-    .finally(() => {
-      if (actorEnergyMutationQueue.get(actorUuid) === next) actorEnergyMutationQueue.delete(actorUuid);
-    });
-  actorEnergyMutationQueue.set(actorUuid, next);
-  return next;
-}
-
 function getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0) {
   return Math.max(0, toInteger(baseCost)) + getAbilityOverloadEnergyCost(actor, abilityItem, abilityFunction);
 }
@@ -10407,6 +10489,18 @@ export function getFixedAbilityEnergyCost(actor, abilityItem, abilityFunction, b
 
 function areFixedAbilityFunctionsEnabled() {
   return getActiveRulesProfile().fixedAbilityFunctionsEnabled !== false;
+}
+
+function isInitiatingDocumentUser(userId = "") {
+  const currentUserId = String(game.user?.id ?? "");
+  const initiatingUserId = String(userId ?? "");
+  return !currentUserId || !initiatingUserId || currentUserId === initiatingUserId;
+}
+
+function isPainLordEffectLifecycleAuthority(userId = "") {
+  const activeGM = game.users?.activeGM ?? null;
+  if (activeGM) return String(activeGM.id ?? "") === String(game.user?.id ?? "");
+  return isInitiatingDocumentUser(userId);
 }
 
 function runFixedAbilityRuntimeHandler(handler) {

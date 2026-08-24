@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -17,6 +18,7 @@ import {
 import { normalizeResourceSettings } from "../src/formulas/normalization.mjs";
 import { migrateActorData } from "../src/migrations/documents.mjs";
 import { migrateWorldConsciousnessData } from "../src/migrations/world.mjs";
+import { UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY } from "../src/utils/active-effect-keys.mjs";
 
 test("consciousness capacity is the rounded average maximum of critical limbs", () => {
   const limbs = {
@@ -127,6 +129,62 @@ test("actual restored health replenishes consciousness one-for-one up to maximum
     assert.equal(changes["system.resources.consciousness.value"], 20);
     assert.equal(changes["system.resources.consciousness.spent"], 80);
     assert.equal(changes["system.combat.consciousnessRecoveryTarget"], 100);
+  } finally {
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+  }
+});
+
+test("unconsciousness immunity centrally suppresses the unconscious state and participates in ActiveEffect status sync", async () => {
+  const previousFoundry = globalThis.foundry;
+  globalThis.foundry = {
+    applications: {
+      api: { DialogV2: class DialogV2 {} },
+      ux: { FormDataExtended: class FormDataExtended {} },
+      handlebars: { renderTemplate: async () => "" }
+    },
+    utils: {
+      hasProperty: () => false,
+      setProperty: (object, path, value) => {
+        object[path] = value;
+        return true;
+      }
+    }
+  };
+
+  try {
+    const {
+      isActorConsciousnessDepleted,
+      isActorUnconsciousnessImmune
+    } = await import("../src/combat/damage-hub.mjs");
+    const actor = {
+      system: {
+        combat: { unconsciousnessImmunity: 0 },
+        resources: {
+          consciousness: { min: 0, value: 0, max: 100, recoveryTarget: 0 }
+        }
+      }
+    };
+
+    assert.equal(UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY, "system.combat.unconsciousnessImmunity");
+    assert.equal(isActorUnconsciousnessImmune(actor), false);
+    assert.equal(isActorConsciousnessDepleted(actor), true);
+
+    actor.system.combat.unconsciousnessImmunity = 1;
+    assert.equal(isActorUnconsciousnessImmune(actor), true);
+    assert.equal(isActorConsciousnessDepleted(actor), false);
+
+    const [model, tokens, damageHub] = await Promise.all([
+      readFile(new URL("../src/data/models/actor-data-models.mjs", import.meta.url), "utf8"),
+      readFile(new URL("../src/utils/effect-key-tokens.mjs", import.meta.url), "utf8"),
+      readFile(new URL("../src/combat/damage-hub.mjs", import.meta.url), "utf8")
+    ]);
+    assert.match(model, /unconsciousnessImmunity: new NumberField\(\{[^}]*min: 0[^}]*persisted: false/);
+    assert.match(tokens, /label: "Невосприимчивость к потере сознания"/);
+    assert.match(tokens, /path: UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY/);
+    assert.match(damageHub, /key === UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY/);
+    assert.match(damageHub, /function createLimbShockCheck[\s\S]*?isActorUnconsciousnessImmune\(actor\)/);
+    assert.match(damageHub, /async function applyShockConsciousnessResult[\s\S]*?isActorUnconsciousnessImmune\(actor\)/);
   } finally {
     if (previousFoundry === undefined) delete globalThis.foundry;
     else globalThis.foundry = previousFoundry;

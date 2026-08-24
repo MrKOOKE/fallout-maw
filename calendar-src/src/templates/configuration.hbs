@@ -1,0 +1,1334 @@
+<form autocomplete="off" class="fallout-maw-calendar-configuration-wrapper">
+    <nav class="fallout-maw-calendar-sheet-tabs tabs">
+        <div class="fallout-maw-calendar-tab-section fallout-maw-calendar-global-settings">
+            <div class="fallout-maw-calendar-heading">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.Title'}}</div>
+            <a class="fallout-maw-calendar-item" data-tab="globalSettings">{{localize 'FALLOUTMAW.Calendar.Settings'}}</a>
+            {{#if isGM}}
+            <a class="fallout-maw-calendar-item" data-tab="permissions">{{localize 'Permissions'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="importExport">{{localize 'FALLOUTMAW.Calendar.Configuration.General.ImportExport.Title'}}</a>
+            {{/if}}
+        </div>
+        {{#if isGM}}
+        <div class="fallout-maw-calendar-tab-section fallout-maw-calendar-stripe fallout-maw-calendar-calendar-settings">
+            <div class="fallout-maw-calendar-calendar-selector">
+                <div class="fallout-maw-calendar-heading">{{localize 'FALLOUTMAW.Calendar.Calendar'}}:<br/>{{object.name}}</div>
+                <ul class="fallout-maw-calendar-closed">
+                    {{#each calendars}}
+                        <li class="{{#if (eq ../object.id id)}} fallout-maw-calendar-active{{/if}}" data-calendar="{{id}}">
+                            {{name}} {{#unless (eq id 'default_temp')}}<button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-tooltip="{{localize 'FALLOUTMAW.Calendar.RemoveCalendar'}}" data-calendar="{{id}}"><span class="fa fa-trash"></span></button>{{/unless}}
+                        </li>
+                    {{/each}}
+                    <li class="fallout-maw-calendar-item fallout-maw-calendar-new-calendar" data-tab="newCalendar">{{localize 'FALLOUTMAW.Calendar.AddNewCalendar'}}<span class="fa fa-plus-circle"></span></li>
+                </ul>
+            </div>
+            <a class="fallout-maw-calendar-item" data-tab="quickSetup">{{localize 'FALLOUTMAW.Calendar.Configuration.General.QuickSetup'}}</a>
+            <div class="fallout-maw-calendar-sub-heading">{{localize 'FALLOUTMAW.Calendar.Settings'}}</div>
+            <a class="fallout-maw-calendar-item" data-tab="generalSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="displayOptions">{{localize 'FALLOUTMAW.Calendar.Configuration.General.DisplayOptions'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="yearSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="monthSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="weekdaySettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="leapYearSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="seasonSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="moonSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="timeSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.Title'}}</a>
+            <a class="fallout-maw-calendar-item" data-tab="noteSettings">{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.Title'}}</a>
+        </div>
+        {{/if}}
+        <div class="fallout-maw-calendar-tab-section fallout-maw-calendar-help">
+            <div class="fallout-maw-calendar-heading">{{localize 'FALLOUTMAW.Calendar.Help'}}</div>
+            <a class="fallout-maw-calendar-item" href="https://simplecalendar.info/" target="_blank">{{localize 'FALLOUTMAW.Calendar.Documentation'}}&nbsp;<span class="fa fa-external-link-alt"></span></a>
+            <a class="fallout-maw-calendar-item" data-tab="about">{{localize 'About'}}</a>
+        </div>
+    </nav>
+    <div class="fallout-maw-calendar-tab-wrapper">
+        <div class="tab fallout-maw-calendar-global-settings" data-tab="globalSettings">
+            {{#if isGM}}
+            <div class="fallout-maw-calendar-section fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Global.Title'}} <a href="https://simplecalendar.info/docs/global-configuration/settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <p>{{localize 'FALLOUTMAW.Calendar.Configuration.Global.Description'}}</p>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarSyncCalendars">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.SyncCalendars.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{globalConfiguration.syncCalendars}}" type="checkbox" id="falloutMawCalendarSyncCalendars" {{checked globalConfiguration.syncCalendars}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.SyncCalendars.Description'}}</p>
+                </div>
+                <!--
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarCalendarsSameTimestamp">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.SameTimestamp.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{globalConfiguration.calendarsSameTimestamp}}" type="checkbox" id="falloutMawCalendarCalendarsSameTimestamp" {{checked globalConfiguration.calendarsSameTimestamp}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.SameTimestamp.Description'}}</p>
+                </div>
+                -->
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarSecondsInCombatRound">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.SecondsInCombatRound'}}</label>
+                    <div class="form-fields">
+                        <input value="{{globalConfiguration.secondsInCombatRound}}" type="number" id="falloutMawCalendarSecondsInCombatRound" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.SecondsInCombatRoundHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarCombatPauseClockRule">{{localize 'FALLOUTMAW.Calendar.Configuration.CombatPauseRule.Title'}}</label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarCombatPauseClockRule">
+                            {{selectOptions combatPauseRules selected=globalConfiguration.combatPauseRule localize=true}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.CombatPauseRule.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarShowNoteFolder">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.ShowNoteFolder.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{globalConfiguration.showNotesFolder}}" type="checkbox" id="falloutMawCalendarShowNoteFolder" {{checked globalConfiguration.showNotesFolder}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.ShowNoteFolder.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarInGameChatTimestamp">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.InGameChatTimestamp.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{globalConfiguration.inGameChatTimestamp}}" type="checkbox" id="falloutMawCalendarInGameChatTimestamp" {{checked globalConfiguration.inGameChatTimestamp}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Global.InGameChatTimestamp.Description'}}</p>
+                </div>
+            </div>
+            {{/if}}
+            <div class="fallout-maw-calendar-section fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Client.Title'}} <a href="https://simplecalendar.info/docs/using-sc/client-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <p>{{localize 'FALLOUTMAW.Calendar.Configuration.Client.Description'}}</p>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarTheme">{{localize 'FALLOUTMAW.Calendar.Configuration.Theme.Title'}}</label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarTheme">
+                            {{selectOptions clientSettings.themes selected=clientSettings.theme localize=true}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Theme.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarOpenOnLoad">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.OpenOnLoad.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{clientSettings.openOnLoad}}" type="checkbox" id="falloutMawCalendarOpenOnLoad" {{checked clientSettings.openOnLoad}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.OpenOnLoad.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarOpenInCompact">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.OpenCompact.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{clientSettings.openInCompact}}" type="checkbox" id="falloutMawCalendarOpenInCompact" {{checked clientSettings.openInCompact}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.OpenCompact.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarRememberPos">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.RememberPosition.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{clientSettings.rememberPos}}" type="checkbox" id="falloutMawCalendarRememberPos" {{checked clientSettings.rememberPos}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.RememberPosition.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarRememberCompactPos">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.RememberCompactPosition.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{clientSettings.rememberCompactPos}}" type="checkbox" id="falloutMawCalendarRememberCompactPos" {{checked clientSettings.rememberCompactPos}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.RememberCompactPosition.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarNoteReminderNotification">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.NoteReminderNotification.Title'}}</label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarNoteReminderNotification">
+                            {{selectOptions clientSettings.noteReminderNotifications selected=clientSettings.noteReminderNotification localize=true}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.NoteReminderNotification.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarSideDrawerDirection">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.NoteListOpenDirection.Title'}}</label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarSideDrawerDirection">
+                            {{selectOptions clientSettings.sideDrawerDirections selected=clientSettings.sideDrawerDirection localize=true}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.NoteListOpenDirection.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarAlwaysOpenNoteList">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.AlwaysShowNoteList.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{clientSettings.alwaysShowNoteList}}" type="checkbox" id="falloutMawCalendarAlwaysOpenNoteList" {{checked clientSettings.alwaysShowNoteList}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.AlwaysShowNoteList.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarPersistentOpen">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.PersistentOpen.Title'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{clientSettings.persistentOpen}}" type="checkbox" id="falloutMawCalendarPersistentOpen" {{checked clientSettings.persistentOpen}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.PersistentOpen.Description'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarCompactViewScale">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.CompactViewScale.Title'}}</label>
+                    <div class="form-fields">
+                        {{rangePicker name="falloutMawCalendarCompactViewScale" value=clientSettings.compactViewScale step=10 min=70 max=200}}
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Client.CompactViewScale.Description'}}</p>
+                </div>
+            </div>
+        </div>
+
+        {{#if isGM}}
+        <div class="tab fallout-maw-calendar-permissions" data-tab="permissions">
+            <h2>{{localize 'Permissions'}} <a href="https://simplecalendar.info/docs/global-configuration/permissions" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+            <p>{{localize 'FALLOUTMAW.Calendar.Configuration.General.Permissions.Note'}}</p>
+            <header class="fallout-maw-calendar-table-header flexrow">
+                <label class="fallout-maw-calendar-index">{{localize 'PERMISSION.Permission'}}</label>
+                <label>{{localize 'USER.RolePlayer'}}</label>
+                <label>{{localize 'USER.RoleTrusted'}}</label>
+                <label>{{localize 'USER.RoleAssistant'}}</label>
+                <label>{{localize 'USER.RoleGamemaster'}}</label>
+            </header>
+            <ul class="fallout-maw-calendar-permissions-list">
+                <li class="fallout-maw-calendar-permission form-group fallout-maw-calendar-open">
+                    <label class="fallout-maw-calendar-index">{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}</label>
+                    <div class="form-fields">
+                        <input type="checkbox" name="CalendarVisible.P" id="falloutMawCalendarCalendarVisibleP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RolePlayer'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RolePlayer'}}" {{checked globalConfiguration.permissions.viewCalendar.player}} />
+                        <input type="checkbox" name="CalendarVisible.TP" id="falloutMawCalendarCalendarVisibleTP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RoleTrusted'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RoleTrusted'}}" {{checked globalConfiguration.permissions.viewCalendar.trustedPlayer}} />
+                        <input type="checkbox" name="CalendarVisible.AGM" id="falloutMawCalendarCalendarVisibleAGM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RoleAssistant'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RoleAssistant'}}" {{checked globalConfiguration.permissions.viewCalendar.assistantGameMaster}} />
+                        <input type="checkbox" name="CalendarVisible.GM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RoleGamemaster'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisible'}}: {{localize 'USER.RoleGamemaster'}}" checked disabled />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarPlayerVisibleHelp'}}</p>
+                </li>
+                <li class="fallout-maw-calendar-permission form-group fallout-maw-calendar-open">
+                    <label class="fallout-maw-calendar-index">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}</label>
+                    <div class="form-fields">
+                        <input type="checkbox" name="AddNotes.P" id="falloutMawCalendarAddNotesP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RolePlayer'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RolePlayer'}}" {{checked globalConfiguration.permissions.addNotes.player}} />
+                        <input type="checkbox" name="AddNotes.TP" id="falloutMawCalendarAddNotesTP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RoleTrusted'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RoleTrusted'}}" {{checked globalConfiguration.permissions.addNotes.trustedPlayer}} />
+                        <input type="checkbox" name="AddNotes.AGM" id="falloutMawCalendarAddNotesAGM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RoleAssistant'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RoleAssistant'}}" {{checked globalConfiguration.permissions.addNotes.assistantGameMaster}} />
+                        <input type="checkbox" name="AddNotes.GM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RoleGamemaster'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotes'}}: {{localize 'USER.RoleGamemaster'}}" checked disabled />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerAddNotesHelp'}}</p>
+                </li>
+                <li class="fallout-maw-calendar-permission form-group fallout-maw-calendar-open">
+                    <label class="fallout-maw-calendar-index">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}</label>
+                    <div class="form-fields">
+                        <input type="checkbox" name="AddNotes.P" id="falloutMawCalendarReorderNotesP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RolePlayer'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RolePlayer'}}" {{checked globalConfiguration.permissions.reorderNotes.player}} />
+                        <input type="checkbox" name="AddNotes.TP" id="falloutMawCalendarReorderNotesTP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RoleTrusted'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RoleTrusted'}}" {{checked globalConfiguration.permissions.reorderNotes.trustedPlayer}} />
+                        <input type="checkbox" name="AddNotes.AGM" id="falloutMawCalendarReorderNotesAGM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RoleAssistant'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RoleAssistant'}}" {{checked globalConfiguration.permissions.reorderNotes.assistantGameMaster}} />
+                        <input type="checkbox" name="AddNotes.GM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RoleGamemaster'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotes'}}: {{localize 'USER.RoleGamemaster'}}" checked disabled />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayerReorderNotesHelp'}}</p>
+                </li>
+                <li class="fallout-maw-calendar-permission form-group fallout-maw-calendar-open">
+                    <label class="fallout-maw-calendar-index">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}</label>
+                    <div class="form-fields">
+                        <input type="checkbox" name="AddNotes.P" id="falloutMawCalendarChangeDateTimeP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RolePlayer'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RolePlayer'}}" {{checked globalConfiguration.permissions.changeDateTime.player}} />
+                        <input type="checkbox" name="AddNotes.TP" id="falloutMawCalendarChangeDateTimeTP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RoleTrusted'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RoleTrusted'}}" {{checked globalConfiguration.permissions.changeDateTime.trustedPlayer}} />
+                        <input type="checkbox" name="AddNotes.AGM" id="falloutMawCalendarChangeDateTimeAGM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RoleAssistant'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RoleAssistant'}}" {{checked globalConfiguration.permissions.changeDateTime.assistantGameMaster}} />
+                        <input type="checkbox" name="AddNotes.GM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RoleGamemaster'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTime'}}: {{localize 'USER.RoleGamemaster'}}" checked disabled />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeDateTimeHelp'}}</p>
+                </li>
+                <li class="fallout-maw-calendar-permission form-group fallout-maw-calendar-open">
+                    <label class="fallout-maw-calendar-index">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}</label>
+                    <div class="form-fields">
+                        <input type="checkbox" name="AddNotes.P" id="falloutMawCalendarChangeActiveCalP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RolePlayer'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RolePlayer'}}" {{checked globalConfiguration.permissions.changeActiveCalendar.player}} />
+                        <input type="checkbox" name="AddNotes.TP" id="falloutMawCalendarChangeActiveCalTP" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RoleTrusted'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RoleTrusted'}}" {{checked globalConfiguration.permissions.changeActiveCalendar.trustedPlayer}} />
+                        <input type="checkbox" name="AddNotes.AGM" id="falloutMawCalendarChangeActiveCalAGM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RoleAssistant'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RoleAssistant'}}" {{checked globalConfiguration.permissions.changeActiveCalendar.assistantGameMaster}} />
+                        <input type="checkbox" name="AddNotes.GM" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RoleGamemaster'}}" aria-label="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendar'}}: {{localize 'USER.RoleGamemaster'}}" checked disabled />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PlayersChangeActiveCalendarHelp'}}</p>
+                </li>
+            </ul>
+        </div>
+        <div class="tab fallout-maw-calendar-import-export" data-tab="importExport">
+            <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.General.ImportExport.Title'}} <a href="https://simplecalendar.info/docs/global-configuration/import-export" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+            <div class="fallout-maw-calendar-section fallout-maw-calendar-open">
+                <div class="form-group fallout-maw-calendar-open">
+                    <label>{{localize 'FALLOUTMAW.Calendar.Import'}}</label>
+                    <div class="form-fields fallout-maw-calendar-importing">
+                        <input type="file" id="falloutMawCalendarImportCalendarPicker" accept="application/json, .json" />
+                        <div class="fallout-maw-calendar-progress fallout-maw-calendar-hide">
+                            <div class="fallout-maw-calendar-progress-bar"></div>
+                        </div>
+                        <div class="fallout-maw-calendar-file-details"></div>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.ImportExport.ImportDescription'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label>{{localize 'FALLOUTMAW.Calendar.Export'}}</label>
+                    <div class="form-fields">
+                        <ul class="fallout-maw-calendar-calendar-list">
+                            <li><label><input type="checkbox" data-id="global" checked /><span class="fa fa-cog"></span>&nbsp;{{localize 'FALLOUTMAW.Calendar.Configuration.Global.Title'}}</label></li>
+                            <li><label><input type="checkbox" data-id="permissions" checked /><span class="fa fa-key"></span>&nbsp;{{localize 'Permissions'}}</label></li>
+                            {{#each calendars}}
+                                <li><label><input type="checkbox" data-id="{{id}}" checked /><strong><span class="fa fa-calendar"></span> {{name}}</strong>: {{localize 'FALLOUTMAW.Calendar.CalendarConfiguration'}}</label></li>
+                                <li><label><input type="checkbox" data-id="{{id}}-notes" checked /><strong><span class="fa fa-sticky-note"></span> {{name}}</strong>: {{localize 'FALLOUTMAW.Calendar.CalendarNotes'}}</label></li>
+                            {{/each}}
+                        </ul>
+                        <button class="fallout-maw-calendar-control fallout-maw-calendar-secondary" id="exportCalendar"><i class="fa fa-file-export"></i> {{localize 'FALLOUTMAW.Calendar.Export'}}</button>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.ImportExport.ExportDescription'}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab fallout-maw-calendar-new-calendar" data-tab="newCalendar">
+            <h2>{{localize 'FALLOUTMAW.Calendar.AddNewCalendar'}} <a href="https://simplecalendar.info/docs/calendar-configuration/add-remove-switch-calendar#add-a-new-calendar" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+            <div class="form-group fallout-maw-calendar-open">
+                <label for="falloutMawCalendarAddCalendarName">{{localize 'FALLOUTMAW.Calendar.Configuration.AddCalendar.CalendarName'}}</label>
+                <div class="form-fields">
+                    <input value="" type="text" id="falloutMawCalendarAddCalendarName" />
+                </div>
+                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.AddCalendar.CalendarNameHelp'}}</p>
+                <button class="fallout-maw-calendar-control fallout-maw-calendar-save" id="falloutMawCalendarAddCalendar">{{localize 'FALLOUTMAW.Calendar.Configuration.AddCalendar.Button'}}</button>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-quick-setup" data-tab="quickSetup">
+            <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.General.QuickSetup'}} <a href="https://simplecalendar.info/docs/calendar-configuration/quick-setup" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+            <p>{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.Description'}}</p>
+            <div class="fallout-maw-calendar-section-wrapper">
+                <div class="fallout-maw-calendar-section fallout-maw-calendar-predefined {{#if uiElementStates.qsNextClicked}} fallout-maw-calendar-closed{{else}} fallout-maw-calendar-open{{/if}}">
+                    <div class="form-group fallout-maw-calendar-open">
+                        <label>{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.ChoosePredefinedTitle'}}</label>
+                        <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.ChoosePredefinedDescription'}}</p>
+                        <div class="fallout-maw-calendar-predefined-list">
+                            {{#each predefined}}
+                                <div class="fallout-maw-calendar-predefined-calendar {{#if (eq ../uiElementStates.selectedPredefinedCalendar key)}} fallout-maw-calendar-selected{{/if}}" data-calendar="{{key}}">
+                                    <div class="fallout-maw-calendar-predefined-calendar-details">
+                                        {{localize label}}
+                                        <div class="fallout-maw-calendar-predefined-calendar-includes">
+                                            {{localize "FALLOUTMAW.Calendar.Includes"}}:
+                                            {{#if config}}
+                                                <span class="fa fa-calendar" data-tooltip="{{localize "FALLOUTMAW.Calendar.CalendarConfiguration"}}"></span>
+                                            {{/if}}
+                                            {{#if notes}}
+                                                <span class="fa fa-sticky-note" data-tooltip="{{localize "FALLOUTMAW.Calendar.CalendarNotes"}}"></span>
+                                            {{/if}}
+                                        </div>
+                                    </div>
+
+                                </div>
+                            {{/each}}
+                        </div>
+                    </div>
+                    <div class="form-group fallout-maw-calendar-open">
+                        <label for="falloutMawCalendarQSAddNotes">{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.ImportNotes'}}</label>
+                        <div class="form-fields">
+                            <input value="{{uiElementStates.qsAddNotes}}" type="checkbox" id="falloutMawCalendarQSAddNotes" {{checked uiElementStates.qsAddNotes}} />
+                        </div>
+                        <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.ImportNotesDescription'}}</p>
+                    </div>
+                    <div class="fallout-maw-calendar-control-section">
+                        <button class="fallout-maw-calendar-control fallout-maw-calendar-primary fallout-maw-calendar-qs-next" {{#unless uiElementStates.selectedPredefinedCalendar}}style="display: none;" {{/unless}}>{{localize 'FALLOUTMAW.Calendar.Next'}}&nbsp;<span class="fa fa-arrow-right"></span></button>
+                    </div>
+                </div>
+                <div class="fallout-maw-calendar-section fallout-maw-calendar-settings {{#if uiElementStates.qsNextClicked}} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}">
+                    <div class="form-group fallout-maw-calendar-open">
+                        <label>{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.ChooseCurrentDateTitle'}}</label>
+                        <div class="form-fields">
+                            {{fallout-maw-calendar-date-selector id='quick-setup-predefined-calendar' calendar=activeCalendarId selectedStartDate=qsCalDate selectedEndDate=qsCalDate position='left-down' allowDateRangeSelection=false showTimeSelector=false editYear=true }}
+                        </div>
+                        <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.QuickSetup.ChooseCurrentDateDescription'}}</p>
+                    </div>
+                    <div class="form-group fallout-maw-calendar-open">
+                        <label for="falloutMawCalendarQSShowClock">{{localize 'FALLOUTMAW.Calendar.Configuration.General.ShowClock'}}</label>
+                        <div class="form-fields">
+                            <input class="fallout-maw-calendar-toggle" value="{{generalSettings.showClock}}" type="checkbox" id="falloutMawCalendarQSShowClock" {{checked generalSettings.showClock}} />
+                        </div>
+                        <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.ShowClockHelp'}}</p>
+                    </div>
+                    <div class="fallout-maw-calendar-control-section">
+                        <button class="fallout-maw-calendar-control fallout-maw-calendar-primary fallout-maw-calendar-qs-back"><span class="fa fa-arrow-left"></span>&nbsp;{{localize 'FALLOUTMAW.Calendar.Back'}}</button>
+                        <button class="fallout-maw-calendar-control fallout-maw-calendar-save fallout-maw-calendar-qs-save"><span class="fa fa-save"></span>&nbsp;{{localize 'FALLOUTMAW.Calendar.Save'}}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab fallout-maw-calendar-general-settings" data-tab="generalSettings">
+            <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.General.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/general-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+            <p>{{localize 'FALLOUTMAW.Calendar.Configuration.General.Description'}}</p>
+            <div class="settings-group fallout-maw-calendar-open">
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarCalendarName">{{localize 'FALLOUTMAW.Calendar.Configuration.AddCalendar.CalendarName'}}</label>
+                    <div class="form-fields">
+                        <input value="{{object.name}}" type="text" id="falloutMawCalendarCalendarName" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.CalendarNameHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarGameWorldTime">{{localize 'FALLOUTMAW.Calendar.Configuration.General.GameWorldTime'}}</label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarGameWorldTime">
+                            {{selectOptions timeTrackers selected=generalSettings.gameWorldTimeIntegration localize=true}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.GameWorldTimeHelp'}}</p>
+                </div>
+                {{#if (eq gameSystem 'pf2e')}}
+                    <div class="form-group fallout-maw-calendar-open">
+                        <label for="falloutMawCalendarPF2ESync">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PF2ESync'}}</label>
+                        <div class="form-fields">
+                            <input class="fallout-maw-calendar-toggle" value="{{generalSettings.pf2eSync}}" type="checkbox" id="falloutMawCalendarPF2ESync" {{checked generalSettings.pf2eSync}} />
+                        </div>
+                        <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.PF2ESyncHelp'}}</p>
+                    </div>
+                {{/if}}
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-display-options" data-tab="displayOptions">
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Display.DateTimeFormat'}} <a href="https://simplecalendar.info/docs/calendar-configuration/display-options" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <p>{{{localize 'FALLOUTMAW.Calendar.Configuration.Display.Description'}}}</p>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-tokens" style="border-top: 1px solid #7a7971;">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head fallout-maw-calendar-date-format-token-show" style="cursor: pointer;">
+                        <div class="fallout-maw-calendar-col">
+                            <div>{{localize 'FALLOUTMAW.Calendar.DateFormat.Title'}}</div>
+                            <div style="flex: 1 1 100%;font-weight: normal;font-size: 0.75rem; margin-top: 0.5rem;">{{localize 'FALLOUTMAW.Calendar.DateFormat.Description'}}</div>
+                        </div>
+                        <div class="fa {{#if showDateFormatTokens}}fa-chevron-up{{else}}fa-chevron-down{{/if}}" style="flex: 0 1 50px;"></div>
+                    </div>
+                    <div class="fallout-maw-calendar-collapse-data" style="{{#unless showDateFormatTokens}}display: none;{{/unless}}">
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.YearOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>YYYY</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.Full'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.FullExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>YY</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.Short'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.ShortExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>YN</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.Name'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.NameExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>YA</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.Prefix'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.PrefixExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>YZ</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.Postfix'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Year.PostfixExample'}}</td>
+                                    </tr>
+
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.MonthOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>M</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.Number'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.NumberExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>MM</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.NumberPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.NumberPaddedExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>MMM</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.AbbreviatedName'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.AbbreviatedNameExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>MMMM</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.Name'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Month.NameExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.DayOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>D</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Day.Number'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Day.NumberExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>DD</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Day.NumberPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Day.NumberPaddedExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>DO</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Day.NumberSuffix'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Day.NumberSuffixExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.WeekdayOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>d</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.Number'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.NumberExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>dd</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.NumberPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.NumberPaddedExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>ddd</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.AbbreviatedName'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.AbbreviatedNameExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>dddd</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.Name'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Weekday.NameExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.HourOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>h</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.12Hour'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.12HourExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>H</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.24Hour'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.24HourExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>hh</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.12HourPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.12HourPaddedExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>HH</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.24HourPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.24HourPaddedExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>a</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.ampm'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.ampmExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>A</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.AMPM'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Hour.AMPMExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.MinuteOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>m</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Minute.Number'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Minute.NumberExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>mm</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Minute.NumberPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Minute.NumberPaddedExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.SecondOptions'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>s</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Second.Number'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Second.NumberExample'}}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>ss</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Second.NumberPadded'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.Second.NumberPaddedExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="fallout-maw-calendar-row">
+                            <div style="flex: 1 1 25%;text-align: center;"><strong>{{localize 'FALLOUTMAW.Calendar.DateFormat.Text'}}</strong></div>
+                            <div style="flex: 1 1 75%;">
+                                <table style="border-left: 1px solid #7a7971;">
+                                    <tr>
+                                        <th style="width: 55px;">{{localize 'FALLOUTMAW.Calendar.Token'}}</th>
+                                        <th>{{localize 'FALLOUTMAW.Calendar.Description'}}</th>
+                                        <th style="width: 36%;">{{localize 'FALLOUTMAW.Calendar.ExampleResult'}}</th>
+                                    </tr>
+                                    <tr>
+                                        <td>[*]</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.TextDescription'}}</td>
+                                        <td>{{localize 'FALLOUTMAW.Calendar.DateFormat.TextExample'}}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarDateFormatsDate">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.Date'}}</label>
+                    <div class="form-fields">
+                        <input value="{{generalSettings.dateFormat.date}}" id="falloutMawCalendarDateFormatsDate" type="text" />
+                    </div>
+                    <div class="fallout-maw-calendar-example"><strong>{{localize 'FALLOUTMAW.Calendar.Example'}}</strong>: {{uiElementStates.dateFormatExample}}</div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.DateHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarDateFormatsTime">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.Time'}}</label>
+                    <div class="form-fields">
+                        <input value="{{generalSettings.dateFormat.time}}" id="falloutMawCalendarDateFormatsTime" type="text" />
+                    </div>
+                    <div class="fallout-maw-calendar-example"><strong>{{localize 'FALLOUTMAW.Calendar.Example'}}</strong>: {{uiElementStates.timeFormatExample}}</div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.TimeHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarDateFormatsMonthYear">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.MonthYear'}}</label>
+                    <div class="form-fields">
+                        <input value="{{generalSettings.dateFormat.monthYear}}" id="falloutMawCalendarDateFormatsMonthYear" type="text" />
+                    </div>
+                    <div class="fallout-maw-calendar-example"><strong>{{localize 'FALLOUTMAW.Calendar.Example'}}</strong>: {{uiElementStates.monthYearFormatExample}}</div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.MonthYearHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarDateFormatsChatTime">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.ChatTime'}}</label>
+                    <div class="form-fields">
+                        <input value="{{generalSettings.dateFormat.chatTime}}" id="falloutMawCalendarDateFormatsChatTime" type="text" />
+                    </div>
+                    <div class="fallout-maw-calendar-example"><strong>{{localize 'FALLOUTMAW.Calendar.Example'}}</strong>: {{uiElementStates.chatFormatExample}}</div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.Display.DateFormat.ChatTimeHelp'}}</p>
+                </div>
+            </div>
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Display.Compact'}} <a href="https://simplecalendar.info/docs/calendar-configuration/display-options#compact-view-options" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label>{{localize 'FALLOUTMAW.Calendar.Configuration.Display.CompactControls.Title'}}</label>
+                    <div class="form-fields">
+                        <label class="fallout-maw-calendar-radio-group">
+                            <img src="{{images.compactViewLayoutFull}}" alt="{{localize 'FALLOUTMAW.Calendar.FullControls'}}" />
+                            <input value="full" name="falloutMawCalendarCompactControlLayout" type="radio" {{#if (eq generalSettings.compactViewOptions.controlLayout 'full')}} checked{{/if}} />
+                            {{localize 'FALLOUTMAW.Calendar.FullControls'}}
+                        </label>
+                        <label class="fallout-maw-calendar-radio-group">
+                            <img src="{{images.compactViewLayoutQuickIncrement}}" alt="{{localize 'FALLOUTMAW.Calendar.QuickIncrement'}}" />
+                            <input value="quick-increment" name="falloutMawCalendarCompactControlLayout" type="radio" {{#if (eq generalSettings.compactViewOptions.controlLayout 'quick-increment')}} checked{{/if}} />
+                            {{localize 'FALLOUTMAW.Calendar.QuickIncrement'}}
+                        </label>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Display.CompactControls.Description'}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-year-settings" data-tab="yearSettings">
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Year.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/year-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarCurrentYear">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.Current'}}</label>
+                    <div class="form-fields">
+                        <input value="{{currentYear.numericRepresentation}}" type="number" id="falloutMawCalendarCurrentYear" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.CurrentHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarYearPreFix">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.Prefix'}}</label>
+                    <div class="form-fields">
+                        <input value="{{currentYear.prefix}}" type="text" id="falloutMawCalendarYearPreFix" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.PrefixHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarYearPostFix">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.Postfix'}}</label>
+                    <div class="form-fields">
+                        <input value="{{currentYear.postfix}}" type="text" id="falloutMawCalendarYearPostFix" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.PostfixHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open {{#if uiElementStates.disabledControls.pf2e}} fallout-maw-calendar-disabled{{/if}}">
+                    <label for="falloutMawCalendarYearZero">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearZero'}} <span class="fa-solid fa-triangle-exclamation" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PF2ESyncDisabledSettings'}}"></span></label>
+                    <div class="form-fields">
+                        <input value="{{currentYear.yearZero}}" type="number" id="falloutMawCalendarYearZero" {{#if uiElementStates.disabledControls.pf2e}} disabled{{/if}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearZeroHelp'}}</p>
+                </div>
+            </div>
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNames'}} <a href="https://simplecalendar.info/docs/calendar-configuration/year-settings#year-names" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarYearNameBehaviour">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNameBehaviour'}}</label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarYearNameBehaviour">
+                            {{selectOptions yearNameBehaviourOptions selected=currentYear.yearNamingRule localize=true }}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNameBehaviourHelp'}}</p>
+                </div>
+                <div class="form-group {{#if (eq currentYear.yearNamingRule 'random')}} fallout-maw-calendar-closed{{else}} fallout-maw-calendar-open{{/if}}">
+                    <label for="falloutMawCalendarYearNamesStart">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNamesStart'}}</label>
+                    <div class="form-fields">
+                        <input value="{{currentYear.yearNamesStart}}" type="number" id="falloutMawCalendarYearNamesStart" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNamesStartHelp'}}</p>
+                </div>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-year-name">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.NameHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-year-names">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNameHelp'}}" class="fallout-maw-calendar-col">{{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearName'}}</div>
+                        <div class="fallout-maw-calendar-col"></div>
+                    </div>
+                    {{#each currentYear.yearNames}}
+                    <div class="fallout-maw-calendar-row" data-index="{{@index}}">
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarYearName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Name'}}</label>
+                            <input id="falloutMawCalendarYearName{{@index}}" class="fallout-maw-calendar-year-name" value="{{this}}" type="text" aria-describedby="fallout-maw-calendar-year-name" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="year-name"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+                <div class="fallout-maw-calendar-table-actions">
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="year-name"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNameAdd'}}</button>
+                    <span class="fallout-maw-calendar-spacer"></span>
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="year-name" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Year.YearNameRemove'}}</button>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-month-settings" data-tab="monthSettings"  >
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Months'}} <a href="https://simplecalendar.info/docs/calendar-configuration/month-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <p>{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Description'}}</p>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-month-name">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.NameHelp'}}</label>
+                    <label id="fallout-maw-calendar-month-days">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.DaysHelp'}}</label>
+                    <label id="fallout-maw-calendar-month-intercalary">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.IntercalaryHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-months">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Month.NameHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Name'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Month.DaysHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Days'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Month.IntercalaryHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Intercalary'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Month.NumberHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Number'}}</div>
+                        <div class="fallout-maw-calendar-col"></div>
+                        <div class="fallout-maw-calendar-col"></div>
+                    </div>
+                    {{#each months}}
+                    <div class="fallout-maw-calendar-row" data-index="{{@index}}" data-type="month">
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMonthName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Name'}}</label>
+                            <input id="falloutMawCalendarMonthName{{@index}}" class="fallout-maw-calendar-month-name" value="{{name}}" type="text" aria-describedby="fallout-maw-calendar-month-name" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMonthDays{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Days'}}</label>
+                            <input id="falloutMawCalendarMonthDays{{@index}}" class="fallout-maw-calendar-month-days" value="{{numberOfDays}}" type="number" aria-describedby="fallout-maw-calendar-month-days" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMonthIntercalary{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Intercalary'}}</label>
+                            <input id="falloutMawCalendarMonthIntercalary{{@index}}" class="fallout-maw-calendar-month-intercalary" value="{{intercalary}}" type="checkbox" aria-describedby="fallout-maw-calendar-month-intercalary" {{checked intercalary}} />
+                        </div>
+                        <div class="fallout-maw-calendar-col fallout-maw-calendar-month-number">{{#if (gt numericRepresentation 0)}}{{numericRepresentation}}{{else}}IC{{/if}}</div>
+                        <div class="fallout-maw-calendar-col">
+                            {{#if showAdvanced}}
+                            <a class="fallout-maw-calendar-show-advanced" aria-expanded="true" aria-controls="falloutMawCalendarMonthAdvanced{{@index}}"><i class="fa fa-chevron-up"></i><span>{{localize 'FALLOUTMAW.Calendar.HideAdvanced'}}</span></a>
+                            {{else}}
+                            <a class="fallout-maw-calendar-show-advanced" aria-expanded="false" aria-controls="falloutMawCalendarMonthAdvanced{{@index}}"><i class="fa fa-chevron-down"></i><span>{{localize 'FALLOUTMAW.Calendar.ShowAdvanced'}}</span></a>
+                            {{/if}}
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="month"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                        </div>
+                        <div id="falloutMawCalendarMonthAdvanced{{@index}}" class="fallout-maw-calendar-options {{#if showAdvanced }} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}">
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarMonthAbbreviation{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Abbreviation'}}</label>
+                                <div class="form-fields">
+                                    <input class="fallout-maw-calendar-month-abbreviation" value="{{abbreviation}}" id="falloutMawCalendarMonthAbbreviation{{@index}}" type="text" />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.AbbreviationHelp'}}</p>
+                            </div>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarMonthDescription{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.DescriptionField'}}</label>
+                                <div class="form-fields">
+                                    <textarea id="falloutMawCalendarMonthDescription{{@index}}" class="fallout-maw-calendar-month-description">{{description}}</textarea>
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.DescriptionHelp'}}</p>
+                            </div>
+                            <div class="form-group {{#unless intercalary}} fallout-maw-calendar-closed {{else}} fallout-maw-calendar-open{{/unless}}">
+                                <label for="falloutMawCalendarMonthIntercalaryInclude{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.IntercalaryInclude'}}</label>
+                                <div class="form-fields">
+                                    <input class="fallout-maw-calendar-month-intercalary-include" value="{{intercalaryInclude}}" id="falloutMawCalendarMonthIntercalaryInclude{{@index}}" type="checkbox" {{checked intercalaryInclude}} />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.IntercalaryIncludeHelp'}}</p>
+                            </div>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarMonthDayOffset{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.DayOffset'}}</label>
+                                <div class="form-fields">
+                                    <input class="fallout-maw-calendar-month-numeric-representation-offset" value="{{numericRepresentationOffset}}" id="falloutMawCalendarMonthDayOffset{{@index}}" type="number" />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.DayOffsetHelp'}}</p>
+                            </div>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarMonthStartingWeekday{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.StartingWeekDay'}}</label>
+                                <div class="form-fields">
+                                    <select class="fallout-maw-calendar-month-starting-weekday" id="falloutMawCalendarMonthStartingWeekday{{@index}}">
+                                        {{selectOptions ../monthStartingWeekdays selected=startingWeekday }}
+                                    </select>
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.StartingWeekDayHelp'}}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+                <div class="fallout-maw-calendar-table-actions">
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="month"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Add'}}</button>
+                    <span class="fallout-maw-calendar-spacer"></span>
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="month" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.RemoveAll'}}</button>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-weekday-settings" data-tab="weekdaySettings" >
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/weekday-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarShowWeekdayHeaders">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.ShowHeadings'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{currentYear.showWeekdayHeadings}}" type="checkbox" id="falloutMawCalendarShowWeekdayHeaders" {{checked currentYear.showWeekdayHeadings}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.ShowHeadingsHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open {{#if uiElementStates.disabledControls.pf2e}} fallout-maw-calendar-disabled{{/if}}">
+                    <label for="falloutMawCalendarWeekdayFirstDay">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.FirstWeekDay'}} <span class="fa-solid fa-triangle-exclamation" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PF2ESyncDisabledSettings'}}"></span></label>
+                    <div class="form-fields">
+                        <select class="fallout-maw-calendar-moon-year-reset" id="falloutMawCalendarWeekdayFirstDay" {{#if uiElementStates.disabledControls.pf2e}} disabled{{/if}}>
+                            {{#each weekdays}}
+                            <option value="{{@index}}" {{#if (eq @index ../currentYear.firstWeekday)}}selected="selected"{{/if}}>{{name}}</option>
+                            {{/each}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.FirstWeekDayHelp'}}</p>
+                </div>
+            </div>
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Weekdays'}} <a href="https://simplecalendar.info/docs/calendar-configuration/weekday-settings#weekdays" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-weekday-name">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.NameHelp'}}</label>
+                    <label id="fallout-maw-calendar-weekday-abbreviation">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.AbbreviationHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-weekdays">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.NameHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Name'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.AbbreviationHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Abbreviation'}}</div>
+                        <div class="fallout-maw-calendar-col"></div>
+                        <div class="fallout-maw-calendar-col"></div>
+                    </div>
+                    {{#each weekdays}}
+                    <div class="fallout-maw-calendar-row" data-index="{{@index}}" data-type="weekday">
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarWeekdayName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Name'}}</label>
+                            <input id="falloutMawCalendarWeekdayName{{@index}}" class="fallout-maw-calendar-weekday-name" value="{{name}}" type="text" aria-describedby="fallout-maw-calendar-weekday-name" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarWeekdayAbbreviation{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Abbreviation'}}</label>
+                            <input id="falloutMawCalendarWeekdayAbbreviation{{@index}}" class="fallout-maw-calendar-weekday-abbreviation" value="{{abbreviation}}" type="text" aria-describedby="fallout-maw-calendar-weekday-abbreviation" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            {{#if showAdvanced}}
+                                <a class="fallout-maw-calendar-show-advanced" aria-expanded="true" aria-controls="falloutMawCalendarWeekdayAdvanced{{@index}}"><i class="fa fa-chevron-up"></i><span>{{localize 'FALLOUTMAW.Calendar.HideAdvanced'}}</span></a>
+                            {{else}}
+                                <a class="fallout-maw-calendar-show-advanced" aria-expanded="false" aria-controls="falloutMawCalendarWeekdayAdvanced{{@index}}"><i class="fa fa-chevron-down"></i><span>{{localize 'FALLOUTMAW.Calendar.ShowAdvanced'}}</span></a>
+                            {{/if}}
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="weekday"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                        </div>
+                        <div id="falloutMawCalendarWeekdayAdvanced{{@index}}" class="fallout-maw-calendar-options {{#if showAdvanced }} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}">
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarWeekdayWeekend{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Weekend'}}</label>
+                                <div class="form-fields">
+                                    <input id="falloutMawCalendarWeekdayWeekend{{@index}}" class="fallout-maw-calendar-weekday-weekend" type="checkbox" {{checked restday}} />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.WeekendHelp'}}</p>
+                            </div>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarWeekdayDescription{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.DescriptionField'}}</label>
+                                <div class="form-fields">
+                                    <textarea id="falloutMawCalendarWeekdayDescription{{@index}}" class="fallout-maw-calendar-weekday-description">{{description}}</textarea>
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.DescriptionHelp'}}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+                <div class="fallout-maw-calendar-table-actions">
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="weekday"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.Add'}}</button>
+                    <span class="fallout-maw-calendar-spacer"></span>
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="weekday" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Weekday.RemoveAll'}}</button>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-leapyear-settings" data-tab="leapYearSettings">
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/leap-year-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open {{#if uiElementStates.disabledControls.pf2e}} fallout-maw-calendar-disabled{{/if}}">
+                    <label for="falloutMawCalendarLeapYearRule">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.Rule'}} <span class="fa-solid fa-triangle-exclamation" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.General.PF2ESyncDisabledSettings'}}"></span></label>
+                    <div class="form-fields">
+                        <select id="falloutMawCalendarLeapYearRule" {{#if uiElementStates.disabledControls.pf2e}} disabled{{/if}}>
+                            {{selectOptions leapYearRules selected=leapYearRule.rule localize=true}}
+                        </select>
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.RuleHelp'}}</p>
+                </div>
+                <div class="form-group {{#if showLeapYearCustomMod}} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}">
+                    <label for="falloutMawCalendarLeapYearCustomMod">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.CustomMod'}}</label>
+                    <div class="form-fields">
+                        <input value="{{leapYearRule.customMod}}" type="number" id="falloutMawCalendarLeapYearCustomMod" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.CustomModHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarLeapStartingYear">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.StartingYear'}}</label>
+                    <div class="form-fields">
+                        <input value="{{leapYearRule.startingYear}}" type="number" id="falloutMawCalendarLeapStartingYear" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.StartingYearHelp'}}</p>
+                </div>
+            </div>
+            <div class="fallout-maw-calendar-settings-group {{#if showLeapYearMonths}} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}" id="falloutMawCalendarLeapYearMonthList">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Months'}} <a href="https://simplecalendar.info/docs/calendar-configuration/leap-year-settings#months" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-leapyear-days">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.DaysHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-months">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Month.NameHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Name'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.DaysHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.Days'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Month.NumberHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Month.Number'}}</div>
+                    </div>
+                    {{#each months}}
+                        <div class="fallout-maw-calendar-row" data-index="{{@index}}">
+                            <div class="fallout-maw-calendar-col">{{name}}</div>
+                            <div class="fallout-maw-calendar-col">
+                                <label for="falloutMawCalendarMonthLeapDays{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.LeapYear.Days'}}</label>
+                                <input id="falloutMawCalendarMonthLeapDays{{@index}}" class="fallout-maw-calendar-month-leap-days" value="{{numberOfLeapYearDays}}" type="number" aria-describedby="fallout-maw-calendar-leapyear-days" />
+                            </div>
+                            <div class="fallout-maw-calendar-col">{{#if numericRepresentation}}{{numericRepresentation}}{{else}}IC{{/if}}</div>
+                        </div>
+                    {{/each}}
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-season-settings" data-tab="seasonSettings">
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/season-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <datalist id="falloutMawCalendarSeasonColors">
+                    {{#each seasonColors}}
+                        <option value="{{value}}">{{display}}</option>
+                    {{/each}}
+                </datalist>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-season-name">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.NameHelp'}}</label>
+                    <label id="fallout-maw-calendar-season-start-date">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.StartingDateHelp'}}</label>
+                    <label id="fallout-maw-calendar-season-end-date">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.SunriseSunsetHelp'}}</label>
+                    <label id="fallout-maw-calendar-season-icon">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.IconHelp'}}</label>
+                    <label id="fallout-maw-calendar-season-color">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.ColorHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-seasons">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Season.NameHelp'}}" class="fallout-maw-calendar-col">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Name'}}</div>
+                        <div data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Season.StartingDateHelp'}}" class="fallout-maw-calendar-col">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.StartingDate'}}</div>
+                        <div data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Season.SunriseSunsetHelp'}}" class="fallout-maw-calendar-col">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.SunriseSunset'}}</div>
+                        <div data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Season.IconHelp'}}" class="fallout-maw-calendar-col">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Icon'}}</div>
+                        <div data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Season.ColorHelp'}}" class="fallout-maw-calendar-col">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Color'}}</div>
+                        <div class="fallout-maw-calendar-col"></div>
+                        <div class="fallout-maw-calendar-col"></div>
+                    </div>
+                    {{#each seasons}}
+                        <div class="fallout-maw-calendar-row" data-index="{{@index}}" data-type="season">
+                            <div class="fallout-maw-calendar-col">
+                                <label for="falloutMawCalendarSeasonName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Name'}}</label>
+                                <input id="falloutMawCalendarSeasonName{{@index}}" class="fallout-maw-calendar-season-name" value="{{name}}" type="text" aria-describedby="fallout-maw-calendar-season-name" />
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                {{fallout-maw-calendar-date-selector id=startDateSelectorId calendar=../activeCalendarId showDateSelector=true showTimeSelector=false showCalendarYear=false useCloneCalendars=true selectedStartDate=startDateSelectedDate }}
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                {{fallout-maw-calendar-date-selector id=sunriseSelectorId calendar=../activeCalendarId showDateSelector=false showTimeSelector=true allowDateRangeSelection=false allowTimeRangeSelection=true timeDelimiter='/' useCloneCalendars=true selectedStartDate=sunriseSelectorSelectedDates.start selectedEndDate=sunriseSelectorSelectedDates.end}}
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                <label for="falloutMawCalendarSeasonIcon{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Icon'}}</label>
+                                <select id="falloutMawCalendarSeasonIcon{{@index}}" class="fallout-maw-calendar-season-icon" aria-describedby="fallout-maw-calendar-season-icon">
+                                    {{selectOptions ../seasonIcons selected=icon }}
+                                </select>
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                <label for="falloutMawCalendarSeasonColor{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.Color'}}</label>
+                                <input id="falloutMawCalendarSeasonColor{{@index}}" type="color" value="{{color}}" class="fallout-maw-calendar-season-color" aria-describedby="fallout-maw-calendar-season-color" list="falloutMawCalendarSeasonColors" />
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                {{#if showAdvanced}}
+                                    <a class="fallout-maw-calendar-show-advanced" aria-expanded="true" aria-controls="falloutMawCalendarSeasonAdvanced{{@index}}"><i class="fa fa-chevron-up"></i><span>{{localize 'FALLOUTMAW.Calendar.HideAdvanced'}}</span></a>
+                                {{else}}
+                                    <a class="fallout-maw-calendar-show-advanced" aria-expanded="false" aria-controls="falloutMawCalendarSeasonAdvanced{{@index}}"><i class="fa fa-chevron-down"></i><span>{{localize 'FALLOUTMAW.Calendar.ShowAdvanced'}}</span></a>
+                                {{/if}}
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="season"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                            </div>
+                            <div id="falloutMawCalendarSeasonAdvanced{{@index}}" class="fallout-maw-calendar-options {{#if showAdvanced }} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}">
+                                <div class="form-group fallout-maw-calendar-open">
+                                    <label for="falloutMawCalendarSeasonDescription{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.DescriptionField'}}</label>
+                                    <div class="form-fields">
+                                        <textarea id="falloutMawCalendarSeasonDescription{{@index}}" class="fallout-maw-calendar-season-description">{{description}}</textarea>
+                                    </div>
+                                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Season.DescriptionHelp'}}</p>
+                                </div>
+                            </div>
+                        </div>
+                    {{/each}}
+                </div>
+                <div class="fallout-maw-calendar-table-actions">
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="season"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Season.Add'}}</button>
+                    <span class="fallout-maw-calendar-spacer"></span>
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="season" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Season.RemoveAll'}}</button>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-moon-settings" data-tab="moonSettings">
+            <div class="settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Moons'}} <a href="https://simplecalendar.info/docs/calendar-configuration/moon-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-moon-name">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.NameHelp'}}</label>
+                    <label id="fallout-maw-calendar-moon-cycle">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleLengthHelp'}}</label>
+                    <label id="fallout-maw-calendar-moon-cycle-adjust">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleAdjustmentHelp'}}</label>
+                    <label id="fallout-maw-calendar-moon-color">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.ColorHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-moons">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.NameHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Name'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleLengthHelp'}}" >{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleLength'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleAdjustmentHelp'}}" >{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleAdjustment'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.ColorHelp'}}" >{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Color'}}</div>
+                        <div class="fallout-maw-calendar-col"></div>
+                    </div>
+                    {{#each moons}}
+                    <div class="fallout-maw-calendar-row" data-index="{{@index}}">
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMoonName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Name'}}</label>
+                            <input id="falloutMawCalendarMoonName{{@index}}" class="fallout-maw-calendar-moon-name" value="{{name}}" type="text" aria-describedby="fallout-maw-calendar-moon-name" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMoonCycle{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleLength'}}</label>
+                            <input id="falloutMawCalendarMoonCycle{{@index}}" class="fallout-maw-calendar-moon-cycle-length" value="{{cycleLength}}" type="number" aria-describedby="fallout-maw-calendar-moon-cycle" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMoonCycleAdjust{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.CycleAdjustment'}}</label>
+                            <input id="falloutMawCalendarMoonCycleAdjust{{@index}}" class="fallout-maw-calendar-moon-cycle-adjustment" value="{{cycleDayAdjust}}" type="number" aria-describedby="fallout-maw-calendar-moon-cycle-adjust" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <label for="falloutMawCalendarMoonColor{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Color'}}</label>
+                            <input id="falloutMawCalendarMoonColor{{@index}}" class="fallout-maw-calendar-moon-color" value="{{color}}" type="color" aria-describedby="fallout-maw-calendar-moon-color" />
+                        </div>
+                        <div class="fallout-maw-calendar-col">
+                            <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="moon"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                        </div>
+                        <div class="fallout-maw-calendar-options fallout-maw-calendar-open">
+                            <h3>{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Lighting'}}</h3>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="fallout-maw-calendar-moon-affects-lighting-{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.AffectsLighting'}}</label>
+                                <div class="form-fields">
+                                    <input id="fallout-maw-calendar-moon-affects-lighting-{{@index}}" class="fallout-maw-calendar-moon-affects-lighting" type="checkbox" {{checked affectsLighting}} />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.AffectsLightingHelp'}}</p>
+                            </div>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="fallout-maw-calendar-moon-max-light-contribution-{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.MaxLightContribution'}}</label>
+                                <div class="form-fields">
+                                    <input id="fallout-maw-calendar-moon-max-light-contribution-{{@index}}" class="fallout-maw-calendar-moon-max-light-contribution" value="{{maxLightContribution}}" type="number" min="0" max="1" step="0.05" />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.MaxLightContributionHelp'}}</p>
+                            </div>
+                            <h3>{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.FirstNewMoon'}}</h3>
+                            <div class="form-group fallout-maw-calendar-open">
+                                <label for="falloutMawCalendarMoonYearReset{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.YearReset'}}</label>
+                                <div class="form-fields">
+                                    <select class="fallout-maw-calendar-moon-year-reset" id="falloutMawCalendarMoonYearReset{{@index}}">
+                                        {{selectOptions ../moonYearReset selected=firstNewMoon.yearReset localize=true}}
+                                    </select>
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.YearResetHelp'}}</p>
+                            </div>
+                            <div class="form-group {{#unless (eq firstNewMoon.yearReset 'none')}} fallout-maw-calendar-closed{{else}} fallout-maw-calendar-open{{/unless}}">
+                                <label for="falloutMawCalendarMoonYear{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Year'}}</label>
+                                <div class="form-fields">
+                                    <input class="fallout-maw-calendar-moon-year" value="{{firstNewMoon.year}}" type="number" id="falloutMawCalendarMoonYear{{@index}}" />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.YearHelp'}}</p>
+                            </div>
+                            <div class="form-group {{#unless (eq firstNewMoon.yearReset 'x-years')}} fallout-maw-calendar-closed{{else}} fallout-maw-calendar-open{{/unless}}">
+                                <label for="falloutMawCalendarMoonYearX{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.YearX'}}</label>
+                                <div class="form-fields">
+                                    <input class="fallout-maw-calendar-moon-year-x" value="{{firstNewMoon.yearX}}" type="number" id="falloutMawCalendarMoonYearX{{@index}}" />
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.YearXHelp'}}</p>
+                            </div>
+                            <div class="form-group fallout-maw-calendar-open" style="overflow: visible;">
+                                <label for="{{firstNewMoonDateSelectorId}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Month'}}</label>
+                                <div class="form-fields">
+                                    {{fallout-maw-calendar-date-selector id=firstNewMoonDateSelectorId calendar=../activeCalendarId showDateSelector=true showTimeSelector=false showCalendarYear=false useCloneCalendars=true selectedStartDate=firstNewMoonSelectedDate }}
+                                </div>
+                                <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.MonthHelp'}}</p>
+                            </div>
+                            <h3>{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Phases'}}</h3>
+                            <div class="fallout-maw-calendar-hidden-label">
+                                <label id="fallout-maw-calendar-moon-phase-name{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseNameHelp'}}</label>
+                                <label id="fallout-maw-calendar-moon-phase-single{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseSingleDayHelp'}}</label>
+                                <label id="fallout-maw-calendar-moon-phase-icon{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIconHelp'}}</label>
+                                <label id="fallout-maw-calendar-moon-phase-illumination{{@index}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIlluminationHelp'}}</label>
+                            </div>
+                            <div class="fallout-maw-calendar-f-table fallout-maw-calendar-phases">
+                                <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                                    <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseNameHelp'}}" >{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseName'}}</div>
+                                    <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseLengthHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseLength'}}</div>
+                                    <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseSingleDayHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseSingleDay'}}</div>
+                                    <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIconHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIcon'}}</div>
+                                    <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIlluminationHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIllumination'}}</div>
+                                    <div class="fallout-maw-calendar-col"></div>
+                                </div>
+                                {{#each phases}}
+                                <div class="fallout-maw-calendar-row" data-index="{{@index}}">
+                                    <div class="fallout-maw-calendar-col">
+                                        <label for="falloutMawCalendarMoon{{@../index}}PhaseName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseName'}}</label>
+                                        <input id="falloutMawCalendarMoon{{@../index}}PhaseName{{@index}}" class="fallout-maw-calendar-moon-phase-name" value="{{name}}" type="text" data-moon-index="{{@../index}}" aria-describedby="fallout-maw-calendar-moon-phase-name{{@../index}}" />
+                                    </div>
+                                    <div class="fallout-maw-calendar-col fallout-maw-calendar-moon-phase-length">{{length}} {{localize 'FALLOUTMAW.Calendar.Days'}}</div>
+                                    <div class="fallout-maw-calendar-col">
+                                        <label for="falloutMawCalendarMoon{{@../index}}PhaseSingle{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseSingleDay'}}</label>
+                                        <input id="falloutMawCalendarMoon{{@../index}}PhaseSingle{{@index}}" class="fallout-maw-calendar-moon-phase-single-day" value="{{singleDay}}" type="checkbox" data-moon-index="{{@../index}}" aria-describedby="fallout-maw-calendar-moon-phase-single{{@../index}}" {{checked singleDay}} />
+                                    </div>
+                                    <div class="fallout-maw-calendar-col">
+                                        <label for="falloutMawCalendarMoon{{@../index}}PhaseIcon{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIcon'}}</label>
+                                        <select id="falloutMawCalendarMoon{{@../index}}PhaseIcon{{@index}}" class="fallout-maw-calendar-moon-phase-icon" data-moon-index="{{@../index}}" aria-describedby="fallout-maw-calendar-moon-phase-icon{{@../index}}">
+                                            {{selectOptions ../../moonIcons selected=icon localize=true}}
+                                        </select>
+                                    </div>
+                                    <div class="fallout-maw-calendar-col">
+                                        <label for="falloutMawCalendarMoon{{@../index}}PhaseIllumination{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseIllumination'}}</label>
+                                        <input id="falloutMawCalendarMoon{{@../index}}PhaseIllumination{{@index}}" class="fallout-maw-calendar-moon-phase-illumination" value="{{illumination}}" type="number" min="0" max="1" step="0.05" data-moon-index="{{@../index}}" aria-describedby="fallout-maw-calendar-moon-phase-illumination{{@../index}}" />
+                                    </div>
+                                    <div class="fallout-maw-calendar-col">
+                                        <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="moon-phase" data-moon-index="{{@../index}}"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                                    </div>
+                                </div>
+                                {{/each}}
+                            </div>
+                            <div class="fallout-maw-calendar-table-actions">
+                                <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="moon-phase" data-moon-index="{{@index}}"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseAdd'}}</button>
+                                <span class="fallout-maw-calendar-spacer"></span>
+                                <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="moon-phase" data-moon-index="{{@index}}" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Moon.PhaseRemoveAll'}}</button>
+                            </div>
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+                <div class="fallout-maw-calendar-table-actions">
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="moon"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Moon.Add'}}</button>
+                    <span class="fallout-maw-calendar-spacer"></span>
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="moon" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Moon.RemoveAll'}}</button>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-time-settings" data-tab="timeSettings">
+            <div class="fallout-maw-calendar-section fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Time.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/time-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarHoursInDay">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.HoursInDay'}}</label>
+                    <div class="form-fields">
+                        <input value="{{time.hoursInDay}}" type="number" id="falloutMawCalendarHoursInDay" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.HoursInDayHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarMinutesInHour">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.MinutesInHour'}}</label>
+                    <div class="form-fields">
+                        <input value="{{time.minutesInHour}}" type="number" id="falloutMawCalendarMinutesInHour" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.MinutesInHourHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarSecondsInMinute">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.SecondsInMinute'}}</label>
+                    <div class="form-fields">
+                        <input value="{{time.secondsInMinute}}" type="number" id="falloutMawCalendarSecondsInMinute" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.SecondsInMinuteHelp'}}</p>
+                </div>
+            </div>
+            <div class="fallout-maw-calendar-section fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Time.ClockSettings'}} <a href="https://simplecalendar.info/docs/calendar-configuration/time-settings#clock-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarShowClock">{{localize 'FALLOUTMAW.Calendar.Configuration.General.ShowClock'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{generalSettings.showClock}}" type="checkbox" id="falloutMawCalendarShowClock" {{checked generalSettings.showClock}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.General.ShowClockHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarGameTimeRatio">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.GameTimeRatio'}}</label>
+                    <div class="form-fields">
+                        <input value="{{time.gameTimeRatio}}" type="number" id="falloutMawCalendarGameTimeRatio" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.GameTimeRatioHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarTimeUpdateFrequency">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.UpdateFrequency'}}</label>
+                    <div class="form-fields">
+                        <input value="{{time.updateFrequency}}" type="number" id="falloutMawCalendarTimeUpdateFrequency" />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.UpdateFrequencyHelp'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarUnifyClockWithFoundryPause">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.UnifyGameAndClock'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{time.unifyGameAndClockPause}}" type="checkbox" id="falloutMawCalendarUnifyClockWithFoundryPause" {{checked time.unifyGameAndClockPause}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Time.UnifyGameAndClockHelp'}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="tab fallout-maw-calendar-note-settings" data-tab="noteSettings">
+            <div class="fallout-maw-calendar-settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.Title'}} <a href="https://simplecalendar.info/docs/calendar-configuration/note-settings" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarDefaultPlayerVisibility">{{localize 'FALLOUTMAW.Calendar.Configuration.DefaultNoteVisibility'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{generalSettings.noteDefaultVisibility}}" type="checkbox" id="falloutMawCalendarDefaultPlayerVisibility" {{checked generalSettings.noteDefaultVisibility}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.DefaultNoteVisibilityHint'}}</p>
+                </div>
+                <div class="form-group fallout-maw-calendar-open">
+                    <label for="falloutMawCalendarPostNoteRemindersOnFoundryLoad">{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.PostNoteRemindersOnFoundryLoadTitle'}}</label>
+                    <div class="form-fields">
+                        <input class="fallout-maw-calendar-toggle" value="{{generalSettings.postNoteRemindersOnFoundryLoad}}" type="checkbox" id="falloutMawCalendarPostNoteRemindersOnFoundryLoad" {{checked generalSettings.postNoteRemindersOnFoundryLoad}} />
+                    </div>
+                    <p class="notes">{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.PostNoteRemindersOnFoundryLoadHelp'}}</p>
+                </div>
+            </div>
+            <div class="fallout-maw-calendar-settings-group fallout-maw-calendar-open">
+                <h2>{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.NoteCategories'}} <a href="https://simplecalendar.info/docs/calendar-configuration/note-settings#note-categories" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Help'}}" target="_blank" class="fa fa-question-circle"></a></h2>
+                <div class="fallout-maw-calendar-hidden-label">
+                    <label id="fallout-maw-calendar-note-categories-name">{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.NameHelp'}}</label>
+                    <label id="fallout-maw-calendar-note-categories-color">{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.ColorHelp'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-f-table fallout-maw-calendar-note-categories">
+                    <div class="fallout-maw-calendar-row fallout-maw-calendar-head">
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.NameHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.Name'}}</div>
+                        <div class="fallout-maw-calendar-col" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.ColorHelp'}}">{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.Color'}}</div>
+                        <div class="fallout-maw-calendar-col"></div>
+                    </div>
+                    {{#each noteCategories}}
+                        <div class="fallout-maw-calendar-row" data-index="{{@index}}">
+                            <div class="fallout-maw-calendar-col">
+                                <label for="falloutMawCalendarNoteCategoryName{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.Name'}}</label>
+                                <input id="falloutMawCalendarNoteCategoryName{{@index}}" class="fallout-maw-calendar-note-category-name" value="{{name}}" type="text"  aria-describedby="fallout-maw-calendar-note-categories-name" />
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                <label for="falloutMawCalendarNoteCategoryColor{{@index}}" class="fallout-maw-calendar-hidden-label">{{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.Color'}}</label>
+                                <input id="falloutMawCalendarNoteCategoryColor{{@index}}" type="color" value="{{color}}" class="fallout-maw-calendar-note-category-color" aria-describedby="fallout-maw-calendar-note-categories-color" />
+                            </div>
+                            <div class="fallout-maw-calendar-col">
+                                <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="note-category"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.Month.Remove'}}</button>
+                            </div>
+                        </div>
+                    {{/each}}
+                </div>
+                <div class="fallout-maw-calendar-table-actions">
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-save" data-type="note-category"><span class="fa fa-plus"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.Add'}}</button>
+                    <span class="fallout-maw-calendar-spacer"></span>
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-type="note-category" data-index="all"><span class="fa fa-trash"></span> {{localize 'FALLOUTMAW.Calendar.Configuration.NoteCategories.RemoveAll'}}</button>
+                </div>
+            </div>
+        </div>
+        {{/if}}
+        <div class="tab fallout-maw-calendar-about" data-tab="about">
+            <div class="fallout-maw-calendar-logo">
+                {{fallout-maw-calendar-icon name='logo'}}
+            </div>
+            <h1>{{localize 'FALLOUTMAW.Calendar.Title'}}</h1>
+            <p class="fallout-maw-calendar-description">{{localize 'FALLOUTMAW.Calendar.Configuration.About.Description'}}</p>
+            <div class="fallout-maw-calendar-row">
+                <div class="fallout-maw-calendar-card fallout-maw-calendar-authors">
+                    <h2>{{localize 'FALLOUTMAW.Calendar.Title'}}</h2>
+                    <p>{{localize 'FALLOUTMAW.Calendar.Configuration.About.Maintenance'}}</p>
+                    <p>{{localize 'FALLOUTMAW.Calendar.Configuration.About.Attribution'}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="fallout-maw-calendar-config-save">
+        <button class="fallout-maw-calendar-control fallout-maw-calendar-save" id="falloutMawCalendarSave" type="button" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Save'}}">
+            <i class="far fa-save"></i> {{localize 'FALLOUTMAW.Calendar.Configuration.Save'}}
+        </button>
+    </div>
+</form>
+

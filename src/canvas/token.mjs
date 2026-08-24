@@ -44,6 +44,7 @@ import {
 } from "./ability-route-preview-state.mjs";
 import { resolveTokenTargetAlpha } from "./token-target-alpha.mjs";
 import { localViewReceivesPhantomVision } from "./phantom-vision.mjs";
+import { getLivingSteelEffectTooltipRows } from "../abilities/living-steel.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -840,6 +841,7 @@ export function buildEffectTooltipHTML(effect, actor = null) {
   const duration = getEffectDurationLabel(effect);
   const triggeredAura = getEffectTriggeredAuraSummary(effect, actor);
   const limitedUses = getEffectLimitedUseStates(effect, actor, sourceContext);
+  const livingSteelRows = getLivingSteelEffectTooltipRows(effect, actor);
   const summaryRows = [
     duration ? {
       label: localize("FALLOUTMAW.Effects.Duration"),
@@ -856,7 +858,8 @@ export function buildEffectTooltipHTML(effect, actor = null) {
     ...progressRows.map(row => ({
       label: row.label,
       value: `${formatEffectProgressValue(row.current)} / ${formatEffectProgressValue(row.required)}`
-    }))
+    })),
+    ...livingSteelRows
   ].filter(Boolean);
   const description = String(effect.description ?? "").trim();
 

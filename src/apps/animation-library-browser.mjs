@@ -37,9 +37,7 @@ function injectAnimationLibraryButton(_app, element) {
   });
   item.append(button);
 
-  const worldTimeItem = menu.querySelector("[data-fallout-maw-world-time-control]")?.closest("li");
-  if (worldTimeItem?.nextSibling) worldTimeItem.parentElement.insertBefore(item, worldTimeItem.nextSibling);
-  else menu.append(item);
+  menu.append(item);
   updateAnimationLibraryButtonState();
 }
 

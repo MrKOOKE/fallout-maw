@@ -1,0 +1,338 @@
+@import "../variables";
+.fallout-maw-calendar-year-view-wrapper{
+  max-height: pxToRem(550);
+  overflow: auto;
+  margin-bottom: $spacer-half;
+
+  .fallout-maw-calendar-current-year{
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: $spacer-half;
+    span{
+      margin: 0 $spacer;
+    }
+  }
+
+  .fallout-maw-calendar-year-view{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-column-gap: $spacer-half;
+
+    .fallout-maw-calendar-calendar-wrapper{
+      position: unset; //This removes the large empty space below the months
+    }
+  }
+}
+
+.fallout-maw-calendar-calendar-wrapper{
+  position: relative;
+
+  .fallout-maw-calendar-descriptions{
+    position: absolute;
+    z-index: 100;
+    min-width: 100%;
+    margin-top: $spacer-half * .5;
+
+    .fallout-maw-calendar-context-menu{
+      min-width: unset;
+    }
+    .fallout-maw-calendar-description-content{
+      max-height: pxToRem(200);
+      overflow: auto;
+      @include scrollbar();
+    }
+  }
+}
+.fallout-maw-calendar-calendar {
+  background-color: var(--section-bg-color);
+  border: 1px solid var(--section-border-color);
+  color: var(--section-color);
+  padding: 0 pxToRem(5) $spacer-half;
+  margin: 0 0 $spacer-half;
+  max-height: pxToRem(500);
+  overflow-y: auto;
+  position: relative;
+  @include scrollbar();
+
+  &.fallout-maw-calendar-display-only{
+    .fallout-maw-calendar-calendar-header{
+      .fallout-maw-calendar-current-date{
+        a:first-child, a:last-child{
+          cursor: default;
+          &:hover{
+            text-shadow: unset;
+          }
+        }
+      }
+    }
+    .fallout-maw-calendar-days{
+      .fallout-maw-calendar-week{
+        .fallout-maw-calendar-day-wrapper{
+          .fallout-maw-calendar-day{
+            cursor: default;
+            &:hover{
+              background-color: unset;
+            }
+          }
+        }
+
+      }
+    }
+  }
+
+  .fallout-maw-calendar-description-clickable{
+    cursor: help;
+  }
+
+  .fallout-maw-calendar-calendar-header{
+    background-color: var(--section-bg-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: pxToRem(5) 0 0;
+    margin-bottom: pxToRem(5);
+
+    .fallout-maw-calendar-current-date{
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      font-size: 1.25rem;
+      margin: 0 auto pxToRem(10);
+
+      a:first-child{
+        margin: 2px pxToRem(5) 0;
+      }
+
+      a:last-child{
+        margin: 2px pxToRem(5) 0;
+      }
+
+      .fallout-maw-calendar-month-year{
+        text-align: center;
+        input[type="number"] {
+          width: 6ch;
+        }
+      }
+
+    }
+
+    .fallout-maw-calendar-season{
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: center;
+      align-items: center;
+      margin: pxToRem(-6) auto pxToRem(10);
+      font-size: pxToRem(12);
+      font-style: italic;
+      font-weight: 600;
+
+      svg{
+        height: pxToRem(15);
+        margin-right: $spacer-quarter;
+      }
+      span{
+        margin-right: $spacer-quarter;
+      }
+    }
+
+    .fallout-maw-calendar-weekdays{
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: center;
+      margin-bottom: pxToRem(-5);
+
+      .fallout-maw-calendar-weekday{
+        width: pxToRem(44);
+        padding: 0 2px pxToRem(5);
+        text-align: center;
+        font-size: $spacer;
+        font-weight: 600;
+
+        &.fallout-maw-calendar-weekend{
+          border-top-right-radius: $spacer-quarter;
+          border-top-left-radius: $spacer-quarter;
+        }
+      }
+    }
+  }
+
+  .fallout-maw-calendar-weekend{
+    background-color: var(--cal-weekend-bg-color);
+  }
+
+  .fallout-maw-calendar-days{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-wrap: nowrap;
+
+    .fallout-maw-calendar-week{
+      display: flex;
+      flex-direction: row;
+
+      .fallout-maw-calendar-empty-day{
+        width: pxToRem(40);
+        height: pxToRem(40);
+        text-align: center;
+        padding-top: pxToRem(11.2);
+        margin: 0 2px;
+      }
+
+      .fallout-maw-calendar-day-wrapper{
+        padding: 2px 0;
+        .fallout-maw-calendar-day{
+          position: relative;
+          width: pxToRem(40);
+          height: pxToRem(40);
+          font-size: pxToRem(14);
+          text-align: center;
+          padding-top: pxToRem(11.2);
+          margin: 0 2px;
+          border: 1px solid var(--cal-day-border-color);
+          border-radius: pxToRem(20);
+          cursor: pointer;
+
+          &:hover{
+            background-color: var(--cal-day-hover-color);
+          }
+          &.fallout-maw-calendar-current{
+            box-shadow: inset 0 0 5px var(--cal-day-current-box-shadow-color);
+            background-color: var(--cal-day-current-bg-color);
+            &:hover{
+              background-color: var(--cal-day-current-hover-bg-color);
+            }
+          }
+          &.fallout-maw-calendar-selected{
+            box-shadow: inset 0 0 5px var(--cal-day-selected-box-shadow-color);
+            background-color: var(--cal-day-selected-bg-color);
+            &:hover{
+              background-color: var(--cal-day-selected-hover-bg-color);
+            }
+          }
+
+          &.fallout-maw-calendar-selected-range-start{
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+          }
+          &.fallout-maw-calendar-selected-range-mid{
+            border-radius: 0;
+          }
+          &.fallout-maw-calendar-selected-range-end{
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+          }
+
+          .fallout-maw-calendar-day-notes{
+            position: absolute;
+            top: -3px;
+            right: 0;
+            display: flex;
+            .fallout-maw-calendar-note-count{
+              width: $spacer;
+              height: $spacer;
+              font-size: pxToRem(12);
+              font-weight: 600;
+              margin-right: 2px;
+              padding: 1px 1px 1px 2px;
+              border-radius: $spacer-half;
+              box-shadow: 1px 1px pxToRem(5);
+              background-color: var(--cal-note-indicator-bg-color);
+              color: var(--cal-note-indicator-color);
+
+              &.fallout-maw-calendar-reminders{
+                margin-right: 0;
+                background-color: var(--cal-note-reminder-indicator-bg-color);
+              }
+            }
+          }
+
+          .fallout-maw-calendar-moons{
+            position: absolute;
+            right: 0;
+            display: flex;
+            flex-direction: row;
+
+            &:hover {
+              .fallout-maw-calendar-moon-group-wrapper {
+                .fallout-maw-calendar-moon-group {
+                  display: flex;
+                }
+              }
+            }
+
+            .fallout-maw-calendar-moon-group-wrapper{
+              display: flex;
+              margin-right: pxToRem(-6);
+              .fa{
+                margin-left: pxToRem(-7);
+                margin-top: 3px;
+                z-index: 1;
+                text-shadow: -2px -1px 0px var(--cal-moon-text-shadow);
+              }
+              .fallout-maw-calendar-moon-group{
+                display: none;
+                flex-wrap: wrap;
+                justify-content: center;
+                position: absolute;
+                z-index: 100;
+                border: 1px solid var(--cal-moon-group-border-color);
+                border-radius: pxToRem(5);
+                padding: 0.25rem;
+                width: pxToRem(50);
+                &.fallout-maw-calendar-top{
+                  top: pxToRem(-5);
+                }
+                &.fallout-maw-calendar-bottom{
+                  bottom: 0;
+                }
+                &.fallout-maw-calendar-right{
+                  left: pxToRem(-6);
+                }
+                &.fallout-maw-calendar-left{
+                  right: pxToRem(-5);
+                }
+                .fallout-maw-calendar-moon-phase{
+                  margin-right: 2px;
+                  margin-bottom: 2px;
+                }
+                background-color: var(--cal-moon-group-bg-color);
+                box-shadow: 1px 1px 5px var(--cal-moon-group-box-shadow-color);
+              }
+            }
+
+            .fallout-maw-calendar-moon-phase{
+              svg{
+                width: pxToRem(11);
+                height: pxToRem(11);
+                filter: drop-shadow(0px 0px 1px var(--cal-moon-text-shadow));
+              }
+              width: pxToRem(11);
+              height: pxToRem(11);
+              margin-right: 2px;
+              font-size: pxToRem(11);
+            }
+          }
+        }
+      }
+
+      &.fallout-maw-calendar-weekend-round{
+        .fallout-maw-calendar-day-wrapper{
+          &.fallout-maw-calendar-weekend{
+            border-top-right-radius: $spacer-quarter;
+            border-top-left-radius: $spacer-quarter;
+          }
+        }
+      }
+      &:last-child{
+        .fallout-maw-calendar-day-wrapper{
+          &.fallout-maw-calendar-weekend{
+            border-bottom-right-radius: $spacer-quarter;
+            border-bottom-left-radius: $spacer-quarter;
+          }
+        }
+      }
+    }
+  }
+}

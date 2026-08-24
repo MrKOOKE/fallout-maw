@@ -83,12 +83,12 @@ test("standard and independent health routes keep the required multiplier bounda
   assert.match(hub, /if \(independentHealthRules && targetedProsthesis\) \{\s*result = await calculateProsthesisLimbDamage\([\s\S]*?prosthesis: targetedProsthesis,\s*limbDamageMultiplier: getWeaponLimbDamageMultiplier/);
   assert.match(hub, /if \(independentHealthRules && installedProsthesis\) \{\s*result = await calculateProsthesisLimbDamage\([\s\S]*?prosthesis: installedProsthesis,\s*limbDamageMultiplier: getWeaponLimbDamageMultiplier/);
   assert.match(hub, /if \(installedProsthesis\) \{\s*result = estimateProsthesisLimbDamage\([\s\S]*?prosthesis: installedProsthesis,\s*limbDamageMultiplier: getWeaponLimbDamageMultiplier/);
-  assert.match(hub, /function estimateIndependentDamageEntriesBatch[\s\S]*?directProsthesisDamage\.get[\s\S]*?entry\.amount \* getWeaponLimbDamageMultiplier/);
+  assert.match(hub, /function applyDamageEntryToEstimateLedger[\s\S]*?entry\.amount \* getWeaponLimbDamageMultiplier[\s\S]*?ledger\.independentHealthState/);
 
   assert.equal((hub.match(/prosthesis: (?:targetedProsthesis|installedProsthesis),\s*limbDamageMultiplier: getWeaponLimbDamageMultiplier/g) ?? []).length, 6);
   assert.match(hub, /async function calculateProsthesisLimbDamage[\s\S]*?const damage = roundDamageAmount\(amount \* limbDamageMultiplier\);/);
   assert.match(hub, /function estimateProsthesisLimbDamage[\s\S]*?const damage = roundDamageAmount\(amount \* limbDamageMultiplier\);/);
-  assert.match(hub, /function estimateDamageEntriesBatch[\s\S]*?entry\.amount \* getWeaponLimbDamageMultiplier/);
+  assert.match(hub, /function estimateDamageEntriesBatch[\s\S]*?function applyDamageEntryToEstimateLedger[\s\S]*?entry\.amount \* getWeaponLimbDamageMultiplier/);
 });
 
 test("weapon explosions resolve a canonical limb key before creating damage requests", async () => {

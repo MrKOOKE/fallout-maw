@@ -45,8 +45,10 @@ import {
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS,
   SMART_FUDGE_RESULT_EFFECT_KEYS,
+  STUN_IMMUNITY_EFFECT_KEY,
   TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
-  TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY
+  TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY,
+  UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY
 } from "./active-effect-changes.mjs";
 import { ORGANISM_DEVELOPMENT_LIMIT_EFFECT_KEY } from "../races/organism-development.mjs";
 import {
@@ -953,10 +955,24 @@ export function buildCombatEffectKeyTokens() {
       group: "Бой"
     }),
     createEffectKeyToken({
+      code: "unconsciousnessImmunity",
+      key: "unconsciousnessImmunity",
+      label: "Невосприимчивость к потере сознания",
+      path: UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY,
+      group: "Бой"
+    }),
+    createEffectKeyToken({
       code: "stun",
       key: "stun",
       label: "Оглушение, %",
       path: STUN_EFFECT_KEY,
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "stunImmunity",
+      key: "stunImmunity",
+      label: "Невосприимчивость к оглушению",
+      path: STUN_IMMUNITY_EFFECT_KEY,
       group: "Бой"
     }),
     createEffectKeyToken({

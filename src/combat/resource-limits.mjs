@@ -1,4 +1,7 @@
 import { toInteger } from "../utils/numbers.mjs";
+import { STUN_IMMUNITY_EFFECT_KEY } from "../utils/active-effect-keys.mjs";
+
+export { STUN_IMMUNITY_EFFECT_KEY };
 
 export const STUN_EFFECT_KEY = "system.combat.stun";
 export const STUN_RESOURCE_KEYS = Object.freeze([
@@ -12,7 +15,12 @@ const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const DAMAGE_RESOURCE_LIMIT_KINDS = new Set(["resourceLimit", "resourceBlock"]);
 const STUN_LIMIT_COLOR = "#d94b4b";
 
+export function isActorStunImmune(actor = null) {
+  return toInteger(actor?.system?.combat?.stunImmunity) > 0;
+}
+
 export function getActorStunDegree(actor = null) {
+  if (isActorStunImmune(actor)) return 0;
   return Math.min(100, Math.max(0, toInteger(actor?.system?.combat?.stun)));
 }
 

@@ -1,0 +1,44 @@
+@import "src/styles/variables";
+.fallout-maw-calendar {
+  .fallout-maw-calendar-message {
+    padding: $spacer-half;
+    margin-bottom: $spacer-half;
+    border: 1px solid;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    color: var(--message-color);
+    &.fallout-maw-calendar-warn{
+      background-color: var(--message-warn-bg-color);
+      border-color: var(--message-warn-border-color) !important;
+    }
+    &.fallout-maw-calendar-success{
+      background-color: var(--message-success-bg-color);
+      border-color: var(--message-success-border-color) !important;
+    }
+    &.fallout-maw-calendar-info{
+      background-color: var(--message-info-bg-color);
+      border-color: var(--message-info-border-color) !important;
+    }
+    &.fallout-maw-calendar-danger{
+      background-color: var(--message-danger-bg-color);
+      border-color: var(--message-danger-border-color) !important;
+    }
+  }
+  &.fallout-maw-calendar-message{
+    .fallout-maw-calendar-chat-command-input{
+      text-transform: capitalize;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--color-border-light-2);
+    }
+
+    .fallout-maw-calendar-chat-command-result{
+      margin-bottom: 0.5rem;
+    }
+
+    .fallout-maw-calendar-control:hover{
+      background-color: #0000001f;
+    }
+  }
+}

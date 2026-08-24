@@ -1,0 +1,228 @@
+<form autocomplete="off">
+    {{#if editMode}}
+        <h1>
+            <div class="fallout-maw-calendar-compact-form-group">
+                <input value="{{name}}" placeholder="{{localize 'FALLOUTMAW.Calendar.Notes.New'}}" type="text" class="fallout-maw-calendar-note-title" />
+                <label for="falloutMawCalendarNoteTitle">{{localize 'FALLOUTMAW.Calendar.Search.Options.Fields.Title'}}</label>
+            </div>
+        </h1>
+        <div class="fields">
+            <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                <div class="fallout-maw-calendar-compact-form-group">
+                    {{fallout-maw-calendar-date-selector id=edit.dateSelectorId showDateSelector=true showTimeSelector=true placeholderText='' allowDateRangeSelection=true editYear=true timeSelected=edit.timeSelected selectedStartDate=edit.noteData.startDate selectedEndDate=edit.noteData.endDate onDateSelect=edit.dateSelectorSelect }}
+                    <label for="{{edit.dateSelectorId}}">{{localize 'FALLOUTMAW.Calendar.Notes.DateTime.Title'}}</label>
+                    <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.DateTime.Help'}}"><span class="fa-solid fa-circle-question"></span></div>
+                </div>
+                <div class="fallout-maw-calendar-compact-form-group">
+                    <select id="falloutMawCalendarNoteRepeats_{{data._id}}">
+                        {{selectOptions edit.repeatOptions selected=edit.repeats localize=true}}
+                    </select>
+                    <label for="falloutMawCalendarNoteRepeats_{{data._id}}">{{localize 'FALLOUTMAW.Calendar.Notes.Repeating'}}</label>
+                    <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.RepeatingHelp'}}"><span class="fa-solid fa-circle-question"></span></div>
+                </div>
+            </div>
+            <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                <div class="fallout-maw-calendar-compact-form-group">
+                    {{fallout-maw-calendar-multi-select id=edit.categoryMultiSelectId options=edit.allCategories }}
+                    <label>{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.NoteCategories'}}</label>
+                    <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Configuration.Notes.NoteCategoriesHelp'}}"><span class="fa-solid fa-circle-question"></span></div>
+                </div>
+                <div class="fallout-maw-calendar-compact-form-group">
+                    {{fallout-maw-calendar-multi-select id=edit.playerMultiSelectId options=edit.users }}
+                    <label>{{localize 'FALLOUTMAW.Calendar.Notes.UserPermissionTitle'}}</label>
+                    <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.UserPermissionHelp'}}"><span class="fa-solid fa-circle-question"></span></div>
+                </div>
+            </div>
+            <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-half">
+                    <select id="falloutMawCalendarNoteMacro_{{data._id}}">
+                        {{selectOptions edit.macroList selected=edit.selectedMacro localize=false}}
+                    </select>
+                    <label for="falloutMawCalendarNoteMacro_{{data._id}}">{{localize 'FALLOUTMAW.Calendar.Notes.Macro'}}</label>
+                    <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.MacroHelp'}}"><span class="fa-solid fa-circle-question"></span></div>
+                </div>
+                <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-check-group fallout-maw-calendar-quarter">
+                    <input type="checkbox" class="fallout-maw-calendar-toggle" id="falloutMawCalendarRemindMe_{{data._id}}" {{checked edit.reminder}}>
+                    <label for="falloutMawCalendarRemindMe_{{data._id}}"><span class="fa fa-bell"></span> {{localize 'FALLOUTMAW.Calendar.Notes.Reminder'}}</label>
+                    <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.ReminderHelp'}}"><span class="fa-solid fa-circle-question"></span></div>
+                </div>
+            </div>
+        </div>
+        <div class="fallout-maw-calendar-page-details">
+            <h2>{{localize 'DOCUMENT.JournalEntryPages'}}</h2>
+            <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                <div class="fallout-maw-calendar-compact-form-group">
+                    <input value="{{edit.page.name}}" placeholder="{{localize 'JOURNALENTRYPAGE.PageTitle'}}" type="text" id="falloutMawCalendarPageName_{{data._id}}" />
+                    <label for="falloutMawCalendarPageName_{{data._id}}">{{localize 'JOURNALENTRYPAGE.PageTitle'}}</label>
+                </div>
+                <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-quarter">
+                    <select id="falloutMawCalendarPageType_{{data._id}}">
+                        {{selectOptions edit.pageTypes selected=edit.page.type localize=true}}
+                    </select>
+                    <label for="falloutMawCalendarPageType_{{data._id}}">{{localize 'JOURNALENTRYPAGE.Type'}}</label>
+                </div>
+            </div>
+            <div class="fallout-maw-calendar-editor-container">
+                {{#if (eq edit.page.type 'text')}}
+                    {{editor enrichedContent target="content" editable=true button=false owner=owner engine="prosemirror"}}
+                {{else if (eq edit.page.type 'image')}}
+                    <div class="fallout-maw-calendar-image-preview">
+                        {{{enrichedContent}}}
+                    </div>
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-threeQuarters">
+                            <input id="falloutMawCalendarPageImageSrc_{{data._id}}" type="text" name="src" placeholder="{{localize 'JOURNALENTRYPAGE.ImageSource'}}" value="{{edit.page.src}}" />
+                            <label for="falloutMawCalendarPageImageSrc_{{data._id}}">{{localize 'JOURNALENTRYPAGE.ImageSource'}}</label>
+                            <div class="fallout-maw-calendar-form-group-actions">{{filePicker type='image' target="src"}}</div>
+                        </div>
+                    </div>
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group">
+                            <input id="falloutMawCalendarPageImageCaption_{{data._id}}" type="text" name="image.caption" placeholder="{{localize 'JOURNALENTRYPAGE.ImageCaption'}}" value="{{edit.page.image.caption}}" />
+                            <label for="falloutMawCalendarPageImageCaption_{{data._id}}">{{localize 'JOURNALENTRYPAGE.ImageCaption'}}</label>
+                        </div>
+                    </div>
+                {{else if (eq edit.page.type 'pdf')}}
+                    {{{enrichedContent}}}
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-threeQuarters">
+                            <input id="falloutMawCalendarPagePDFSrc_{{data._id}}" type="text" name="src" placeholder="{{localize 'JOURNALENTRYPAGE.PDFSource'}}" value="{{edit.page.src}}" />
+                            <label for="falloutMawCalendarPagePDFSrc_{{data._id}}">{{localize 'JOURNALENTRYPAGE.PDFSource'}}</label>
+                            <div class="fallout-maw-calendar-form-group-actions">
+                                {{filePicker type='text' target="src"}}
+                            </div>
+                        </div>
+                    </div>
+                {{else if (eq edit.page.type 'video')}}
+                    {{{enrichedContent}}}
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-threeQuarters">
+                            <input id="falloutMawCalendarPageVideoSrc_{{data._id}}" type="text" name="src" placeholder="{{localize 'JOURNALENTRYPAGE.VideoSource'}}" value="{{edit.page.src}}" />
+                            <label for="falloutMawCalendarPageVideoSrc_{{data._id}}">{{localize 'JOURNALENTRYPAGE.VideoSource'}}</label>
+                            <div class="fallout-maw-calendar-form-group-help" data-tooltip="{{localize 'JOURNALENTRYPAGE.VideoSourceHint'}}"><span class="fa-solid fa-circle-question"></span></div>
+                            <div class="fallout-maw-calendar-form-group-actions">
+                                {{filePicker type='video' target="src"}}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-check-group fallout-maw-calendar-third">
+                            <input type="checkbox" class="fallout-maw-calendar-toggle" id="falloutMawCalendarPageVideoControls_{{data._id}}" {{checked edit.page.video.controls}}>
+                            <label for="falloutMawCalendarPageVideoControls_{{data._id}}">{{localize 'JOURNALENTRYPAGE.VideoControls'}}</label>
+                        </div>
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-check-group fallout-maw-calendar-third">
+                            <input type="checkbox" class="fallout-maw-calendar-toggle" id="falloutMawCalendarPageVideoAutoplay_{{data._id}}" {{checked edit.page.video.autoplay}}>
+                            <label for="falloutMawCalendarPageVideoAutoplay_{{data._id}}">{{localize 'TILE.VideoAutoplay'}}</label>
+                        </div>
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-check-group">
+                            <input type="checkbox" class="fallout-maw-calendar-toggle" id="falloutMawCalendarPageVideoLoop_{{data._id}}" {{checked edit.page.video.loop}}>
+                            <label for="falloutMawCalendarPageVideoLoop_{{data._id}}">{{localize 'TILE.VideoLoop'}}</label>
+                        </div>
+                    </div>
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-half">
+                            <input id="falloutMawCalendarPageVideoVolume_{{data._id}}" type="range" name="video.volume" value="{{edit.page.video.volume}}" min="0" max="1" step="0.05" />
+                            <label for="falloutMawCalendarPageVideoVolume_{{data._id}}">{{localize 'TILE.VideoVolume'}}: <span>{{edit.page.video.volumeDisplay}}</span></label>
+                        </div>
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-quarter">
+                            <input id="falloutMawCalendarPageVideoWidth_{{data._id}}" type="number" name="video.width" min="0" step="1" placeholder="{{localize 'Width'}}" value="{{edit.page.video.width}}" />
+                            <label for="falloutMawCalendarPageVideoWidth_{{data._id}}">{{localize 'Width'}}</label>
+                        </div>
+                        <div class="fallout-maw-calendar-compact-form-group">
+                            <input id="falloutMawCalendarPageVideoHeight_{{data._id}}" type="number" name="video.height" min="0" step="1" placeholder="{{localize 'Height'}}" value="{{edit.page.video.height}}" />
+                            <label for="falloutMawCalendarPageVideoHeight_{{data._id}}">{{localize 'Height'}}</label>
+                        </div>
+                    </div>
+                    <div class="">{{localize 'JOURNALENTRYPAGE.VideoStartTime'}}</div>
+                    <div class="fallout-maw-calendar-inline-form-group-wrapper">
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-quarter">
+                            <input id="falloutMawCalendarPageVideoHours_{{data._id}}" type="number" placeholder="{{localize 'TIME.Hours'}}" value="{{edit.page.video.timestampParts.h}}" />
+                            <label for="falloutMawCalendarPageVideoHours_{{data._id}}">{{localize 'TIME.Hours'}}</label>
+                        </div>
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-quarter">
+                            <input id="falloutMawCalendarPageVideoMinutes_{{data._id}}" type="number" placeholder="{{localize 'TIME.Minutes'}}" value="{{edit.page.video.timestampParts.m}}" />
+                            <label for="falloutMawCalendarPageVideoMinutes_{{data._id}}">{{localize 'TIME.Minutes'}}</label>
+                        </div>
+                        <div class="fallout-maw-calendar-compact-form-group fallout-maw-calendar-quarter">
+                            <input id="falloutMawCalendarPageVideoSeconds_{{data._id}}" type="number" placeholder="{{localize 'TIME.Seconds'}}" value="{{edit.page.video.timestampParts.s}}" />
+                            <label for="falloutMawCalendarPageVideoSeconds_{{data._id}}">{{localize 'TIME.Seconds'}}</label>
+                        </div>
+                    </div>
+                {{/if}}
+            </div>
+        </div>
+        <div class="fallout-maw-calendar-edit-controls">
+            <button class="fallout-maw-calendar-control fallout-maw-calendar-save" name="submit" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.Save'}}">
+                <i class="far fa-save"></i> {{localize 'FALLOUTMAW.Calendar.Notes.Save'}}
+            </button>
+            <button class="fallout-maw-calendar-control fallout-maw-calendar-delete fallout-maw-calendar-note-delete"><i class="fa fa-trash"></i> {{localize 'FALLOUTMAW.Calendar.Delete'}}</button>
+        </div>
+    {{else}}
+        <div class="fallout-maw-calendar-note-header">
+            <h1>
+                <span class="fallout-maw-calendar-title-text">{{name}}</span>
+                <span class="fallout-maw-calendar-reminder fallout-maw-calendar-note-category {{#if display.reminder}} fallout-maw-calendar-selected{{/if}}"><label><input class="fallout-maw-calendar-toggle" type="checkbox" /><span class="fa {{#if display.reminder}}fa-bell{{else}}fa-bell-slash{{/if}}"></span></label></span>
+            </h1>
+            <div class="fallout-maw-calendar-date">
+                <div class="fallout-maw-calendar-note-category" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.DateTime.Title'}}">
+                    <span class="fa fa-calendar"></span>  {{display.date}}
+                </div>
+                {{#if (gt display.repeats 0)}}
+                    <div class="fallout-maw-calendar-note-category" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.Repeats'}}">
+                        <span class="fas fa-sync"></span>  {{display.repeatsDisplay}}
+                    </div>
+                {{/if}}
+                <div class="fallout-maw-calendar-note-category" style="background-color: {{display.author.color}}; color:{{display.author.textColor}}" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.Author'}}">
+                    <span class="fa fa-pencil-alt"></span> {{display.author.name}}
+                </div>
+                {{#if display.macro}}
+                    <div class="fallout-maw-calendar-note-category" data-tooltip="{{localize 'DOCUMENT.Macro'}}">
+                        <span class="fas fa-scroll"></span> {{display.macro}}
+                    </div>
+                {{/if}}
+            </div>
+            <div class="fallout-maw-calendar-category-list">
+                {{#each display.categories}}
+                    <div class="fallout-maw-calendar-note-category" style="background-color: {{color}}; color:{{textColor}}">{{name}}</div>
+                {{/each}}
+            </div>
+        </div>
+        <div class="fallout-maw-calendar-content">
+            {{{enrichedContent}}}
+        </div>
+        {{#if editable}}
+            <div class="fallout-maw-calendar-edit-controls">
+                <button class="fallout-maw-calendar-control fallout-maw-calendar-primary fallout-maw-calendar-note-edit"><i class="fa fa-edit"></i> {{localize 'FALLOUTMAW.Calendar.Edit'}}</button>
+                <button class="fallout-maw-calendar-control fallout-maw-calendar-delete fallout-maw-calendar-note-delete"><i class="fa fa-trash"></i> {{localize 'FALLOUTMAW.Calendar.Delete'}}</button>
+            </div>
+        {{/if}}
+    {{/if}}
+</form>
+{{#if (or editMode (gt pages.length 1))}}
+<div class="fallout-maw-calendar-side-drawer fallout-maw-calendar-page-list {{#unless editMode}} fallout-maw-calendar-read-only{{/unless}} {{#if uiElementStates.fallout-maw-calendar-page-list}} fallout-maw-calendar-open{{else}} fallout-maw-calendar-closed{{/if}}">
+    <div class="fallout-maw-calendar-page-list-controls">
+        <a class="fallout-maw-calendar-pages" data-tooltip="{{#if uiElementStates.fallout-maw-calendar-page-list}}{{localize 'JOURNAL.ViewCollapse'}}{{else}}{{localize 'JOURNAL.ViewExpand'}}{{/if}}"><i class="fa-solid {{#if uiElementStates.fallout-maw-calendar-page-list}} fa-caret-right{{else}} fa-caret-left{{/if}}"></i></a>
+        <div class="fallout-maw-calendar-search-box">
+            <input placeholder="{{localize 'FALLOUTMAW.Calendar.Notes.SearchPages'}}" type="text" value="{{uiElementStates.search.term}}" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Notes.SearchPages'}}" />
+            <button class="fallout-maw-calendar-control fallout-maw-calendar-hide" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Clear'}}" ><span class="fa fa-times"></span></button>
+        </div>
+        {{#if editMode}}
+            <button class="fallout-maw-calendar-add-new-page fallout-maw-calendar-control fallout-maw-calendar-save" data-tooltip="{{localize 'JOURNAL.AddPage'}}"><span class="fa fa-file-circle-plus"></span></button>
+        {{/if}}
+    </div>
+    <ul class="fallout-maw-calendar-list-of-pages">
+        {{#each pages}}
+            <li data-index="{{_id}}" class="{{#if (eq @index ../uiElementStates.selectedPageIndex)}} fallout-maw-calendar-current{{/if}}{{#unless show}} fallout-maw-calendar-hide{{/unless}}">
+                <span>{{name}}</span>
+            {{#if ../editMode}}
+                <div class="fallout-maw-calendar-actions">
+                    {{#unless (eq ../pages.length 1)}}
+                    <button class="fallout-maw-calendar-control fallout-maw-calendar-delete" data-tooltip="{{localize 'FALLOUTMAW.Calendar.Delete'}}"><span class="fa fa-trash"></span></button>
+                    {{/unless}}
+                </div>
+            {{/if}}
+            </li>
+        {{/each}}
+    </ul>
+</div>
+{{/if}}

@@ -1,0 +1,135 @@
+@import "../variables";
+
+.fallout-maw-calendar-context-menu{
+  &::before{
+    content: ' ';
+    position: absolute;
+    width: pxToRem(10);
+    height: pxToRem(5);
+    left: pxToRem(8);
+    top: pxToRem(-6);
+    clip-path: polygon(0% 100%, 50% 0%, 100% 100%);
+    z-index: -1;
+    background-color: var(--context-menu-border-color);
+  }
+  position: absolute;
+  padding: $spacer-half;
+  margin: 0 $spacer-half;
+  border: 1px solid var(--context-menu-border-color);
+  border-radius: pxToRem(5);
+  opacity: 1;
+  min-width: max-content;
+  background-color: var(--context-menu-bg-color);
+  color: var(--context-menu-color);
+
+  &.fallout-maw-calendar-left{
+    right: calc(100% + 18.75rem);
+    &::before{
+      left:101%;
+      top: pxToRem(8);
+      clip-path: polygon(0% 0%, 100% 50%, 0% 100%);
+      width: pxToRem(5);
+      height: pxToRem(10);
+    }
+  }
+
+  &.fallout-maw-calendar-right{
+    left: calc(100% + 18.75rem);
+    &::before{
+      left: pxToRem(-6);
+      top: pxToRem(8);
+      clip-path: polygon(100% 0%, 100% 100%, 0% 50%);
+      width: pxToRem(5);
+      height: pxToRem(10);
+    }
+  }
+
+  &.fallout-maw-calendar-down{
+    left: 100%;
+    &::before{
+      left: pxToRem(-6);
+      top: pxToRem(8);
+      clip-path: polygon(100% 0%, 100% 100%, 0% 50%);
+      width: pxToRem(5);
+      height: pxToRem(10);
+    }
+  }
+
+  &.fallout-maw-calendar-hide{
+    opacity: 0;
+    height: 0;
+    visibility: hidden;
+  }
+
+  .fallout-maw-calendar-day-context-list{
+    font-size: pxToRem(12);
+
+    > div{
+      margin: $spacer-half 0;
+      &.fallout-maw-calendar-hide{
+        display: none;
+      }
+      &:first-of-type{
+        margin-top: 0;
+      }
+      &:last-of-type{
+        margin-bottom: 0;
+      }
+    }
+
+    .fa{
+      margin-right: $spacer-half;
+    }
+    .fallout-maw-calendar-context-list-title{
+      font-size: pxToRem(14);
+    }
+    .fallout-maw-calendar-context-list-text{
+      margin: $spacer-quarter 0 $spacer-quarter $spacer-quarter;
+    }
+    .fallout-maw-calendar-context-list-action{
+      cursor: pointer;
+      &:hover, &:focus, &:active{
+        color: var(--context-menu-action-hover-color);
+      }
+    }
+    .fallout-maw-calendar-context-list-break{
+      border-bottom: 1px solid var(--context-menu-divider-color);
+    }
+    .fallout-maw-calendar-context-list-expand{
+      position: relative;
+
+      .fa-caret-right{
+        margin-right: 0;
+        margin-left: $spacer-half;
+        float: right;
+      }
+      &:focus, &:active{
+        color: var(--context-menu-action-hover-color);
+      }
+      &:hover{
+        color: var(--context-menu-action-hover-color);
+        .fallout-maw-calendar-context-list-sub-menu{
+          opacity: 1;
+          left: calc(100% + $spacer-half);
+          color: var(--context-menu-color);
+        }
+      }
+
+      .fallout-maw-calendar-context-list-sub-menu{
+        position: absolute;
+        top: -($spacer *.45);
+        left: 0;
+        width: 100%;
+        border: 1px solid var(--context-menu-border-color);
+        border-top-right-radius: pxToRem(5);
+        border-bottom-right-radius: pxToRem(5);
+        opacity: 0;
+        z-index: -1;
+        padding: 0 $spacer-quarter;
+        background-color: var(--context-menu-bg-color);
+      }
+    }
+  }
+
+
+}

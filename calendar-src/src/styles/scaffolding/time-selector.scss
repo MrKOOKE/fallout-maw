@@ -1,0 +1,90 @@
+@import "../variables";
+
+.fallout-maw-calendar{
+  &.window-app{
+    .window-content{
+      .fallout-maw-calendar-time-selector{
+        display: flex;
+        justify-content: space-evenly;
+        margin: $spacer-half 0;
+        color: var(--time-selector-color);
+        .fallout-maw-calendar-ts-inputs{
+          position: relative;
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          margin-bottom: pxToRem(5);
+          border-radius: pxToRem(5);
+          border: 1px solid var(--time-selector-input-border-color);
+          background-color: var(--time-selector-input-bg-color);
+
+          input{
+            width: $spacer * 2;
+            border: unset;
+            border-radius: pxToRem(5);
+            margin: 0 2px;
+            text-align: center;
+          }
+
+          .fallout-maw-calendar-dropdown{
+            position: absolute;
+            bottom: pxToRem(23);
+            width: $spacer * 3;
+            max-height: pxToRem(150);
+            margin: 0;
+            padding: 0;
+            border: 1px solid var(--time-selector-input-bg-color);
+            z-index: 100;
+            overflow-y: scroll;
+            background-color: var(--time-selector-input-bg-color);
+            @include scrollbar();
+
+            &.fallout-maw-calendar-hide{
+              display: none;
+            }
+
+
+            &.fallout-maw-calendar-ts-hour-list{
+              left: 2px;
+            }
+            &.fallout-maw-calendar-ts-minute-list{
+              right: 0;
+            }
+
+            li{
+              list-style: none;
+              padding: $spacer-quarter $spacer-half;
+              &:nth-child(even){
+                background-color: var(--time-selector-option-bg-even-color);
+              }
+              &:hover{
+                background-color: var(--time-selector-option-hover-bg-color);
+              }
+            }
+          }
+        }
+
+        .fallout-maw-calendar-time-spacer{
+          font-size: 1.5rem;
+          margin-top: -$spacer-quarter;
+          padding: 0 $spacer-quarter
+        }
+
+        .fa-clock{
+          font-size: 1.25rem;
+          margin-top: 3px;
+          margin-right: 0.25rem;
+        }
+      }
+
+      .fallout-maw-calendar-add-time, .fallout-maw-calendar-remove-time{
+        display: flex;
+        justify-content: space-evenly;
+        margin: $spacer 0;
+        button{
+          flex: 0 1 50% !important;
+        }
+      }
+    }
+  }
+}

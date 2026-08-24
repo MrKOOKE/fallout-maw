@@ -1,0 +1,47 @@
+@import "../variables";
+
+.fallout-maw-calendar{
+  .fallout-maw-calendar-category-list, .form-fields.fallout-maw-calendar-category-list{
+    flex-wrap: wrap;
+  }
+  .fallout-maw-calendar-note-category, label.fallout-maw-calendar-note-category, .form-fields .fallout-maw-calendar-note-category{
+    font-size: 0.725rem;
+    border-radius: pxToRem(7);
+    padding: .2rem .4rem;
+    margin-right: pxToRem(5);
+    margin-bottom: pxToRem(5);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background-color: var(--note-cat-bg-color);
+    border-color: var(--note-cat-bg-color);
+    color: var(--note-cat-color);
+    box-shadow: 1px 1px 5px var(--note-cat-box-shadow-color);
+
+    &.fallout-maw-calendar-secondary{
+      background-color: var(--note-cat-secondary-bg-color);
+      border-color: var(--note-cat-secondary-bg-color);
+      color: var(--note-cat-secondary-color);
+    }
+    &.fallout-maw-calendar-success{
+      background-color: var(--note-cat-success-bg-color);
+      border-color: var(--note-cat-success-bg-color);
+      color: var(--note-cat-success-color);
+    }
+    &.fallout-maw-calendar-danger{
+      background-color: var(--note-cat-danger-bg-color);
+      border-color: var(--note-cat-danger-bg-color);
+      color: var(--note-cat-danger-color);
+    }
+    &.fallout-maw-calendar-reminder{
+      background-color: var(--note-cat-reminder-bg-color);
+      border-color: var(--note-cat-reminder-bg-color);
+      color: var(--note-cat-reminder-color);
+    }
+
+    span{
+      margin-right: 0.35rem;
+      white-space: nowrap;
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import { dispatchSystemEvent, withSystemEventRoot } from "../events/dispatcher.mjs";
 
 const queuedWorldTimeProcessors = new Map();
+const queuedWorldTimeFinalizers = new Set();
 const pendingWorldTimeUpdates = [];
 let worldTimeHookRegistered = false;
 let processingWorldTimeQueue = false;
@@ -18,50 +19,102 @@ export async function advanceWorldTime(seconds, {
 } = {}) {
   const amount = Math.trunc(Number(seconds) || 0);
   if (!amount || !game.user?.isGM) return false;
-  const advance = worldTimeAdvanceQueue.then(() => withSystemEventRoot({
-    kind: "worldTimeAdvance",
-    operationId: `world-time:${foundry.utils.randomID()}`,
-    sceneUuid: String(canvas?.scene?.uuid ?? ""),
-    combatUuid: String(game.combat?.uuid ?? ""),
-    chainRef
-  }, async scope => {
+  return enqueueWorldTimeMutation(() => amount, {
+    restMode,
+    campRest,
+    forceTimeMechanics,
+    chainRef,
+    source
+  });
+}
+
+/**
+ * Set an absolute world-time target through the same serialized pipeline as
+ * relative advances. The delta is intentionally calculated only when this
+ * operation reaches the head of the shared queue, so an earlier time mutation
+ * cannot make a precomputed delta overshoot the requested target.
+ */
+export async function setWorldTime(targetSeconds, {
+  restMode = false,
+  campRest = null,
+  forceTimeMechanics = false,
+  chainRef = null,
+  source = "system"
+} = {}) {
+  const numericTarget = Number(targetSeconds);
+  if (!Number.isFinite(numericTarget) || !game.user?.isGM) return false;
+  const target = Math.trunc(numericTarget);
+  return enqueueWorldTimeMutation(before => target - before, {
+    restMode,
+    campRest,
+    forceTimeMechanics,
+    chainRef,
+    source,
+    zeroResult: true,
+    absoluteTarget: target
+  });
+}
+
+function enqueueWorldTimeMutation(resolveAmount, {
+  restMode = false,
+  campRest = null,
+  forceTimeMechanics = false,
+  chainRef = null,
+  source = "system",
+  zeroResult = false,
+  absoluteTarget = null
+} = {}) {
+  const advance = worldTimeAdvanceQueue.then(async () => {
     const before = Number(game.time?.worldTime) || 0;
-    const requested = await scope.emit("fallout-maw.world.time.beforeAdvance", {
-      data: { seconds: amount, source: String(source ?? "system") },
-      before: { worldTime: before },
-      after: { worldTime: before + amount },
-      delta: { worldTime: amount }
-    }, {
-      occurrenceKey: `world-time-before:${scope.rootId}:${before}:${amount}`,
-      participants: { source: null, target: null, related: [] }
+    const amount = Math.trunc(Number(resolveAmount(before)) || 0);
+    if (!amount) return zeroResult;
+    return withSystemEventRoot({
+      kind: "worldTimeAdvance",
+      operationId: `world-time:${foundry.utils.randomID()}`,
+      sceneUuid: String(canvas?.scene?.uuid ?? ""),
+      combatUuid: String(game.combat?.uuid ?? ""),
+      chainRef
+    }, async scope => {
+      const requested = await scope.emit("fallout-maw.world.time.beforeAdvance", {
+        data: { seconds: amount, source: String(source ?? "system") },
+        before: { worldTime: before },
+        after: { worldTime: before + amount },
+        delta: { worldTime: amount }
+      }, {
+        occurrenceKey: `world-time-before:${scope.rootId}:${before}:${amount}`,
+        participants: { source: null, target: null, related: [] }
+      });
+      if (requested?.control?.current || requested?.control?.remaining || requested?.control?.root) return false;
+      const timeOptions = {
+        [SYSTEM_TIME_ADVANCE_OPTION]: true,
+        falloutMawWorldTimeSource: String(source ?? "system"),
+        falloutMawSystemEventChainRef: scope.chainRef,
+        chainRef: scope.chainRef,
+        falloutMaw: {
+          restMode: Boolean(restMode),
+          forceTimeMechanics: Boolean(forceTimeMechanics),
+          ...(campRest ? { campRest } : {})
+        }
+      };
+      if (Number.isFinite(absoluteTarget)) await game.time.set(absoluteTarget, timeOptions);
+      else await game.time.advance(amount, timeOptions);
+      await waitForWorldTimeQueueIdle();
+      const after = Number(game.time?.worldTime) || (before + amount);
+      await scope.emit("fallout-maw.world.time.advanced", {
+        data: { seconds: after - before, source: String(source ?? "system") },
+        before: { worldTime: before },
+        after: { worldTime: after },
+        delta: { worldTime: after - before },
+        outcome: { advanced: true }
+      }, {
+        occurrenceKey: `world-time-advanced:${scope.rootId}:${after}`,
+        participants: { source: null, target: null, related: [] }
+      });
+      return true;
     });
-    if (requested?.control?.current || requested?.control?.remaining || requested?.control?.root) return false;
-    await game.time.advance(amount, {
-      [SYSTEM_TIME_ADVANCE_OPTION]: true,
-      falloutMawSystemEventChainRef: scope.chainRef,
-      chainRef: scope.chainRef,
-      falloutMaw: {
-        restMode: Boolean(restMode),
-        forceTimeMechanics: Boolean(forceTimeMechanics),
-        ...(campRest ? { campRest } : {})
-      }
-    });
-    await waitForWorldTimeQueueIdle();
-    const after = Number(game.time?.worldTime) || (before + amount);
-    await scope.emit("fallout-maw.world.time.advanced", {
-      data: { seconds: after - before, source: String(source ?? "system") },
-      before: { worldTime: before },
-      after: { worldTime: after },
-      delta: { worldTime: after - before },
-      outcome: { advanced: true }
-    }, {
-      occurrenceKey: `world-time-advanced:${scope.rootId}:${after}`,
-      participants: { source: null, target: null, related: [] }
-    });
-    return true;
-  }));
+  });
   worldTimeAdvanceQueue = advance.catch(error => {
-    console.error("Fallout MaW | Queued world time advance failed", error);
+    console.error("Fallout MaW | Queued world time mutation failed", error);
     return false;
   });
   return advance;
@@ -76,6 +129,17 @@ export function registerQueuedWorldTimeProcessor(processor, { priority = 0 } = {
   registerWorldTimeQueueHook();
   queuedWorldTimeProcessors.set(processor, Number(priority) || 0);
   return () => queuedWorldTimeProcessors.delete(processor);
+}
+
+/**
+ * Register work which must observe the completed result of every queued
+ * world-time processor, regardless of their current or future priorities.
+ */
+export function registerQueuedWorldTimeFinalizer(finalizer) {
+  if (typeof finalizer !== "function") return () => {};
+  registerWorldTimeQueueHook();
+  queuedWorldTimeFinalizers.add(finalizer);
+  return () => queuedWorldTimeFinalizers.delete(finalizer);
 }
 
 function registerWorldTimeQueueHook() {
@@ -173,6 +237,18 @@ async function processWorldTimeQueue() {
           await processor(wt, dt, update.options, update.userId);
         } catch (error) {
           console.error("Fallout MaW | World time processor failed", error);
+        }
+      }
+      for (const finalizer of Array.from(queuedWorldTimeFinalizers)) {
+        try {
+          const clock = Number(game.time?.worldTime) || 0;
+          if (clock > wt) {
+            dt += clock - wt;
+            wt = clock;
+          }
+          await finalizer(wt, dt, update.options, update.userId);
+        } catch (error) {
+          console.error("Fallout MaW | World time finalizer failed", error);
         }
       }
       for (const sourceUpdate of update.sourceUpdates) {

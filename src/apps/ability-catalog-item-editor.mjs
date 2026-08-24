@@ -95,6 +95,8 @@ import {
   normalizeNightmareSettings,
   normalizePhantomSettings,
   normalizeDanceOfThousandShadowsSettings,
+  normalizeLivingSteelSettings,
+  normalizePainLordSettings,
   normalizeSpecialMixSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
@@ -2929,6 +2931,27 @@ function readFixedFunctionSettings(row) {
       criticalChancePerKill: row.querySelector("[data-field='fixed.danceOfThousandShadows.criticalChancePerKill']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel) {
+    return {
+      annulledDamageLimit: row.querySelector("[data-field='fixed.livingSteel.annulledDamageLimit']")?.value,
+      normalMissingHealthStepPercent: row.querySelector("[data-field='fixed.livingSteel.normalMissingHealthStepPercent']")?.value,
+      weakenedMissingHealthStepPercent: row.querySelector("[data-field='fixed.livingSteel.weakenedMissingHealthStepPercent']")?.value,
+      resilienceBonusPerStep: row.querySelector("[data-field='fixed.livingSteel.resilienceBonusPerStep']")?.value,
+      weakenedResilienceDivisor: row.querySelector("[data-field='fixed.livingSteel.weakenedResilienceDivisor']")?.value,
+      weakenedDurationSeconds: row.querySelector("[data-field='fixed.livingSteel.weakenedDurationSeconds']")?.value,
+      resetAfterSeconds: row.querySelector("[data-field='fixed.livingSteel.resetAfterSeconds']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
+    return {
+      energyPerDamage: row.querySelector("[data-field='fixed.painLord.energyPerDamage']")?.value,
+      offenderDamagePerPercent: row.querySelector("[data-field='fixed.painLord.offenderDamagePerPercent']")?.value,
+      offenderMaxPercent: row.querySelector("[data-field='fixed.painLord.offenderMaxPercent']")?.value,
+      overflowEnergyPerPercent: row.querySelector("[data-field='fixed.painLord.overflowEnergyPerPercent']")?.value,
+      overflowMaxPercent: row.querySelector("[data-field='fixed.painLord.overflowMaxPercent']")?.value,
+      overflowDurationSeconds: row.querySelector("[data-field='fixed.painLord.overflowDurationSeconds']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -3488,6 +3511,12 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedDanceOfThousandShadowsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows
     ? normalizeDanceOfThousandShadowsSettings(normalized.fixedSettings)
     : null;
+  const fixedLivingSteelSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel
+    ? normalizeLivingSteelSettings(normalized.fixedSettings)
+    : null;
+  const fixedPainLordSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord
+    ? normalizePainLordSettings(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3574,6 +3603,8 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedNightmareSettings,
     fixedPhantomSettings,
     fixedDanceOfThousandShadowsSettings,
+    fixedLivingSteelSettings,
+    fixedPainLordSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,

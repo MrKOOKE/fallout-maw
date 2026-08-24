@@ -19,8 +19,8 @@ import {
   systemEventParticipant,
   withSystemEventRoot
 } from "../events/foundry-world-events.mjs";
+import { advanceWorldTime } from "../time/world-time-queue.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
-import { advanceWorldTime } from "./world-time-control.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const CAMP_SOCKET = `system.${SYSTEM_ID}`;

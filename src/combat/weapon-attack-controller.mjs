@@ -4278,6 +4278,7 @@ export function buildWeaponExplosionDamageRequests({
           targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
           penetrationPower,
           pelletIndex,
+          damagePacketId: conditionWearPacketId,
           conditionWearPacketId,
           ...(concentratedPelletImpact ? {
             pelletImpactCount: pelletDamages.length,
@@ -13635,9 +13636,13 @@ function buildWeaponDamageRequests(weapon, {
       ...distanceContext,
       chanceOperationId: getActiveUseOperationId(source)
     });
+  const damagePacketId = String(source.damagePacketId ?? "").trim()
+    || String(source.conditionWearPacketId ?? "").trim()
+    || foundry.utils.randomID();
   const requestSource = {
     ...source,
-    conditionWearPacketId: source.conditionWearPacketId ?? foundry.utils.randomID(),
+    damagePacketId,
+    conditionWearPacketId: String(source.conditionWearPacketId ?? "").trim() || damagePacketId,
     weaponFunctionId: source.weaponFunctionId ?? weaponFunctionId,
     weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
     targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
@@ -13694,9 +13699,13 @@ function buildWeaponConditionDamageRequests(weapon, {
       ...distanceContext,
       chanceOperationId: getActiveUseOperationId(source)
     });
+  const damagePacketId = String(source.damagePacketId ?? "").trim()
+    || String(source.conditionWearPacketId ?? "").trim()
+    || foundry.utils.randomID();
   const requestSource = {
     ...source,
-    conditionWearPacketId: source.conditionWearPacketId ?? foundry.utils.randomID(),
+    damagePacketId,
+    conditionWearPacketId: String(source.conditionWearPacketId ?? "").trim() || damagePacketId,
     weaponFunctionId: source.weaponFunctionId ?? weaponFunctionId,
     weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
     targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",

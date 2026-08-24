@@ -1,0 +1,39 @@
+@import "../variables";
+.fallout-maw-calendar{
+  &.window-app{
+    .window-content{
+      form{
+        input[type=checkbox]{
+          &.fallout-maw-calendar-toggle{
+            flex: 0 ($spacer * 2);
+            min-width: ($spacer * 2);
+            height: $spacer;
+            margin: 0.063rem ($spacer-half * .5) 0;
+            background-repeat: no-repeat !important;
+            background-position: left center;
+            background-size: contain;
+            border: 1px solid var(--toggle-border-color) !important;
+            cursor: pointer;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            -webkit-print-color-adjust: exact;
+            color-adjust: exact;
+            print-color-adjust: exact;
+            float: left;
+            background-image: var(--toggle-unchecked-image);
+            border-radius: 2em;
+            transition: background-position .15s ease-in-out;
+
+            &:checked{
+              background-position: right center;
+              background-image: var(--toggle-checked-image);
+              background-color: var(--toggle-checked-bg-color) !important;
+              -webkit-filter: unset;
+            }
+          }
+        }
+      }
+    }
+  }
+}

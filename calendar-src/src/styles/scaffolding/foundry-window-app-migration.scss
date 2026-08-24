@@ -1,0 +1,38 @@
+@import "src/styles/variables";
+.fallout-maw-calendar{
+  .fallout-maw-calendar-migration-wrapper{
+    padding: $spacer-half;
+
+    .fallout-maw-calendar-migration-actions{
+      list-style: none;
+      margin: 0;
+      padding: 0;
+
+      li{
+        margin: $spacer;
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+      }
+      .fallout-maw-calendar-status-indicator{
+        margin-right: $spacer;
+        .fallout-maw-calendar-running{
+          color: var(--btn-secondary-bg-hover-color);
+        }
+        .fallout-maw-calendar-completed{
+          color: var(--btn-save-bg-hover-color);
+        }
+        .fallout-maw-calendar-error{
+          color: var(--btn-delete-bg-hover-color);
+        }
+        .fallout-maw-calendar-cancel{
+          color: var(--btn-grey-bg-hover-color);
+        }
+      }
+      .fallout-maw-calendar-migration-status{
+        flex: 1;
+      }
+    }
+  }
+}

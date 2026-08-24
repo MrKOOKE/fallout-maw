@@ -1,0 +1,16 @@
+[
+  {"key": "gregorian", "label": "FALLOUTMAW.Calendar.Configuration.LeapYear.Rules.Gregorian", "config":  true, "notes":  false},
+  {"key": "darksun", "label": "FALLOUTMAW.Calendar.Predefined.DarkSun", "config":  true, "notes":  false},
+  {"key": "dsa-tde5e", "label": "FALLOUTMAW.Calendar.Predefined.DSA-TDE5e", "config":  true, "notes":  true},
+  {"key": "eberron", "label": "FALLOUTMAW.Calendar.Predefined.Eberron", "config":  true, "notes":  true},
+  {"key": "exalted", "label": "FALLOUTMAW.Calendar.Predefined.Exalted", "config":  true, "notes":  false},
+  {"key": "exandrian", "label": "FALLOUTMAW.Calendar.Predefined.Exandrian", "config":  true, "notes":  true},
+  {"key": "forbidden-lands", "label": "FALLOUTMAW.Calendar.Predefined.ForbiddenLands", "config":  true, "notes":  false},
+  {"key": "harptos", "label": "FALLOUTMAW.Calendar.Predefined.Harptos", "config":  true, "notes":  true},
+  {"key": "golarianpf1e", "label": "FALLOUTMAW.Calendar.Predefined.GolarianPF1E", "config":  true, "notes":  false},
+  {"key": "golarianpf2e", "label": "FALLOUTMAW.Calendar.Predefined.GolarianPF2E", "config":  true, "notes":  false},
+  {"key": "greyhawk", "label": "FALLOUTMAW.Calendar.Predefined.Greyhawk", "config":  true, "notes":  false},
+  {"key": "traveller-ic", "label": "FALLOUTMAW.Calendar.Predefined.TravellerIC", "config":  true, "notes":  false},
+  {"key": "warhammer", "label": "FALLOUTMAW.Calendar.Predefined.WarhammerIC", "config":  true, "notes":  false},
+  {"key": "symbaroum", "label": "FALLOUTMAW.Calendar.Predefined.SymbaroumIC", "config":  true, "notes":  false}
+]

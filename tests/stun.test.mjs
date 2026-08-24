@@ -4,15 +4,17 @@ import test from "node:test";
 
 import {
   STUN_EFFECT_KEY,
+  STUN_IMMUNITY_EFFECT_KEY,
   getActorStunDegree,
-  getResourceLimitState
+  getResourceLimitState,
+  isActorStunImmune
 } from "../src/combat/resource-limits.mjs";
 
-function actor(stun = 0, maximum = 10) {
+function actor(stun = 0, maximum = 10, stunImmunity = 0) {
   return {
     effects: [],
     system: {
-      combat: { stun },
+      combat: { stun, stunImmunity },
       resources: {
         actionPoints: { value: maximum, min: 0, max: maximum },
         reactionPoints: { value: maximum, min: 0, max: maximum },
@@ -25,6 +27,7 @@ function actor(stun = 0, maximum = 10) {
 
 test("stun is a clamped 0-100 effect value with its own key", async () => {
   assert.equal(STUN_EFFECT_KEY, "system.combat.stun");
+  assert.equal(STUN_IMMUNITY_EFFECT_KEY, "system.combat.stunImmunity");
   assert.equal(getActorStunDegree(actor(-10)), 0);
   assert.equal(getActorStunDegree(actor(37)), 37);
   assert.equal(getActorStunDegree(actor(999)), 100);
@@ -32,8 +35,22 @@ test("stun is a clamped 0-100 effect value with its own key", async () => {
   const model = await readFile(new URL("../src/data/models/actor-data-models.mjs", import.meta.url), "utf8");
   const keys = await readFile(new URL("../src/utils/effect-key-tokens.mjs", import.meta.url), "utf8");
   assert.match(model, /stun: new NumberField\(\{[^}]*min: 0, max: 100[^}]*persisted: false/);
+  assert.match(model, /stunImmunity: new NumberField\(\{[^}]*min: 0[^}]*persisted: false/);
   assert.match(keys, /label: "Оглушение, %"/);
   assert.match(keys, /path: STUN_EFFECT_KEY/);
+  assert.match(keys, /label: "Невосприимчивость к оглушению"/);
+  assert.match(keys, /path: STUN_IMMUNITY_EFFECT_KEY/);
+});
+
+test("stun immunity centrally disables every stun resource limit", () => {
+  const target = actor(100, 10, 1);
+  assert.equal(isActorStunImmune(target), true);
+  assert.equal(getActorStunDegree(target), 0);
+  assert.deepEqual(getResourceLimitState(target), { resources: {}, stun: 0 });
+
+  target.system.combat.stunImmunity = 0;
+  assert.equal(isActorStunImmune(target), false);
+  assert.equal(getActorStunDegree(target), 100);
 });
 
 test("stun blocks the same resource pools without changing their stored values", () => {

@@ -36,7 +36,6 @@ export const TEMPLATES = Object.freeze({
   trapPlacementControl: `systems/${SYSTEM_ID}/templates/actor/trap-placement-control.hbs`,
   campWindow: `systems/${SYSTEM_ID}/templates/actor/camp-window.hbs`,
   skillCheckControl: `systems/${SYSTEM_ID}/templates/actor/skill-check-control.hbs`,
-  worldTimeControl: `systems/${SYSTEM_ID}/templates/actor/world-time-control.hbs`,
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
   combatEndResolution: `systems/${SYSTEM_ID}/templates/actor/combat-end-resolution.hbs`,

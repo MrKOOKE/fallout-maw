@@ -1,0 +1,301 @@
+@import "src/styles/variables";
+.fallout-maw-calendar{
+  &.window-app.fallout-maw-calendar-compact-view {
+    header {
+      flex: 0 0 pxToRem(16) !important;
+      justify-content: flex-end;
+      align-content: center;
+
+      a.header-button.close {
+        i[class^='fa']{
+          font-size: pxToRem(10);
+        }
+        padding-top: 2px;
+        font-size: 0 !important;
+        line-height: 0;
+      }
+      > *:not(.close) {
+        display: none;
+      }
+    }
+    .window-content{
+      position: unset;
+      backdrop-filter: unset;
+      .fallout-maw-calendar-main-wrapper{
+        padding: $spacer-quarter;
+        .fallout-maw-calendar-control{
+          font-size: 0.625rem !important;
+          line-height: 0.625rem !important;
+          svg{
+            height: 0.875rem;
+          }
+          span{
+            font-size: 0.625rem !important;
+          }
+        }
+        .fallout-maw-calendar-header-add-left{
+          position: absolute;
+          top: 0;
+          left: $spacer-quarter;
+          height: pxToRem(16);
+          display: flex;
+          flex-wrap: nowrap;
+          flex-direction: row;
+          align-items: center;
+          z-index: 1;
+          .fallout-maw-calendar-season{
+            margin-right: $spacer-half;
+            font-size: pxToRem(12);
+            line-height: pxToRem(16);
+            text-shadow: 1px 1px 0 black;
+            svg{
+              height: pxToRem(12);
+            }
+          }
+          .fallout-maw-calendar-moons{
+            flex: 0;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            position: relative;
+
+            &:hover {
+              .fallout-maw-calendar-moon-group-wrapper {
+                .fallout-maw-calendar-moon-group {
+                  display: flex;
+                  flex-wrap: wrap;
+                  justify-content: center;
+                  position: absolute;
+                  top: pxToRem(-5);
+                  left: pxToRem(-8);
+                  z-index: 100;
+                  border: 1px solid var(--cal-moon-group-border-color);
+                  border-radius: pxToRem(5);
+                  padding: 0.25rem;
+                  width: pxToRem(55);
+                  background-color: var(--cal-moon-group-bg-color);
+                  box-shadow: 1px 1px 5px var(--cal-moon-group-box-shadow-color);
+                  .fallout-maw-calendar-moon-phase{
+                    margin-right: 2px;
+                    margin-bottom: 2px;
+                  }
+                }
+              }
+            }
+
+            .fallout-maw-calendar-moon-group-wrapper{
+              display: flex;
+              margin-right: pxToRem(-7);
+              .fa{
+                font-size: pxToRem(11);
+                margin-left: pxToRem(-5);
+                margin-top: pxToRem(5);
+                z-index: 1;
+                text-shadow: -3px -1px var(--cal-moon-text-shadow);
+              }
+              .fallout-maw-calendar-moon-group{
+                display: none;
+              }
+            }
+
+            .fallout-maw-calendar-moon-phase{
+              height: pxToRem(16);
+              margin-top: pxToRem(2);
+            }
+            svg{
+              height: pxToRem(12);
+              width: pxToRem(12);
+              filter: drop-shadow(0px 0px 1px rgba(255, 255, 255, 0.4));
+            }
+          }
+        }
+        .fallout-maw-calendar-header-add-right{
+          position: absolute;
+          top: 0;
+          right: $spacer-quarter + pxToRem(14);
+          height: pxToRem(16);
+          display: flex;
+          flex-wrap: nowrap;
+          flex-direction: row;
+          .fallout-maw-calendar-note-buttons{
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            justify-content: flex-end;
+            align-items: stretch;
+            height: pxToRem(16);
+            margin-right: $spacer-quarter;
+            .fallout-maw-calendar-control{
+              background: unset;
+              border: unset;
+              border-radius: 0;
+              box-shadow: unset;
+              margin-bottom: 0;
+              padding: 0 $spacer-quarter;
+              &.fallout-maw-calendar-grey{
+                color: var(--comapct-header-control-grey);
+                &:hover{
+                  border-color: var(--btn-grey-border-color);
+                  background-color: var(--btn-grey-bg-color);
+                  color: var(--btn-grey-color);
+                }
+              }
+              &.fallout-maw-calendar-save{
+                color: var(--comapct-header-control-save);
+                &:hover{
+                  background-color: var(--btn-save-bg-color);
+                  border-color: var(--btn-save-border-color);
+                  color: var(--btn-save-color);
+                }
+              }
+              &.fallout-maw-calendar-secondary{
+                color: var(--comapct-header-control-secondary);
+                &:hover{
+                  background-color: var(--btn-secondary-bg-color);
+                  border-color: var(--btn-secondary-border-color);
+                  color: var(--btn-secondary-color);
+                }
+              }
+              &.fallout-maw-calendar-tertiary{
+                color: var(--comapct-header-control-tertiary);
+                &:hover{
+                  background-color: var(--btn-tertiary-bg-color);
+                  border-color: var(--btn-tertiary-border-color);
+                  color: var(--btn-tertiary-color);
+                }
+              }
+              &.fallout-maw-calendar-add-note{
+                white-space: nowrap;
+              }
+            }
+          }
+        }
+        .fallout-maw-calendar-date{
+          flex-basis: 100%;
+          margin-bottom: $spacer-quarter;
+          white-space: nowrap;
+          .fallout-maw-calendar-date-text{
+            width: fit-content;
+            margin: 0 auto;
+          }
+        }
+        .fallout-maw-calendar-clock-display{
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: $spacer-quarter;
+          .fallout-maw-calendar-clock{
+            background-color: rgba(0,0,0,0);
+            border: unset;
+            padding: 0;
+            margin: 0;
+
+            .fallout-maw-calendar-animated-clock{
+              svg{
+                width: pxToRem(20);
+                height: pxToRem(20);
+                margin-bottom: pxToRem(-4);
+              }
+            }
+
+            .fallout-maw-calendar-current-time{
+              font-size: 0.875rem;
+            }
+          }
+          .fallout-maw-calendar-time-keeper-buttons{
+            display: flex;
+            width: 2rem;
+            margin-left: $spacer-quarter;
+            opacity: 0.5;
+            transition: opacity 300ms;
+            .fallout-maw-calendar-control{
+              background: unset;
+              border: unset;
+              box-shadow: unset;
+              margin-bottom: 0;
+              padding: 0.15rem 0;
+              &.fallout-maw-calendar-save{
+                color: var(--btn-save-bg-color);
+              }
+              &.fallout-maw-calendar-secondary{
+                color: var(--btn-secondary-bg-color);
+                &:hover{
+                  color: var(--btn-secondary-bg-color);
+                }
+              }
+              &.fallout-maw-calendar-delete{
+                color: var(--btn-delete-bg-color);
+              }
+            }
+          }
+        }
+        .fallout-maw-calendar-unit-controls{
+          opacity: 0.5;
+          transition: opacity 300ms;
+          flex-wrap: nowrap;
+          padding-top: $spacer-quarter;
+          margin: 0 ($spacer-quarter * -1) ($spacer-quarter * -1);
+          justify-content: center;
+          .fallout-maw-calendar-control-group{
+            margin: 0 ($spacer-half - pxToRem(1)) 0 0;
+            &:first-child{
+              .fallout-maw-calendar-control:first-of-type{
+                border-bottom-left-radius: 0;
+                border-top-left-radius: 0;
+              }
+              .fallout-maw-calendar-control:last-of-type{
+                border-bottom-right-radius: 0;
+              }
+            }
+            &:last-child{
+              .fallout-maw-calendar-control:first-of-type{
+                border-bottom-left-radius: 0;
+              }
+              .fallout-maw-calendar-control:last-of-type{
+                border-bottom-right-radius: 0;
+                border-top-right-radius: 0;
+              }
+            }
+          }
+          .fallout-maw-calendar-adjustable-controls{
+            .fallout-maw-calendar-control{
+              padding-left: 0.2rem;
+              padding-right: 0.2rem;
+              width: calc(5ch + (0.2rem * 2));
+              flex: 1;
+            }
+          }
+        }
+        .fallout-maw-calendar-side-drawer{
+          top: pxToRem(10);
+          height: calc(100% - #{pxToRem(10)});
+          &.fallout-maw-calendar-down{
+            min-width: pxToRem(225);
+          }
+          &.fallout-maw-calendar-open{
+            height: pxToRem(200);
+            &.fallout-maw-calendar-down{
+              top: 100%;
+            }
+          }
+        }
+      }
+    }
+    &:hover{
+      .window-content{
+        .fallout-maw-calendar-main-wrapper{
+          .fallout-maw-calendar-unit-controls{
+            opacity: 1;
+          }
+          .fallout-maw-calendar-clock-display{
+            .fallout-maw-calendar-time-keeper-buttons{
+              opacity: 1;
+            }
+          }
+        }
+      }
+    }
+  }
+}

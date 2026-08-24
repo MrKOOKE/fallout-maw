@@ -14,15 +14,22 @@
     }
   ],
   "esmodules": [
+    "calendar/index.js",
     "src/main.mjs",
     "simple-quest/scripts/main.js"
   ],
   "styles": [
+    "calendar/styles/calendar.css",
     "styles/fallout-maw.css",
     "styles/combat-carousel.css",
     "simple-quest/styles/module.css"
   ],
   "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "calendar/lang/en.json"
+    },
     {
       "lang": "en",
       "name": "English",
@@ -32,6 +39,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/simple-quest.en.json"
+    },
+    {
+      "lang": "ru",
+      "name": "Русский",
+      "path": "calendar/lang/ru.json"
     },
     {
       "lang": "ru",

@@ -33,8 +33,9 @@ export function initEnrichers() {
                     const a = document.createElement("a");
                     a.classList.add("simple-quest-time");
                     a.draggable = false;
+                    const calendarApi = game.falloutMaW?.calendar?.api;
 
-                    if (!window.SimpleCalendar) {
+                    if (!calendarApi) {
                         a.innerHTML = `<i class="fa-duotone fa-hourglass-start"></i> ${game.i18n.localize(`${MODULE_ID}.time-enricher.calendar-not-installed`)}`;
                         return a;
                     }
@@ -49,7 +50,7 @@ export function initEnrichers() {
                         time = parseInt(match[1]);
                     } else {
                         time = Date.parse(match[1]);
-                        if (window.SimpleCalendar) {
+                        if (calendarApi) {
                             //parse string, this is the format yyyy/mm/dd, hh:mm
                             const dateTimeParts = matchedTime.split(",");
                             const dateParts = dateTimeParts[0].trim().split("/");
@@ -60,22 +61,22 @@ export function initEnrichers() {
                             const hour = parseInt(timeParts[0]);
                             const minute = parseInt(timeParts[1]);
 
-                            time = window.SimpleCalendar.api.dateToTimestamp({ year: year, month: month, day: day, hour: hour, minute: minute });
+                            time = calendarApi.dateToTimestamp({ year: year, month: month, day: day, hour: hour, minute: minute });
                         }
                     }
 
-                    const scDateTime = window.SimpleCalendar.api.timestampToDate(time);
-                    a.dataset.tooltip = `${scDateTime.display.date} ${scDateTime.display.time}`;
+                    const calendarDateTime = calendarApi.timestampToDate(time);
+                    a.dataset.tooltip = `${calendarDateTime.display.date} ${calendarDateTime.display.time}`;
                     a.dataset.tooltipDirection = "UP";
 
-                    const delta = time - window.SimpleCalendar.api.timestamp();
+                    const delta = time - calendarApi.timestamp();
 
                     if (delta < 0) {
                         a.innerHTML = `<i class="fa-duotone fa-hourglass-start"></i> ${game.i18n.localize(`${MODULE_ID}.time-enricher.expired`)}`;
                         return a;
                     }
 
-                    const interval = window.SimpleCalendar.api.secondsToInterval(delta);
+                    const interval = calendarApi.secondsToInterval(delta);
                     let timeString = ``;
                     if (interval.year) timeString += `${interval.year}y `;
                     if (interval.month || interval.year) timeString += `${interval.month}m `;

@@ -6,7 +6,6 @@ const sources = Object.fromEntries(await Promise.all(
   [
     ["index", "../src/time/world-time-actor-index.mjs"],
     ["scope", "../src/time/world-time-actor-scope.mjs"],
-    ["control", "../src/apps/world-time-control.mjs"],
     ["damage", "../src/combat/damage-hub.mjs"],
     ["needs", "../src/needs/need-thresholds.mjs"],
     ["regeneration", "../src/needs/regeneration.mjs"],
@@ -103,18 +102,5 @@ test("empty time work exits before allocating per-Actor and per-Token operation 
   assert.ok(
     lightBody.indexOf("getActiveLightSourceEntries(tokenDocument)")
       < lightBody.indexOf("runTokenLightSourceOperation")
-  );
-});
-
-test("world-time UI updates its clock text without a full Application render", () => {
-  const refreshBody = functionBody(
-    sources.control,
-    "function rerenderWorldTimeControl",
-    "export class WorldTimeControl"
-  );
-  assert.match(refreshBody, /currentTime\.textContent = formatWorldTime/);
-  assert.ok(
-    refreshBody.indexOf("currentTime.textContent")
-      < refreshBody.indexOf("app.render({ force: true })")
   );
 });

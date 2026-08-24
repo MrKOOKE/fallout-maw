@@ -1,0 +1,41 @@
+@import "../variables";
+.fallout-maw-calendar{
+  .fallout-maw-calendar-configuration-wrapper{
+    .fallout-maw-calendar-progress{
+      .fallout-maw-calendar-progress-bar{
+        transition: width 100ms;
+      }
+    }
+    .fallout-maw-calendar-tab-section{
+      &.fallout-maw-calendar-calendar-selector{
+        ul {
+          &.fallout-maw-calendar-animate {
+            transition: max-height 500ms;
+          }
+        }
+      }
+    }
+    .fallout-maw-calendar-tab-wrapper{
+      .fallout-maw-calendar-settings-group{
+        &.fallout-maw-calendar-animate {
+          transition: opacity 400ms;
+        }
+      }
+      .form-group{
+        &.fallout-maw-calendar-animate {
+          transition: max-height 200ms;
+        }
+      }
+      .fallout-maw-calendar-options{
+        &.fallout-maw-calendar-animate {
+          transition: max-height 400ms;
+        }
+      }
+      .fallout-maw-calendar-section{
+        &.fallout-maw-calendar-animate {
+          transition: opacity 500ms;
+        }
+      }
+    }
+  }
+}

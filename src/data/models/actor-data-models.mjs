@@ -125,6 +125,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         stun: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0, persisted: false }),
+        stunImmunity: new NumberField({ required: true, integer: true, min: 0, initial: 0, persisted: false }),
+        unconsciousnessImmunity: new NumberField({ required: true, integer: true, min: 0, initial: 0, persisted: false }),
         unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         consciousnessRecoveryTarget: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
       }),

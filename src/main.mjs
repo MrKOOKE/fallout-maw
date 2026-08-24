@@ -57,8 +57,8 @@ import { registerTravelMovementHooks, registerTravelMovementSocket } from "./glo
 import { initializeCombatCarousel, registerCombatCarouselHooks } from "./apps/combat-carousel.mjs";
 import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
 import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control.mjs";
-import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerCampHooks, registerCampSocket } from "./apps/camp-window.mjs";
+import { registerCalendarRuntimeHooks } from "./calendar/runtime.mjs";
 import { registerDynamicLightingHooks } from "./time/dynamic-lighting.mjs";
 import { registerActorFactionConfigHooks } from "./apps/faction-settings-config.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
@@ -217,7 +217,7 @@ Hooks.once("init", () => {
   registerTravelGroupHudHooks();
   registerTravelMovementHooks();
   registerCombatCarouselHooks();
-  registerWorldTimeControlHooks();
+  registerCalendarRuntimeHooks();
   registerDynamicLightingHooks();
   registerCampHooks();
   registerActorFactionConfigHooks();

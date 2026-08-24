@@ -1,0 +1,17 @@
+@import "../variables";
+
+.fallout-maw-calendar{
+  &.journal-sheet {
+    .fallout-maw-calendar-options {
+      &.fallout-maw-calendar-animate {
+        transition: max-height 400ms;
+      }
+    }
+
+    .fallout-maw-calendar-page-list{
+      &.fallout-maw-calendar-animate{
+        transition: left 400ms;
+      }
+    }
+  }
+}

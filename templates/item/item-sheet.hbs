@@ -1567,6 +1567,51 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedLivingSteelSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Живая сталь</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Накопление</strong>
+          <label><span>Урон до ослабления</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.annulledDamageLimit" value="{{fixedLivingSteelSettings.annulledDamageLimit}}" min="1" step="1"></label>
+          <label><span>Сброс без урона, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resetAfterSeconds" value="{{fixedLivingSteelSettings.resetAfterSeconds}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Обычный режим</strong>
+          <label><span>Недостающие ОЗ за шаг, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.normalMissingHealthStepPercent" value="{{fixedLivingSteelSettings.normalMissingHealthStepPercent}}" min="1" step="0.1"></label>
+          <label><span>Стойкость за шаг</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resilienceBonusPerStep" value="{{fixedLivingSteelSettings.resilienceBonusPerStep}}" min="0" step="0.1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Ослабление</strong>
+          <label><span>Делитель Стойкости</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.weakenedResilienceDivisor" value="{{fixedLivingSteelSettings.weakenedResilienceDivisor}}" min="1" step="0.1"></label>
+          <label><span>Недостающие ОЗ за шаг, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.weakenedMissingHealthStepPercent" value="{{fixedLivingSteelSettings.weakenedMissingHealthStepPercent}}" min="1" step="0.1"></label>
+          <label><span>Длительность, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.weakenedDurationSeconds" value="{{fixedLivingSteelSettings.weakenedDurationSeconds}}" min="1" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedPainLordSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Владыка боли</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Полученный урон</strong>
+          <label><span>Энергии за 1 урон</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyPerDamage" value="{{fixedPainLordSettings.energyPerDamage}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Эффект на обидчике</strong>
+          <label><span>Урона за +1%</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.offenderDamagePerPercent" value="{{fixedPainLordSettings.offenderDamagePerPercent}}" min="0.01" step="0.1"></label>
+          <label><span>Максимум, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.offenderMaxPercent" value="{{fixedPainLordSettings.offenderMaxPercent}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Избыток Энергии</strong>
+          <label><span>Энергии за +1% урона</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overflowEnergyPerPercent" value="{{fixedPainLordSettings.overflowEnergyPerPercent}}" min="0.01" step="0.1"></label>
+          <label><span>Максимум, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overflowMaxPercent" value="{{fixedPainLordSettings.overflowMaxPercent}}" min="0" step="1"></label>
+          <label><span>Длительность, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overflowDurationSeconds" value="{{fixedPainLordSettings.overflowDurationSeconds}}" min="1" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

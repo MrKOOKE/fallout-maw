@@ -11,6 +11,10 @@ import {
 } from "../abilities/attack-action-settings.mjs";
 import { buildRequirementPercentModifierChanges } from "../items/requirement-modifiers.mjs";
 import { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
+import {
+  STUN_IMMUNITY_EFFECT_KEY,
+  UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY
+} from "../utils/active-effect-keys.mjs";
 
 export { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
 
@@ -215,7 +219,9 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   sandman: "sandman",
   nightmare: "nightmare",
   phantom: "phantom",
-  danceOfThousandShadows: "danceOfThousandShadows"
+  danceOfThousandShadows: "danceOfThousandShadows",
+  livingSteel: "livingSteel",
+  painLord: "painLord"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -974,6 +980,26 @@ function normalizeAbilityFunction(value = {}, index = 0) {
       equipmentPercent: fixedSettings.equipmentRequirementPercent,
       weaponPercent: fixedSettings.weaponRequirementPercent
     }));
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
+    changes = normalizeAbilityChanges([
+      {
+        id: "pain-lord-unconsciousness-immunity",
+        key: UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY,
+        type: "add",
+        value: "1",
+        phase: "initial",
+        priority: null
+      },
+      {
+        id: "pain-lord-stun-immunity",
+        key: STUN_IMMUNITY_EFFECT_KEY,
+        type: "add",
+        value: "1",
+        phase: "initial",
+        priority: null
+      }
+    ]);
   }
   conditions = finalizeTrialPrimaryChangeCompatibility(conditions, changes);
   const penalties = normalizeAbilityChanges(value?.penalties);
@@ -2285,6 +2311,12 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows) {
     return normalizeDanceOfThousandShadowsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel) {
+    return normalizeLivingSteelSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
+    return normalizePainLordSettings(value);
+  }
   return {};
 }
 
@@ -2310,6 +2342,31 @@ export function normalizeDanceOfThousandShadowsSettings(value = {}) {
     stealthBonusPerKill: toNumber(value?.stealthBonusPerKill ?? 10),
     damagePercentPerKill: toNumber(value?.damagePercentPerKill ?? 5),
     criticalChancePerKill: toNumber(value?.criticalChancePerKill ?? 2)
+  };
+}
+
+/** "Живая сталь": final-health-damage annulment with a temporary weakened state. */
+export function normalizeLivingSteelSettings(value = {}) {
+  return {
+    annulledDamageLimit: Math.max(1, toInteger(value?.annulledDamageLimit ?? 1000)),
+    normalMissingHealthStepPercent: Math.max(1, toNumber(value?.normalMissingHealthStepPercent ?? 1)),
+    weakenedMissingHealthStepPercent: Math.max(1, toNumber(value?.weakenedMissingHealthStepPercent ?? 4)),
+    resilienceBonusPerStep: Math.max(0, toNumber(value?.resilienceBonusPerStep ?? 2)),
+    weakenedResilienceDivisor: Math.max(1, toNumber(value?.weakenedResilienceDivisor ?? 4)),
+    weakenedDurationSeconds: Math.max(1, toInteger(value?.weakenedDurationSeconds ?? 18)),
+    resetAfterSeconds: Math.max(1, toInteger(value?.resetAfterSeconds ?? 60))
+  };
+}
+
+/** "Владыка боли": damage-powered Energy, offender vulnerability, and overflow damage. */
+export function normalizePainLordSettings(value = {}) {
+  return {
+    energyPerDamage: Math.max(0, toInteger(value?.energyPerDamage ?? 1)),
+    offenderDamagePerPercent: Math.max(0.01, toNumber(value?.offenderDamagePerPercent ?? 5)),
+    offenderMaxPercent: Math.max(0, toNumber(value?.offenderMaxPercent ?? 100)),
+    overflowEnergyPerPercent: Math.max(0.01, toNumber(value?.overflowEnergyPerPercent ?? 5)),
+    overflowMaxPercent: Math.max(0, toNumber(value?.overflowMaxPercent ?? 100)),
+    overflowDurationSeconds: Math.max(1, toInteger(value?.overflowDurationSeconds ?? 12))
   };
 }
 

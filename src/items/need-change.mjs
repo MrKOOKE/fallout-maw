@@ -127,11 +127,12 @@ export function normalizeNeedChangeOrganismDevelopment(entries = []) {
 }
 
 async function applyNeedChangeDamages(actor, damages = [], source = {}) {
+  const damagePacketId = String(source?.damagePacketId ?? "").trim() || foundry.utils.randomID();
   const requests = damages.map(entry => ({
     actor,
     amount: entry.value,
     damageTypeKey: entry.damageTypeKey,
-    source
+    source: { ...source, damagePacketId }
   }));
   if (!requests.length) return [];
   return requestDamageApplications(requests);

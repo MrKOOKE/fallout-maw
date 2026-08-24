@@ -131,7 +131,7 @@ test("damage workflow awaits one batched DEx persistence step before legacy obse
     notifySource.indexOf("await handler(context)")
       < notifySource.indexOf("Hooks.callAll(DAMAGE_APPLIED_HOOK, context)")
   );
-  assert.equal((damageHub.match(/await notifyDamageApplied\(/g) ?? []).length, 7);
+  assert.equal((damageHub.match(/await notifyDamageApplied\(/g) ?? []).length, 10);
 
   assert.match(fixedFunctions, /registerDamageAppliedHandler\(/);
   assert.doesNotMatch(fixedFunctions, /Hooks\.on\(DAMAGE_APPLIED_HOOK/);
