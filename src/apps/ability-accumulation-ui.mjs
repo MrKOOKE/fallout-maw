@@ -15,6 +15,7 @@ export function prepareAbilityAccumulationForDisplay(value = {}) {
     valueSourceChoices: choices(settings.valueSource, [
       [ABILITY_ACCUMULATION_VALUE_SOURCES.damageActualHealthLoss, "Фактическая потеря здоровья"],
       [ABILITY_ACCUMULATION_VALUE_SOURCES.damageAfterMitigation, "Урон после сопротивлений"],
+      [ABILITY_ACCUMULATION_VALUE_SOURCES.damageBeforeResistance, "Урон после Защиты, до Сопротивления"],
       [ABILITY_ACCUMULATION_VALUE_SOURCES.damageBarrierAbsorbed, "Урон, поглощённый барьером"],
       [ABILITY_ACCUMULATION_VALUE_SOURCES.damageAfterBarrier, "Урон после барьера"],
       [ABILITY_ACCUMULATION_VALUE_SOURCES.damageIncoming, "Входящий урон до сопротивлений"],

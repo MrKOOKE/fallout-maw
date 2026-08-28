@@ -28,6 +28,7 @@ test("resolved damage events reuse one indexed application breakdown", () => {
   assert.match(workflow, /const applicationBreakdownIndexes = new WeakMap\(\)/);
   assert.match(workflow, /buildDamageApplicationBreakdownIndex\(applications\)/);
   assert.match(requestResult, /getDamageEventIndexEntry\(/);
+  assert.match(requestResult, /amountBeforeResistance:\s*Math\.max\(0,\s*Number\(application\.amountBeforeResistance\)/);
   assert.doesNotMatch(requestResult, /\.filter\(/);
 });
 

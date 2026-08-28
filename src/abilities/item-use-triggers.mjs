@@ -419,11 +419,20 @@ async function selectRuntimeChanges(actor, abilityItem, abilityFunction = {}) {
       minimum: 1,
       context: "item-use change limit"
     }),
-    choose: ({ changes, selectionIds, limit, actor: evaluationActor }) => requestLimitedChangeSelection({
+    choose: ({
+      changes,
+      selectionIds,
+      limit,
+      minimum,
+      selectionMode,
+      actor: evaluationActor
+    }) => requestLimitedChangeSelection({
       abilityName: abilityItem.name,
       changes,
       selectionIds,
       limit,
+      minimum,
+      selectionMode,
       evaluationActors: [evaluationActor]
     })
   });

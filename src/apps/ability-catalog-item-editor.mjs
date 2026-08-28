@@ -34,6 +34,7 @@ import {
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_ATTACK_DISTANCE_MODES,
   ABILITY_ATTACK_DISTANCE_SIDES,
+  ABILITY_CHANGE_SELECTION_MODES,
   ABILITY_CHANGE_VALUE_SOURCES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
@@ -95,6 +96,8 @@ import {
   normalizeNightmareSettings,
   normalizePhantomSettings,
   normalizeDanceOfThousandShadowsSettings,
+  normalizeExplosiveResilienceSettings,
+  normalizeLastDropSettings,
   normalizeLivingSteelSettings,
   normalizePainLordSettings,
   normalizeSpecialMixSettings,
@@ -160,7 +163,10 @@ import {
   getEventReactionProgressLabel,
   isEventReactionProgressTracked
 } from "../events/event-reaction-progress.mjs";
-import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
+import {
+  ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
+  REACTION_POINTS_RESOURCE_KEY
+} from "../events/reaction-costs.mjs";
 import {
   SYSTEM_EVENT_PHASES,
   SYSTEM_EVENT_ROLES,
@@ -2931,6 +2937,29 @@ function readFixedFunctionSettings(row) {
       criticalChancePerKill: row.querySelector("[data-field='fixed.danceOfThousandShadows.criticalChancePerKill']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience) {
+    return {
+      damageRequired: row.querySelector("[data-field='fixed.explosiveResilience.damageRequired']")?.value,
+      durationSeconds: row.querySelector("[data-field='fixed.explosiveResilience.durationSeconds']")?.value,
+      offenseDamagePercent: row.querySelector("[data-field='fixed.explosiveResilience.offenseDamagePercent']")?.value,
+      offenseAccuracy: row.querySelector("[data-field='fixed.explosiveResilience.offenseAccuracy']")?.value,
+      offenseActionPoints: row.querySelector("[data-field='fixed.explosiveResilience.offenseActionPoints']")?.value,
+      defenseResistanceFormula: row.querySelector("[data-field='fixed.explosiveResilience.defenseResistanceFormula']")?.value,
+      defenseDodge: row.querySelector("[data-field='fixed.explosiveResilience.defenseDodge']")?.value,
+      defenseMovementPoints: row.querySelector("[data-field='fixed.explosiveResilience.defenseMovementPoints']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastDrop) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.lastDrop.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.lastDrop.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.lastDrop.overloadDurationSeconds']")?.value,
+      durationSeconds: row.querySelector("[data-field='fixed.lastDrop.durationSeconds']")?.value,
+      characteristicBonusFormula: row.querySelector("[data-field='fixed.lastDrop.characteristicBonusFormula']")?.value,
+      resistanceBonusFormula: row.querySelector("[data-field='fixed.lastDrop.resistanceBonusFormula']")?.value,
+      redistributionMinimumPercent: row.querySelector("[data-field='fixed.lastDrop.redistributionMinimumPercent']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel) {
     return {
       annulledDamageLimit: row.querySelector("[data-field='fixed.livingSteel.annulledDamageLimit']")?.value,
@@ -2944,6 +2973,7 @@ function readFixedFunctionSettings(row) {
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
     return {
+      useIncomingDamageBeforeResistance: row.querySelector("[data-field='fixed.painLord.useIncomingDamageBeforeResistance']")?.checked !== false,
       energyPerDamage: row.querySelector("[data-field='fixed.painLord.energyPerDamage']")?.value,
       offenderDamagePerPercent: row.querySelector("[data-field='fixed.painLord.offenderDamagePerPercent']")?.value,
       offenderMaxPercent: row.querySelector("[data-field='fixed.painLord.offenderMaxPercent']")?.value,
@@ -3238,6 +3268,9 @@ function readAbilityConditions(root) {
       limitFormula: row.querySelector("[data-field='conditionLimitFormula']")?.value
         ?? row.querySelector("[data-field='conditionLimit']")?.value
         ?? 1,
+      selectionMode: row.querySelector("[data-field='conditionSelectionMode']")?.value
+        ?? ABILITY_CHANGE_SELECTION_MODES.exact,
+      refresh: readBooleanField(row.querySelector("[data-field='conditionRefresh']"), false),
       usesSpent: row.querySelector("[data-field='conditionUsesSpent']")?.value ?? 0,
       usesMax: row.querySelector("[data-field='conditionUsesMax']")?.value ?? 1,
       name: row.querySelector("[data-field='conditionToggleName']")?.value
@@ -3511,6 +3544,12 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedDanceOfThousandShadowsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows
     ? normalizeDanceOfThousandShadowsSettings(normalized.fixedSettings)
     : null;
+  const fixedExplosiveResilienceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience
+    ? normalizeExplosiveResilienceSettings(normalized.fixedSettings)
+    : null;
+  const fixedLastDropSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastDrop
+    ? normalizeLastDropSettings(normalized.fixedSettings)
+    : null;
   const fixedLivingSteelSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel
     ? normalizeLivingSteelSettings(normalized.fixedSettings)
     : null;
@@ -3603,6 +3642,8 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedNightmareSettings,
     fixedPhantomSettings,
     fixedDanceOfThousandShadowsSettings,
+    fixedExplosiveResilienceSettings,
+    fixedLastDropSettings,
     fixedLivingSteelSettings,
     fixedPainLordSettings,
     fixedRageSettings,
@@ -4904,6 +4945,18 @@ function prepareConditionForDisplay(condition, {
     changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    changeSelectionModeChoices: [
+      {
+        value: ABILITY_CHANGE_SELECTION_MODES.exact,
+        label: "Ровно указанное число",
+        selected: condition?.selectionMode !== ABILITY_CHANGE_SELECTION_MODES.upTo
+      },
+      {
+        value: ABILITY_CHANGE_SELECTION_MODES.upTo,
+        label: "До указанного числа",
+        selected: condition?.selectionMode === ABILITY_CHANGE_SELECTION_MODES.upTo
+      }
+    ],
     effectCopyLimit: Math.max(1, toInteger(condition?.limit ?? 1)),
     effectCopyLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     usesSpent: Math.max(0, toInteger(condition?.usesSpent ?? 0)),
@@ -5727,6 +5780,13 @@ function getEventReactionResourceDefinitions() {
     resources.unshift({
       key: REACTION_POINTS_RESOURCE_KEY,
       label: localizeEventReactionUi("Resources.ReactionPoints", "Reaction points"),
+      supported: true
+    });
+  }
+  if (!resources.some(resource => resource.key === ACTION_OR_REACTION_POINTS_RESOURCE_KEY)) {
+    resources.unshift({
+      key: ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
+      label: "ОД/ОР",
       supported: true
     });
   }

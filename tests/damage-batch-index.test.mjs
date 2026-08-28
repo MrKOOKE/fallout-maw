@@ -35,6 +35,9 @@ test("barrier breakdown aggregation preserves totals, fallbacks, and depletion o
   const index = buildDamageApplicationBreakdownIndex([
     {
       damageEventIndex: 2,
+      incomingAmount: 20,
+      amountBeforeResistance: 14,
+      mitigationBlocked: 12,
       preBarrierAmount: 8,
       barrierAbsorbed: 3,
       amountAfterBarrier: 5,
@@ -44,6 +47,9 @@ test("barrier breakdown aggregation preserves totals, fallbacks, and depletion o
     },
     {
       damageEventIndex: "2",
+      incomingAmount: 10,
+      amountBeforeResistance: 9,
+      mitigationBlocked: 4,
       preBarrierAmount: 7,
       barrierAbsorbed: 1,
       amount: 6,
@@ -60,6 +66,9 @@ test("barrier breakdown aggregation preserves totals, fallbacks, and depletion o
   ]);
 
   assert.deepEqual(getDamageEventIndexEntry(index, 2), {
+    incomingAmount: 30,
+    amountBeforeResistance: 23,
+    mitigationBlocked: 16,
     preBarrierAmount: 15,
     barrierAbsorbed: 4,
     amountAfterBarrier: 11,
@@ -68,6 +77,9 @@ test("barrier breakdown aggregation preserves totals, fallbacks, and depletion o
     depleted: [firstDepletion, secondDepletion]
   });
   assert.deepEqual(getDamageEventIndexEntry(index, "3"), {
+    incomingAmount: 0,
+    amountBeforeResistance: 0,
+    mitigationBlocked: 0,
     preBarrierAmount: 0,
     barrierAbsorbed: 0,
     amountAfterBarrier: 0,

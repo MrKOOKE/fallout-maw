@@ -233,6 +233,7 @@ const actorDamageStatusSyncQueue = new Map();
 const actorDamageMutationQueue = new Map();
 const pendingDamageSocketRequests = new Map();
 const lethalDamagePreventionHandlers = new Set();
+const unconsciousnessPreventionHandlers = new Set();
 const finalHealthDamageInterceptors = new Map();
 const damageAppliedHandlers = new Map();
 let damageHubOperationQueue = Promise.resolve();
@@ -242,6 +243,13 @@ export function registerLethalDamagePreventionHandler(handler) {
   if (typeof handler !== "function") return () => undefined;
   lethalDamagePreventionHandlers.add(handler);
   return () => lethalDamagePreventionHandlers.delete(handler);
+}
+
+/** Give system abilities an awaited opportunity to prevent new unconsciousness. */
+export function registerUnconsciousnessPreventionHandler(handler) {
+  if (typeof handler !== "function") return () => undefined;
+  unconsciousnessPreventionHandlers.add(handler);
+  return () => unconsciousnessPreventionHandlers.delete(handler);
 }
 
 /**
@@ -1025,6 +1033,8 @@ function serializeDamageEventResult(result = {}) {
   return {
     actorUuid: String(result?.actor?.uuid ?? result?.actorUuid ?? ""),
     amount: Math.max(0, Number(result?.amount) || 0),
+    incomingAmount: Math.max(0, Number(result?.incomingAmount) || 0),
+    amountBeforeResistance: Math.max(0, Number(result?.amountBeforeResistance) || 0),
     potentialAmount: Math.max(0, Number(result?.potentialAmount) || 0),
     preBarrierAmount: Math.max(0, Number(result?.preBarrierAmount) || 0),
     barrierAbsorbed: Math.max(0, Number(result?.barrierAbsorbed) || 0),
@@ -1056,6 +1066,8 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationB
   if (!application) {
     if (hasApplicationBreakdown) {
       return {
+        incomingAmount: 0,
+        amountBeforeResistance: 0,
         mitigationBlocked: 0,
         preBarrierAmount: 0,
         barrierAbsorbed: 0,
@@ -1070,6 +1082,8 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationB
       };
     }
     return {
+      incomingAmount: Math.max(0, Number(result?.incomingAmount) || 0),
+      amountBeforeResistance: Math.max(0, Number(result?.amountBeforeResistance) || 0),
       mitigationBlocked: Math.max(0, Number(result?.mitigationBlocked) || 0),
       preBarrierAmount: Math.max(0, Number(result?.preBarrierAmount) || 0),
       barrierAbsorbed: Math.max(0, Number(result?.barrierAbsorbed) || 0),
@@ -1083,6 +1097,8 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationB
   }
   const depleted = application.depleted;
   return {
+    incomingAmount: Math.max(0, Number(application.incomingAmount) || 0),
+    amountBeforeResistance: Math.max(0, Number(application.amountBeforeResistance) || 0),
     mitigationBlocked: Math.max(0, Number(application.mitigationBlocked) || 0),
     preBarrierAmount: application.preBarrierAmount,
     barrierAbsorbed: application.barrierAbsorbed,
@@ -1287,6 +1303,8 @@ function serializeDamageCycleSocketResults(results = []) {
     return {
       actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
       amount: roundDamageAmount(result.amount),
+      incomingAmount: roundDamageAmount(result.incomingAmount),
+      amountBeforeResistance: roundDamageAmount(result.amountBeforeResistance),
       delayedAmount: roundDamageAmount(result.delayedAmount),
       preBarrierAmount: roundDamageAmount(result.preBarrierAmount),
       barrierAbsorbed: roundDamageAmount(result.barrierAbsorbed),
@@ -1556,8 +1574,11 @@ async function applyDamageApplicationNow(request = {}, {
       includeEquipmentConditionDamage: data.processDamageTypeSettings,
       includeResistanceOverheat: data.processDamageTypeSettings
     })
-    : { amount: requestedAmount, display: null };
+    : { amount: requestedAmount, amountBeforeResistance: requestedAmount, display: null };
   const mitigatedAmount = mitigationResult.amount;
+  const amountBeforeResistance = mode === MODE_DAMAGE
+    ? Math.max(0, Number(mitigationResult.amountBeforeResistance) || 0)
+    : 0;
   const effectiveAmountBeforeBarrier = mode === MODE_DAMAGE && data.processDamageTypeSettings
     ? hasInstalledProsthesis(actor, data.limbKey) || isIndependentHealthModelActive(actor)
       ? mitigatedAmount
@@ -1572,9 +1593,11 @@ async function applyDamageApplicationNow(request = {}, {
       await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
       await applyResistanceOverheats(actor, [mitigationResult.resistanceOverheat]);
     }
-    return {
+    const result = {
       actor,
       amount: 0,
+      incomingAmount: mode === MODE_DAMAGE ? requestedAmount : 0,
+      amountBeforeResistance,
       mitigationBlocked,
       healthDelta: 0,
       limbDelta: 0,
@@ -1584,6 +1607,11 @@ async function applyDamageApplicationNow(request = {}, {
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       source: data.source
     };
+    if (createSummary && mode === MODE_DAMAGE && requestedAmount > 0) {
+      await publishDamageSummaryMessage([result]);
+      await notifyDamageApplied([result]);
+    }
+    return result;
   }
 
   const barrierApplication = mode === MODE_DAMAGE
@@ -1608,6 +1636,8 @@ async function applyDamageApplicationNow(request = {}, {
     const result = {
       actor,
       amount: 0,
+      incomingAmount: mode === MODE_DAMAGE ? requestedAmount : 0,
+      amountBeforeResistance,
       potentialAmount: effectiveAmountBeforeBarrier,
       preBarrierAmount: effectiveAmountBeforeBarrier,
       barrierAbsorbed: barrierApplication.absorbed,
@@ -1645,6 +1675,8 @@ async function applyDamageApplicationNow(request = {}, {
       const result = {
         actor,
         amount: 0,
+        incomingAmount: requestedAmount,
+        amountBeforeResistance,
         potentialAmount: effectiveAmountBeforeBarrier,
         preBarrierAmount: effectiveAmountBeforeBarrier,
         barrierAbsorbed: barrierApplication.absorbed,
@@ -1659,7 +1691,7 @@ async function applyDamageApplicationNow(request = {}, {
         damageTypeKey: damageType?.key ?? data.damageTypeKey,
         source: data.source
       };
-      if (createSummary && result.barrierAbsorbed > 0) {
+      if (createSummary) {
         await publishDamageSummaryMessage([result]);
         await notifyDamageApplied([result]);
       }
@@ -1693,6 +1725,8 @@ async function applyDamageApplicationNow(request = {}, {
       const result = {
         actor,
         amount: 0,
+        incomingAmount: requestedAmount,
+        amountBeforeResistance,
         potentialAmount: effectiveAmountBeforeBarrier,
         preBarrierAmount: effectiveAmountBeforeBarrier,
         barrierAbsorbed: barrierApplication.absorbed,
@@ -1725,9 +1759,11 @@ async function applyDamageApplicationNow(request = {}, {
       requests: [finalRequest]
     });
     if (prevented) {
-      return {
+      const result = {
         actor,
         amount: 0,
+        incomingAmount: requestedAmount,
+        amountBeforeResistance,
         potentialAmount: effectiveAmountBeforeBarrier,
         preBarrierAmount: effectiveAmountBeforeBarrier,
         barrierAbsorbed: barrierApplication.absorbed,
@@ -1744,12 +1780,19 @@ async function applyDamageApplicationNow(request = {}, {
         damageTypeKey: damageType?.key ?? data.damageTypeKey,
         source: data.source
       };
+      if (createSummary) {
+        await publishDamageSummaryMessage([result]);
+        await notifyDamageApplied([result]);
+      }
+      return result;
     }
   }
 
   await applyPreHealthDamageTypeSettings();
 
   const result = await applyDirectDamageApplication(actor, { ...finalRequest, mode }, damageType);
+  result.incomingAmount = mode === MODE_DAMAGE ? requestedAmount : 0;
+  result.amountBeforeResistance = amountBeforeResistance;
   result.preBarrierAmount = effectiveAmountBeforeBarrier;
   result.barrierAbsorbed = barrierApplication.absorbed;
   result.amountAfterBarrier = effectiveAmount;
@@ -2288,6 +2331,14 @@ async function applyDamageApplicationsNow(
   const applicationDeltaIndex = buildDamageApplicationDeltaIndex(batchResult?.applicationDeltas);
   if (batchResult) {
     batchResult.mitigationBlocked = batchMitigationBlocked;
+    batchResult.incomingAmount = damageApplications.reduce(
+      (sum, entry) => sum + Math.max(0, roundDamageAmount(entry.incomingAmount)),
+      0
+    );
+    batchResult.amountBeforeResistance = damageApplications.reduce(
+      (sum, entry) => sum + Math.max(0, roundDamageAmount(entry.amountBeforeResistance)),
+      0
+    );
     batchResult.potentialAmount = batchPotentialAmountBeforeInterception;
     batchResult.preventedAmount = Math.max(0, Number(batchResult.preventedAmount) || 0)
       + finalHealthDamageInterception.preventedHealthDamage;
@@ -2310,6 +2361,9 @@ async function applyDamageApplicationsNow(
       return {
         damageEventIndex: entry.damageEventIndex,
         damageTypeKey: entry.damageTypeKey,
+        incomingAmount: Math.max(0, roundDamageAmount(entry.incomingAmount)),
+        amountBeforeResistance: Math.max(0, roundDamageAmount(entry.amountBeforeResistance)),
+        source: entry.source && typeof entry.source === "object" ? entry.source : {},
         mitigationBlocked: Math.max(0, roundDamageAmount(entry.damageMitigationDisplay?.blocked)),
         preBarrierAmount: entry.preBarrierAmount,
         barrierAbsorbed: entry.barrierAbsorbed,
@@ -2482,6 +2536,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       return {
         ...data,
         amount: 0,
+        incomingAmount: 0,
+        amountBeforeResistance: 0,
         delayedAmount,
         damageTypeKey: damageType?.key ?? data.damageTypeKey,
         damageType,
@@ -2533,7 +2589,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       equipmentConditionDamageState: includeEquipmentConditionDamage ? equipmentConditionDamageState : null,
       contextualAbilitySnapshots: preparationContext?.contextualAbilitySnapshots
     })
-    : { amount: data.amount, display: null };
+    : { amount: data.amount, amountBeforeResistance: data.amount, display: null };
+  const amountBeforeResistance = Math.max(0, Number(mitigationResult.amountBeforeResistance) || 0);
   const mitigatedAmount = mitigationResult.amount;
   const effectiveAmountBeforeBarrier = data.processDamageTypeSettings
     ? prosthesis || isIndependentHealthModelActive(actor)
@@ -2548,6 +2605,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       ? {
         ...data,
         amount: 0,
+        incomingAmount: Math.max(0, Number(data.amount) || 0),
+        amountBeforeResistance,
         damageTypeKey: damageType?.key ?? data.damageTypeKey,
         damageType,
         scope,
@@ -2568,6 +2627,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
     return {
       ...data,
       amount: 0,
+      incomingAmount: Math.max(0, Number(data.amount) || 0),
+      amountBeforeResistance,
       preBarrierAmount: effectiveAmountBeforeBarrier,
       barrierAbsorbed: barrierApplication.absorbed,
       amountAfterBarrier: 0,
@@ -2592,6 +2653,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
   return {
     ...data,
     amount: amountAfterNeed,
+    incomingAmount: Math.max(0, Number(data.amount) || 0),
+    amountBeforeResistance,
     preBarrierAmount: effectiveAmountBeforeBarrier,
     barrierAbsorbed: barrierApplication.absorbed,
     amountAfterBarrier: effectiveAmount,
@@ -4483,7 +4546,7 @@ async function synchronizeActorVitalStatuses(actor) {
     });
   }
   const dead = isActorHealthDepleted(actor) || hasDestroyedCriticalLimb(actor);
-  const unconscious = consciousnessEnabled && !dead && isActorConsciousnessDepleted(actor);
+  let unconscious = consciousnessEnabled && !dead && isActorConsciousnessDepleted(actor);
   if (dead) {
     await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.dead);
     await setActorStatus(actor, STATUS_EFFECTS.unconscious, false, { animate: false });
@@ -4491,6 +4554,18 @@ async function synchronizeActorVitalStatuses(actor) {
     return;
   }
 
+  if (unconscious && !actor.statuses?.has?.(STATUS_EFFECTS.unconscious)) {
+    for (const handler of unconsciousnessPreventionHandlers) {
+      try {
+        const result = await handler({ actor });
+        if (!result?.handled) continue;
+        unconscious = result.prevented ? isActorConsciousnessDepleted(actor) : unconscious;
+        break;
+      } catch (error) {
+        console.error("Fallout MaW | Unconsciousness prevention handler failed", error);
+      }
+    }
+  }
   if (unconscious) await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.unconscious);
   await setActorStatus(actor, STATUS_EFFECTS.dead, false);
   await setActorStatus(actor, STATUS_EFFECTS.unconscious, Boolean(unconscious));
@@ -9188,8 +9263,8 @@ function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "
 export function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
   const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
   const mitigationPenetration = getDamageMitigationPenetration(source);
-  if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
-  if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
+  if (!incomingDamage) return { amount: 0, amountBeforeResistance: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
+  if (!damageTypeKey) return { amount: incomingDamage, amountBeforeResistance: incomingDamage, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
 
   const includeEquipmentConditionDamage = shouldCalculateEquipmentConditionDamage(
     options.damageType,
@@ -9284,6 +9359,7 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
     blocked: defenseEquipmentContribution.blocked
   });
   remaining = Math.max(0, remaining - defenseBlocked);
+  const amountBeforeResistance = remaining;
   const contextualResistance = Number(contextual.resistance ?? preparedResistance) || 0;
   const rawResistance = percentageMitigation ? contextualResistance : Math.max(0, contextualResistance);
   const contextualResistanceWithoutEquipment = Number(
@@ -9316,6 +9392,7 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
     : 0;
   return {
     amount: finalAmount,
+    amountBeforeResistance,
     display: null,
     penetration: mitigationPenetration,
     penetrationSpent: spentPenetration,

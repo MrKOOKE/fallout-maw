@@ -5,6 +5,17 @@
  * without coupling those paths to a particular UI.
  */
 
+export const ABILITY_CHANGE_SELECTION_MODES = Object.freeze({
+  exact: "exact",
+  upTo: "upTo"
+});
+
+export function normalizeAbilityChangeSelectionMode(value = "") {
+  return value === ABILITY_CHANGE_SELECTION_MODES.upTo
+    ? ABILITY_CHANGE_SELECTION_MODES.upTo
+    : ABILITY_CHANGE_SELECTION_MODES.exact;
+}
+
 export function getSelectableAbilityChanges(changes = []) {
   const source = Array.isArray(changes) ? changes : Object.values(changes ?? {});
   return source
@@ -37,6 +48,32 @@ export function resolveLimitedChangeLimit(conditions = [], actor = null, {
 }
 
 /**
+ * Multiple limit rows remain conservative: every participating row must opt
+ * into `upTo`; legacy or mixed rows retain the historical exact-count rule.
+ */
+export function resolveLimitedChangeSelectionMode(conditions = []) {
+  const limited = getLimitedChangeConditions(conditions);
+  return limited.length > 0 && limited.every(condition => (
+    normalizeAbilityChangeSelectionMode(condition?.selectionMode)
+      === ABILITY_CHANGE_SELECTION_MODES.upTo
+  ))
+    ? ABILITY_CHANGE_SELECTION_MODES.upTo
+    : ABILITY_CHANGE_SELECTION_MODES.exact;
+}
+
+export function isLimitedChangeSelectionCountValid(count, limit, {
+  selectionMode = ABILITY_CHANGE_SELECTION_MODES.exact,
+  minimum = 1
+} = {}) {
+  const maximum = Math.max(1, toPositiveInteger(limit, 1));
+  const normalizedMinimum = Math.max(1, Math.min(maximum, toPositiveInteger(minimum, 1)));
+  const selected = Math.max(0, toNonNegativeInteger(count));
+  return normalizeAbilityChangeSelectionMode(selectionMode) === ABILITY_CHANGE_SELECTION_MODES.upTo
+    ? selected >= normalizedMinimum && selected <= maximum
+    : selected === maximum;
+}
+
+/**
  * Resolve the selected change rows.  `choose` receives the already filtered
  * rows and must return their ids, or null/undefined when the user cancels.
  */
@@ -48,48 +85,59 @@ export async function resolveLimitedChangeSet({
   choose = null
 } = {}) {
   const available = getSelectableAbilityChanges(changes);
+  const selectionMode = resolveLimitedChangeSelectionMode(conditions);
+  const minimum = 1;
   if (!available.length) {
-    return { changes: [], ids: [], limit: 0, cancelled: false, available };
+    return { changes: [], ids: [], limit: 0, minimum, selectionMode, cancelled: false, available };
   }
 
   const configuredLimit = resolveLimitedChangeLimit(conditions, actor, { evaluateLimit });
   const limit = configuredLimit === null
     ? available.length
     : Math.min(available.length, configuredLimit);
-  if (limit >= available.length) {
+  if (
+    selectionMode === ABILITY_CHANGE_SELECTION_MODES.exact
+    && limit >= available.length
+  ) {
     return {
       changes: available.map(entry => entry.change),
       ids: available.map(entry => entry.id),
       limit,
+      minimum,
+      selectionMode,
       cancelled: false,
       available
     };
   }
   if (typeof choose !== "function") {
-    return { changes: [], ids: [], limit, cancelled: true, available };
+    return { changes: [], ids: [], limit, minimum, selectionMode, cancelled: true, available };
   }
 
   const selectedIds = await choose({
     changes: available.map(entry => entry.change),
     selectionIds: available.map(entry => entry.id),
     limit,
+    minimum,
+    selectionMode,
     actor
   });
   if (!selectedIds) {
-    return { changes: [], ids: [], limit, cancelled: true, available };
+    return { changes: [], ids: [], limit, minimum, selectionMode, cancelled: true, available };
   }
 
   const selected = new Set((Array.isArray(selectedIds) ? selectedIds : [])
     .map(id => String(id ?? "").trim())
     .filter(Boolean));
   const selectedEntries = available.filter(entry => selected.has(entry.id));
-  if (selectedEntries.length !== limit) {
-    return { changes: [], ids: [], limit, cancelled: true, available };
+  if (!isLimitedChangeSelectionCountValid(selectedEntries.length, limit, { selectionMode, minimum })) {
+    return { changes: [], ids: [], limit, minimum, selectionMode, cancelled: true, available };
   }
   return {
     changes: selectedEntries.map(entry => entry.change),
     ids: selectedEntries.map(entry => entry.id),
     limit,
+    minimum,
+    selectionMode,
     cancelled: false,
     available
   };
@@ -157,4 +205,14 @@ function formatLimitedChangeNumber(value) {
 function defaultEvaluateLimit(formula) {
   const value = Number(formula);
   return Number.isFinite(value) ? value : 1;
+}
+
+function toPositiveInteger(value, fallback = 1) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.trunc(numeric) : fallback;
+}
+
+function toNonNegativeInteger(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.trunc(numeric) : 0;
 }

@@ -1567,6 +1567,53 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedExplosiveResilienceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Взрывная стойкость</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Накопление входящего урона</strong>
+          <label><span>Порог</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damageRequired" value="{{fixedExplosiveResilienceSettings.damageRequired}}" min="1" step="1"></label>
+          <label><span>Длительность бонуса, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.durationSeconds" value="{{fixedExplosiveResilienceSettings.durationSeconds}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Натиск</strong>
+          <label><span>Урон, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.offenseDamagePercent" value="{{fixedExplosiveResilienceSettings.offenseDamagePercent}}" step="1"></label>
+          <label><span>Точность</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.offenseAccuracy" value="{{fixedExplosiveResilienceSettings.offenseAccuracy}}" step="1"></label>
+          <label><span>ОД</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.offenseActionPoints" value="{{fixedExplosiveResilienceSettings.offenseActionPoints}}" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Оборона</strong>
+          <label><span>Сопротивления</span><input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.defenseResistanceFormula" value="{{fixedExplosiveResilienceSettings.defenseResistanceFormula}}"></label>
+          <label><span>Уклонение</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.defenseDodge" value="{{fixedExplosiveResilienceSettings.defenseDodge}}" step="1"></label>
+          <label><span>ОП</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.defenseMovementPoints" value="{{fixedExplosiveResilienceSettings.defenseMovementPoints}}" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedLastDropSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: До последней капли</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Срабатывание</strong>
+          <label><span>Расход энергии</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedLastDropSettings.energyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedLastDropSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedLastDropSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+          <label><span>Эффект, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.durationSeconds" value="{{fixedLastDropSettings.durationSeconds}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Бонусы</strong>
+          <label><span>Характеристики</span><input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.characteristicBonusFormula" value="{{fixedLastDropSettings.characteristicBonusFormula}}"></label>
+          <label><span>Сопротивления</span><input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resistanceBonusFormula" value="{{fixedLastDropSettings.resistanceBonusFormula}}"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перераспределение</strong>
+          <label><span>Минимальное состояние конечности, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.redistributionMinimumPercent" value="{{fixedLastDropSettings.redistributionMinimumPercent}}" min="-100" max="100" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedLivingSteelSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Живая сталь</h3>
@@ -1596,6 +1643,7 @@
       <div class="fallout-maw-fixed-settings">
         <div class="fallout-maw-fixed-settings-row">
           <strong>Полученный урон</strong>
+          <label><span>Считать до сопротивлений</span><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.fixedSettings.useIncomingDamageBeforeResistance" data-fixed-pain-lord-use-incoming-damage {{#if fixedPainLordSettings.useIncomingDamageBeforeResistance}}checked{{/if}}></label>
           <label><span>Энергии за 1 урон</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyPerDamage" value="{{fixedPainLordSettings.energyPerDamage}}" min="0" step="1"></label>
         </div>
         <div class="fallout-maw-fixed-settings-row">
@@ -3563,6 +3611,10 @@
               {{/if}}
               {{#if isLimitedChanges}}
               <label>
+                <span>Количество</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.selectionMode">{{#each changeSelectionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+              <label>
                 <span>Выбрать изменений</span>
                 <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
                 <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{changeLimit}}">
@@ -3573,6 +3625,10 @@
               </label>
               {{/if}}
               {{#if isSelectedChanges}}
+              <label>
+                <span>Количество</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.selectionMode">{{#each changeSelectionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
               <label>
                 <span>Выбрать изменений</span>
                 <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
@@ -3588,6 +3644,10 @@
                 <span>Максимум копий</span>
                 <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{effectCopyLimitFormula}}" data-formula-autocomplete="all">
                 <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{effectCopyLimit}}">
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.refresh" {{#if refresh}}checked{{/if}}>
+                <span>Обновлять существующий эффект</span>
               </label>
               {{/if}}
               {{#if isLimitedUses}}
@@ -4824,6 +4884,10 @@
               {{/if}}
               {{#if isLimitedChanges}}
               <label>
+                <span>Количество</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.selectionMode">{{#each changeSelectionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+              <label>
                 <span>Выбрать из изменений</span>
                 <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
                 <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{changeLimit}}">
@@ -4838,6 +4902,10 @@
                 <span>Максимум копий</span>
                 <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{effectCopyLimitFormula}}" data-formula-autocomplete="all">
                 <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{effectCopyLimit}}">
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.refresh" {{#if refresh}}checked{{/if}}>
+                <span>Обновлять существующий эффект</span>
               </label>
               {{/if}}
               {{#if isLimitedUses}}

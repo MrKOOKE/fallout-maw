@@ -1,6 +1,8 @@
 export const REACTION_POINTS_RESOURCE_KEY = "reactionPoints";
 export const HEALTH_RESOURCE_KEY = "health";
 export const POWER_RESOURCE_KEY = "power";
+/** Dynamic combat spend: OД on the actor's turn, OР outside it. */
+export const ACTION_OR_REACTION_POINTS_RESOURCE_KEY = "actionOrReactionPoints";
 export const STRICT_REACTION_RESOURCE_UPDATE_OPTION = "falloutMawReactionResourceUpdate";
 
 export const REACTION_COST_FAILURES = Object.freeze({

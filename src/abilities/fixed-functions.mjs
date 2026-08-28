@@ -51,6 +51,8 @@ import {
   normalizeNightmareSettings,
   normalizePhantomSettings,
   normalizeDanceOfThousandShadowsSettings,
+  normalizeExplosiveResilienceSettings,
+  normalizeLastDropSettings,
   normalizeLivingSteelSettings,
   normalizePainLordSettings,
   normalizeSpecialMixSettings,
@@ -212,6 +214,15 @@ import {
   swapWithDancePhantom
 } from "./dance-of-thousand-shadows.mjs";
 import {
+  getExplosiveResilienceProgressEntry,
+  registerExplosiveResilienceRuntime
+} from "./explosive-resilience.mjs";
+import {
+  getLastDropAbilityProgressEntry,
+  registerLastDropRuntime,
+  toggleLastDropUnconsciousnessTrigger
+} from "./last-drop.mjs";
+import {
   LIVING_STEEL_DAMAGE_INTERCEPTOR_ID,
   actorHasLivingSteel,
   abilityItemHasLivingSteel,
@@ -350,16 +361,24 @@ import {
   payAbilityFunctionResourceCosts,
   quoteAbilityFunctionResourceCosts
 } from "./trigger-cost-runtime.mjs";
+import {
+  ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
+  HEALTH_RESOURCE_KEY
+} from "../events/reaction-costs.mjs";
 import { requestLimitedChangeSelection } from "./purchase.mjs";
 import {
   getSelectableAbilityChanges,
+  isLimitedChangeSelectionCountValid,
   resolveLimitedChangeLimit,
+  resolveLimitedChangeSelectionMode,
   resolveLimitedChangeSet
 } from "./limited-changes.mjs";
 import {
   LIMITED_EFFECT_COPY_FLAG_KEY,
   buildLimitedEffectCopyFlag,
+  findLimitedEffectCopyToRefresh,
   hasLimitedEffectCopyCapacity,
+  isLimitedEffectCopyRefresh,
   releaseLimitedEffectCopyReservation,
   reserveLimitedEffectCopySlot
 } from "./limited-effect-copies.mjs";
@@ -920,6 +939,26 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience,
+    label: "Взрывная стойкость",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience,
+      fixedSettings: normalizeExplosiveResilienceSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.lastDrop,
+    label: "До последней капли",
+    active: true,
+    passive: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lastDrop,
+      fixedSettings: normalizeLastDropSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.livingSteel,
     label: "Живая сталь",
     passive: true,
@@ -979,6 +1018,8 @@ function registerFixedAbilityRuntimeHooks() {
   registerShadowEffectIndexHooks();
   registerPhantomRuntimeHooks();
   registerDanceOfThousandShadowsRuntimeHooks();
+  registerExplosiveResilienceRuntime();
+  registerLastDropRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
     applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
     apply: runFixedAbilityRuntimeHandler(applyLivingSteelFinalHealthDamage),
@@ -1312,6 +1353,12 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel) {
         return getLivingSteelAbilityProgressEntry(abilityItem, entry);
       }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience) {
+        return getExplosiveResilienceProgressEntry(abilityItem, entry);
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastDrop) {
+        return getLastDropAbilityProgressEntry(abilityItem, entry);
+      }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
         return getPainLordAbilityProgressEntry(abilityItem, entry);
       }
@@ -1595,6 +1642,12 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery) {
     await toggleExperimentalSurgery(item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastDrop) {
+    await toggleLastDropUnconsciousnessTrigger(item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
   }
@@ -2888,11 +2941,20 @@ async function useSelectedChangesApplication(scope, actor, abilityItem, abilityF
         minimum: 1,
         context: "selected changes limit"
       }),
-      choose: ({ changes, selectionIds, limit, actor: evaluationActor }) => requestLimitedChangeSelection({
+      choose: ({
+        changes,
+        selectionIds,
+        limit,
+        minimum,
+        selectionMode,
+        actor: evaluationActor
+      }) => requestLimitedChangeSelection({
         abilityName: getAbilityDisplayName(abilityItem),
         changes,
         selectionIds,
         limit,
+        minimum,
+        selectionMode,
         evaluationActors: [evaluationActor]
       })
     });
@@ -3059,11 +3121,20 @@ async function executeActiveApplicationUse(scope, {
         minimum: 1,
         context: "active application change limit"
       }),
-      choose: ({ changes, selectionIds, limit, actor: sourceActor }) => requestLimitedChangeSelection({
+      choose: ({
+        changes,
+        selectionIds,
+        limit,
+        minimum,
+        selectionMode,
+        actor: sourceActor
+      }) => requestLimitedChangeSelection({
         abilityName: getAbilityDisplayName(abilityItem),
         changes,
         selectionIds,
         limit,
+        minimum,
+        selectionMode,
         evaluationActors: settings.changeEvaluation === "source"
           ? [sourceActor]
           : allowed.map(entry => entry.target?.actor).filter(Boolean)
@@ -3728,12 +3799,16 @@ function getPrimaryActorToken(actor) {
 }
 
 function activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets = []) {
+  const refreshExisting = isLimitedEffectCopyRefresh(abilityFunction);
+  const options = getActiveApplicationEffectCopyOptions(sourceActor);
   return targets.every(target => hasLimitedEffectCopyCapacity({
     recipientActor: target?.actor,
     sourceActor,
     sourceItem: abilityItem,
     abilityFunction
-  }, getActiveApplicationEffectCopyOptions(sourceActor)));
+  }, options) || (
+    refreshExisting && findLimitedEffectCopyToRefresh(target?.actor, abilityItem, abilityFunction)
+  ));
 }
 
 function getActiveApplicationEffectCopyOptions(sourceActor) {
@@ -3847,6 +3922,15 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   const effectPlans = createsApplicationEffect
     ? plans.filter(plan => plan.changes?.length || createsRuntimeAuraEffect)
     : [];
+  if (effectPlans.length && isLimitedEffectCopyRefresh(abilityFunction)) {
+    for (const plan of effectPlans) {
+      plan.existingEffect = findLimitedEffectCopyToRefresh(
+        plan.target.actor,
+        abilityItem,
+        abilityFunction
+      );
+    }
+  }
   if (
     effectPlans.length
     && !activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets)
@@ -3864,6 +3948,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   // aura-only application therefore still reserves a copy and creates an
   // effect even when it has no ordinary change rows.
   for (const plan of effectPlans) {
+    if (plan.existingEffect) continue;
     const reservation = reserveLimitedEffectCopySlot({
       recipientActor: plan.target.actor,
       sourceActor,
@@ -3877,6 +3962,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     reservations.push(reservation);
   }
   const createdEffects = [];
+  const refreshedEffects = [];
   const itemMutationResults = [];
   try {
     for (const plan of effectPlans) {
@@ -3884,7 +3970,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
       const targetActor = target.actor;
       const changes = plan.changes;
       const signature = JSON.stringify(changes);
-      const created = await targetActor.createEmbeddedDocuments("ActiveEffect", [{
+      const effectData = {
         type: "base",
         name: getAbilityDisplayName(abilityItem),
         img: abilityItem.img || "icons/svg/aura.svg",
@@ -3926,11 +4012,20 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
             } : {})
           }
         }
-      }], {
+      };
+      const operationOptions = {
         animate: false,
         ...createAbilitySystemEventOptions(chainRef)
-      });
-      createdEffects.push(...(created ?? []));
+      };
+      if (plan.existingEffect) {
+        const previousData = plan.existingEffect.toObject?.();
+        const { type, ...updateData } = effectData;
+        await plan.existingEffect.update(updateData, operationOptions);
+        if (previousData) refreshedEffects.push({ effect: plan.existingEffect, previousData });
+      } else {
+        const created = await targetActor.createEmbeddedDocuments("ActiveEffect", [effectData], operationOptions);
+        createdEffects.push(...(created ?? []));
+      }
     }
     if (hasItemMutations) {
       const actors = new Map(targets
@@ -3946,12 +4041,27 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     }
   } catch (error) {
     await rollbackActiveApplicationItemMutations(itemMutationResults);
+    await restoreActiveApplicationEffectsSafely(refreshedEffects, chainRef);
     await deleteActiveApplicationEffectsSafely(createdEffects, chainRef);
     throw error;
   } finally {
     reservations.forEach(releaseLimitedEffectCopyReservation);
   }
   return true;
+}
+
+async function restoreActiveApplicationEffectsSafely(effects = [], chainRef = null) {
+  for (const { effect, previousData } of [...effects].reverse()) {
+    try {
+      const { _id, type, ...updateData } = previousData;
+      await effect?.update?.(updateData, {
+        animate: false,
+        ...createAbilitySystemEventOptions(chainRef)
+      });
+    } catch (error) {
+      console.error("Fallout MaW | Failed to restore a refreshed active application effect", error);
+    }
+  }
 }
 
 async function deleteActiveApplicationEffectsSafely(effects = [], chainRef = null) {
@@ -4130,6 +4240,19 @@ async function rollbackActiveApplicationPayment({
 
   const updates = {};
   let healthRefund = 0;
+  const combatActionPointReceipt = payment?.execution?.spendReceipt?.combatActionPointReceipt ?? null;
+  if (combatActionPointReceipt) {
+    try {
+      const restored = await refundCombatActionPointReceipt(actor, combatActionPointReceipt, {
+        suppressResourceNotification: true,
+        chainRef
+      });
+      if (restored < Math.max(0, toInteger(combatActionPointReceipt.amount))) complete = false;
+    } catch (error) {
+      complete = false;
+      console.error("Fallout MaW | Failed to refund active application ОД/ОР", error);
+    }
+  }
   const receiptCosts = payment?.execution?.spendReceipt?.costs;
   const paidCosts = Array.isArray(receiptCosts)
     ? receiptCosts
@@ -4138,6 +4261,7 @@ async function rollbackActiveApplicationPayment({
     const resourceKey = String(cost?.resourceKey ?? "").trim();
     const amount = Math.max(0, toInteger(cost?.amount));
     if (!resourceKey || amount <= 0) continue;
+    if (resourceKey === ACTION_OR_REACTION_POINTS_RESOURCE_KEY) continue;
     if (resourceKey === HEALTH_RESOURCE_KEY) {
       healthRefund += amount;
       continue;
@@ -4329,16 +4453,22 @@ async function processActiveApplicationEffectOperation(payload = {}) {
       context: "active application authority limit"
     })
   });
-  const expectedCount = configuredLimit === null
+  const maximumCount = configuredLimit === null
     ? available.length
     : Math.min(available.length, configuredLimit);
+  const selectionMode = resolveLimitedChangeSelectionMode(abilityFunction.conditions ?? []);
   const selectedIds = Array.from(new Set((payload?.selectedChangeIds ?? [])
     .map(id => String(id ?? "").trim())
     .filter(Boolean)));
-  if (selectedIds.length !== expectedCount) return false;
+  if (maximumCount === 0) {
+    if (selectedIds.length !== 0) return false;
+  } else if (!isLimitedChangeSelectionCountValid(selectedIds.length, maximumCount, {
+    selectionMode,
+    minimum: 1
+  })) return false;
   const selected = new Set(selectedIds);
   const selectedChanges = available.filter(entry => selected.has(entry.id)).map(entry => entry.change);
-  if (selectedChanges.length !== expectedCount) return false;
+  if (selectedChanges.length !== selectedIds.length) return false;
   const selectedFunction = {
     ...abilityFunction,
     changes: selectedChanges

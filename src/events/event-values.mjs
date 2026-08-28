@@ -20,6 +20,13 @@ export function getSystemEventNumericValue(valueSource = "", envelope = {}) {
   if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageIncoming) {
     return positiveNumber(data.amount);
   }
+  if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageBeforeResistance) {
+    return positiveNumber(
+      Object.hasOwn(result, "amountBeforeResistance")
+        ? result.amountBeforeResistance
+        : data.amount
+    );
+  }
   if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageAfterMitigation) {
     return positiveNumber(result.preBarrierAmount ?? result.amount);
   }

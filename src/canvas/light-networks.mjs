@@ -11,6 +11,7 @@ const { FormDataExtended } = foundry.applications.ux;
 
 const LIGHT_NETWORK_FLAG = "lightNetwork";
 const LIGHT_NETWORK_INTERACTION_FLAG = "lightNetworkInteraction";
+const LIGHT_NETWORK_VISUAL_FLAG = "lightNetworkVisual";
 const LIGHT_NETWORK_SOCKET = `system.${SYSTEM_ID}`;
 const LIGHT_NETWORK_SOCKET_SCOPE = "fallout-maw.lightNetworks";
 const DEFAULT_INTERACTION_IMAGE = "icons/svg/light.svg";
@@ -158,7 +159,8 @@ class FalloutMaWLightNetworkConfig extends AmbientLightConfig {
     return startLightNetworkInteractionPlacement({
       sourceLight: this.document,
       networkName: network.name,
-      image: network.interactionImage,
+      onImage: network.interactionImage,
+      offImage: network.interactionOffImage,
       scale: network.interactionScale,
       parentConfig: parent,
       networkConfig: this
@@ -280,6 +282,7 @@ export function registerLightNetworkHooks() {
     patchLightNetworkInteractionTileVisibility();
     registerLightNetworkDoubleClickListener();
     refreshLightNetworkInteractionTileVisibility();
+    void reconcileLightNetworkVisuals(canvas.scene);
   });
   Hooks.on("controlToken", refreshLightNetworkInteractionTileVisibility);
   Hooks.on("sightRefresh", refreshLightNetworkInteractionTileVisibility);
@@ -318,10 +321,40 @@ function onLightNetworkCanvasDoubleClick(event) {
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  new LightNetworkInteractionDialog({ tile }).render({ force: true });
+  if (shouldOpenLightNetworkInteractionDialog(tile)) {
+    new LightNetworkInteractionDialog({ tile }).render({ force: true });
+    return;
+  }
+  void toggleLightNetworkFromInteraction(tile);
 }
 
-async function startLightNetworkInteractionPlacement({ sourceLight, networkName = "", image = "", scale = DEFAULT_INTERACTION_SCALE, parentConfig = null, networkConfig = null } = {}) {
+async function toggleLightNetworkFromInteraction(tile) {
+  const interaction = getLightNetworkInteractionFlag(tile);
+  const scene = tile?.parent ?? canvas.scene;
+  if (!interaction || !scene) return false;
+  return requestLightNetworkState({
+    sceneId: scene.id ?? "",
+    networkName: interaction.networkName,
+    sourceLightUuid: interaction.sourceLightUuid,
+    enabled: !isLightNetworkEnabled({
+      scene,
+      networkName: interaction.networkName,
+      sourceLightUuid: interaction.sourceLightUuid
+    })
+  });
+}
+
+function shouldOpenLightNetworkInteractionDialog(tile) {
+  const interaction = getLightNetworkInteractionFlag(tile);
+  const scene = tile?.parent ?? canvas.scene;
+  if (!interaction || !scene) return false;
+  const sourceLight = (scene.lights?.contents ?? [])
+    .find(light => light.uuid === interaction.sourceLightUuid);
+  const light = sourceLight ?? getMatchingNetworkLights(scene, interaction).at(0);
+  return Boolean(light && getLightNetworkData(light).interactionOpenMenu);
+}
+
+async function startLightNetworkInteractionPlacement({ sourceLight, networkName = "", onImage = "", offImage = "", scale = DEFAULT_INTERACTION_SCALE, parentConfig = null, networkConfig = null } = {}) {
   cancelActiveCanvasTargetSelection({ reason: "superseded" });
   if (!game.user?.isGM) {
     ui.notifications.warn("Размещать источник взаимодействия сети может только GM.");
@@ -335,7 +368,8 @@ async function startLightNetworkInteractionPlacement({ sourceLight, networkName 
   const placement = activePlacement = {
     sourceLightUuid: sourceLight.uuid,
     networkName: normalizeNetworkName(networkName),
-    image: normalizeInteractionImage(image),
+    onImage: normalizeInteractionImage(onImage),
+    offImage: normalizeInteractionImage(offImage || onImage),
     scale: normalizeInteractionScale(scale),
     parentConfig,
     networkConfig,
@@ -461,6 +495,12 @@ async function finishLightNetworkInteractionPlacement(event) {
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
   const size = getSceneGridSize(canvas.scene);
   const center = getSnappedTileCenter(point, canvas.scene, size, size);
+  const enabled = isLightNetworkEnabled({
+    scene: canvas.scene,
+    networkName: placement.networkName,
+    sourceLightUuid: placement.sourceLightUuid
+  });
+  const image = enabled ? placement.onImage : placement.offImage;
   cancelLightNetworkInteractionPlacement({ placement, cancelled: false });
   await canvas.scene.createEmbeddedDocuments("Tile", [{
     name: `Сеть: ${getNetworkDisplayName(placement.networkName)}`,
@@ -470,7 +510,7 @@ async function finishLightNetworkInteractionPlacement(event) {
     height: size,
     elevation: 0,
     texture: {
-      src: placement.image,
+      src: image,
       anchorX: 0.5,
       anchorY: 0.5,
       fit: "contain",
@@ -485,8 +525,16 @@ async function finishLightNetworkInteractionPlacement(event) {
         [LIGHT_NETWORK_INTERACTION_FLAG]: {
           networkName: placement.networkName,
           sourceLightUuid: placement.sourceLightUuid,
-          image: placement.image,
+          image: placement.onImage,
           scale: placement.scale
+        },
+        [LIGHT_NETWORK_VISUAL_FLAG]: {
+          networkName: placement.networkName,
+          sourceLightUuid: placement.sourceLightUuid,
+          onImage: placement.onImage,
+          offImage: placement.offImage,
+          hideWhenOff: false,
+          active: enabled
         }
       }
     }
@@ -514,7 +562,7 @@ async function createLightNetworkPlacementPreview(placement) {
   layer.addChild(container);
   placement.preview = { container, graphics, sprite: null };
   try {
-    const texture = await foundry.canvas.loadTexture(placement.image);
+    const texture = await foundry.canvas.loadTexture(placement.onImage);
     if (
       activePlacement !== placement
       || placement.cleaned
@@ -527,7 +575,7 @@ async function createLightNetworkPlacementPreview(placement) {
     placement.preview.sprite = sprite;
     container.addChild(sprite);
   } catch (error) {
-    console.warn(`${SYSTEM_ID} | Light network placement preview texture failed to load: ${placement.image}`, error);
+    console.warn(`${SYSTEM_ID} | Light network placement preview texture failed to load: ${placement.onImage}`, error);
   }
 }
 
@@ -692,6 +740,15 @@ async function applyLightNetworkState({ sceneId = "", networkName = "", sourceLi
       falloutMawSystemEventChainRef: scope.chainRef,
       chainRef: scope.chainRef
     });
+    const visualTiles = getMatchingNetworkVisualTiles(scene, { networkName, sourceLightUuid });
+    if (visualTiles.length) {
+      await scene.updateEmbeddedDocuments("Tile", visualTiles.map(tile =>
+        getLightNetworkVisualUpdate(tile, enabled)
+      ), {
+        falloutMawSystemEventChainRef: scope.chainRef,
+        chainRef: scope.chainRef
+      });
+    }
     const afterEnabled = isLightNetworkEnabled({ scene, networkName, sourceLightUuid });
     await scope.emit("fallout-maw.environment.lightNetwork.changed", {
       data: {
@@ -699,7 +756,8 @@ async function applyLightNetworkState({ sceneId = "", networkName = "", sourceLi
         networkName: normalizeNetworkName(networkName),
         sourceLightUuid: String(sourceLightUuid ?? ""),
         enabled: afterEnabled,
-        lightUuids: lights.map(light => String(light.uuid ?? "")).filter(Boolean)
+        lightUuids: lights.map(light => String(light.uuid ?? "")).filter(Boolean),
+        visualTileUuids: visualTiles.map(tile => String(tile.uuid ?? "")).filter(Boolean)
       },
       before: { enabled: beforeEnabled },
       after: { enabled: afterEnabled },
@@ -719,6 +777,53 @@ function getMatchingNetworkLights(scene, { networkName = "", sourceLightUuid = "
     return lights.filter(light => light.uuid === sourceLightUuid);
   }
   return lights.filter(light => normalizeNetworkName(getLightNetworkData(light).name) === normalizedName);
+}
+
+function getMatchingNetworkVisualTiles(scene, { networkName = "", sourceLightUuid = "" } = {}) {
+  const normalizedName = normalizeNetworkName(networkName);
+  return (scene?.tiles?.contents ?? []).filter(tile => {
+    const visual = getLightNetworkVisualFlag(tile);
+    if (!visual) return false;
+    if (normalizedName) return visual.networkName === normalizedName;
+    return visual.sourceLightUuid === String(sourceLightUuid ?? "");
+  });
+}
+
+function getLightNetworkVisualUpdate(tile, enabled) {
+  const visual = getLightNetworkVisualFlag(tile);
+  const image = enabled ? visual.onImage : visual.offImage;
+  const update = {
+    _id: tile.id,
+    hidden: visual.hideWhenOff ? !enabled : Boolean(tile.hidden),
+    alpha: enabled ? visual.onAlpha : visual.offAlpha,
+    [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_VISUAL_FLAG}.active`]: Boolean(enabled)
+  };
+  if (image) update["texture.src"] = image;
+  return update;
+}
+
+async function reconcileLightNetworkVisuals(scene) {
+  if (!scene || !game.user?.isActiveGM) return false;
+  const updates = [];
+  for (const tile of scene.tiles?.contents ?? []) {
+    const visual = getLightNetworkVisualFlag(tile);
+    if (!visual) continue;
+    const enabled = isLightNetworkEnabled({
+      scene,
+      networkName: visual.networkName,
+      sourceLightUuid: visual.sourceLightUuid
+    });
+    const image = enabled ? visual.onImage : visual.offImage;
+    const imageMatches = !image || String(tile.texture?.src ?? "") === image;
+    const hiddenMatches = !visual.hideWhenOff || Boolean(tile.hidden) === !enabled;
+    const alpha = enabled ? visual.onAlpha : visual.offAlpha;
+    const alphaMatches = Math.abs((Number(tile.alpha) || 0) - alpha) < 0.0001;
+    if (visual.active === enabled && imageMatches && hiddenMatches && alphaMatches) continue;
+    updates.push(getLightNetworkVisualUpdate(tile, enabled));
+  }
+  if (!updates.length) return false;
+  await scene.updateEmbeddedDocuments("Tile", updates, { render: false });
+  return true;
 }
 
 function normalizeLightNetworkStateRequest({ sceneId = "", networkName = "", sourceLightUuid = "", enabled = false } = {}) {
@@ -948,10 +1053,27 @@ function getLightNetworkData(light) {
   return {
     name: normalizeNetworkName(stored.name),
     interactionImage: normalizeInteractionImage(stored.interactionImage),
+    interactionOffImage: normalizeInteractionImage(stored.interactionOffImage || stored.interactionImage),
     interactionScale: normalizeInteractionScale(stored.interactionScale),
+    interactionOpenMenu: Boolean(stored.interactionOpenMenu),
     onData: stored.onData ? extractAmbientLightState(stored.onData) : fallback,
     active: Boolean(stored.active),
     baseData: stored.baseData ? extractAmbientLightState(stored.baseData) : null
+  };
+}
+
+function getLightNetworkVisualFlag(tile) {
+  const stored = tile?.getFlag?.(SYSTEM_ID, LIGHT_NETWORK_VISUAL_FLAG);
+  if (!stored) return null;
+  return {
+    networkName: normalizeNetworkName(stored.networkName),
+    sourceLightUuid: String(stored.sourceLightUuid ?? ""),
+    onImage: normalizeVisualImage(stored.onImage) || normalizeVisualImage(tile?.texture?.src),
+    offImage: normalizeVisualImage(stored.offImage),
+    hideWhenOff: Boolean(stored.hideWhenOff),
+    onAlpha: normalizeVisualAlpha(stored.onAlpha, 1),
+    offAlpha: normalizeVisualAlpha(stored.offAlpha, 1),
+    active: Boolean(stored.active)
   };
 }
 
@@ -978,7 +1100,9 @@ function normalizeNetworkMetadata(data = {}) {
   return {
     name: normalizeNetworkName(data.name),
     interactionImage: normalizeInteractionImage(data.interactionImage),
-    interactionScale: normalizeInteractionScale(data.interactionScale)
+    interactionOffImage: normalizeInteractionImage(data.interactionOffImage || data.interactionImage),
+    interactionScale: normalizeInteractionScale(data.interactionScale),
+    interactionOpenMenu: Boolean(data.interactionOpenMenu)
   };
 }
 
@@ -988,6 +1112,16 @@ function normalizeNetworkName(value = "") {
 
 function normalizeInteractionImage(value = "") {
   return String(value ?? "").trim() || DEFAULT_INTERACTION_IMAGE;
+}
+
+function normalizeVisualImage(value = "") {
+  return String(value ?? "").trim();
+}
+
+function normalizeVisualAlpha(value, fallback = 1) {
+  const alpha = Number(value);
+  if (!Number.isFinite(alpha)) return Math.min(1, Math.max(0, Number(fallback) || 0));
+  return Math.min(1, Math.max(0, alpha));
 }
 
 function normalizeInteractionScale(value = DEFAULT_INTERACTION_SCALE) {

@@ -978,6 +978,9 @@ test("accumulator settings normalize safely and actual health loss does not coun
   assert.equal(getSystemEventNumericValue("damageAfterMitigation", {
     data: { result: { amount: 4, preBarrierAmount: 12, barrierAbsorbed: 8 } }
   }), 12);
+  assert.equal(getSystemEventNumericValue("damageBeforeResistance", {
+    data: { amount: 100, result: { amountBeforeResistance: 60, preBarrierAmount: 30 } }
+  }), 60);
   assert.equal(getSystemEventNumericValue("damageBarrierAbsorbed", {
     data: { result: { barrierAbsorbed: 8 } }
   }), 8);

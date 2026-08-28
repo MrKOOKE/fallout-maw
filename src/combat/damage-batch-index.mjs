@@ -40,6 +40,9 @@ export function buildDamageApplicationBreakdownIndex(applications = []) {
     const eventIndex = normalizeDamageEventIndex(application?.damageEventIndex);
     if (eventIndex === null) continue;
     const totals = index.get(eventIndex) ?? {
+      incomingAmount: 0,
+      amountBeforeResistance: 0,
+      mitigationBlocked: 0,
       preBarrierAmount: 0,
       barrierAbsorbed: 0,
       amountAfterBarrier: 0,
@@ -47,6 +50,9 @@ export function buildDamageApplicationBreakdownIndex(applications = []) {
       actualLimbDelta: 0,
       depleted: []
     };
+    totals.incomingAmount += toNonNegativeNumber(application?.incomingAmount);
+    totals.amountBeforeResistance += toNonNegativeNumber(application?.amountBeforeResistance);
+    totals.mitigationBlocked += toNonNegativeNumber(application?.mitigationBlocked);
     totals.preBarrierAmount += toNonNegativeNumber(application?.preBarrierAmount);
     totals.barrierAbsorbed += toNonNegativeNumber(application?.barrierAbsorbed);
     totals.amountAfterBarrier += toNonNegativeNumber(

@@ -29,7 +29,8 @@ test("limited effect copies normalize as non-OR metadata", () => {
       groupId: "",
       type: ABILITY_CONDITION_TYPES.limitedEffectCopies,
       limit: 1,
-      limitFormula: "1"
+      limitFormula: "1",
+      refresh: false
     });
   } finally {
     globalThis.foundry = previousFoundry;

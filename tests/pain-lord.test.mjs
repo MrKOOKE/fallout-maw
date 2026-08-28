@@ -21,6 +21,7 @@ import {
 test("pain lord defaults and fixed passive immunities match the design", async () => {
   assert.equal(ABILITY_FIXED_FUNCTION_KEYS.painLord, "painLord");
   assert.deepEqual(normalizePainLordSettings(), {
+    useIncomingDamageBeforeResistance: true,
     energyPerDamage: 1,
     offenderDamagePerPercent: 5,
     offenderMaxPercent: 100,
@@ -84,6 +85,146 @@ test("pain lord normalizes discrete Energy and duration settings to whole values
 
   assert.equal(normalized.energyPerDamage, 2);
   assert.equal(normalized.overflowDurationSeconds, 12);
+});
+
+test("pain lord uses damage after Defense and before Resistance and can restore actual-loss mode", async () => {
+  await withFoundryFixture(async ({ actors }) => {
+    const incomingVictim = createActor({ id: "incoming-victim", painLord: true });
+    const actualVictim = createActor({
+      id: "actual-victim",
+      painLord: true,
+      painLordSettings: { useIncomingDamageBeforeResistance: false }
+    });
+    const incomingOffender = createActor({ id: "incoming-offender" });
+    const actualOffender = createActor({ id: "actual-offender" });
+    for (const actor of [incomingVictim, actualVictim, incomingOffender, actualOffender]) {
+      actors.set(actor.uuid, actor);
+    }
+
+    await processPainLordDamageResults([{
+      actor: incomingVictim,
+      mode: "damage",
+      healthDelta: 20,
+      incomingAmount: 100,
+      amountBeforeResistance: 60,
+      damageApplications: [{
+        incomingAmount: 100,
+        amountBeforeResistance: 60,
+        source: { attackerActorUuid: incomingOffender.uuid }
+      }],
+      sourceDamageEntries: [{ damage: 20, source: { attackerActorUuid: incomingOffender.uuid } }]
+    }, {
+      actor: actualVictim,
+      mode: "damage",
+      healthDelta: 20,
+      incomingAmount: 100,
+      amountBeforeResistance: 60,
+      damageApplications: [{
+        incomingAmount: 100,
+        amountBeforeResistance: 60,
+        source: { attackerActorUuid: actualOffender.uuid }
+      }],
+      sourceDamageEntries: [{ damage: 20, source: { attackerActorUuid: actualOffender.uuid } }]
+    }]);
+
+    assert.equal(incomingVictim.system.resources.power.value, 60);
+    assert.equal(actualVictim.system.resources.power.value, 20);
+    assert.equal(incomingOffender.effects[0].system.changes[0].value, "12");
+    assert.equal(actualOffender.effects[0].system.changes[0].value, "4");
+  });
+});
+
+test("fully resisted damage still powers pain lord and marks its attacker once", async () => {
+  await withFoundryFixture(async ({ actors }) => {
+    const victim = createActor({
+      id: "resisted-victim",
+      energy: { value: 0, max: 100, spent: 100 },
+      painLord: true
+    });
+    const offender = createActor({ id: "resisted-offender" });
+    actors.set(victim.uuid, victim);
+    actors.set(offender.uuid, offender);
+
+    await processPainLordDamageResults([{
+      actor: victim,
+      mode: "damage",
+      incomingAmount: 35,
+      amountBeforeResistance: 35,
+      mitigationBlocked: 35,
+      healthDelta: 0,
+      source: { attackerActorUuid: offender.uuid }
+    }]);
+
+    assert.equal(victim.system.resources.power.value, 35);
+    assert.equal(victim.actorUpdates.length, 1);
+    assert.equal(offender.effectCreates.length, 1);
+    assert.equal(offender.effects[0].system.changes[0].value, "7");
+  });
+});
+
+test("blocked multi-source batches preserve attacker shares and convert only aggregate overflow", async () => {
+  await withFoundryFixture(async ({ actors }) => {
+    const victim = createActor({
+      id: "blocked-batch-victim",
+      energy: { value: 45, max: 50, spent: 5 },
+      painLord: true
+    });
+    const firstOffender = createActor({ id: "first-blocked-offender" });
+    const secondOffender = createActor({ id: "second-blocked-offender" });
+    for (const actor of [victim, firstOffender, secondOffender]) actors.set(actor.uuid, actor);
+
+    await processPainLordDamageResults([{
+      actor: victim,
+      mode: "damage",
+      incomingAmount: 45,
+      amountBeforeResistance: 45,
+      mitigationBlocked: 45,
+      healthDelta: 0,
+      damageApplications: [{
+        incomingAmount: 17,
+        amountBeforeResistance: 17,
+        source: { attackerActorUuid: firstOffender.uuid }
+      }, {
+        incomingAmount: 28,
+        amountBeforeResistance: 28,
+        source: { attackerActorUuid: secondOffender.uuid }
+      }],
+      sourceDamageEntries: []
+    }]);
+
+    assert.equal(victim.system.resources.power.value, 50);
+    assert.equal(victim.actorUpdates.length, 1);
+    assert.equal(victim.effects[0].system.changes[0].value, "8");
+    assert.equal(firstOffender.effects[0].system.changes[0].value, "3");
+    assert.equal(secondOffender.effects[0].system.changes[0].value, "5");
+  });
+});
+
+test("disabled pre-resistance mode ignores damage fully blocked before health", async () => {
+  await withFoundryFixture(async ({ actors }) => {
+    const victim = createActor({
+      id: "disabled-resisted-victim",
+      painLord: true,
+      painLordSettings: { useIncomingDamageBeforeResistance: false }
+    });
+    const offender = createActor({ id: "disabled-resisted-offender" });
+    actors.set(victim.uuid, victim);
+    actors.set(offender.uuid, offender);
+
+    await processPainLordDamageResults([{
+      actor: victim,
+      mode: "damage",
+      incomingAmount: 35,
+      mitigationBlocked: 35,
+      healthDelta: 0,
+      source: { attackerActorUuid: offender.uuid }
+    }]);
+
+    assert.equal(victim.system.resources.power.value, 0);
+    assert.equal(victim.actorUpdates.length, 0);
+    assert.equal(victim.effects.length, 0);
+    assert.equal(offender.effects.length, 0);
+  });
 });
 
 test("actual health damage restores Energy, marks the offender, and converts only overflow", async () => {
@@ -294,6 +435,7 @@ test("pain lord is registered through the awaited damage handler and both editor
   assert.match(catalogEditor, /fixedPainLordSettings/);
 
   const fields = [
+    "useIncomingDamageBeforeResistance",
     "energyPerDamage",
     "offenderDamagePerPercent",
     "offenderMaxPercent",
@@ -332,6 +474,16 @@ test("active-effect damage notifies once and source attribution uses actual heal
   assert.doesNotMatch(attributionSource, /damageRatio|requestedDamage|entry\.amount/);
 });
 
+test("fully delayed periodic damage is counted only when its ticks are applied", async () => {
+  const damageHub = await readFile(new URL("../src/combat/damage-hub.mjs", import.meta.url), "utf8");
+  const preparationStart = damageHub.indexOf("function prepareDamageBatchEntry");
+  const preparationEnd = damageHub.indexOf("async function applyDirectDamageApplication", preparationStart);
+  const preparationSource = damageHub.slice(preparationStart, preparationEnd);
+
+  assert.ok(preparationStart >= 0 && preparationEnd > preparationStart);
+  assert.match(preparationSource, /if\s*\(!immediateAmount\)\s*\{\s*return\s*\{[^}]*incomingAmount:\s*0/);
+});
+
 async function withFoundryFixture(run) {
   const previous = {
     game: globalThis.game,
@@ -365,7 +517,12 @@ async function withFoundryFixture(run) {
   }
 }
 
-function createActor({ id, energy = { value: 0, max: 100, spent: 100 }, painLord = false } = {}) {
+function createActor({
+  id,
+  energy = { value: 0, max: 100, spent: 100 },
+  painLord = false,
+  painLordSettings = {}
+} = {}) {
   const actor = {
     id,
     uuid: `Actor.${id}`,
@@ -425,7 +582,7 @@ function createActor({ id, energy = { value: 0, max: 100, spent: 100 }, painLord
           id: "pain-lord-function",
           type: "fixed",
           fixedKey: ABILITY_FIXED_FUNCTION_KEYS.painLord,
-          fixedSettings: {}
+          fixedSettings: painLordSettings
         }]
       }
     };

@@ -12,11 +12,18 @@ import {
 import { buildRequirementPercentModifierChanges } from "../items/requirement-modifiers.mjs";
 import { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
 import {
+  normalizeAbilityChangeSelectionMode
+} from "../abilities/limited-changes.mjs";
+import {
   STUN_IMMUNITY_EFFECT_KEY,
   UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY
 } from "../utils/active-effect-keys.mjs";
 
 export { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
+export {
+  ABILITY_CHANGE_SELECTION_MODES,
+  normalizeAbilityChangeSelectionMode
+} from "../abilities/limited-changes.mjs";
 
 export {
   createAttackActionSettings,
@@ -220,6 +227,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   nightmare: "nightmare",
   phantom: "phantom",
   danceOfThousandShadows: "danceOfThousandShadows",
+  explosiveResilience: "explosiveResilience",
+  lastDrop: "lastDrop",
   livingSteel: "livingSteel",
   painLord: "painLord"
 });
@@ -296,6 +305,7 @@ export const ABILITY_EVENT_REACTION_MODES = Object.freeze({
 
 export const ABILITY_ACCUMULATION_VALUE_SOURCES = Object.freeze({
   damageIncoming: "damageIncoming",
+  damageBeforeResistance: "damageBeforeResistance",
   damageAfterMitigation: "damageAfterMitigation",
   damageBarrierAbsorbed: "damageBarrierAbsorbed",
   damageAfterBarrier: "damageAfterBarrier",
@@ -1940,6 +1950,7 @@ export function normalizeAbilityCondition(value = {}) {
       // migrations.  New constructors may use an actor formula instead.
       limit: legacyLimit,
       limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
+      selectionMode: normalizeAbilityChangeSelectionMode(value?.selectionMode),
       durationSeconds: 0
     };
   }
@@ -1955,6 +1966,7 @@ export function normalizeAbilityCondition(value = {}) {
       type,
       limit: legacyLimit,
       limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
+      selectionMode: normalizeAbilityChangeSelectionMode(value?.selectionMode),
       // Persistent selection is stored on the condition itself; it never
       // removes the unselected changes (unlike limitedChanges).
       selectedKeys: Array.isArray(value?.selectedKeys)
@@ -2311,6 +2323,12 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows) {
     return normalizeDanceOfThousandShadowsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience) {
+    return normalizeExplosiveResilienceSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lastDrop) {
+    return normalizeLastDropSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel) {
     return normalizeLivingSteelSettings(value);
   }
@@ -2345,6 +2363,33 @@ export function normalizeDanceOfThousandShadowsSettings(value = {}) {
   };
 }
 
+/** "Взрывная стойкость": damage threshold followed by one selected package. */
+export function normalizeExplosiveResilienceSettings(value = {}) {
+  return {
+    damageRequired: Math.max(1, toInteger(value?.damageRequired ?? 200)),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 12)),
+    offenseDamagePercent: toNumber(value?.offenseDamagePercent ?? 15),
+    offenseAccuracy: toNumber(value?.offenseAccuracy ?? 20),
+    offenseActionPoints: toNumber(value?.offenseActionPoints ?? 1),
+    defenseResistanceFormula: String(value?.defenseResistanceFormula ?? "10+resilience/10").trim() || "10+resilience/10",
+    defenseDodge: toNumber(value?.defenseDodge ?? 30),
+    defenseMovementPoints: toNumber(value?.defenseMovementPoints ?? 4)
+  };
+}
+
+/** "До последней капли": emergency state and lethal-damage redistribution. */
+export function normalizeLastDropSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 50)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 200)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200)),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 24)),
+    characteristicBonusFormula: String(value?.characteristicBonusFormula ?? "1+resilience/100").trim() || "1+resilience/100",
+    resistanceBonusFormula: String(value?.resistanceBonusFormula ?? "10+resilience/5").trim() || "10+resilience/5",
+    redistributionMinimumPercent: Math.max(-100, Math.min(100, toNumber(value?.redistributionMinimumPercent ?? -50)))
+  };
+}
+
 /** "Живая сталь": final-health-damage annulment with a temporary weakened state. */
 export function normalizeLivingSteelSettings(value = {}) {
   return {
@@ -2361,6 +2406,7 @@ export function normalizeLivingSteelSettings(value = {}) {
 /** "Владыка боли": damage-powered Energy, offender vulnerability, and overflow damage. */
 export function normalizePainLordSettings(value = {}) {
   return {
+    useIncomingDamageBeforeResistance: value?.useIncomingDamageBeforeResistance !== false,
     energyPerDamage: Math.max(0, toInteger(value?.energyPerDamage ?? 1)),
     offenderDamagePerPercent: Math.max(0.01, toNumber(value?.offenderDamagePerPercent ?? 5)),
     offenderMaxPercent: Math.max(0, toNumber(value?.offenderMaxPercent ?? 100)),

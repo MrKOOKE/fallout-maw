@@ -125,6 +125,7 @@ test("disabled equipment wear does not scan Items before mitigation", () => {
   });
 
   assert.equal(result.amount, 3);
+  assert.equal(result.amountBeforeResistance, 3);
   assert.deepEqual(result.equipmentConditionDamage, []);
 });
 
@@ -139,6 +140,7 @@ test("percentage defense and resistance reduce the remaining damage in sequence"
   });
 
   assert.equal(result.amount, 25);
+  assert.equal(result.amountBeforeResistance, 50);
   assert.equal(result.penetrationSpent, 0);
 });
 

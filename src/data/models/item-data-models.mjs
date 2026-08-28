@@ -483,7 +483,7 @@ function abilityConditionField() {
       valueSource: new StringField({
         required: true,
         blank: false,
-        choices: ["damageIncoming", "damageAfterMitigation", "damageActualHealthLoss", "damageLimbLoss", "damageItemConditionLoss"],
+        choices: ["damageIncoming", "damageBeforeResistance", "damageAfterMitigation", "damageActualHealthLoss", "damageLimbLoss", "damageItemConditionLoss"],
         initial: "damageActualHealthLoss"
       }),
       percent: new NumberField({ required: true, min: 0, initial: 10 }),
@@ -660,6 +660,12 @@ function abilityConditionField() {
     auraRepeatSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     limitFormula: new StringField({ required: true, blank: true, initial: "1" }),
+    selectionMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["exact", "upTo"],
+      initial: "exact"
+    }),
     usesSpent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     usesMax: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     requiredCount: new StringField({ required: true, blank: true, initial: "1" }),

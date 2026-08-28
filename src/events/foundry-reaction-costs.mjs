@@ -14,11 +14,17 @@ import {
   getStrictActionPointState
 } from "../combat/strict-action-points.mjs";
 import {
+  getCombatActionPointState,
+  refundCombatActionPointReceipt,
+  spendCombatActionPointsWithReceipt
+} from "../combat/reaction-resources.mjs";
+import {
   applyDamageRequestsInCurrentHubOperation,
   requestDamageApplication,
   restoreActorHealthCost
 } from "../combat/damage-hub.mjs";
 import {
+  ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
   HEALTH_RESOURCE_KEY,
   POWER_RESOURCE_KEY,
   REACTION_POINTS_RESOURCE_KEY,
@@ -40,6 +46,7 @@ export function createFoundryReactionCostRegistry({
   const powerAdapter = createPowerResourceAdapter();
   const reactionAdapter = createActorResourceAdapter();
   const actionPointAdapter = createStrictActionPointAdapter();
+  const actionOrReactionPointAdapter = createActionOrReactionPointAdapter();
   const formulaEvaluator = evaluateCostFormula ?? ((formula, actor) => (
     evaluateFormula(formula, buildActorFormulaData(actor))
   ));
@@ -56,7 +63,8 @@ export function createFoundryReactionCostRegistry({
       [HEALTH_RESOURCE_KEY]: healthAdapter,
       [POWER_RESOURCE_KEY]: powerAdapter,
       [REACTION_POINTS_RESOURCE_KEY]: reactionAdapter,
-      [ACTION_RESOURCE_KEY]: actionPointAdapter
+      [ACTION_RESOURCE_KEY]: actionPointAdapter,
+      [ACTION_OR_REACTION_POINTS_RESOURCE_KEY]: actionOrReactionPointAdapter
     },
     defaultAdapter: ordinaryAdapter,
     spendVector: (actor, costs, context) => spendFoundryReactionCostVector(actor, costs, {
@@ -83,6 +91,9 @@ export function buildReactionResourceDefinitions(resourceSettings = null) {
   if (!definitions.some(entry => entry.key === REACTION_POINTS_RESOURCE_KEY)) {
     definitions.push({ key: REACTION_POINTS_RESOURCE_KEY, label: localizeReactionPoints() });
   }
+  if (!definitions.some(entry => entry.key === ACTION_OR_REACTION_POINTS_RESOURCE_KEY)) {
+    definitions.push({ key: ACTION_OR_REACTION_POINTS_RESOURCE_KEY, label: "ОД/ОР" });
+  }
   return definitions;
 }
 
@@ -97,17 +108,63 @@ export async function spendFoundryReactionCostVector(actor, costs = [], context 
     error.reason = "staleQuote";
     throw error;
   }
-  return spendActorResourceCostVector(actor, costs, {
-    context,
-    updateOptions: { chainRef: context.chainRef },
-    spendHealth: spendHealthCost,
-    restoreHealth: (targetActor, amount, rollbackContext = {}) => (
-      typeof rollbackContext.restoreHealthCost === "function"
-        ? rollbackContext.restoreHealthCost(targetActor, amount, rollbackContext)
-        : restoreActorHealthCost(targetActor, amount, rollbackContext)
-    ),
-    afterSpend: context.afterVectorSpend
-  });
+  const dynamicCost = (costs ?? []).find(cost => (
+    cost?.resourceKey === ACTION_OR_REACTION_POINTS_RESOURCE_KEY
+  ));
+  const dynamicAmount = Math.max(0, Math.trunc(Number(dynamicCost?.amount) || 0));
+  const ordinaryCosts = (costs ?? []).filter(cost => (
+    cost?.resourceKey !== ACTION_OR_REACTION_POINTS_RESOURCE_KEY
+  ));
+  let combatActionPointReceipt = null;
+  if (dynamicAmount > 0) {
+    const transaction = await spendCombatActionPointsWithReceipt(actor, dynamicAmount, {
+      suppressResourceNotification: true,
+      chainRef: context.chainRef
+    });
+    if (transaction.spent !== dynamicAmount || !transaction.receipt) {
+      const error = new Error(`Dynamic combat-point cost was not applied exactly (${transaction.spent} != ${dynamicAmount}).`);
+      error.reason = "spendFailed";
+      throw error;
+    }
+    combatActionPointReceipt = transaction.receipt;
+  }
+
+  try {
+    const receipt = await spendActorResourceCostVector(actor, ordinaryCosts, {
+      context,
+      updateOptions: { chainRef: context.chainRef },
+      spendHealth: spendHealthCost,
+      restoreHealth: (targetActor, amount, rollbackContext = {}) => (
+        typeof rollbackContext.restoreHealthCost === "function"
+          ? rollbackContext.restoreHealthCost(targetActor, amount, rollbackContext)
+          : restoreActorHealthCost(targetActor, amount, rollbackContext)
+      ),
+      afterSpend: context.afterVectorSpend
+    });
+    return {
+      ...receipt,
+      costs: [
+        ...(receipt?.costs ?? []),
+        ...(dynamicAmount > 0 ? [{
+          resourceKey: ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
+          amount: dynamicAmount
+        }] : [])
+      ],
+      combatActionPointReceipt
+    };
+  } catch (error) {
+    if (combatActionPointReceipt) {
+      try {
+        await refundCombatActionPointReceipt(actor, combatActionPointReceipt, {
+          suppressResourceNotification: true,
+          chainRef: context.chainRef
+        });
+      } catch (rollbackError) {
+        error.rollbackError ??= rollbackError;
+      }
+    }
+    throw error;
+  }
 }
 
 async function spendHealthCost(actor, amount, context = {}) {
@@ -192,6 +249,7 @@ function createActorResourceAdapter() {
 function notifyFoundryCombatResourceCosts(actor, costs = [], context = {}, notifyResourceSpend = null) {
   if (typeof notifyResourceSpend !== "function") return [];
   const resources = Object.fromEntries(COMBAT_ONLY_RESOURCE_KEYS
+    .filter(resourceKey => resourceKey !== ACTION_OR_REACTION_POINTS_RESOURCE_KEY)
     .map(resourceKey => [
       resourceKey,
       Math.max(0, Math.trunc(Number(
@@ -199,6 +257,13 @@ function notifyFoundryCombatResourceCosts(actor, costs = [], context = {}, notif
       ) || 0))
     ])
     .filter(([, amount]) => amount > 0));
+  const dynamicAmount = Math.max(0, Math.trunc(Number(
+    (costs ?? []).find(cost => cost?.resourceKey === ACTION_OR_REACTION_POINTS_RESOURCE_KEY)?.amount
+  ) || 0));
+  const paidResourceKey = String(context?.spendReceipt?.combatActionPointReceipt?.resourceKey ?? "").trim();
+  if (dynamicAmount > 0 && paidResourceKey) {
+    resources[paidResourceKey] = (resources[paidResourceKey] ?? 0) + dynamicAmount;
+  }
   if (!Object.keys(resources).length) return [];
   return notifyResourceSpend(actor, resources, context);
 }
@@ -227,6 +292,21 @@ function createStrictActionPointAdapter() {
     async spend() {
       // The Foundry integration commits strict ОД together with the other
       // ordinary actor resources in spendFoundryReactionCostVector.
+    }
+  };
+}
+
+function createActionOrReactionPointAdapter() {
+  return {
+    getAvailable(actor) {
+      if (!isCombatResourceCostActive(actor, ACTION_OR_REACTION_POINTS_RESOURCE_KEY)) return 0;
+      const state = getCombatActionPointState(actor);
+      if (!state) throw new Error(`Missing dynamic combat-point resource '${ACTION_OR_REACTION_POINTS_RESOURCE_KEY}'.`);
+      return state.value;
+    },
+    async spend() {
+      // The Foundry vector adapter commits the dynamic resource atomically
+      // with the remaining ability costs and retains a refundable receipt.
     }
   };
 }

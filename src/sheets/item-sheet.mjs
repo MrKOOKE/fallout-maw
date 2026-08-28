@@ -76,6 +76,7 @@ import {
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_ATTACK_DISTANCE_MODES,
   ABILITY_ATTACK_DISTANCE_SIDES,
+  ABILITY_CHANGE_SELECTION_MODES,
   ABILITY_CHANGE_VALUE_SOURCES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
@@ -143,6 +144,8 @@ import {
   normalizeNightmareSettings,
   normalizePhantomSettings,
   normalizeDanceOfThousandShadowsSettings,
+  normalizeExplosiveResilienceSettings,
+  normalizeLastDropSettings,
   normalizeLivingSteelSettings,
   normalizePainLordSettings,
   normalizeSpecialMixSettings,
@@ -192,7 +195,10 @@ import {
   isEventReactionProgressTracked,
   normalizeEventReactionProgressRequired
 } from "../events/event-reaction-progress.mjs";
-import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
+import {
+  ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
+  REACTION_POINTS_RESOURCE_KEY
+} from "../events/reaction-costs.mjs";
 import { createAttackActionTrial } from "../abilities/attack-action-settings.mjs";
 import {
   SYSTEM_EVENT_PHASES,
@@ -7445,6 +7451,12 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedDanceOfThousandShadowsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows
     ? normalizeDanceOfThousandShadowsSettings(entry?.fixedSettings)
     : null;
+  const fixedExplosiveResilienceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience
+    ? normalizeExplosiveResilienceSettings(entry?.fixedSettings)
+    : null;
+  const fixedLastDropSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastDrop
+    ? normalizeLastDropSettings(entry?.fixedSettings)
+    : null;
   const fixedLivingSteelSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.livingSteel
     ? normalizeLivingSteelSettings(entry?.fixedSettings)
     : null;
@@ -7546,6 +7558,8 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedNightmareSettings,
     fixedPhantomSettings,
     fixedDanceOfThousandShadowsSettings,
+    fixedExplosiveResilienceSettings,
+    fixedLastDropSettings,
     fixedLivingSteelSettings,
     fixedPainLordSettings,
     hasEventReaction,
@@ -8445,6 +8459,18 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    changeSelectionModeChoices: [
+      {
+        value: ABILITY_CHANGE_SELECTION_MODES.exact,
+        label: "Ровно указанное число",
+        selected: condition?.selectionMode !== ABILITY_CHANGE_SELECTION_MODES.upTo
+      },
+      {
+        value: ABILITY_CHANGE_SELECTION_MODES.upTo,
+        label: "До указанного числа",
+        selected: condition?.selectionMode === ABILITY_CHANGE_SELECTION_MODES.upTo
+      }
+    ],
     effectCopyLimit: Math.max(1, toInteger(condition?.limit ?? 1)),
     effectCopyLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     usesSpent: Math.max(0, toInteger(condition?.usesSpent ?? 0)),
@@ -9243,6 +9269,13 @@ function getAbilityEventReactionResourceDefinitions() {
     resources.unshift({
       key: REACTION_POINTS_RESOURCE_KEY,
       label: localizeAbilityEventReactionUi("Resources.ReactionPoints", "Reaction points"),
+      supported: true
+    });
+  }
+  if (!resources.some(resource => resource.key === ACTION_OR_REACTION_POINTS_RESOURCE_KEY)) {
+    resources.unshift({
+      key: ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
+      label: "ОД/ОР",
       supported: true
     });
   }
@@ -10459,6 +10492,18 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-where-are-you-going-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.painLord) {
+      const useIncomingDamage = Boolean(
+        row.querySelector("[data-fixed-pain-lord-use-incoming-damage]")?.checked
+      );
+      foundry.utils.setProperty(
+        submitData,
+        `${functionPath}.${functionIndex}.fixedSettings.useIncomingDamageBeforeResistance`,
+        useIncomingDamage
+      );
       continue;
     }
 

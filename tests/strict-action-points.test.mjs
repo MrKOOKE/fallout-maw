@@ -291,9 +291,10 @@ test("dynamic AP receipts spend one-time points first and restore their exact sp
   assert.equal(getOneTimeActionPointTotal(actor), 0);
 });
 
-test("only ОД, ОР, ОП and dodge are combat-only resources", () => {
+test("ОД, ОД/ОР, ОР, ОП and dodge are combat-only resources", () => {
   assert.deepEqual(COMBAT_ONLY_RESOURCE_KEYS, [
     "actionPoints",
+    "actionOrReactionPoints",
     "reactionPoints",
     "movementPoints",
     "dodge"

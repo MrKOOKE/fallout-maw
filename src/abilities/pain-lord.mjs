@@ -34,9 +34,12 @@ export async function processPainLordDamageResults(results = []) {
   for (const batch of batches.victims.values()) {
     const context = findPainLordAbilityContext(batch.actor);
     if (!context || !canManageActor(batch.actor)) continue;
+    const useIncomingDamage = context.settings.useIncomingDamageBeforeResistance;
+    const damage = useIncomingDamage ? batch.incomingDamage : batch.actualDamage;
+    const offenders = useIncomingDamage ? batch.incomingOffenders : batch.actualOffenders;
 
     const requestedEnergy = Math.max(0, Math.floor(
-      (batch.damage * context.settings.energyPerDamage) + 1e-9
+      (damage * context.settings.energyPerDamage) + 1e-9
     ));
     if (requestedEnergy > 0 && batch.actor.system?.resources?.[ENERGY_RESOURCE_KEY]) {
       const receipt = await restoreActorEnergy(batch.actor, requestedEnergy);
@@ -45,7 +48,7 @@ export async function processPainLordDamageResults(results = []) {
       }
     }
 
-    for (const [offenderUuid, offenderDamage] of batch.offenders) {
+    for (const [offenderUuid, offenderDamage] of offenders) {
       const offender = resolveActorUuid(offenderUuid);
       if (
         !offender
@@ -169,28 +172,88 @@ function collectPainLordDamageBatches(results = []) {
   for (const result of Array.from(results ?? []).flat(Infinity).filter(Boolean)) {
     if (result.mode && result.mode !== "damage") continue;
     const actor = resolveDamageResultActor(result);
-    const damage = Math.max(0, Number(result.healthDelta) || 0);
-    if (!actor?.uuid || damage <= 0 || isPhantomEntity(actor)) continue;
+    const actualDamage = Math.max(0, Number(result.healthDelta) || 0);
+    const incomingEntries = getPainLordIncomingDamageEntries(result);
+    const incomingDamage = incomingEntries.reduce(
+      (total, entry) => total + Math.max(0, Number(entry.damage) || 0),
+      0
+    );
+    if (!actor?.uuid || (actualDamage <= 0 && incomingDamage <= 0) || isPhantomEntity(actor)) continue;
 
     const batch = victims.get(actor.uuid) ?? {
       actor,
-      damage: 0,
-      offenders: new Map()
+      actualDamage: 0,
+      incomingDamage: 0,
+      actualOffenders: new Map(),
+      incomingOffenders: new Map()
     };
-    batch.damage += damage;
+    batch.actualDamage += actualDamage;
+    batch.incomingDamage += incomingDamage;
     victims.set(actor.uuid, batch);
 
     const sourceEntries = Array.isArray(result.sourceDamageEntries) && result.sourceDamageEntries.length
       ? result.sourceDamageEntries
-      : [{ source: result.source, damage }];
+      : [{ source: result.source, damage: actualDamage }];
     for (const entry of sourceEntries) {
       const offender = resolveDamageSourceActor(entry?.source);
       const offenderDamage = Math.max(0, Number(entry?.damage) || 0);
       if (!offender?.uuid || offender.uuid === actor.uuid || offenderDamage <= 0 || isPhantomEntity(offender)) continue;
-      batch.offenders.set(offender.uuid, (batch.offenders.get(offender.uuid) ?? 0) + offenderDamage);
+      batch.actualOffenders.set(
+        offender.uuid,
+        (batch.actualOffenders.get(offender.uuid) ?? 0) + offenderDamage
+      );
+    }
+    for (const entry of incomingEntries) {
+      const offender = resolveDamageSourceActor(entry?.source);
+      const offenderDamage = Math.max(0, Number(entry?.damage) || 0);
+      if (!offender?.uuid || offender.uuid === actor.uuid || offenderDamage <= 0 || isPhantomEntity(offender)) continue;
+      batch.incomingOffenders.set(
+        offender.uuid,
+        (batch.incomingOffenders.get(offender.uuid) ?? 0) + offenderDamage
+      );
     }
   }
   return { victims };
+}
+
+function getPainLordIncomingDamageEntries(result = {}) {
+  if (Array.isArray(result.damageApplications) && result.damageApplications.length) {
+    return result.damageApplications
+      .map(entry => ({
+        damage: Math.max(0, Number(
+          Object.hasOwn(entry ?? {}, "amountBeforeResistance")
+            ? entry.amountBeforeResistance
+            : entry?.incomingAmount
+        ) || 0),
+        source: entry?.source && typeof entry.source === "object" ? entry.source : {}
+      }))
+      .filter(entry => entry.damage > 0);
+  }
+  if (Object.hasOwn(result ?? {}, "amountBeforeResistance")) {
+    const damage = Math.max(0, Number(result.amountBeforeResistance) || 0);
+    return damage > 0 ? [{ damage, source: result.source }] : [];
+  }
+  if (
+    !(Number(result.incomingAmount) > 0)
+    && !(Number(result.preBarrierAmount) > 0)
+    && !(Number(result.mitigationBlocked) > 0)
+    && Array.isArray(result.sourceDamageEntries)
+    && result.sourceDamageEntries.length
+  ) {
+    return result.sourceDamageEntries
+      .map(entry => ({
+        damage: Math.max(0, Number(entry?.damage) || 0),
+        source: entry?.source && typeof entry.source === "object" ? entry.source : {}
+      }))
+      .filter(entry => entry.damage > 0);
+  }
+  const fallback = Math.max(
+    0,
+    Number(result.incomingAmount)
+      || ((Number(result.preBarrierAmount) || 0) + (Number(result.mitigationBlocked) || 0))
+      || Number(result.healthDelta)
+  );
+  return fallback > 0 ? [{ damage: fallback, source: result.source }] : [];
 }
 
 function findPainLordAbilityContext(actor) {

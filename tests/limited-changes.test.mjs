@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import {
+  ABILITY_CHANGE_SELECTION_MODES,
   formatLimitedChangeDisplayValue,
   getSelectableAbilityChanges,
+  isLimitedChangeSelectionCountValid,
   resolveLimitedChangeLimit,
+  resolveLimitedChangeSelectionMode,
   resolveLimitedChangeSet
 } from "../src/abilities/limited-changes.mjs";
 
@@ -53,6 +57,81 @@ test("limited changes open one exact-count selection and preserve source order",
   assert.equal(chooseCalls, 1);
   assert.equal(result.cancelled, false);
   assert.deepEqual(result.ids, ["a", "c"]);
+});
+
+test("legacy and mixed selection modes remain exact", async () => {
+  assert.equal(resolveLimitedChangeSelectionMode([
+    { type: "limitedChanges", selectionMode: "upTo" },
+    { type: "selectedChanges" }
+  ]), ABILITY_CHANGE_SELECTION_MODES.exact);
+  assert.equal(resolveLimitedChangeSelectionMode([
+    { type: "limitedChanges", selectionMode: "upTo" },
+    { type: "selectedChanges", selectionMode: "upTo" }
+  ]), ABILITY_CHANGE_SELECTION_MODES.upTo);
+
+  const result = await resolveLimitedChangeSet({
+    changes: CHANGES,
+    conditions: [{ type: "limitedChanges", limit: 2 }],
+    choose: async () => ["a"]
+  });
+  assert.equal(result.selectionMode, ABILITY_CHANGE_SELECTION_MODES.exact);
+  assert.equal(result.cancelled, true);
+});
+
+test("up-to selection accepts one through the evaluated maximum and preserves order", async () => {
+  let seen;
+  const result = await resolveLimitedChangeSet({
+    changes: CHANGES,
+    conditions: [{ type: "selectedChanges", limitFormula: "3", selectionMode: "upTo" }],
+    choose: async options => {
+      seen = options;
+      return ["c", "a"];
+    }
+  });
+
+  assert.equal(seen.minimum, 1);
+  assert.equal(seen.limit, 3);
+  assert.equal(seen.selectionMode, ABILITY_CHANGE_SELECTION_MODES.upTo);
+  assert.equal(result.cancelled, false);
+  assert.deepEqual(result.ids, ["a", "c"]);
+  assert.equal(isLimitedChangeSelectionCountValid(1, 3, {
+    selectionMode: ABILITY_CHANGE_SELECTION_MODES.upTo
+  }), true);
+  assert.equal(isLimitedChangeSelectionCountValid(3, 3, {
+    selectionMode: ABILITY_CHANGE_SELECTION_MODES.upTo
+  }), true);
+});
+
+test("up-to selection rejects zero and selections above the maximum", async () => {
+  for (const selectedIds of [[], ["a", "b", "c"]]) {
+    const result = await resolveLimitedChangeSet({
+      changes: CHANGES,
+      conditions: [{ type: "limitedChanges", limit: 2, selectionMode: "upTo" }],
+      choose: async () => selectedIds
+    });
+    assert.equal(result.cancelled, true);
+    assert.deepEqual(result.changes, []);
+  }
+  assert.equal(isLimitedChangeSelectionCountValid(0, 2, {
+    selectionMode: ABILITY_CHANGE_SELECTION_MODES.upTo
+  }), false);
+  assert.equal(isLimitedChangeSelectionCountValid(3, 2, {
+    selectionMode: ABILITY_CHANGE_SELECTION_MODES.upTo
+  }), false);
+});
+
+test("up-to mode still opens the picker when its maximum includes every change", async () => {
+  let chooseCalls = 0;
+  const result = await resolveLimitedChangeSet({
+    changes: CHANGES,
+    conditions: [{ type: "limitedChanges", limit: 99, selectionMode: "upTo" }],
+    choose: async () => {
+      chooseCalls += 1;
+      return ["b"];
+    }
+  });
+  assert.equal(chooseCalls, 1);
+  assert.deepEqual(result.ids, ["b"]);
 });
 
 test("limited changes cancel safely when the picker is closed or unavailable", async () => {
@@ -110,4 +189,47 @@ test("fallback selection ids survive filtering incomplete rows", async () => {
   });
   assert.equal(result.cancelled, false);
   assert.equal(result.changes[0], changes[2]);
+});
+
+test("fixed active-application paths preserve the up-to contract through the picker and GM authority", async () => {
+  const source = await readFile(new URL("../src/abilities/fixed-functions.mjs", import.meta.url), "utf8");
+  const selectedStart = source.indexOf("async function useSelectedChangesApplication");
+  const selectedEnd = source.indexOf("async function executeActiveApplicationUse", selectedStart);
+  const activeEnd = source.indexOf("async function gateActiveApplicationTargets", selectedEnd);
+  const authorityStart = source.indexOf("async function processActiveApplicationEffectOperation");
+  const authorityEnd = source.indexOf("function isActiveApplicationTokenDocumentAllowed", authorityStart);
+  assert.ok(selectedStart >= 0 && selectedEnd > selectedStart && activeEnd > selectedEnd);
+  assert.ok(authorityStart >= 0 && authorityEnd > authorityStart);
+
+  for (const flow of [
+    source.slice(selectedStart, selectedEnd),
+    source.slice(selectedEnd, activeEnd)
+  ]) {
+    assert.match(flow, /choose:\s*\(\{[\s\S]*?minimum,[\s\S]*?selectionMode,[\s\S]*?\}\)\s*=>\s*requestLimitedChangeSelection\(\{/);
+    assert.match(flow, /requestLimitedChangeSelection\(\{[\s\S]*?minimum,[\s\S]*?selectionMode,/);
+  }
+
+  const authority = source.slice(authorityStart, authorityEnd);
+  assert.match(authority, /resolveLimitedChangeSelectionMode\(abilityFunction\.conditions/);
+  assert.match(authority, /isLimitedChangeSelectionCountValid\(selectedIds\.length, maximumCount/);
+  assert.match(authority, /selectedChanges\.length !== selectedIds\.length/);
+});
+
+test("active applications refresh their existing limited copy without reserving or creating another", async () => {
+  const source = await readFile(new URL("../src/abilities/fixed-functions.mjs", import.meta.url), "utf8");
+  const capacityStart = source.indexOf("function activeApplicationTargetsHaveEffectCopyCapacity");
+  const capacityEnd = source.indexOf("function getActiveApplicationEffectCopyOptions", capacityStart);
+  const applyStart = source.indexOf("async function applyActiveApplicationEffectsDirect");
+  const applyEnd = source.indexOf("async function restoreActiveApplicationEffectsSafely", applyStart);
+  assert.ok(capacityStart >= 0 && capacityEnd > capacityStart);
+  assert.ok(applyStart >= 0 && applyEnd > applyStart);
+
+  const capacity = source.slice(capacityStart, capacityEnd);
+  assert.match(capacity, /isLimitedEffectCopyRefresh\(abilityFunction\)/);
+  assert.match(capacity, /findLimitedEffectCopyToRefresh\(target\?\.actor, abilityItem, abilityFunction\)/);
+
+  const apply = source.slice(applyStart, applyEnd);
+  assert.match(apply, /if \(plan\.existingEffect\) continue;[\s\S]*?reserveLimitedEffectCopySlot/);
+  assert.match(apply, /await plan\.existingEffect\.update\(updateData, operationOptions\)/);
+  assert.match(apply, /restoreActiveApplicationEffectsSafely\(refreshedEffects, chainRef\)/);
 });

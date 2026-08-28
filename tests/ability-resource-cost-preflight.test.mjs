@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 globalThis.foundry = {
-  utils: { randomID: () => "test-id" },
+  utils: {
+    deepClone: value => structuredClone(value),
+    mergeObject: (original, other) => ({ ...structuredClone(original), ...structuredClone(other) }),
+    randomID: () => "test-id"
+  },
   applications: {
     api: { DialogV2: {} },
     ux: { FormDataExtended: class FormDataExtended {} },
@@ -42,6 +46,29 @@ function createQuote(rows = [], actor = null) {
     costs,
     fingerprint: JSON.stringify(costs.map(cost => [cost.resourceKey, cost.amount])),
     costLines: []
+  };
+}
+
+function createDynamicPointCostActor({ rejectPowerUpdate = false } = {}) {
+  return {
+    uuid: "Actor.DynamicPointCost",
+    isOwner: true,
+    effects: [],
+    flags: {},
+    system: {
+      resources: {
+        actionPoints: { value: 5, min: 0, max: 5, spent: 0 },
+        reactionPoints: { value: 4, min: 0, max: 4, spent: 0 },
+        power: { value: 10, min: 0, max: 10, spent: 0 }
+      }
+    },
+    async update(changes) {
+      if (rejectPowerUpdate && Object.hasOwn(changes, "system.resources.power.value")) return;
+      for (const [path, value] of Object.entries(changes)) {
+        const match = /^system\.resources\.([^.]+)\.(value|spent)$/.exec(path);
+        if (match) this.system.resources[match[1]][match[2]] = value;
+      }
+    }
   };
 }
 
@@ -519,6 +546,104 @@ test("the shared Foundry registry spends health, power and custom resources outs
     movementPoints: 5,
     dodge: 5
   }]);
+});
+
+test("the dynamic ОД/ОР cost spends ОД on turn and ОР outside the actor turn", async () => {
+  const actor = createDynamicPointCostActor();
+  const notifications = [];
+  const registry = createFoundryReactionCostRegistry({
+    resourceSettings: [{ key: "power", label: "Энергия" }],
+    evaluateCostFormula: formula => Number(formula),
+    notifyResourceSpend: (_actor, resources) => {
+      notifications.push(resources);
+      return [];
+    },
+    logger: { warn() {}, error() {} }
+  });
+  const rows = [
+    { id: "dynamic", resourceKey: "actionOrReactionPoints", formula: "1" },
+    { id: "power", resourceKey: "power", formula: "2" }
+  ];
+  globalThis.game = { combat: null, combats: [] };
+  const outsideCombatQuote = await registry.quote(actor, [rows[0]]);
+  assert.equal(outsideCombatQuote.costs[0].amount, 0);
+  const outsideCombatPayment = await registry.execute(actor, [rows[0]], {
+    expectedFingerprint: outsideCombatQuote.fingerprint
+  });
+  assert.equal(outsideCombatPayment.ok, true);
+  assert.equal(actor.system.resources.actionPoints.value, 5);
+  assert.equal(actor.system.resources.reactionPoints.value, 4);
+
+  const combat = {
+    started: true,
+    combatants: [{ actor }],
+    combatant: { actor }
+  };
+  globalThis.game = {
+    combat,
+    combats: [combat],
+    settings: { get: () => ({ turnOrder: { scheme: "normal" } }) }
+  };
+
+  const actionQuote = await registry.quote(actor, rows);
+  assert.equal(actionQuote.affordable, true);
+  assert.equal(actionQuote.costs.find(cost => cost.resourceKey === "actionOrReactionPoints")?.available, 5);
+  const actionPayment = await registry.execute(actor, rows, {
+    expectedFingerprint: actionQuote.fingerprint
+  });
+  assert.equal(actionPayment.ok, true);
+  assert.equal(actionPayment.spendReceipt.combatActionPointReceipt.resourceKey, "actionPoints");
+  assert.equal(actor.system.resources.actionPoints.value, 4);
+  assert.equal(actor.system.resources.reactionPoints.value, 4);
+  assert.equal(actor.system.resources.power.value, 8);
+
+  combat.combatant = { actor: { uuid: "Actor.Other" } };
+  const reactionQuote = await registry.quote(actor, rows);
+  assert.equal(reactionQuote.affordable, true);
+  assert.equal(reactionQuote.costs.find(cost => cost.resourceKey === "actionOrReactionPoints")?.available, 4);
+  const reactionPayment = await registry.execute(actor, rows, {
+    expectedFingerprint: reactionQuote.fingerprint
+  });
+  assert.equal(reactionPayment.ok, true);
+  assert.equal(reactionPayment.spendReceipt.combatActionPointReceipt.resourceKey, "reactionPoints");
+  assert.equal(actor.system.resources.actionPoints.value, 4);
+  assert.equal(actor.system.resources.reactionPoints.value, 3);
+  assert.equal(actor.system.resources.power.value, 6);
+  assert.deepEqual(notifications, [{ actionPoints: 1 }, { reactionPoints: 1 }]);
+});
+
+test("the dynamic ОД/ОР cost is refunded when the remaining resource vector fails", async () => {
+  const actor = createDynamicPointCostActor({ rejectPowerUpdate: true });
+  const registry = createFoundryReactionCostRegistry({
+    resourceSettings: [{ key: "power", label: "Энергия" }],
+    evaluateCostFormula: formula => Number(formula),
+    notifyResourceSpend: () => [],
+    logger: { warn() {}, error() {} }
+  });
+  const rows = [
+    { id: "dynamic", resourceKey: "actionOrReactionPoints", formula: "1" },
+    { id: "power", resourceKey: "power", formula: "2" }
+  ];
+  const combat = {
+    started: true,
+    combatants: [{ actor }],
+    combatant: { actor }
+  };
+  globalThis.game = {
+    combat,
+    combats: [combat],
+    settings: { get: () => ({ turnOrder: { scheme: "normal" } }) }
+  };
+
+  const quote = await registry.quote(actor, rows);
+  const payment = await registry.execute(actor, rows, {
+    expectedFingerprint: quote.fingerprint
+  });
+  assert.equal(payment.ok, false);
+  assert.equal(payment.reason, "spendFailed");
+  assert.equal(actor.system.resources.actionPoints.value, 5);
+  assert.equal(actor.system.resources.reactionPoints.value, 4);
+  assert.equal(actor.system.resources.power.value, 10);
 });
 
 test("inactive combat-only costs do not require those resources to exist on an out-of-combat actor", async () => {

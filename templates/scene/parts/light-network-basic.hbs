@@ -17,13 +17,28 @@
                     Установить
                 </button>
             </div>
-            <p class="hint">Окно закроется, затем выберите место на сцене. Двойной клик по объекту откроет переключатель сети.</p>
+            <p class="hint">Окно закроется, затем выберите место на сцене. По умолчанию двойной клик сразу переключает сеть.</p>
+        </div>
+        <div class="form-group">
+            <label>Открывать меню по двойному клику</label>
+            <div class="form-fields">
+                <input type="checkbox" name="network.interactionOpenMenu" {{checked network.interactionOpenMenu}}>
+            </div>
+            <p class="hint">Включите, если вместо быстрого переключения нужно открывать прежнее полное окно сети.</p>
         </div>
         <div class="form-group fallout-maw-light-network-placement-row">
-            <label>Изображение переключателя</label>
+            <label>Изображение при включении</label>
             <div class="form-fields">
                 <file-picker type="image" name="network.interactionImage" value="{{network.interactionImage}}"></file-picker>
             </div>
+            <p class="hint">Эта картинка отображается у источника взаимодействия, пока сеть включена.</p>
+        </div>
+        <div class="form-group fallout-maw-light-network-placement-row">
+            <label>Изображение при выключении</label>
+            <div class="form-fields">
+                <file-picker type="image" name="network.interactionOffImage" value="{{network.interactionOffImage}}"></file-picker>
+            </div>
+            <p class="hint">При переключении сети плитка автоматически меняет изображение. Если оставить то же изображение, внешний вид не меняется.</p>
         </div>
         <div class="form-group fallout-maw-light-network-scale-row">
             <label>Множитель размера</label>

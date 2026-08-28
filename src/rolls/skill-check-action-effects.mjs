@@ -12,6 +12,19 @@ export const SKILL_CHECK_ACTIONS = Object.freeze([
     "stealth",
     "stealthReveal"
   ]),
+  createAction("grappleResistance", "Сопротивление захвату", [
+    "grappleResistance",
+    "grappleEscape"
+  ]),
+  createAction("knockdownResistance", "Сопротивление опрокидыванию", [
+    "knockdownResistance"
+  ]),
+  createAction("knockbackResistance", "Сопротивление отталкиванию", [
+    "knockbackResistance",
+    "activePushResistance",
+    "weaponPushResistance",
+    "keepAwayResistance"
+  ]),
   createAction("repair", "Ремонт", [
     "repair"
   ]),

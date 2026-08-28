@@ -15,7 +15,13 @@ import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateActorFormula, formatActorFormulaForDisplay } from "../utils/actor-formulas.mjs";
 import { getAbilityAcquisitionChanges } from "./evaluation.mjs";
-import { formatLimitedChangeDisplayValue, resolveLimitedChangeSet } from "./limited-changes.mjs";
+import {
+  ABILITY_CHANGE_SELECTION_MODES,
+  formatLimitedChangeDisplayValue,
+  isLimitedChangeSelectionCountValid,
+  normalizeAbilityChangeSelectionMode,
+  resolveLimitedChangeSet
+} from "./limited-changes.mjs";
 import { getResearchById } from "../research/storage.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -172,12 +178,21 @@ async function applyLimitedChangeSelectionsToGrant(itemData = {}, actor = null, 
         minimum: 1,
         context: limitContext
       })),
-      choose: chooseLimitedChanges ?? (({ changes, selectionIds, limit, actor: evaluationActor }) => (
+      choose: chooseLimitedChanges ?? (({
+        changes,
+        selectionIds,
+        limit,
+        minimum,
+        selectionMode,
+        actor: evaluationActor
+      }) => (
         requestLimitedChangeSelection({
           abilityName: itemData.name,
           changes,
           selectionIds,
           limit,
+          minimum,
+          selectionMode,
           evaluationActors: [evaluationActor]
         })
       ))
@@ -201,12 +216,21 @@ async function applyLimitedChangeSelectionsToGrant(itemData = {}, actor = null, 
           minimum: 1,
           context: limitContext
         })),
-        choose: chooseLimitedChanges ?? (({ changes, selectionIds, limit, actor: evaluationActor }) => (
+        choose: chooseLimitedChanges ?? (({
+          changes,
+          selectionIds,
+          limit,
+          minimum,
+          selectionMode,
+          actor: evaluationActor
+        }) => (
           requestLimitedChangeSelection({
             abilityName: itemData.name,
             changes,
             selectionIds,
             limit,
+            minimum,
+            selectionMode,
             evaluationActors: [evaluationActor]
           })
         ))
@@ -228,9 +252,14 @@ export async function requestLimitedChangeSelection({
   changes = [],
   selectionIds = [],
   limit = 1,
+  minimum = 1,
+  selectionMode = ABILITY_CHANGE_SELECTION_MODES.exact,
   evaluationActors = []
 } = {}) {
   const normalizedLimit = Math.max(1, Math.min(changes.length, toInteger(limit)));
+  const normalizedMinimum = Math.max(1, Math.min(normalizedLimit, toInteger(minimum)));
+  const normalizedSelectionMode = normalizeAbilityChangeSelectionMode(selectionMode);
+  const isUpTo = normalizedSelectionMode === ABILITY_CHANGE_SELECTION_MODES.upTo;
   const rows = changes.map((change, index) => {
     const id = String(selectionIds?.[index] ?? "").trim() || getChangeSelectionId(change, index);
     const display = getAbilityChangeDisplayData(change, evaluationActors);
@@ -258,8 +287,10 @@ export async function requestLimitedChangeSelection({
       <section class="fallout-maw-ability-change-picker">
         <header class="fallout-maw-ability-change-picker-summary">
           <div>
-            <h3>Выберите ${normalizedLimit} из ${changes.length}</h3>
-            <p class="hint">Нужно выбрать ровно ${normalizedLimit}.</p>
+            <h3>Выберите ${isUpTo ? "до " : ""}${normalizedLimit} из ${changes.length}</h3>
+            <p class="hint">${isUpTo
+              ? `Можно выбрать от ${normalizedMinimum} до ${normalizedLimit}.`
+              : `Нужно выбрать ровно ${normalizedLimit}.`}</p>
           </div>
           <output class="fallout-maw-ability-change-picker-counter" data-limited-change-counter aria-live="polite">
             <strong data-limited-change-selected>0</strong><span aria-hidden="true"> / </span><strong>${normalizedLimit}</strong>
@@ -271,7 +302,10 @@ export async function requestLimitedChangeSelection({
         </fieldset>
       </section>
     `,
-    render: (_event, dialog) => activateLimitedChangeSelection(dialog, normalizedLimit),
+    render: (_event, dialog) => activateLimitedChangeSelection(dialog, normalizedLimit, {
+      minimum: normalizedMinimum,
+      selectionMode: normalizedSelectionMode
+    }),
     buttons: [
       {
         action: "apply",
@@ -279,7 +313,10 @@ export async function requestLimitedChangeSelection({
         icon: "fa-solid fa-check",
         default: true,
         disabled: true,
-        callback: (_event, button) => collectLimitedChangeSelection(button.form, normalizedLimit)
+        callback: (_event, button) => collectLimitedChangeSelection(button.form, normalizedLimit, {
+          minimum: normalizedMinimum,
+          selectionMode: normalizedSelectionMode
+        })
       },
       {
         action: "cancel",
@@ -293,7 +330,10 @@ export async function requestLimitedChangeSelection({
   return result === false ? null : result;
 }
 
-function activateLimitedChangeSelection(dialog, limit) {
+function activateLimitedChangeSelection(dialog, limit, {
+  minimum = 1,
+  selectionMode = ABILITY_CHANGE_SELECTION_MODES.exact
+} = {}) {
   const form = dialog.element?.querySelector("form");
   if (!form) return;
 
@@ -302,12 +342,13 @@ function activateLimitedChangeSelection(dialog, limit) {
   const counterElement = form.querySelector("[data-limited-change-counter]");
   const update = () => {
     const selected = form.querySelectorAll("[data-limited-change-choice]:checked").length;
+    const valid = isLimitedChangeSelectionCountValid(selected, limit, { minimum, selectionMode });
     if (selectedElement) selectedElement.textContent = String(selected);
     if (counterElement) {
-      counterElement.classList.toggle("complete", selected === limit);
+      counterElement.classList.toggle("complete", valid);
       counterElement.setAttribute("aria-label", `Выбрано ${selected} из ${limit}`);
     }
-    if (applyButton) applyButton.disabled = selected !== limit;
+    if (applyButton) applyButton.disabled = !valid;
     for (const checkbox of form.querySelectorAll("[data-limited-change-choice]")) {
       const unavailable = !checkbox.checked && selected >= limit;
       checkbox.disabled = unavailable;
@@ -322,12 +363,18 @@ function activateLimitedChangeSelection(dialog, limit) {
   update();
 }
 
-function collectLimitedChangeSelection(form, limit) {
+function collectLimitedChangeSelection(form, limit, {
+  minimum = 1,
+  selectionMode = ABILITY_CHANGE_SELECTION_MODES.exact
+} = {}) {
   const selected = Array.from(form?.querySelectorAll("[data-limited-change-choice]:checked") ?? [])
     .map(input => String(input.value ?? "").trim())
     .filter(Boolean);
-  if (selected.length !== limit) {
-    ui.notifications.warn(`Нужно выбрать изменений: ${limit}.`);
+  if (!isLimitedChangeSelectionCountValid(selected.length, limit, { minimum, selectionMode })) {
+    const normalizedMode = normalizeAbilityChangeSelectionMode(selectionMode);
+    ui.notifications.warn(normalizedMode === ABILITY_CHANGE_SELECTION_MODES.upTo
+      ? `Нужно выбрать от ${minimum} до ${limit} изменений.`
+      : `Нужно выбрать изменений: ${limit}.`);
     return null;
   }
   return selected;

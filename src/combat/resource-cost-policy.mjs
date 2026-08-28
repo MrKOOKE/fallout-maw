@@ -2,6 +2,7 @@ import { isActorInActiveCombat } from "./combat-membership.mjs";
 
 export const COMBAT_ONLY_RESOURCE_KEYS = Object.freeze([
   "actionPoints",
+  "actionOrReactionPoints",
   "reactionPoints",
   "movementPoints",
   "dodge"
