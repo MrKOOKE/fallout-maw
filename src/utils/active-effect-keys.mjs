@@ -19,6 +19,7 @@ export const AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY = "syste
 export const AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY = "system.combat.aimedEffectiveRangeFarRestrictionDisabled";
 export const ATTACK_ACTION_POINT_MOVEMENT_LOSS_PERCENT_BONUS_EFFECT_KEY = "system.combat.attackActionPointMovementLossPercentBonus";
 export const ATTACK_ACTION_POINT_MOVEMENT_LOSS_DISABLED_EFFECT_KEY = "system.combat.attackActionPointMovementLossDisabled";
+export const ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY = "system.combat.attackCriticalFailureDisabled";
 export const CONDITION_LOSS_MULTIPLIER_EFFECT_KEY = "system.combat.conditionLossMultiplier";
 export const CRITICAL_DAMAGE_PERCENT_EFFECT_KEY = "system.combat.criticalDamagePercent";
 export const STUN_IMMUNITY_EFFECT_KEY = "system.combat.stunImmunity";

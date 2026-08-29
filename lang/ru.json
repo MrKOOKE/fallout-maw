@@ -2009,6 +2009,8 @@
       "AimedEffectiveRangeFarRestrictionDisabled": "Прицельная атака: отключение ограничения с дальней стороны",
       "AttackActionPointMovementLossPercentBonus": "Потеря ОП от атаки: изменение конвертации ОД, %",
       "AttackActionPointMovementLossDisabled": "Потеря ОП от атаки: отключение при значении больше 0",
+      "AttackCriticalFailureDisabled": "Критический провал на атаки (в мою сторону)",
+      "DisabledChangeValue": "Отключение",
       "CombatFinishingBlow": "Добивание",
       "CombatFinishingBlowChance": "Шанс добивания",
       "SkillCheckResultGroup": "Результаты проверок",

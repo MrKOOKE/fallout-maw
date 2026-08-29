@@ -72,6 +72,7 @@ import {
   normalizeRicochetSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
+  normalizeHuntingGroundsSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 export { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
@@ -222,6 +223,14 @@ import {
   registerLastDropRuntime,
   toggleLastDropUnconsciousnessTrigger
 } from "./last-drop.mjs";
+import {
+  activateHuntingGrounds,
+  consumeHuntingGroundsMarks,
+  findActiveHuntingGroundsSession,
+  getHuntingGroundsPreyData,
+  getHuntingGroundsSessionData,
+  registerHuntingGroundsRuntime
+} from "./hunting-grounds.mjs";
 import {
   LIVING_STEEL_DAMAGE_INTERCEPTOR_ID,
   actorHasLivingSteel,
@@ -439,6 +448,8 @@ const WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID = "whereAreYouGoingMovement";
 const WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME = "falloutMawWhereAreYouGoingWeapon";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const ACTIVE_APPLICATION_QUERY_NAME = "falloutMawActiveApplication";
+const HUNTING_GROUNDS_ACTIVATION_QUERY_NAME = "falloutMawHuntingGroundsActivation";
+const HUNTING_GROUNDS_MARK_CONSUMPTION_QUERY_NAME = "falloutMawHuntingGroundsMarkConsumption";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS = 60000;
 const ACTIVE_APPLICATION_AUTHORITY_CACHE_MS = 5 * 60 * 1000;
@@ -817,6 +828,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds,
+    label: "Охотничьи угодья",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds,
+      fixedSettings: normalizeHuntingGroundsSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
     label: "Всему свой подход",
     passive: true,
@@ -995,6 +1015,12 @@ export function registerFixedAbilityFunctionHooks() {
     ) queueActiveApplicationEffectSync(actor);
   });
   CONFIG.queries[ACTIVE_APPLICATION_QUERY_NAME] = handleActiveApplicationEffectQuery;
+  CONFIG.queries[HUNTING_GROUNDS_ACTIVATION_QUERY_NAME] = runFixedAbilityRuntimeHandler(
+    handleHuntingGroundsActivationQuery
+  );
+  CONFIG.queries[HUNTING_GROUNDS_MARK_CONSUMPTION_QUERY_NAME] = runFixedAbilityRuntimeHandler(
+    handleHuntingGroundsMarkConsumptionQuery
+  );
   Hooks.on(`${SYSTEM_ID}.settingsPresetApplied`, registerFixedAbilityRuntimeHooks);
   registerFixedAbilityRuntimeHooks();
 }
@@ -1020,6 +1046,7 @@ function registerFixedAbilityRuntimeHooks() {
   registerDanceOfThousandShadowsRuntimeHooks();
   registerExplosiveResilienceRuntime();
   registerLastDropRuntime();
+  registerHuntingGroundsRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
     applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
     apply: runFixedAbilityRuntimeHandler(applyLivingSteelFinalHealthDamage),
@@ -1516,6 +1543,12 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     const used = await useWhirlwind(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
+    const used = await useHuntingGrounds(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -5470,7 +5503,7 @@ async function usePhantom(actor, abilityItem, abilityFunction) {
     ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
     return false;
   }
-  if (!game.user?.isGM && !getResponsibleGM()) {
+  if (!game.user?.isActiveGM && !game.users?.activeGM) {
     ui.notifications.warn(`${abilityName}: нет активного GM для создания фантома.`);
     return false;
   }
@@ -7258,6 +7291,303 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
     return false;
   }
   return true;
+}
+
+async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeHuntingGroundsSettings(abilityFunction.fixedSettings);
+  const sourceToken = getActorSceneToken(actor);
+  const sourceTokenDocument = sourceToken?.document ?? sourceToken;
+  if (!canvas?.ready || !canvas.scene || !sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
+    ui.notifications.warn(`${abilityName}: выберите токен персонажа на готовой сцене.`);
+    return false;
+  }
+
+  const activeSession = findActiveHuntingGroundsSession(actor, abilityItem, abilityFunction);
+  if (activeSession) {
+    const activeSessionData = getHuntingGroundsSessionData(activeSession);
+    const activeSourceDocument = fromUuidSync(String(activeSessionData?.sourceTokenUuid ?? ""));
+    const activeSourceToken = activeSourceDocument?.object ?? activeSourceDocument;
+    if (!activeSourceToken?.actor || activeSourceDocument?.parent?.id !== canvas.scene.id) {
+      ui.notifications.warn(`${abilityName}: исходный токен зоны недоступен на текущей сцене.`);
+      return false;
+    }
+    return useHuntingGroundsMarkedAttack({
+      actor,
+      abilityItem,
+      abilityFunction,
+      sourceToken: activeSourceToken,
+      sessionEffect: activeSession,
+      abilityName
+    });
+  }
+
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для создания зоны.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+
+  const center = await selectHuntingGroundsPlacement(settings, abilityName);
+  if (!center) return false;
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: за время выбора зоны энергия изменилась (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  const created = await requestHuntingGroundsActivation({
+    sourceActorUuid: actor.uuid,
+    sourceTokenUuid: sourceTokenDocument.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    center
+  });
+  if (!created) {
+    await refundEnergy(actor, energyCost);
+    ui.notifications.warn(`${abilityName}: зону создать не удалось; энергия возвращена.`);
+    return false;
+  }
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Установлена зона ${settings.zoneSizeMeters}×${settings.zoneSizeMeters}×${settings.zoneSizeMeters} м на ${formatDuration(settings.durationSeconds)}.`
+  );
+  return true;
+}
+
+async function selectHuntingGroundsPlacement(settings, abilityName = "Охотничьи угодья") {
+  if (!canvas?.ready || !canvas?.regions?.placeRegion || !canvas.scene) return null;
+  const sidePixels = Math.max(
+    1,
+    Number(settings?.zoneSizeMeters) * (
+      Number(canvas.dimensions?.distancePixels)
+      || (Math.max(1, Number(canvas.grid?.size) || 100)
+        / Math.max(0.0001, Number(canvas.scene.grid?.distance) || 1))
+    )
+  );
+  const elevationCenter = Number(canvas.level?.elevation?.base);
+  const halfHeight = Number(settings?.zoneSizeMeters) / 2;
+  if (!Number.isFinite(elevationCenter) || !Number.isFinite(halfHeight) || !canvas.level?.id) return null;
+  ui.notifications.info(`${abilityName}: разместите квадрат ЛКМ; Esc или ПКМ отменяет.`);
+  const preview = await canvas.regions.placeRegion({
+    name: `${abilityName}: зона`,
+    color: game.user?.color?.css ?? game.user?.color ?? "#d6a84b",
+    visibility: CONST.REGION_VISIBILITY.ALWAYS,
+    highlightMode: "shapes",
+    displayMeasurements: true,
+    levels: canvas.level?.id ? [canvas.level.id] : [],
+    elevation: {
+      bottom: elevationCenter - halfHeight,
+      top: elevationCenter + halfHeight,
+      topInclusive: true
+    },
+    shapes: [{
+      type: "rectangle",
+      x: 0,
+      y: 0,
+      width: sidePixels,
+      height: sidePixels,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      rotation: 0,
+      gridBased: true
+    }]
+  }, {
+    create: false,
+    allowRotation: false
+  });
+  const shape = preview?.shapes?.at?.(0) ?? Array.from(preview?.shapes ?? []).at(0);
+  const center = {
+    x: Number(shape?.x),
+    y: Number(shape?.y),
+    levelId: String(canvas.level.id),
+    elevationCenter
+  };
+  return Number.isFinite(center.x) && Number.isFinite(center.y) ? center : null;
+}
+
+async function useHuntingGroundsMarkedAttack({
+  actor,
+  abilityItem,
+  abilityFunction,
+  sourceToken,
+  sessionEffect,
+  abilityName = "Охотничьи угодья"
+} = {}) {
+  const session = getHuntingGroundsSessionData(sessionEffect);
+  if (!session?.sessionId || !sourceToken?.actor) return false;
+  const collectRows = () => collectHuntingGroundsMarkedTargetRows({
+    actor,
+    sourceToken,
+    sessionId: session.sessionId
+  });
+  const [selected] = await requestCustomTokenSelection({
+    rows: collectRows(),
+    limit: 1,
+    title: `${abilityName}: Добыча`,
+    noneWarning: `${abilityName}: нет Добычи с 2 Мишенями, доступной для прицельной атаки.`,
+    instructions: `${abilityName}: выберите Добычу с 2 или более Мишенями. ПКМ или Esc отменяет.`,
+    sourceToken,
+    refreshRows: collectRows,
+    getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? ""),
+    getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? "Добыча")
+  });
+  if (!selected?.token) return false;
+
+  const candidates = getHuntingGroundsAimedAttackCandidates(actor, sourceToken, selected.token);
+  const candidate = await promptHuntingGroundsAttackCandidate(candidates, abilityName);
+  if (!candidate) return false;
+  await actor.update({
+    [`flags.${SYSTEM_ID}.selectedHudWeaponSetKey`]: candidate.weaponSet,
+    [`flags.${SYSTEM_ID}.selectedHudWeaponItemId`]: candidate.weapon.id
+  });
+
+  const executed = await startForcedAimedAttackSelection({
+    label: abilityName,
+    attackerToken: sourceToken,
+    targetToken: selected.token,
+    weapon: candidate.weapon,
+    weaponFunctionId: candidate.weaponFunctionId,
+    actionKey: candidate.actionKey,
+    onBeforeExecute: async () => {
+      const currentSession = findActiveHuntingGroundsSession(actor, abilityItem, abilityFunction);
+      if (getHuntingGroundsSessionData(currentSession)?.sessionId !== session.sessionId) {
+        ui.notifications.warn(`${abilityName}: действие зоны уже закончилось.`);
+        return false;
+      }
+      const preyEffect = findHuntingGroundsPreyEffect(
+        selected.token.actor,
+        session.sessionId,
+        actor.uuid,
+        selected.token
+      );
+      if ((getHuntingGroundsPreyData(preyEffect)?.marks ?? 0) < 2) {
+        ui.notifications.warn(`${abilityName}: у цели уже меньше 2 Мишеней.`);
+        return false;
+      }
+      return true;
+    }
+  });
+  if (!executed) return false;
+
+  const consumed = await requestHuntingGroundsMarkConsumption({
+    sourceActorUuid: actor.uuid,
+    targetActorUuid: selected.token.actor?.uuid ?? "",
+    targetTokenUuid: selected.token.document?.uuid ?? selected.token.uuid ?? "",
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    sessionId: session.sessionId
+  });
+  if (!consumed) {
+    ui.notifications.warn(`${abilityName}: атака совершена, но снять 2 Мишени не удалось.`);
+    return true;
+  }
+  await createAbilityChatMessage(actor, abilityItem, `${selected.token.name}: совершена бесплатная прицельная атака, снято 2 Мишени.`);
+  return true;
+}
+
+function collectHuntingGroundsMarkedTargetRows({ actor = null, sourceToken = null, sessionId = "" } = {}) {
+  return (canvas.tokens?.placeables ?? [])
+    .filter(token => token?.actor && token.actor.uuid !== actor?.uuid && !isPhantomEntity(token))
+    .map(token => {
+      const preyEffect = findHuntingGroundsPreyEffect(token.actor, sessionId, actor?.uuid, token);
+      const prey = getHuntingGroundsPreyData(preyEffect);
+      const marks = Math.max(0, toInteger(prey?.marks));
+      const candidates = marks >= 2
+        ? getHuntingGroundsAimedAttackCandidates(actor, sourceToken, token)
+        : [];
+      return {
+        token,
+        actorUuid: token.actor.uuid,
+        displayed: Boolean(prey && marks >= 2),
+        selectable: candidates.length > 0,
+        reason: marks < 2
+          ? "нужно не менее 2 Мишеней."
+          : candidates.length ? "" : "нет доступного прицельного выстрела или атаки.",
+        marks
+      };
+    });
+}
+
+function findHuntingGroundsPreyEffect(actor, sessionId = "", sourceActorUuid = "", targetToken = null) {
+  const targetTokenUuid = String(targetToken?.document?.uuid ?? targetToken?.uuid ?? "");
+  const now = Number(game.time?.worldTime) || 0;
+  return Array.from(actor?.effects ?? []).find(effect => {
+    const data = getHuntingGroundsPreyData(effect);
+    return data
+      && !effect.disabled
+      && Number(data.expiresAt) > now
+      && String(data.sessionId ?? "") === String(sessionId ?? "")
+      && String(data.sourceActorUuid ?? "") === String(sourceActorUuid ?? "")
+      && (!targetTokenUuid || !data.targetTokenUuid || data.targetTokenUuid === targetTokenUuid);
+  }) ?? null;
+}
+
+function getHuntingGroundsAimedAttackCandidates(actor, sourceToken, targetToken) {
+  const candidates = [];
+  for (const weapon of actor?.items?.contents ?? []) {
+    if (weapon.type !== "gear" || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
+    const weaponSet = getDeployedWeaponSetKey(weapon);
+    if (!weaponSet) continue;
+    for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      for (const actionKey of ["aimedShot", "aimedMeleeAttack"]) {
+        if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) continue;
+        if (!canPerformAimedAttackAgainstToken({
+          attackerToken: sourceToken,
+          targetToken,
+          weapon,
+          weaponFunctionId,
+          actionKey
+        })) continue;
+        candidates.push({ weapon, weaponSet, weaponFunctionId, actionKey });
+      }
+    }
+  }
+  const selectedId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
+  return candidates.sort((left, right) => (
+    Number(right.weapon.id === selectedId) - Number(left.weapon.id === selectedId)
+    || left.weapon.name.localeCompare(right.weapon.name, game.i18n.lang)
+    || left.actionKey.localeCompare(right.actionKey)
+  ));
+}
+
+async function promptHuntingGroundsAttackCandidate(candidates = [], abilityName = "Охотничьи угодья") {
+  if (candidates.length === 1) return candidates[0];
+  if (!candidates.length) return null;
+  const rows = candidates.map((candidate, index) => {
+    const actionLabel = candidate.actionKey === "aimedShot" ? "Прицельный выстрел" : "Прицельная атака";
+    return `
+      <label class="fallout-maw-radio-card">
+        <input type="radio" name="candidateIndex" value="${index}" ${index === 0 ? "checked" : ""}>
+        <span><strong>${escapeHTML(candidate.weapon.name)}</strong><br>${actionLabel}</span>
+      </label>
+    `;
+  }).join("");
+  const result = await DialogV2.input({
+    window: { title: `${abilityName}: выбор атаки` },
+    content: `<div class="fallout-maw-fixed-choice-grid">${rows}</div>`,
+    ok: {
+      label: "Атаковать",
+      icon: "fa-solid fa-crosshairs",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 560 },
+    rejectClose: false
+  });
+  const index = toInteger(result?.candidateIndex);
+  return candidates[index] ?? null;
 }
 
 function getWhirlwindWeaponCandidate(actor) {
@@ -10084,6 +10414,68 @@ async function requestNightmareRegionOperation(payload = {}) {
   return requestFixedAbilitySocketOperation("createNightmareRegion", payload);
 }
 
+async function requestHuntingGroundsActivation(payload = {}) {
+  return requestHuntingGroundsAuthorityQuery(
+    HUNTING_GROUNDS_ACTIVATION_QUERY_NAME,
+    payload,
+    handleHuntingGroundsActivationQuery
+  );
+}
+
+async function requestHuntingGroundsMarkConsumption(payload = {}) {
+  return requestHuntingGroundsAuthorityQuery(
+    HUNTING_GROUNDS_MARK_CONSUMPTION_QUERY_NAME,
+    payload,
+    handleHuntingGroundsMarkConsumptionQuery
+  );
+}
+
+async function requestHuntingGroundsAuthorityQuery(queryName, payload, localHandler) {
+  const authority = game.users?.activeGM ?? (game.user?.isActiveGM ? game.user : null);
+  if (!authority?.active) return false;
+  if (authority.id === game.user?.id) {
+    return Boolean(await localHandler(payload, { user: game.user }));
+  }
+  if (game.user?.hasPermission?.("QUERY_USER") === false || typeof authority.query !== "function") return false;
+  try {
+    return Boolean(await authority.query(queryName, payload, {
+      timeout: DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS
+    }));
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Hunting Grounds authority query failed`, error);
+    return false;
+  }
+}
+
+async function handleHuntingGroundsActivationQuery(payload = {}, { user: sender = null } = {}) {
+  if (!isAuthenticatedHuntingGroundsQuerySender(sender)) return false;
+  try {
+    return Boolean(await processHuntingGroundsActivationOperation(payload, sender));
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Hunting Grounds activation query failed`, error);
+    return false;
+  }
+}
+
+async function handleHuntingGroundsMarkConsumptionQuery(payload = {}, { user: sender = null } = {}) {
+  if (!isAuthenticatedHuntingGroundsQuerySender(sender)) return false;
+  try {
+    return Boolean(await processHuntingGroundsMarkConsumptionOperation(payload, sender));
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Hunting Grounds mark consumption query failed`, error);
+    return false;
+  }
+}
+
+function isAuthenticatedHuntingGroundsQuerySender(sender = null) {
+  return Boolean(
+    sender?.active
+    && sender.id
+    && game.user?.isActiveGM
+    && game.users?.activeGM?.id === game.user.id
+  );
+}
+
 async function requestNightmareFearOperation(payload = {}) {
   if (game.user?.isGM) return processNightmareFearOperation(payload);
   return requestFixedAbilitySocketOperation("applyNightmareFear", payload);
@@ -10305,6 +10697,89 @@ async function processDanceOfThousandShadowsSwap({
     }, { type: "ability", label: getAbilityDisplayName(abilityItem) });
   }
   return true;
+}
+
+async function processHuntingGroundsActivationOperation({
+  sourceActorUuid = "",
+  sourceTokenUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  center = null
+} = {}, sender = null) {
+  if (!game.user?.isActiveGM) return false;
+  const actor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const token = fromUuidSync(String(sourceTokenUuid ?? "").trim());
+  const abilityItem = actor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds);
+  const levelId = String(center?.levelId ?? "").trim();
+  const placementLevel = token?.parent?.levels?.get?.(levelId) ?? null;
+  const placement = {
+    x: Number(center?.x),
+    y: Number(center?.y),
+    levelId,
+    elevationCenter: Number(placementLevel?.elevation?.base)
+  };
+  if (
+    !actor
+    || !token
+    || token.documentName !== "Token"
+    || token.actor?.uuid !== actor.uuid
+    || !token.parent?.regions
+    || !abilityItem
+    || !abilityFunction
+    || !Number.isFinite(placement.x)
+    || !Number.isFinite(placement.y)
+    || !Number.isFinite(placement.elevationCenter)
+    || !placementLevel
+  ) return false;
+  if (!sender || (!sender.isGM && !actor.testUserPermission(sender, "OWNER"))) return false;
+  if (findActiveHuntingGroundsSession(actor, abilityItem, abilityFunction)) return false;
+
+  const result = await activateHuntingGrounds({
+    sourceActor: actor,
+    sourceToken: token,
+    abilityItem,
+    abilityFunction,
+    settings: normalizeHuntingGroundsSettings(abilityFunction.fixedSettings),
+    center: placement
+  });
+  return Boolean(result?.success);
+}
+
+async function processHuntingGroundsMarkConsumptionOperation({
+  sourceActorUuid = "",
+  targetActorUuid = "",
+  targetTokenUuid = "",
+  abilityItemId = "",
+  abilityFunctionId = "",
+  sessionId = ""
+} = {}, sender = null) {
+  if (!game.user?.isActiveGM) return false;
+  const sourceActor = fromUuidSync(String(sourceActorUuid ?? "").trim());
+  const targetActor = fromUuidSync(String(targetActorUuid ?? "").trim());
+  const abilityItem = sourceActor?.items?.get?.(String(abilityItemId ?? "").trim()) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds);
+  const activeSession = findActiveHuntingGroundsSession(sourceActor, abilityItem, abilityFunction);
+  const session = getHuntingGroundsSessionData(activeSession);
+  const normalizedSessionId = String(sessionId ?? "").trim();
+  if (
+    !sourceActor
+    || !targetActor
+    || !abilityItem
+    || !abilityFunction
+    || !normalizedSessionId
+    || session?.sessionId !== normalizedSessionId
+  ) return false;
+  if (!sender || (!sender.isGM && !sourceActor.testUserPermission(sender, "OWNER"))) return false;
+  const targetToken = targetTokenUuid ? fromUuidSync(String(targetTokenUuid).trim()) : null;
+  if (targetTokenUuid && targetToken?.actor?.uuid !== targetActor.uuid) return false;
+  const preyEffect = findHuntingGroundsPreyEffect(targetActor, normalizedSessionId, sourceActor.uuid, targetToken);
+  const amount = 2;
+  if (!preyEffect || Math.max(0, toInteger(getHuntingGroundsPreyData(preyEffect)?.marks)) < amount) return false;
+  const consumed = await consumeHuntingGroundsMarks(preyEffect, amount, session);
+  return Boolean(consumed?.success);
 }
 
 async function processNightmareRegionOperation({

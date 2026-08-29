@@ -110,6 +110,35 @@ test("effect tooltip displays universal barrier points without treating them as 
   assert.doesNotMatch(html, /<span>\+58<\/span>/);
 });
 
+test("effect tooltip renders attack critical-failure disabling as a state instead of +1", () => {
+  const previousLocalize = game.i18n.localize;
+  game.i18n.localize = key => ({
+    "FALLOUTMAW.Effects.AttackCriticalFailureDisabled": "Критический провал на атаки (в мою сторону)",
+    "FALLOUTMAW.Effects.DisabledChangeValue": "Отключение"
+  })[key] ?? String(key);
+  try {
+    const html = buildEffectTooltipHTML({
+      name: "Охотничьи угодья: Добыча · Мишень ×2",
+      img: "icons/svg/target.svg",
+      flags: {},
+      system: {
+        changes: [{
+          key: "system.combat.attackCriticalFailureDisabled",
+          type: "add",
+          value: "1",
+          phase: "initial"
+        }]
+      }
+    });
+
+    assert.match(html, /Критический провал на атаки \(в мою сторону\):/);
+    assert.match(html, /<span>Отключение<\/span>/);
+    assert.doesNotMatch(html, /<span>\+1<\/span>/);
+  } finally {
+    game.i18n.localize = previousLocalize;
+  }
+});
+
 test("effect tooltip displays trauma and disease suppression changes", () => {
   const html = buildEffectTooltipHTML({
     name: "Просто царапины",

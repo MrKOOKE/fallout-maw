@@ -52,6 +52,7 @@ globalThis.game = {
 };
 
 const {
+  ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
   collectActorReverseEffectChanges,
   expandActorEffectChangeKeys,
   getActorReverseEffectChangeValue,
@@ -348,6 +349,25 @@ test("action-specific skill-check keys are registered, reversible, and active on
   assert.equal(getSkillCheckActionEffectKeys("repair").some(key => activeKeys.has(key)), false);
   assert.equal(Array.from(researchKeys).every(key => isActiveUseEffectKey(key)), true);
   assert.equal(Array.from(researchKeys).every(key => isActiveUseEffectKey(getReverseEffectKey(key))), true);
+});
+
+test("attack critical-failure disabling is selectable and active only for attacking checks", () => {
+  const ordinary = buildEffectKeyTokens()
+    .find(token => token.path === ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY);
+
+  assert.equal(ordinary?.label, "Критический провал на атаки (в мою сторону)");
+  assert.equal(isActiveUseEffectKey(ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY), true);
+  assert.equal(getSkillCheckActiveUseKeys("athletics", {
+    requester: "weaponAttack",
+    weaponActionKey: "aimedShot"
+  }).has(ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY), true);
+  assert.equal(getSkillCheckActiveUseKeys("athletics", {
+    requester: "weaponAttack",
+    weaponActionKey: "reload"
+  }).has(ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY), false);
+  assert.equal(getSkillCheckActiveUseKeys("athletics", {
+    requester: "research"
+  }).has(ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY), false);
 });
 
 test("engaged-skill condition is contextual and matches the skill actually used by the check", () => {

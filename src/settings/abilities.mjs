@@ -196,6 +196,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   defensiveTactics: "defensiveTactics",
   rage: "rage",
   whirlwind: "whirlwind",
+  huntingGrounds: "huntingGrounds",
   lunge: "lunge",
   doubleAttack: "doubleAttack",
   counterAttack: "counterAttack",
@@ -2233,6 +2234,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     return normalizeWhirlwindSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
+    return normalizeHuntingGroundsSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return normalizeLungeSettings(value);
   }
@@ -2860,6 +2864,28 @@ export function normalizeWhirlwindSettings(value = {}) {
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
     accuracyModifier: toInteger(value?.accuracyModifier ?? -30)
+  };
+}
+
+export function normalizeHuntingGroundsSettings(value = {}) {
+  const maxMarks = Math.max(1, toInteger(value?.maxMarks ?? 4));
+  const zoneSizeMeters = Number(value?.zoneSizeMeters ?? 20);
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 100)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 200)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 21600)),
+    zoneSizeMeters: Math.max(1, Number.isFinite(zoneSizeMeters) ? zoneSizeMeters : 20),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 30)),
+    checkIntervalSeconds: Math.max(1, toInteger(value?.checkIntervalSeconds ?? 6)),
+    difficultyBase: toInteger(value?.difficultyBase ?? 50),
+    sourceSkillKey: String(value?.sourceSkillKey ?? "naturalist").trim() || "naturalist",
+    targetSkillKey: String(value?.targetSkillKey ?? "stealth").trim() || "stealth",
+    initialMarks: Math.min(maxMarks, Math.max(1, toInteger(value?.initialMarks ?? 1))),
+    actionPointThreshold: Math.max(1, toInteger(value?.actionPointThreshold ?? 4)),
+    movementPointThreshold: Math.max(1, toInteger(value?.movementPointThreshold ?? 6)),
+    maxMarks,
+    incomingDamagePercentPerMark: Math.max(0, toInteger(value?.incomingDamagePercentPerMark ?? 20)),
+    accuracyPerMark: toInteger(value?.accuracyPerMark ?? 40)
   };
 }
 

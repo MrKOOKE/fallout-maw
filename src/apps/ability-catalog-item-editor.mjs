@@ -125,6 +125,7 @@ import {
   normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeHeightenedConcentrationSettings,
+  normalizeHuntingGroundsSettings,
   normalizeKnockOffBalanceSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
@@ -2664,6 +2665,31 @@ function readFixedFunctionSettings(row) {
       accuracyModifier: row.querySelector("[data-field='fixed.whirlwind.accuracyModifier']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.huntingGrounds.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.huntingGrounds.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.huntingGrounds.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.huntingGrounds.overloadDurationUnit']")?.value
+      ),
+      zoneSizeMeters: row.querySelector("[data-field='fixed.huntingGrounds.zoneSizeMeters']")?.value,
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.huntingGrounds.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.huntingGrounds.durationUnit']")?.value
+      ),
+      checkIntervalSeconds: row.querySelector("[data-field='fixed.huntingGrounds.checkIntervalSeconds']")?.value,
+      difficultyBase: row.querySelector("[data-field='fixed.huntingGrounds.difficultyBase']")?.value,
+      sourceSkillKey: row.querySelector("[data-field='fixed.huntingGrounds.sourceSkillKey']")?.value,
+      targetSkillKey: row.querySelector("[data-field='fixed.huntingGrounds.targetSkillKey']")?.value,
+      initialMarks: row.querySelector("[data-field='fixed.huntingGrounds.initialMarks']")?.value,
+      actionPointThreshold: row.querySelector("[data-field='fixed.huntingGrounds.actionPointThreshold']")?.value,
+      movementPointThreshold: row.querySelector("[data-field='fixed.huntingGrounds.movementPointThreshold']")?.value,
+      maxMarks: row.querySelector("[data-field='fixed.huntingGrounds.maxMarks']")?.value,
+      incomingDamagePercentPerMark: row.querySelector("[data-field='fixed.huntingGrounds.incomingDamagePercentPerMark']")?.value,
+      accuracyPerMark: row.querySelector("[data-field='fixed.huntingGrounds.accuracyPerMark']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return {
       energyCost: row.querySelector("[data-field='fixed.lunge.energyCost']")?.value,
@@ -3460,6 +3486,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
     ? prepareWhirlwindSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedHuntingGroundsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds
+    ? prepareHuntingGroundsSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3615,6 +3644,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
     fixedWhirlwindSettings,
+    fixedHuntingGroundsSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
@@ -3998,6 +4028,22 @@ function prepareWhirlwindSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareHuntingGroundsSettingsForDisplay(settings = {}) {
+  const normalized = normalizeHuntingGroundsSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const skills = getSkillSettings();
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
   };
 }
 

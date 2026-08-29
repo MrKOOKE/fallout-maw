@@ -150,6 +150,7 @@ import {
   normalizePainLordSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
+  normalizeHuntingGroundsSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -7364,6 +7365,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
     ? prepareWhirlwindSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedHuntingGroundsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds
+    ? prepareHuntingGroundsSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -7529,6 +7533,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedDefensiveTacticsSettings,
     fixedRageSettings,
     fixedWhirlwindSettings,
+    fixedHuntingGroundsSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
@@ -7963,6 +7968,22 @@ function prepareWhirlwindSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: overloadDuration.amount,
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareHuntingGroundsSettingsForDisplay(settings = {}) {
+  const normalized = normalizeHuntingGroundsSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const skills = getSkillSettings();
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
   };
 }
 
@@ -10382,6 +10403,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-whirlwind-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-whirlwind-overload-duration-unit]")?.value
       );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-hunting-grounds-duration-amount]")?.value,
+        row.querySelector("[data-fixed-hunting-grounds-duration-unit]")?.value
+      );
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-hunting-grounds-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-hunting-grounds-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       continue;
     }

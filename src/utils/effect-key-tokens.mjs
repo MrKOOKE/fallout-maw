@@ -29,6 +29,7 @@ import {
   AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY,
   ATTACK_ACTION_POINT_MOVEMENT_LOSS_DISABLED_EFFECT_KEY,
   ATTACK_ACTION_POINT_MOVEMENT_LOSS_PERCENT_BONUS_EFFECT_KEY,
+  ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
@@ -924,6 +925,13 @@ export function buildCombatEffectKeyTokens() {
       key: "attackActionPointMovementLossDisabled",
       label: game.i18n.localize("FALLOUTMAW.Effects.AttackActionPointMovementLossDisabled"),
       path: ATTACK_ACTION_POINT_MOVEMENT_LOSS_DISABLED_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "attackCriticalFailureDisabled",
+      key: "attackCriticalFailureDisabled",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AttackCriticalFailureDisabled"),
+      path: ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
       group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({

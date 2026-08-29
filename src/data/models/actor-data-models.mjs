@@ -121,6 +121,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         aimedEffectiveRangeFarRestrictionDisabled: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         attackActionPointMovementLossPercentBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         attackActionPointMovementLossDisabled: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        attackCriticalFailureDisabled: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         conditionLossMultiplier: new NumberField({ required: true, min: 0, initial: 1, persisted: false }),
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),

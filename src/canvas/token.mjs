@@ -2,6 +2,7 @@ import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { stripEffectTooltipBonusWords } from "../utils/effect-tooltip-labels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
+  ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
   evaluateActorEffectChangeBaseNumber,
   isActorTraumaDiseaseEffectSuppressed,
   isReverseEffectKey,
@@ -1009,6 +1010,14 @@ function formatEffectChange(change, actor = null, effect = null) {
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(healing, change?.type))}</span>`;
   }
   const path = getChangeKeyLabel(key);
+  if (key === ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY) {
+    const preparedChange = prepareTooltipEffectChange(actor, change, effect);
+    if (!preparedChange) return "";
+    const value = Number(preparedChange.value) > 0
+      ? localize("FALLOUTMAW.Effects.DisabledChangeValue")
+      : formatSignedValue(stringifyChangeValue(preparedChange.value), preparedChange.type);
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(value)}</span>`;
+  }
   if (isTraumaDiseaseSuppressionEffectKey(key)) {
     const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
       fallback: Number(change?.value),

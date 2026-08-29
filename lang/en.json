@@ -1944,6 +1944,8 @@
       "AimedEffectiveRangeFarRestrictionDisabled": "Aimed attack: disable far-side range restriction",
       "AttackActionPointMovementLossPercentBonus": "Attack MP loss: AP conversion change, %",
       "AttackActionPointMovementLossDisabled": "Attack MP loss: disable when the value is greater than 0",
+      "AttackCriticalFailureDisabled": "Critical failure on attacks (against me)",
+      "DisabledChangeValue": "Disabled",
       "CombatFinishingBlow": "Finishing blow",
       "CombatFinishingBlowChance": "Finishing blow chance",
       "SkillCheckResultGroup": "Check results",

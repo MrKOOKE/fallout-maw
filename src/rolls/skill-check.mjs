@@ -24,6 +24,7 @@ import {
   ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
+  ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
   getActorCombatAttackEdgeCount,
   getActorSmartFudgeResultValues,
   getCombatAttackAdvantageEffectKey,
@@ -69,6 +70,7 @@ const SKILL_CHECK_RESULT_KEYS = Object.freeze([
   "success",
   "criticalSuccess"
 ]);
+const ATTACKING_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush", "activePush"]);
 const SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS = Object.freeze(Object.fromEntries(
   SKILL_CHECK_RESULT_KEYS.map(key => [key, `disabledResult:${key}`])
 ));
@@ -1493,14 +1495,16 @@ function normalizeRequestData(data, requester = "") {
 
 export function resolveSkillCheckDisabledResults(actor, context = {}) {
   if (!actor) return normalizeSkillCheckDisabledResults();
+  const isAttackingCheck = isAttackingSkillCheckContext(context);
   const contextual = getContextualAbilityChangeValues(
     actor,
-    buildSkillCheckDisabledResultContextSpecs(actor),
+    [
+      ...buildSkillCheckDisabledResultContextSpecs(actor),
+      ...(isAttackingCheck ? [buildAttackCriticalFailureDisabledContextSpec(actor)] : [])
+    ],
     context
   );
-  return normalizeSkillCheckDisabledResults(Object.fromEntries(
-    SKILL_CHECK_RESULT_KEYS.map(key => [key, contextual[SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key]]])
-  ));
+  return buildResolvedSkillCheckDisabledResults(contextual, { isAttackingCheck });
 }
 
 function buildSkillCheckDisabledResultContextSpecs(actor) {
@@ -1510,6 +1514,39 @@ function buildSkillCheckDisabledResultContextSpecs(actor) {
     key: SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS[key],
     baseValue: Number(prepared?.[key]) || 0
   }));
+}
+
+function buildAttackCriticalFailureDisabledContextSpec(actor) {
+  return {
+    id: "attackCriticalFailureDisabled",
+    key: ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
+    baseValue: Number(actor?.system?.combat?.attackCriticalFailureDisabled) || 0
+  };
+}
+
+function buildResolvedSkillCheckDisabledResults(contextual = {}, { isAttackingCheck = false } = {}) {
+  const values = Object.fromEntries(SKILL_CHECK_RESULT_KEYS.map(key => [
+    key,
+    contextual[SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key]]
+  ]));
+  if (isAttackingCheck) {
+    values.criticalFailure = (Number(values.criticalFailure) || 0)
+      + (Number(contextual.attackCriticalFailureDisabled) || 0);
+  }
+  return normalizeSkillCheckDisabledResults(values);
+}
+
+function isAttackingSkillCheckContext(context = {}) {
+  const requester = String(context?.requester ?? context?.check?.requester ?? "").trim();
+  const actionKey = String(
+    context?.weaponActionKey
+    ?? context?.actionKey
+    ?? context?.check?.weaponActionKey
+    ?? context?.check?.actionKey
+    ?? ""
+  ).trim();
+  return ATTACKING_SKILL_CHECK_REQUESTERS.has(requester)
+    && isAttackingWeaponAction(actionKey);
 }
 
 function normalizeSkillCheckDisabledResults(value = {}) {
@@ -1525,8 +1562,7 @@ function createMutableCheck(actor, skill, data) {
     skillKey
   };
   const weaponActionKey = String(data.weaponActionKey ?? context.weaponActionKey ?? "").trim();
-  const isAttackingCheck = ["weaponAttack", "weaponPush", "activePush"].includes(requester)
-    && isAttackingWeaponAction(weaponActionKey);
+  const isAttackingCheck = isAttackingSkillCheckContext({ requester, weaponActionKey });
   const skillCheckActionId = getSkillCheckActionId(requester);
   const preparedSkillCheckAction = actor?.system?.skillCheck?.actions?.[skillCheckActionId] ?? {};
   const smartFudgeBaseValues = getActorSmartFudgeResultValues(actor, { requester, check: data });
@@ -1573,6 +1609,7 @@ function createMutableCheck(actor, skill, data) {
       baseValue: Number(preparedSkillCheckAction?.[field]) || 0
     })) : []),
     ...buildSkillCheckDisabledResultContextSpecs(actor),
+    ...(isAttackingCheck ? [buildAttackCriticalFailureDisabledContextSpec(actor)] : []),
     ...(requester === "weaponAttack" ? SMART_FUDGE_RESULT_ORDER.map(result => ({
       id: `smartFudge:${result}`,
       key: SMART_FUDGE_RESULT_EFFECT_KEYS[result],
@@ -1590,9 +1627,7 @@ function createMutableCheck(actor, skill, data) {
       alternateKeys: [ALL_COMBAT_DISADVANTAGE_EFFECT_KEY]
     }] : [])
   ], context);
-  const disabledResults = normalizeSkillCheckDisabledResults(Object.fromEntries(
-    SKILL_CHECK_RESULT_KEYS.map(key => [key, contextual[SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key]]])
-  ));
+  const disabledResults = buildResolvedSkillCheckDisabledResults(contextual, { isAttackingCheck });
   const contextualSmartFudgeResult = requester === "weaponAttack"
     ? SMART_FUDGE_RESULT_ORDER.find(result => Number(contextual[`smartFudge:${result}`]) > 0) ?? ""
     : "";

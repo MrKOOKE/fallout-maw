@@ -6308,7 +6308,11 @@ export class WeaponAttackController {
       return;
     }
 
-    const plannedAttackCount = Math.max(1, targets.length);
+    const attacksPerTarget = Math.max(
+      1,
+      toInteger(1 + getActorSkillValue(this.token.actor, "athletics") / 80)
+    );
+    const plannedAttackCount = targets.length * attacksPerTarget;
     const actionContext = this.createWeaponActionContext();
     if (!this.hasRequiredWeaponResources(plannedAttackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
@@ -6337,11 +6341,11 @@ export class WeaponAttackController {
     this.refresh(true);
     this.registerAbilityTrialTargets(targets);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount: plannedAttackCount });
+    const totalCycles = attacksPerTarget * duplicatePlan.cycles;
 
     const damageRequests = [];
     const damageResults = [];
-    const hitTargets = [];
-    const attemptedTargets = [];
+    const trajectories = [];
     const checkBatch = this.createSkillCheckCollector({
       requester: "weaponAttack",
       title: this.attackModifier?.label || this.weapon.name
@@ -6353,12 +6357,13 @@ export class WeaponAttackController {
     let attemptedAttackCount = 0;
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
-    for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
+    for (let cycleIndex = 0; cycleIndex < totalCycles; cycleIndex += 1) {
       for (const target of targets) {
         if (this.attackCanceledByReaction) break;
-        attemptedTargets.push(target);
         attempted = true;
         attemptedAttackCount += 1;
+        const trajectory = buildSwingAnimationTrajectory(this.token, [target], "rightToLeft", this.geometry);
+        if (trajectory) trajectories.push({ ...trajectory, delayGroup: cycleIndex });
         const request = await this.resolveDirectedAttackAgainstTarget(target, {
           mode: "swing",
           damageAmount: baseDamage,
@@ -6366,20 +6371,13 @@ export class WeaponAttackController {
           penetrationStep: 0,
           checkBatch
         });
-        if (!request) break;
-        if (!request.length) continue;
+        if (this.attackCanceledByReaction) break;
+        if (!request?.length) continue;
         damageRequests.push(...request);
-        hitTargets.push(target);
       }
       if (this.attackCanceledByReaction) break;
     }
     await this.dodgeExposure.flush();
-
-    const animationTargets = attemptedTargets.length ? attemptedTargets : (hitTargets.length ? hitTargets : targets);
-    const trajectories = animationTargets
-      .map(target => buildSwingAnimationTrajectory(this.token, [target], "rightToLeft", this.geometry))
-      .filter(Boolean)
-      .map(trajectory => ({ ...trajectory, delayGroup: 0 }));
 
     if (attempted) {
       await this.spendCurrentAttackCosts({
@@ -6388,7 +6386,7 @@ export class WeaponAttackController {
         actionContext
       });
     }
-    await checkBatch.publish({ forceBatch: targets.length > 1 || duplicatePlan.cycles > 1 });
+    await checkBatch.publish({ forceBatch: targets.length > 1 || totalCycles > 1 });
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     this.releaseInteractiveControl();
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));

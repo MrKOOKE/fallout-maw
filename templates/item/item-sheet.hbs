@@ -764,6 +764,112 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedHuntingGroundsSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Охотничьи угодья</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация и зона</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedHuntingGroundsSettings.activationEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Ребро кубической зоны, м</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.zoneSizeMeters" value="{{fixedHuntingGroundsSettings.zoneSizeMeters}}" min="1" step="0.1">
+          </label>
+          <label>
+            <span>Длительность зоны</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedHuntingGroundsSettings.durationAmount}}" min="1" step="1" data-fixed-hunting-grounds-duration-amount>
+              <select data-fixed-hunting-grounds-duration-unit>
+                {{#each fixedHuntingGroundsSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Проверка врагов</strong>
+          <label>
+            <span>Интервал, сек.</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.checkIntervalSeconds" value="{{fixedHuntingGroundsSettings.checkIntervalSeconds}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Базовая сложность</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.difficultyBase" value="{{fixedHuntingGroundsSettings.difficultyBase}}" step="1">
+          </label>
+          <label>
+            <span>Навык владельца</span>
+            <select name="{{functionPath}}.{{functionIndex}}.fixedSettings.sourceSkillKey">
+              {{#each fixedHuntingGroundsSettings.sourceSkillChoices}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Навык цели</span>
+            <select name="{{functionPath}}.{{functionIndex}}.fixedSettings.targetSkillKey">
+              {{#each fixedHuntingGroundsSettings.targetSkillChoices}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Добыча и Мишени</strong>
+          <label>
+            <span>Мишеней при провале</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.initialMarks" value="{{fixedHuntingGroundsSettings.initialMarks}}" min="1" step="1">
+          </label>
+          <label>
+            <span>ОД на Мишень</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.actionPointThreshold" value="{{fixedHuntingGroundsSettings.actionPointThreshold}}" min="1" step="1">
+          </label>
+          <label>
+            <span>ОП на Мишень</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.movementPointThreshold" value="{{fixedHuntingGroundsSettings.movementPointThreshold}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Максимум Мишеней</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maxMarks" value="{{fixedHuntingGroundsSettings.maxMarks}}" min="1" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Каждая Мишень</strong>
+          <label>
+            <span>Входящий урон, %</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.incomingDamagePercentPerMark" value="{{fixedHuntingGroundsSettings.incomingDamagePercentPerMark}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Точность по владельцу</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyPerMark" value="{{fixedHuntingGroundsSettings.accuracyPerMark}}" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedHuntingGroundsSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedHuntingGroundsSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-hunting-grounds-overload-duration-amount>
+              <select data-fixed-hunting-grounds-overload-duration-unit>
+                {{#each fixedHuntingGroundsSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedLungeSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">
