@@ -46,12 +46,8 @@ import {
 import { resolveTokenTargetAlpha } from "./token-target-alpha.mjs";
 import { localViewReceivesPhantomVision } from "./phantom-vision.mjs";
 import { getLivingSteelEffectTooltipRows } from "../abilities/living-steel.mjs";
+import { EffectTooltipController } from "./effect-tooltip-controller.mjs";
 
-const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
-const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
-const TOOLTIP_DIRECTION = "LEFT";
-const TOOLTIP_ACTIVATION_MS = 200;
-const TOOLTIP_DEACTIVATION_MS = 90;
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
 const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
 const POSTURE_WEAPON_ACTION_COST_SUFFIX = ".weaponActionCost";
@@ -60,11 +56,22 @@ const HEALTH_BAR_ATTRIBUTES = new Set(["resources.health", "system.resources.hea
 const NATIVE_DRAG_START_TIMEOUT_MS = 250;
 const NATIVE_DRAG_START_POLL_MS = 5;
 
-let activeEffectTooltipAnchor = null;
-let activeEffectTooltipToken = null;
-let activateTooltipTimeout = null;
-let deactivateTooltipTimeout = null;
-let middleClickGuardRegistered = false;
+const effectTooltipController = new EffectTooltipController({ renderHTML: buildEffectTooltipHTML });
+let effectKeyTokenMapCache = null;
+let effectKeyTokenMapSettings = null;
+let effectKeyTokenMapLanguage = "";
+let effectKeyTokenMapHookRegistered = false;
+
+/** Start the one observer used by declarative Active Effect tooltips in HTML sheets. */
+export function initializeEffectTooltips() {
+  effectTooltipController.observe();
+  if (effectKeyTokenMapHookRegistered || typeof globalThis.Hooks?.on !== "function") return;
+  globalThis.Hooks.on("updateSetting", setting => {
+    if (!String(setting?.key ?? "").startsWith(`${SYSTEM_ID}.`)) return;
+    invalidateEffectKeyTokenMap();
+  });
+  effectKeyTokenMapHookRegistered = true;
+}
 
 /** Wait for Foundry's throttled synthetic pointermove to initialize native drag. */
 function waitForMovementPlanningDrag(manager) {
@@ -590,7 +597,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   async _drawEffects() {
-    if (activeEffectTooltipToken === this) deactivateEffectTooltip();
+    effectTooltipController.deactivateForToken(this);
     this.effects.renderable = false;
 
     this.effects.removeChildren().forEach(child => child.destroy());
@@ -714,46 +721,12 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
   }
 
   _activateEffectIconInteraction(icon, effect) {
-    icon.eventMode = "static";
-    icon.cursor = "help";
-    icon.on("pointerover", event => this._scheduleEffectTooltip(event, icon, effect));
-    icon.on("pointerout", () => scheduleEffectTooltipDeactivation());
-    icon.on("pointerupoutside", () => scheduleEffectTooltipDeactivation());
-  }
-
-  _scheduleEffectTooltip(event, icon, effect) {
-    if (!game.tooltip || !effect) return;
-    const point = getClientPoint(event);
-    if (!isCanvasTopmostAtPoint(point)) return;
-    registerMiddleClickGuard();
-    window.clearTimeout(deactivateTooltipTimeout);
-    window.clearTimeout(activateTooltipTimeout);
-
-    activeEffectTooltipToken = this;
-    const anchor = getEffectTooltipAnchor();
-    positionEffectTooltipAnchor(anchor, icon);
-
-    const html = buildEffectTooltipHTML(effect, this.actor);
-    if (game.tooltip.element === anchor) {
-      game.tooltip.tooltip.innerHTML = foundry.utils.cleanHTML(html);
-      resetTooltipAnchor(anchor);
-      return;
-    }
-
-    activateTooltipTimeout = window.setTimeout(() => {
-      if (!isCanvasTopmostAtPoint(point)) return;
-      positionEffectTooltipAnchor(anchor, icon);
-      game.tooltip.activate(anchor, {
-        html,
-        cssClass: TOOLTIP_CLASS,
-        direction: TOOLTIP_DIRECTION
-      });
-    }, TOOLTIP_ACTIVATION_MS);
+    effectTooltipController.bindCanvasIcon(icon, { token: this, effect });
   }
 
   /** @override */
   destroy(options) {
-    if (activeEffectTooltipToken === this) deactivateEffectTooltip();
+    effectTooltipController.deactivateForToken(this);
     return super.destroy(options);
   }
 }
@@ -770,64 +743,15 @@ function getCanvasToken(tokenId) {
   return (canvas?.tokens?.placeables ?? []).find(token => token?.id === tokenId) ?? null;
 }
 
-function getEffectTooltipAnchor() {
-  if (activeEffectTooltipAnchor?.isConnected) return activeEffectTooltipAnchor;
-
-  const anchor = document.createElement("span");
-  anchor.className = TOOLTIP_ANCHOR_CLASS;
-  anchor.setAttribute("aria-hidden", "true");
-  document.body.append(anchor);
-  activeEffectTooltipAnchor = anchor;
-  return anchor;
-}
-
-function positionEffectTooltipAnchor(anchor, icon) {
-  const rect = getIconClientRect(icon);
-  anchor.style.left = `${rect.left}px`;
-  anchor.style.top = `${rect.top}px`;
-  anchor.style.width = `${Math.max(1, rect.width)}px`;
-  anchor.style.height = `${Math.max(1, rect.height)}px`;
-  resetTooltipAnchor(anchor);
-}
-
-function resetTooltipAnchor(anchor) {
-  if ((game.tooltip?.element === anchor) && (typeof game.tooltip._setAnchor === "function")) {
-    game.tooltip._setAnchor(TOOLTIP_DIRECTION);
-  }
-}
-
-function scheduleEffectTooltipDeactivation() {
-  window.clearTimeout(activateTooltipTimeout);
-  window.clearTimeout(deactivateTooltipTimeout);
-  deactivateTooltipTimeout = window.setTimeout(() => deactivateEffectTooltip(), TOOLTIP_DEACTIVATION_MS);
-}
-
-function deactivateEffectTooltip() {
-  window.clearTimeout(activateTooltipTimeout);
-  window.clearTimeout(deactivateTooltipTimeout);
-  if (game.tooltip?.element === activeEffectTooltipAnchor) game.tooltip.deactivate();
-  activeEffectTooltipAnchor?.remove();
-  activeEffectTooltipAnchor = null;
-  activeEffectTooltipToken = null;
-}
-
-function registerMiddleClickGuard() {
-  if (middleClickGuardRegistered) return;
-  window.addEventListener("pointerup", event => {
-    if (event.button !== 1) return;
-    if (!game.tooltip?.tooltip?.classList?.contains(TOOLTIP_CLASS)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }, true);
-  middleClickGuardRegistered = true;
-}
-
 export function buildEffectTooltipHTML(effect, actor = null) {
   const baseName = localizeDocumentName(effect.name);
   const name = isActorTraumaDiseaseEffectSuppressed(actor, effect)
     ? `${baseName} (${localize("FALLOUTMAW.Effects.Suppressed")})`
     : baseName;
-  const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
+  const keyLabelState = { map: null };
+  const changes = getEffectChanges(effect)
+    .map(change => formatEffectChange(change, actor, effect, keyLabelState))
+    .filter(Boolean);
   const sourceContext = getEffectSourceFunctionContext(effect, actor);
   // A marker renders only counters whose reaction condition explicitly tracks
   // this ability's active-application target. The Item remains the single
@@ -982,7 +906,7 @@ function getEffectChanges(effect) {
   return Array.isArray(changes) ? changes.filter(change => String(change?.key ?? "").trim()) : [];
 }
 
-function formatEffectChange(change, actor = null, effect = null) {
+function formatEffectChange(change, actor = null, effect = null, keyLabelState = null) {
   const damageEffect = formatDamageEffectChange(change, actor);
   if (damageEffect) return damageEffect;
 
@@ -1009,7 +933,7 @@ function formatEffectChange(change, actor = null, effect = null) {
     const path = localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(healing, change?.type))}</span>`;
   }
-  const path = getChangeKeyLabel(key);
+  const path = getChangeKeyLabel(key, keyLabelState);
   if (key === ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY) {
     const preparedChange = prepareTooltipEffectChange(actor, change, effect);
     if (!preparedChange) return "";
@@ -1139,19 +1063,33 @@ function getDamageBarrierLabel(barrier = {}) {
 function getLimbLabel(key, actor = null) {
   const limbKey = String(key ?? "").trim();
   if (!limbKey) return "";
-  const sourceActor = actor ?? activeEffectTooltipToken?.actor;
-  return String(sourceActor?.system?.limbs?.[limbKey]?.label || limbKey);
+  return String(actor?.system?.limbs?.[limbKey]?.label || limbKey);
 }
 
-function getChangeKeyLabel(key) {
-  const token = getEffectKeyTokenMap().get(key);
+function getChangeKeyLabel(key, state = null) {
+  const map = state ? (state.map ??= getEffectKeyTokenMap()) : getEffectKeyTokenMap();
+  const token = map.get(key);
   return token?.label ? stripEffectTooltipBonusWords(token.label) : key;
 }
 
 function getEffectKeyTokenMap() {
+  const settings = getPreparedRuntimeSettings();
+  const language = String(game.i18n?.lang ?? "");
+  if (effectKeyTokenMapCache && effectKeyTokenMapSettings === settings && effectKeyTokenMapLanguage === language) {
+    return effectKeyTokenMapCache;
+  }
   const map = new Map();
   for (const token of buildEffectKeyTokens()) map.set(token.path, token);
-  return map;
+  effectKeyTokenMapCache = map;
+  effectKeyTokenMapSettings = settings;
+  effectKeyTokenMapLanguage = language;
+  return effectKeyTokenMapCache;
+}
+
+function invalidateEffectKeyTokenMap() {
+  effectKeyTokenMapCache = null;
+  effectKeyTokenMapSettings = null;
+  effectKeyTokenMapLanguage = "";
 }
 
 function stripEffectPathSuffix(label) {
@@ -1177,40 +1115,6 @@ function formatSignedValue(value, type = "") {
 function stringifyChangeValue(value) {
   if (value === undefined || value === null) return "";
   return typeof value === "string" ? value : JSON.stringify(value);
-}
-
-function getIconClientRect(icon) {
-  const bounds = icon?.getBounds?.();
-  const view = canvas?.app?.view;
-  const rect = view?.getBoundingClientRect?.();
-  if (bounds && rect) {
-    const screen = canvas.app.renderer?.screen;
-    const scaleX = rect.width / (Number(screen?.width) || rect.width || 1);
-    const scaleY = rect.height / (Number(screen?.height) || rect.height || 1);
-    return {
-      left: rect.left + ((bounds.x - (Number(screen?.x) || 0)) * scaleX),
-      top: rect.top + ((bounds.y - (Number(screen?.y) || 0)) * scaleY),
-      width: bounds.width * scaleX,
-      height: bounds.height * scaleY
-    };
-  }
-
-  return { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 1, height: 1 };
-}
-
-function getClientPoint(event) {
-  const nativeEvent = event?.nativeEvent ?? event?.originalEvent ?? event;
-  if (Number.isFinite(nativeEvent?.clientX) && Number.isFinite(nativeEvent?.clientY)) {
-    return { x: nativeEvent.clientX, y: nativeEvent.clientY };
-  }
-  return null;
-}
-
-function isCanvasTopmostAtPoint(point) {
-  const view = canvas?.app?.view;
-  if (!view || !point) return false;
-  const element = document.elementFromPoint(point.x, point.y);
-  return element === view;
 }
 
 function calculateHealthBarMaximums(actor, data = {}) {

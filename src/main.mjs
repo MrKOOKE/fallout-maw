@@ -1,5 +1,5 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
-import { FalloutMaWToken } from "./canvas/token.mjs";
+import { FalloutMaWToken, initializeEffectTooltips } from "./canvas/token.mjs";
 import { FalloutMaWTokenLayer } from "./canvas/token-layer.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
 import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
@@ -241,6 +241,7 @@ Hooks.once("ready", () => {
   // Foundry dispatches ready with Hooks.callAll and does not await callback
   // Promises. Register request handlers before starting any asynchronous
   // maintenance so the live UI never observes a half-registered system.
+  initializeEffectTooltips();
   initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
   registerSkillCheckSocket();

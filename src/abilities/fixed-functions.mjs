@@ -55,6 +55,7 @@ import {
   normalizeLastDropSettings,
   normalizeLivingSteelSettings,
   normalizePainLordSettings,
+  normalizeReactiveSettings,
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
@@ -367,6 +368,7 @@ import {
   getAbilityOverloadEnergyCost,
   getAbilityOverloadName
 } from "./overload.mjs";
+import { registerReactiveRuntime, useReactiveAbility } from "./reactive.mjs";
 import {
   notifyAbilityTriggerCostFailure,
   payAbilityFunctionResourceCosts,
@@ -673,6 +675,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.whirlwind
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.reactive,
+    label: "Реактивный",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.reactive,
+      fixedSettings: normalizeReactiveSettings()
     })
   }),
   Object.freeze({
@@ -1057,6 +1068,7 @@ function registerFixedAbilityRuntimeHooks() {
   registerDanceOfThousandShadowsRuntimeHooks();
   registerExplosiveResilienceRuntime();
   registerLastDropRuntime();
+  registerReactiveRuntime();
   registerHuntingGroundsRuntime();
   registerTempoRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
@@ -1556,6 +1568,16 @@ export async function useFixedAbilityFunctionItem({
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     const used = await useWhirlwind(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
+    const used = await useReactiveAbility(actor, item, abilityFunction);
+    if (used) {
+      const settings = normalizeReactiveSettings(abilityFunction.fixedSettings);
+      await createAbilityChatMessage(actor, item, `Эффект активен на ${formatDuration(settings.durationSeconds)}.`);
+      await application?.render?.({ force: true });
+    }
     return true;
   }
 

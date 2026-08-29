@@ -88,8 +88,43 @@ const {
 } = await import("../src/canvas/ability-route-preview-state.mjs");
 const {
   FalloutMaWToken,
-  buildEffectTooltipHTML
+  buildEffectTooltipHTML,
+  initializeEffectTooltips
 } = await import("../src/canvas/token.mjs");
+
+test("effect tooltip label cache invalidates when system settings change", () => {
+  const previousHooks = globalThis.Hooks;
+  const previousLocalize = game.i18n.localize;
+  let updateSetting;
+  globalThis.Hooks = {
+    on(name, callback) {
+      if (name === "updateSetting") updateSetting = callback;
+    }
+  };
+  initializeEffectTooltips();
+  assert.equal(typeof updateSetting, "function");
+
+  const effect = {
+    name: "Accuracy",
+    flags: {},
+    system: { changes: [{ key: "system.combat.accuracy", type: "add", value: "1" }] }
+  };
+  try {
+    game.i18n.localize = key => key === "FALLOUTMAW.Effects.CombatAccuracy" ? "Before" : String(key);
+    updateSetting({ key: "fallout-maw.coverSettings" });
+    assert.match(buildEffectTooltipHTML(effect), /Before/);
+
+    game.i18n.localize = key => key === "FALLOUTMAW.Effects.CombatAccuracy" ? "After" : String(key);
+    assert.match(buildEffectTooltipHTML(effect), /Before/, "the unchanged generation reuses its map");
+    updateSetting({ key: "fallout-maw.coverSettings" });
+    assert.match(buildEffectTooltipHTML(effect), /After/);
+  } finally {
+    game.i18n.localize = previousLocalize;
+    updateSetting({ key: "fallout-maw.coverSettings" });
+    if (previousHooks === undefined) delete globalThis.Hooks;
+    else globalThis.Hooks = previousHooks;
+  }
+});
 
 test("effect tooltip displays universal barrier points without treating them as an actor bonus", () => {
   const html = buildEffectTooltipHTML({

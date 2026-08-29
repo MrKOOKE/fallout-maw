@@ -1,5 +1,9 @@
 <section class="tab {{tabs.effects.cssClass}} fallout-maw-effects-tab" data-group="{{tabs.effects.group}}" data-tab="{{tabs.effects.id}}">
-  <div class="fallout-maw-effect-category-list">
+  <div
+    class="fallout-maw-effect-category-list"
+    data-tooltip-class="fallout-maw-effect-tooltip"
+    data-tooltip-direction="LEFT"
+  >
     {{#each effectCategories}}
     <section class="fallout-maw-panel fallout-maw-effect-category">
       <h2>{{label}}</h2>
@@ -9,12 +13,16 @@
           class="fallout-maw-effect-row"
           data-effect-id="{{id}}"
           data-effect-uuid="{{uuid}}"
+          data-effect-tooltip-actor-uuid="{{actorUuid}}"
           data-effect-parent-item-id="{{parentItemId}}"
-          data-tooltip-html="{{tooltipHTML}}"
-          data-tooltip-class="fallout-maw-effect-tooltip"
-          data-tooltip-direction="LEFT"
         >
-          <img src="{{img}}" alt="{{name}}">
+          <img
+            src="{{img}}"
+            alt="{{name}}"
+            data-effect-tooltip
+            data-effect-tooltip-fallback="{{name}}"
+            data-tooltip-html="<i class='fa-solid fa-spinner fa-spin' aria-hidden='true'></i>"
+          >
           <div class="fallout-maw-effect-name">
             <strong>{{name}}</strong>
             {{#if duration}}<span>{{duration}}</span>{{/if}}

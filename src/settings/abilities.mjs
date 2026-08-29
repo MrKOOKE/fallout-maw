@@ -232,7 +232,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   explosiveResilience: "explosiveResilience",
   lastDrop: "lastDrop",
   livingSteel: "livingSteel",
-  painLord: "painLord"
+  painLord: "painLord",
+  reactive: "reactive"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -2179,6 +2180,17 @@ function normalizeFixedFunctionKey(value = "") {
     : ABILITY_FIXED_FUNCTION_KEYS.deusExMachina;
 }
 
+/** "Реактивный": converts actually spent Movement Points into one-time Action Points. */
+export function normalizeReactiveSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 6)),
+    movementPointsPerActionPoint: Math.max(1, toInteger(value?.movementPointsPerActionPoint ?? 4))
+  };
+}
+
 function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   const normalizedKey = normalizeFixedFunctionKey(fixedKey);
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
@@ -2234,6 +2246,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     return normalizeWhirlwindSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
+    return normalizeReactiveSettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
     return normalizeHuntingGroundsSettings(value);

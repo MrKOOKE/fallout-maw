@@ -69,7 +69,6 @@ import {
   buildSkillCheckActionEffectKeyTokens,
   buildToolSupplyCostEffectKeyTokens
 } from "../utils/effect-key-tokens.mjs";
-import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
   import {
     completeResearch,
@@ -9901,13 +9900,13 @@ function prepareEffectCategories(effects = [], actor = null) {
     categoryMap.get(kind)?.effects.push({
       id: effect.id,
       uuid: effect.uuid,
+      actorUuid: actor?.uuid ?? "",
       parentItemId: effect.parent?.documentName === "Item" ? effect.parent.id : "",
       name: effect.name,
       img: effect.img,
       disabled: effect.disabled,
       changes: effect.system?.changes?.length ?? effect.changes?.length ?? 0,
-      duration: getEffectDurationLabel(effect),
-      tooltipHTML: buildEffectTooltipHTML(effect, actor)
+      duration: getEffectDurationLabel(effect)
     });
   }
 
