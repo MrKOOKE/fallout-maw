@@ -126,6 +126,7 @@ import {
   normalizeFullForceSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeHuntingGroundsSettings,
+  normalizeTempoSettings,
   normalizeKnockOffBalanceSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
@@ -2690,6 +2691,22 @@ function readFixedFunctionSettings(row) {
       accuracyPerMark: row.querySelector("[data-field='fixed.huntingGrounds.accuracyPerMark']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo) {
+    return {
+      maxTempo: row.querySelector("[data-field='fixed.tempo.maxTempo']")?.value,
+      automaticGain: row.querySelector("[data-field='fixed.tempo.automaticGain']")?.value,
+      automaticIntervalSeconds: row.querySelector("[data-field='fixed.tempo.automaticIntervalSeconds']")?.value,
+      successfulAttackGain: row.querySelector("[data-field='fixed.tempo.successfulAttackGain']")?.value,
+      missedAttackLoss: row.querySelector("[data-field='fixed.tempo.missedAttackLoss']")?.value,
+      incomingMissGain: row.querySelector("[data-field='fixed.tempo.incomingMissGain']")?.value,
+      incomingHitLoss: row.querySelector("[data-field='fixed.tempo.incomingHitLoss']")?.value,
+      actionPointsPerTempo: row.querySelector("[data-field='fixed.tempo.actionPointsPerTempo']")?.value,
+      movementPointsPerTempo: row.querySelector("[data-field='fixed.tempo.movementPointsPerTempo']")?.value,
+      accuracyPerTempo: row.querySelector("[data-field='fixed.tempo.accuracyPerTempo']")?.value,
+      damagePercentPerTempo: row.querySelector("[data-field='fixed.tempo.damagePercentPerTempo']")?.value,
+      attackMovementLossReductionPercentPerTempo: row.querySelector("[data-field='fixed.tempo.attackMovementLossReductionPercentPerTempo']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return {
       energyCost: row.querySelector("[data-field='fixed.lunge.energyCost']")?.value,
@@ -3489,6 +3506,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedHuntingGroundsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds
     ? prepareHuntingGroundsSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedTempoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo
+    ? normalizeTempoSettings(normalized.fixedSettings)
+    : null;
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3645,6 +3665,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedLuckyCoinSettings,
     fixedWhirlwindSettings,
     fixedHuntingGroundsSettings,
+    fixedTempoSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,

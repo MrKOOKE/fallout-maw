@@ -197,6 +197,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   rage: "rage",
   whirlwind: "whirlwind",
   huntingGrounds: "huntingGrounds",
+  tempo: "tempo",
   lunge: "lunge",
   doubleAttack: "doubleAttack",
   counterAttack: "counterAttack",
@@ -2237,6 +2238,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
     return normalizeHuntingGroundsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo) {
+    return normalizeTempoSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return normalizeLungeSettings(value);
   }
@@ -2886,6 +2890,26 @@ export function normalizeHuntingGroundsSettings(value = {}) {
     maxMarks,
     incomingDamagePercentPerMark: Math.max(0, toInteger(value?.incomingDamagePercentPerMark ?? 20)),
     accuracyPerMark: toInteger(value?.accuracyPerMark ?? 40)
+  };
+}
+
+export function normalizeTempoSettings(value = {}) {
+  return {
+    maxTempo: Math.max(1, toInteger(value?.maxTempo ?? 5)),
+    automaticGain: Math.max(0, toInteger(value?.automaticGain ?? 2)),
+    automaticIntervalSeconds: Math.max(1, toInteger(value?.automaticIntervalSeconds ?? 6)),
+    successfulAttackGain: Math.max(0, toInteger(value?.successfulAttackGain ?? 1)),
+    missedAttackLoss: Math.max(0, toInteger(value?.missedAttackLoss ?? 1)),
+    incomingMissGain: Math.max(0, toInteger(value?.incomingMissGain ?? 1)),
+    incomingHitLoss: Math.max(0, toInteger(value?.incomingHitLoss ?? 1)),
+    actionPointsPerTempo: Math.max(0, toInteger(value?.actionPointsPerTempo ?? 1)),
+    movementPointsPerTempo: Math.max(0, toInteger(value?.movementPointsPerTempo ?? 1)),
+    accuracyPerTempo: Math.max(0, toInteger(value?.accuracyPerTempo ?? 10)),
+    damagePercentPerTempo: Math.max(0, toInteger(value?.damagePercentPerTempo ?? 5)),
+    attackMovementLossReductionPercentPerTempo: Math.max(
+      0,
+      toInteger(value?.attackMovementLossReductionPercentPerTempo ?? 20)
+    )
   };
 }
 

@@ -14,6 +14,10 @@ export function registerFoundryCompatibilitySystemEventHooks() {
     if (context?.falloutMawSemanticMirror === true) return;
     void emitWeaponAttackCheckResolved(context);
   });
+  Hooks.on("fallout-maw.weaponAttackResolved", context => {
+    if (context?.falloutMawSemanticMirror === true) return;
+    void emitWeaponAttackResolved(context);
+  });
   Hooks.on("fallout-maw.energyConsumptionChanged", actor => void emitEnergyConsumptionChanged(actor));
   Hooks.on(`${SYSTEM_ID}.recipeKnowledgeUpdated`, context => void emitRecipeKnowledgeChanged(context));
 }
@@ -80,6 +84,60 @@ export async function emitWeaponAttackCheckResolved(context = {}) {
   });
 }
 
+export async function emitWeaponAttackResolved(context = {}) {
+  if (context?.attackCheckAggregate !== true) return;
+  const actor = context.actor ?? context.actorToken?.actor ?? null;
+  const actorUuid = String(actor?.uuid ?? context.attackerUuid ?? context.actorUuid ?? "").trim();
+  const attackCheckCount = Math.max(0, Number(context.attackCheckCount) || 0);
+  if (!actorUuid || attackCheckCount <= 0) return;
+
+  const attackCheckTargetActorUuids = uniqueUuids(context.attackCheckTargetActorUuids);
+  const targetActorUuids = uniqueUuids([
+    ...attackCheckTargetActorUuids,
+    ...(Array.isArray(context.targetActorUuids) ? context.targetActorUuids : [])
+  ]);
+  const successfulAttackTargetActorUuids = uniqueUuids(context.successfulAttackTargetActorUuids);
+  const successfulAttackCheckCount = Math.max(0, Number(context.successfulAttackCheckCount) || 0);
+  const successfulAttack = context.successfulAttack === true || successfulAttackCheckCount > 0;
+  const attackId = String(context.attackId ?? "").trim();
+  const source = participant(actor, context.actorToken, null) ?? {
+    actorUuid,
+    tokenUuid: String(context.tokenUuid ?? ""),
+    itemUuid: String(context.weaponUuid ?? "")
+  };
+  source.itemUuid ||= String(context.weaponUuid ?? "");
+
+  await dispatchSystemEvent("fallout-maw.weapon.attack.resolved", {
+    data: {
+      actorUuid,
+      weaponUuid: String(context.weaponUuid ?? ""),
+      actionKey: String(context.actionKey ?? context.weaponActionKey ?? ""),
+      weaponFunctionId: String(context.weaponFunctionId ?? ""),
+      attackId,
+      attackCheckCount,
+      successfulAttackCheckCount,
+      successfulAttack,
+      attackCheckTargetActorUuids,
+      successfulAttackTargetActorUuids,
+      targetActorUuids,
+      attackCycleAggregate: true,
+      suppressGenericEventReactions: true
+    },
+    outcome: { success: successfulAttack }
+  }, {
+    kind: "weaponAttackCycleResolved",
+    operationId: `weapon-attack-cycle:${attackId || foundry.utils.randomID()}`,
+    sceneUuid: String(context.actorToken?.document?.parent?.uuid ?? canvas?.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: context?.chainRef ?? null,
+    participants: {
+      source,
+      target: null,
+      related: targetActorUuids.map(actorUuid => ({ actorUuid, tokenUuid: "", itemUuid: "" }))
+    }
+  });
+}
+
 async function emitEnergyConsumptionChanged(actor) {
   if (!isCurrentActiveGM() || !actor?.uuid) return;
   await dispatchSystemEvent("fallout-maw.item.energyConsumer.changed", {
@@ -117,6 +175,12 @@ function participant(actor = null, token = null, item = null) {
     itemUuid: String(item?.uuid ?? "")
   };
   return Object.values(value).some(Boolean) ? value : null;
+}
+
+function uniqueUuids(values = []) {
+  return Array.from(new Set((Array.isArray(values) ? values : [])
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean)));
 }
 
 function isCurrentActiveGM() {

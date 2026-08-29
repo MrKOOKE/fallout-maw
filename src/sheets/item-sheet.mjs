@@ -151,6 +151,7 @@ import {
   normalizeSpecialMixSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeHuntingGroundsSettings,
+  normalizeTempoSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -7368,6 +7369,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedHuntingGroundsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds
     ? prepareHuntingGroundsSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedTempoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo
+    ? normalizeTempoSettings(entry?.fixedSettings)
+    : null;
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -7534,6 +7538,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedRageSettings,
     fixedWhirlwindSettings,
     fixedHuntingGroundsSettings,
+    fixedTempoSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,

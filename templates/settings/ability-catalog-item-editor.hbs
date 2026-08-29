@@ -746,6 +746,34 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedTempoSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Темп</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Накопление</strong>
+          <label><span>Максимальный Темп</span><input type="number" data-field="fixed.tempo.maxTempo" value="{{fixedTempoSettings.maxTempo}}" min="1" step="1"></label>
+          <label><span>Темп в начале боя / за интервал</span><input type="number" data-field="fixed.tempo.automaticGain" value="{{fixedTempoSettings.automaticGain}}" min="0" step="1"></label>
+          <label><span>Интервал, сек.</span><input type="number" data-field="fixed.tempo.automaticIntervalSeconds" value="{{fixedTempoSettings.automaticIntervalSeconds}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Результаты атак</strong>
+          <label><span>За успешную вашу атаку</span><input type="number" data-field="fixed.tempo.successfulAttackGain" value="{{fixedTempoSettings.successfulAttackGain}}" min="0" step="1"></label>
+          <label><span>Потеря за ваш промах</span><input type="number" data-field="fixed.tempo.missedAttackLoss" value="{{fixedTempoSettings.missedAttackLoss}}" min="0" step="1"></label>
+          <label><span>За промах по вам</span><input type="number" data-field="fixed.tempo.incomingMissGain" value="{{fixedTempoSettings.incomingMissGain}}" min="0" step="1"></label>
+          <label><span>Потеря за попадание по вам</span><input type="number" data-field="fixed.tempo.incomingHitLoss" value="{{fixedTempoSettings.incomingHitLoss}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Каждая единица Темпа</strong>
+          <label><span>ОД</span><input type="number" data-field="fixed.tempo.actionPointsPerTempo" value="{{fixedTempoSettings.actionPointsPerTempo}}" min="0" step="1"></label>
+          <label><span>ОП</span><input type="number" data-field="fixed.tempo.movementPointsPerTempo" value="{{fixedTempoSettings.movementPointsPerTempo}}" min="0" step="1"></label>
+          <label><span>Точность</span><input type="number" data-field="fixed.tempo.accuracyPerTempo" value="{{fixedTempoSettings.accuracyPerTempo}}" min="0" step="1"></label>
+          <label><span>Урон, %</span><input type="number" data-field="fixed.tempo.damagePercentPerTempo" value="{{fixedTempoSettings.damagePercentPerTempo}}" min="0" step="1"></label>
+          <label><span>Снижение потери ОП от ОД атаки, %</span><input type="number" data-field="fixed.tempo.attackMovementLossReductionPercentPerTempo" value="{{fixedTempoSettings.attackMovementLossReductionPercentPerTempo}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedLungeSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Выпад</h3>

@@ -177,7 +177,10 @@ import {
   testObserverVisibilityBatch
 } from "../canvas/physical-los.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
-import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
+import {
+  emitWeaponAttackCheckResolved,
+  emitWeaponAttackResolved
+} from "../events/foundry-compatibility-events.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
 import {
@@ -350,7 +353,11 @@ async function publishWeaponAttackResolved(context = {}) {
       console.error(`${SYSTEM_ID} | Weapon attack resolved handler '${id}' failed`, error);
     }
   }
-  Hooks.callAll(WEAPON_ATTACK_RESOLVED_HOOK, context);
+  await emitWeaponAttackResolved(context);
+  Hooks.callAll(WEAPON_ATTACK_RESOLVED_HOOK, {
+    ...context,
+    falloutMawSemanticMirror: true
+  });
 }
 
 async function runWeaponAttackTerminalHandlers(context = {}) {
@@ -4415,6 +4422,9 @@ export class WeaponAttackController {
     this.criticalDamageUsed = false;
     this.lastResolvedAttackOutcome = null;
     this.attackCheckCount = 0;
+    this.successfulAttackCheckCount = 0;
+    this.attackCheckTargetActorUuids = new Set();
+    this.successfulAttackTargetActorUuids = new Set();
     this.attackCheckEventSequence = 0;
     this.pendingTerminalAttackOutcomes = [];
     this.weaponNoisePreviewSourceId = `weapon-attack:${this.attackId}`;
@@ -4667,6 +4677,7 @@ export class WeaponAttackController {
       canceledByReaction: Boolean(this.attackCanceledByReaction),
       criticalDamageUsed: this.criticalDamageUsed,
       attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
+      ...this.getAttackCheckAggregateData(),
       damageResults: resolvedDamageResults,
       impactConditionWear,
       modifierState: this.getWeaponActionModifierState(),
@@ -4710,6 +4721,7 @@ export class WeaponAttackController {
 
   async notifyAttackCheckResolved(outcome = null, completionCollector = null) {
     const notify = async () => {
+      this.recordAttackCheckOutcome(outcome);
       const checkOccurrenceId = `${this.attackId}:${++this.attackCheckEventSequence}`;
       const context = {
         actor: this.token?.actor ?? null,
@@ -5394,6 +5406,44 @@ export class WeaponAttackController {
       this.createWeaponActionContext()
     )) return false;
     return true;
+  }
+
+  recordAttackCheckOutcome(outcome = null) {
+    const targetToken = outcome?.check?.targetToken ?? outcome?.targetToken ?? null;
+    const targetActor = targetToken?.actor ?? outcome?.check?.targetActor ?? outcome?.targetActor ?? null;
+    const targetActorUuid = String(targetActor?.uuid ?? "").trim();
+    if (targetActorUuid) this.attackCheckTargetActorUuids.add(targetActorUuid);
+    if (!isSuccessfulAttack(outcome)) return false;
+    this.successfulAttackCheckCount += 1;
+    if (targetActorUuid) this.successfulAttackTargetActorUuids.add(targetActorUuid);
+    return true;
+  }
+
+  getAttackCheckAggregateData() {
+    return {
+      successfulAttackCheckCount: Math.max(0, toInteger(this.successfulAttackCheckCount)),
+      successfulAttack: this.successfulAttackCheckCount > 0,
+      attackCheckTargetActorUuids: Array.from(this.attackCheckTargetActorUuids),
+      successfulAttackTargetActorUuids: Array.from(this.successfulAttackTargetActorUuids),
+      attackCheckAggregate: true
+    };
+  }
+
+  emitAttackCheckAggregateResolved() {
+    return emitWeaponAttackResolved({
+      actor: this.token?.actor ?? null,
+      actorToken: this.token,
+      attackerUuid: this.token?.actor?.uuid ?? "",
+      actorUuid: this.token?.actor?.uuid ?? "",
+      tokenUuid: this.token?.document?.uuid ?? "",
+      weaponUuid: this.weapon?.uuid ?? "",
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      attackId: this.attackId,
+      attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
+      ...this.getAttackCheckAggregateData(),
+      chainRef: this.chainRef
+    });
   }
 
   flushPendingTerminalAttackOutcomes() {
@@ -6611,6 +6661,7 @@ export class WeaponAttackController {
     }
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     await this.finalizeWeaponNoiseDetection();
+    await this.emitAttackCheckAggregateResolved();
     this.completeProcessingCycle();
   }
 
@@ -7976,6 +8027,7 @@ export class WeaponAttackController {
         }
       }
       await this.finalizeWeaponNoiseDetection();
+      await this.emitAttackCheckAggregateResolved();
       this.completeProcessingCycle();
       return;
     }

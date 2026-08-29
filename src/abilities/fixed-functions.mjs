@@ -73,6 +73,7 @@ import {
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeHuntingGroundsSettings,
+  normalizeTempoSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 export { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
@@ -231,6 +232,7 @@ import {
   getHuntingGroundsSessionData,
   registerHuntingGroundsRuntime
 } from "./hunting-grounds.mjs";
+import { registerTempoRuntime } from "./tempo.mjs";
 import {
   LIVING_STEEL_DAMAGE_INTERCEPTOR_ID,
   actorHasLivingSteel,
@@ -837,6 +839,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.tempo,
+    label: "Темп",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.tempo,
+      fixedSettings: normalizeTempoSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
     label: "Всему свой подход",
     passive: true,
@@ -1047,6 +1058,7 @@ function registerFixedAbilityRuntimeHooks() {
   registerExplosiveResilienceRuntime();
   registerLastDropRuntime();
   registerHuntingGroundsRuntime();
+  registerTempoRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
     applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
     apply: runFixedAbilityRuntimeHandler(applyLivingSteelFinalHealthDamage),
