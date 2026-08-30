@@ -42,6 +42,22 @@ test("ability catalog preparation is synchronous and uses precomputed indexes", 
   assert.match(applicationSource, /getCreatureRaceSummaries/);
 });
 
+test("completed evolution families are green, sort after unavailable abilities, and mark only their branch complete", () => {
+  const prepareCategories = sourceBetween("  #prepareAbilityCategories(", "  #prepareSelectedAbility()");
+  const indexer = sourceBetween("function indexAbilityEvolutionFamily(", "function getLocalEvolutionAncestorSourceIds(");
+  const sorter = sourceBetween("function compareAbilityAvailability(", "function evaluateProgressionFormula(");
+  assert.match(prepareCategories, /evolutionExhausted/);
+  assert.match(prepareCategories, /!currentOwnedEntry\.hasEvolutionContinuation/);
+  assert.match(indexer, /hasAbilityEvolutionContinuation\(ability, ownerAbility\)/);
+  assert.match(indexer, /ownerAbility\?\.system\?\.evolution, ability\?\.system\?\.evolution/);
+  assert.match(sorter, /if \(entry\?\.owned\) return 2/);
+  assert.match(sorter, /entry\?\.acquisitionAvailable \? 0 : 1/);
+  assert.match(abilitiesTemplate, /evolutionExhausted/);
+  assert.match(abilitiesTemplate, /title="\{\{#if evolutionExhausted\}\}Завершено/);
+  assert.match(stylesheet, /\.fallout-maw-advancement-talent-item\.owned\s*\{[^}]*background:[^}]*border-color:/s);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-mark\.complete\s*\{[^}]*color:\s*#ff6b66;/s);
+});
+
 test("ability entries do not enrich every description during page render", () => {
   const prepareEntry = sourceBetween("  #prepareAbilityEntry(", "  #getAbilityResearch(");
   assert.doesNotMatch(prepareEntry, /TextEditor\.enrichHTML|renderAbilityDescriptionTooltipHTML/);
@@ -135,6 +151,8 @@ test("evolution graph camera updates synchronously with bounds and never force-r
   assert.match(camera, /#applyAbilityEvolutionViewport\(nextState\)/);
   assert.match(camera, /clampGraphViewportToVisibleNode/);
   assert.match(camera, /createGraphSegmentViewport/);
+  assert.match(camera, /maxZoom: ABILITY_EVOLUTION_FOCUS_ZOOM_MAX/);
+  assert.match(applicationSource, /const ABILITY_EVOLUTION_FOCUS_ZOOM_MAX = 2;/);
   assert.match(camera, /ResizeObserver/);
   assert.match(camera, /style\.transform = `translate\(/);
   assert.match(camera, /snapToDevicePixel/);

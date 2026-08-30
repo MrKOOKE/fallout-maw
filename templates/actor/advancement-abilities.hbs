@@ -25,7 +25,7 @@
             >
               <img class="fallout-maw-advancement-talent-icon" src="{{img}}" alt="">
               <span class="fallout-maw-advancement-talent-name">{{name}}</span>
-              {{#if hasEvolution}}<i class="fa-solid fa-code-branch fallout-maw-advancement-evolution-mark" title="Есть ветка эволюции"></i>{{/if}}
+              {{#if hasEvolution}}<i class="fa-solid fa-code-branch fallout-maw-advancement-evolution-mark{{#if evolutionExhausted}} complete{{/if}}" title="{{#if evolutionExhausted}}Завершено{{else}}Есть ветка эволюции{{/if}}"></i>{{/if}}
             </button>
             {{else}}
             <p class="fallout-maw-empty-list fallout-maw-advancement-talent-empty">В каталоге нет способностей.</p>

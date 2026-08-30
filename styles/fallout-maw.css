@@ -12829,7 +12829,15 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-advancement-talent-item.owned {
-  border-color: rgba(140, 178, 100, 0.42);
+  background: rgba(67, 116, 54, 0.28);
+  border-color: rgba(126, 205, 101, 0.72);
+  color: #b8eba8;
+}
+
+.fallout-maw-advancement-talent-item.owned:hover,
+.fallout-maw-advancement-talent-item.owned.selected {
+  background: rgba(76, 139, 59, 0.38);
+  border-color: rgba(150, 228, 123, 0.9);
 }
 
 .fallout-maw-advancement-talent-item.unavailable {
@@ -13048,6 +13056,11 @@ html.fallout-maw-token-action-hud-open #hotbar {
   flex: 0 0 auto;
   font-size: 0.85rem;
   filter: drop-shadow(0 0 4px rgba(231, 200, 119, 0.28));
+}
+
+.fallout-maw-advancement-talent-item .fallout-maw-advancement-evolution-mark.complete {
+  color: #ff6b66;
+  filter: drop-shadow(0 0 4px rgba(255, 78, 72, 0.42));
 }
 
 .fallout-maw-advancement-evolution-header button,

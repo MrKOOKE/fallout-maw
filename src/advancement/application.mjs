@@ -79,6 +79,7 @@ const ABILITY_EVOLUTION_NODE_WIDTH = 184;
 const ABILITY_EVOLUTION_NODE_HEIGHT = 76;
 const ABILITY_EVOLUTION_ZOOM_MIN = 0.35;
 const ABILITY_EVOLUTION_ZOOM_MAX = 2.25;
+const ABILITY_EVOLUTION_FOCUS_ZOOM_MAX = 2;
 const ABILITY_EVOLUTION_GRID_SIZE = 22;
 const ABILITY_EVOLUTION_MAJOR_GRID_SIZE = 110;
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
@@ -1504,7 +1505,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         .map(node => node.id),
       height: metrics.height,
       links: this.#abilityEvolutionGraph.links,
-      maxZoom: 0.9,
+      maxZoom: ABILITY_EVOLUTION_FOCUS_ZOOM_MAX,
       minZoom: ABILITY_EVOLUTION_ZOOM_MIN,
       nodeHeight: ABILITY_EVOLUTION_NODE_HEIGHT,
       nodeWidth: ABILITY_EVOLUTION_NODE_WIDTH,
@@ -2211,7 +2212,15 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           const familySourceId = String(ability?.id ?? "");
           const familyOwned = ownedFamilyRootIds.has(familySourceId);
           if (familyOwned && !abilityHasEvolutions(ability)) return null;
+          const currentOwnedSourceId = currentOwnedSourceIdByFamily.get(familySourceId);
+          const currentOwnedEntry = this.#abilityById.get(currentOwnedSourceId);
+          const evolutionExhausted = Boolean(
+            familyOwned
+            && currentOwnedEntry
+            && !currentOwnedEntry.hasEvolutionContinuation
+          );
           const rootEntry = this.#prepareAbilityEntry(category, ability, remaining, {
+            evolutionExhausted: evolutionExhausted && currentOwnedSourceId === familySourceId,
             familyOwned,
             familyHasEvolution: abilityHasEvolutions(ability),
             familySourceId,
@@ -2221,10 +2230,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
             requirementContext: this.#abilityRequirementContext,
             skillByKey
           });
-          const currentOwnedSourceId = currentOwnedSourceIdByFamily.get(familySourceId);
-          const currentOwnedEntry = this.#abilityById.get(currentOwnedSourceId);
           if (!familyOwned || !currentOwnedEntry || currentOwnedSourceId === familySourceId) return rootEntry;
           return this.#prepareAbilityEntry(category, currentOwnedEntry.ability, remaining, {
+            evolutionExhausted,
             evolutionParentIds: currentOwnedEntry.incomingSourceIds,
             familyOwned: true,
             familyHasEvolution: true,
@@ -2362,6 +2370,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #prepareAbilityEntry(category, ability, remaining = {}, {
+    evolutionExhausted = false,
     evolutionParentIds = [],
     familyOwned = false,
     familyHasEvolution = null,
@@ -2410,6 +2419,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       currentOwned,
       evolutionAcquisitionBlocked,
       evolutionAvailable,
+      evolutionExhausted: Boolean(evolutionExhausted),
       evolutionLocked: !evolutionAvailable,
       evolutionParentIds,
       familyOwned,
@@ -2945,6 +2955,7 @@ function indexAbilityEvolutionFamily(
     ability,
     ancestorSourceIds,
     category,
+    hasEvolutionContinuation: hasAbilityEvolutionContinuation(ability, ownerAbility),
     incomingSourceIds,
     ownerAbility,
     parentAbility,
@@ -2959,6 +2970,17 @@ function indexAbilityEvolutionFamily(
       ownerAbility: ability
     });
   }
+}
+
+function hasAbilityEvolutionContinuation(ability = {}, ownerAbility = null) {
+  const sourceId = String(ability?.id ?? "").trim();
+  if (!sourceId) return false;
+  return [ownerAbility?.system?.evolution, ability?.system?.evolution]
+    .filter(Boolean)
+    .some(evolution => (evolution.links ?? []).some(link => (
+      String(link?.fromId ?? "").trim() === sourceId
+      && Boolean(String(link?.toId ?? "").trim())
+    )));
 }
 
 function getLocalEvolutionAncestorSourceIds(ownerAbility = {}, nodeId = "") {
@@ -3221,13 +3243,18 @@ function getAbilityAcquisitionRequirementLabel(requirementRows = []) {
 }
 
 function compareAbilityAvailability(left, right) {
-  if (left?.acquisitionAvailable !== right?.acquisitionAvailable) {
-    return left?.acquisitionAvailable ? -1 : 1;
-  }
+  const leftRank = getAbilityAvailabilityRank(left);
+  const rightRank = getAbilityAvailabilityRank(right);
+  if (leftRank !== rightRank) return leftRank - rightRank;
   return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "ru", {
     sensitivity: "base",
     numeric: true
   });
+}
+
+function getAbilityAvailabilityRank(entry = {}) {
+  if (entry?.owned) return 2;
+  return entry?.acquisitionAvailable ? 0 : 1;
 }
 
 function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {
