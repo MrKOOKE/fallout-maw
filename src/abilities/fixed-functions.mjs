@@ -20,7 +20,7 @@ import {
   getAbilitySourceId,
   normalizeActiveApplicationSettings,
   normalizeAbilityConstructs,
-  normalizeAbilityFunctions,
+  normalizeAbilityFunctions as normalizeStoredAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
@@ -374,6 +374,12 @@ import {
   getAbilityOverloadEnergyCost,
   getAbilityOverloadName
 } from "./overload.mjs";
+
+// Fixed-function runtimes never scan disabled rows. Keeping this filter at the
+// normalization boundary avoids sprinkling conditionals through every hot path.
+function normalizeAbilityFunctions(value = []) {
+  return normalizeStoredAbilityFunctions(value).filter(entry => entry.enabled !== false);
+}
 import { registerReactiveRuntime, useReactiveAbility } from "./reactive.mjs";
 import {
   notifyAbilityTriggerCostFailure,

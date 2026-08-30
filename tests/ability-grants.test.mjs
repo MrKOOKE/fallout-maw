@@ -25,11 +25,19 @@ globalThis.game = {
 globalThis.ui = { notifications: { warn() {} } };
 
 const {
+  ABILITY_SOURCE_FLAG,
   ABILITY_CONDITION_TYPES,
   createAbilityCondition
 } = await import("../src/settings/abilities.mjs");
 const { getAbilityEffectChangesFromFunctions } = await import("../src/abilities/evaluation.mjs");
-const { grantAbilityItemData } = await import("../src/abilities/purchase.mjs");
+const {
+  completeAbilityResearch,
+  findCatalogAbility,
+  grantAbilityItemData,
+  grantCatalogAbility,
+  hasUnsafeAbilityEvolutionAcquisitionChanges,
+  prepareCatalogAbilityItemData
+} = await import("../src/abilities/purchase.mjs");
 
 test("ability grants persist only selected changes before creating the item", async () => {
   const actor = createActor();
@@ -114,11 +122,126 @@ test("limited changes normalize as non-OR metadata", () => {
   assert.equal(condition.groupId, "");
 });
 
-function createActor() {
-  return {
+test("catalog lookup finds a nested evolution with its incoming predecessor", () => {
+  const catalog = createEvolutionCatalog();
+  const entry = findCatalogAbility("reactive-2", catalog);
+
+  assert.equal(entry?.ability?.name, "Реактивный II");
+  assert.equal(entry?.rootAbility?.id, "reactive-1");
+  assert.deepEqual(entry?.incomingSourceIds, ["reactive-1"]);
+  assert.equal(entry?.category?.id, "athletics");
+});
+
+test("every catalog snapshot path preserves nested evolution lineage", () => {
+  const entry = findCatalogAbility("reactive-2", createEvolutionCatalog());
+  const itemData = prepareCatalogAbilityItemData(entry);
+  assert.deepEqual(itemData.flags["fallout-maw"][ABILITY_SOURCE_FLAG], {
+    id: "reactive-2",
+    categoryId: "athletics",
+    evolutionRootId: "reactive-1",
+    evolutionParentIds: ["reactive-1"],
+    evolutionAncestorIds: ["reactive-1"]
+  });
+});
+
+test("granting an evolution replaces exactly one predecessor in place", async () => {
+  const actor = createActor({ ownedSourceId: "reactive-1" });
+  const originalItemId = actor.items[0].id;
+  actor.items[0].flags.externalModule = { retained: true };
+  actor.items[0].flags["fallout-maw"].abilityFixedFunctionState = { stale: true };
+
+  const evolved = await grantCatalogAbility(actor, "reactive-2", createEvolutionCatalog());
+
+  assert.equal(actor.created.length, 0, "evolution must never create a second embedded Item");
+  assert.equal(actor.updated.length, 1);
+  assert.equal(actor.updated[0].documentName, "Item");
+  assert.deepEqual(actor.updated[0].options, { diff: false, recursive: false });
+  assert.equal(actor.updated[0].data._id, originalItemId, "the predecessor Item UUID must remain stable");
+  assert.equal(evolved?.id, originalItemId);
+  assert.equal(evolved?.name, "Реактивный II");
+  assert.deepEqual(evolved?.flags?.externalModule, { retained: true });
+  assert.equal(Object.hasOwn(evolved?.flags?.["fallout-maw"] ?? {}, "abilityFixedFunctionState"), false);
+  assert.deepEqual(evolved?.flags?.["fallout-maw"]?.[ABILITY_SOURCE_FLAG], {
+    id: "reactive-2",
+    categoryId: "athletics",
+    evolutionRootId: "reactive-1",
+    evolutionParentIds: ["reactive-1"],
+    evolutionAncestorIds: ["reactive-1"]
+  });
+});
+
+test("evolution replacement forwards non-rendering options to its single update", async () => {
+  const actor = createActor({ ownedSourceId: "reactive-1" });
+  const entry = findCatalogAbility("reactive-2", createEvolutionCatalog());
+  const result = await grantAbilityItemData(actor, prepareCatalogAbilityItemData(entry), {
+    sourceId: "reactive-2",
+    createOptions: { render: false }
+  });
+
+  assert.ok(result.item);
+  assert.deepEqual(actor.updated[0].options, {
+    render: false,
+    diff: false,
+    recursive: false
+  });
+});
+
+test("concurrent evolution grants update the predecessor only once", async () => {
+  const actor = createActor({ ownedSourceId: "reactive-1" });
+  let releaseUpdate;
+  const updateStarted = new Promise(resolve => {
+    actor.beforeUpdate = () => new Promise(release => {
+      releaseUpdate = release;
+      resolve();
+    });
+  });
+
+  const firstGrant = grantCatalogAbility(actor, "reactive-2", createEvolutionCatalog());
+  await updateStarted;
+  const secondGrant = await grantCatalogAbility(actor, "reactive-2", createEvolutionCatalog());
+  assert.equal(secondGrant, null);
+  assert.equal(actor.updated.length, 1);
+
+  releaseUpdate();
+  const evolved = await firstGrant;
+  assert.equal(evolved?.name, "Реактивный II");
+  assert.equal(actor.updated.length, 1);
+});
+
+test("unsafe evolution acquisition changes keep completed research and predecessor intact", async () => {
+  const actor = createActor({ ownedSourceId: "reactive-1" });
+  const reward = createEvolutionRewardData({ withAcquisitionChange: true });
+  assert.equal(
+    hasUnsafeAbilityEvolutionAcquisitionChanges(actor, reward, ["reactive-1"]),
+    true,
+    "advancement must be able to block the cost before research starts"
+  );
+  actor.system.researches = [{
+    id: "research-evolution",
+    type: "ability",
+    sourceId: "reactive-2",
+    progress: 100,
+    target: 100,
+    rewards: [{ type: "item", itemData: reward }]
+  }];
+
+  const result = await completeAbilityResearch(actor, "research-evolution");
+
+  assert.equal(result?.blocked, true);
+  assert.equal(result?.item, null);
+  assert.equal(actor.deletedResearches.length, 0, "blocked reward must leave completed research available");
+  assert.equal(actor.updated.length, 0);
+  assert.equal(actor.items[0].flags["fallout-maw"][ABILITY_SOURCE_FLAG].id, "reactive-1");
+});
+
+function createActor({ ownedSourceId = "" } = {}) {
+  const actor = {
     items: [],
     system: {},
     created: [],
+    updated: [],
+    deletedResearches: [],
+    beforeUpdate: null,
     async createEmbeddedDocuments(documentName, entries) {
       assert.equal(documentName, "Item");
       const data = structuredClone(entries[0]);
@@ -132,8 +255,33 @@ function createActor() {
       this.items.push(item);
       return [item];
     },
+    async updateEmbeddedDocuments(documentName, entries, options) {
+      assert.equal(documentName, "Item");
+      const data = structuredClone(entries[0]);
+      this.updated.push({ documentName, data, options: structuredClone(options) });
+      await this.beforeUpdate?.();
+      const index = this.items.findIndex(item => item.id === data._id || item._id === data._id);
+      if (index < 0) return [];
+      const item = {
+        ...data,
+        id: data._id,
+        getFlag(namespace, key) {
+          return this.flags?.[namespace]?.[key];
+        }
+      };
+      this.items[index] = item;
+      return [item];
+    },
+    async deleteResearch(researchId) {
+      this.deletedResearches.push(researchId);
+      this.system.researches = this.system.researches.filter(research => research.id !== researchId);
+    },
     async update() {}
   };
+  if (ownedSourceId) {
+    actor.items.push(createOwnedAbility("owned-ability-id", ownedSourceId));
+  }
+  return actor;
 }
 
 function createLimitedAbilityData() {
@@ -170,6 +318,87 @@ function createChange(id, key) {
     value: "10",
     phase: "initial",
     priority: null
+  };
+}
+
+function createEvolutionCatalog() {
+  return {
+    categories: [{
+      id: "athletics",
+      name: "Атлетика",
+      abilities: [{
+        id: "reactive-1",
+        name: "Реактивный",
+        img: "icons/svg/aura.svg",
+        system: {
+          functions: [],
+          evolution: {
+            nodes: [{
+              id: "reactive-2",
+              x: 300,
+              y: 0,
+              ability: {
+                id: "reactive-2",
+                name: "Реактивный II",
+                img: "icons/svg/aura.svg",
+                description: "Каждые 4 потраченных ОП дают +2 ОД.",
+                system: { functions: [] }
+              }
+            }],
+            links: [{ id: "reactive-link", fromId: "reactive-1", toId: "reactive-2" }]
+          }
+        }
+      }]
+    }]
+  };
+}
+
+function createEvolutionRewardData({ withAcquisitionChange = false } = {}) {
+  return {
+    name: "Реактивный II",
+    type: "ability",
+    system: {
+      functions: withAcquisitionChange ? [{
+        id: "unsafe-acquisition",
+        type: "acquisitionChanges",
+        changes: [createChange("unsafe-change", "system.development.points.skills")],
+        conditions: [],
+        penalties: []
+      }] : []
+    },
+    flags: {
+      "fallout-maw": {
+        [ABILITY_SOURCE_FLAG]: {
+          id: "reactive-2",
+          categoryId: "athletics",
+          evolutionRootId: "reactive-1",
+          evolutionParentIds: ["reactive-1"]
+        }
+      }
+    }
+  };
+}
+
+function createOwnedAbility(id, sourceId) {
+  return {
+    id,
+    _id: id,
+    name: "Реактивный",
+    type: "ability",
+    system: { functions: [] },
+    flags: {
+      "fallout-maw": {
+        [ABILITY_SOURCE_FLAG]: {
+          id: sourceId,
+          categoryId: "athletics",
+          evolutionRootId: "",
+          evolutionParentIds: []
+        }
+      }
+    },
+    getFlag(namespace, key) {
+      return this.flags?.[namespace]?.[key];
+    }
   };
 }
 

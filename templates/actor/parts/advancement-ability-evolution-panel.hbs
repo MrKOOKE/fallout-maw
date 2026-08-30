@@ -1,0 +1,75 @@
+<div
+  class="fallout-maw-advancement-evolution-layer{{#if abilityEvolutionPanel}} open{{/if}}"
+  data-ability-evolution-layer
+  data-ability-evolution-open="{{#if abilityEvolutionPanel}}true{{else}}false{{/if}}"
+  {{#if abilityEvolutionPanel}}data-ability-family-source-id="{{abilityEvolutionPanel.familySourceId}}"{{/if}}
+>
+  {{#if abilityEvolutionPanel}}
+  <aside class="fallout-maw-advancement-evolution-panel" aria-label="Эволюция способности {{abilityEvolutionPanel.rootAbility.name}}">
+    <header class="fallout-maw-advancement-evolution-header">
+      <div>
+        <span>Ветка эволюции</span>
+        <strong>{{abilityEvolutionPanel.rootAbility.name}}</strong>
+      </div>
+      <button type="button" data-action="closeAbilityEvolution" title="Закрыть ветку" aria-label="Закрыть ветку эволюции">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </header>
+
+    <div class="fallout-maw-advancement-evolution-toolbar">
+      <span>Колесо — масштаб, ПКМ — камера</span>
+      <div>
+        <output data-ability-evolution-zoom>90%</output>
+        <button type="button" data-action="resetAbilityEvolutionView" title="Вернуть камеру" aria-label="Вернуть камеру">
+          <i class="fa-solid fa-crosshairs"></i>
+        </button>
+      </div>
+    </div>
+
+    <div
+      class="fallout-maw-advancement-evolution-viewport"
+      data-ability-evolution-viewport
+    >
+      <div class="fallout-maw-advancement-evolution-stage" data-ability-evolution-stage>
+        <svg class="fallout-maw-advancement-evolution-links" aria-hidden="true">
+          {{#each abilityEvolutionPanel.links}}
+          <path class="{{#if completed}}completed{{/if}}"
+                d="{{path}}"
+                data-ability-evolution-link-id="{{id}}"
+                data-from-id="{{fromId}}"
+                data-to-id="{{toId}}"></path>
+          {{/each}}
+        </svg>
+        {{#each abilityEvolutionPanel.nodes}}
+        <button
+          type="button"
+          class="fallout-maw-advancement-evolution-node {{stateClass}}{{#if selected}} selected{{/if}}"
+          style="{{style}}"
+          data-action="selectAbilityEvolutionNode"
+           data-ability-evolution-node
+           data-ability-source-id="{{ability.id}}"
+           data-node-x="{{x}}"
+           data-node-y="{{y}}"
+           data-current-owned="{{#if currentOwned}}true{{else}}false{{/if}}"
+           {{#if hasDescriptionTooltip}}data-ability-description-source-id="{{ability.id}}" data-ability-description-mode="{{tooltipMode}}"{{/if}}
+           aria-pressed="{{#if selected}}true{{else}}false{{/if}}"
+        >
+          <img src="{{ability.img}}" alt="" draggable="false">
+          <span>
+            <strong>{{ability.name}}</strong>
+            <small>
+              {{#if currentOwned}}Текущая версия
+              {{else if researchActive}}Исследуется
+              {{else if completed}}Пройдено
+              {{else if acquisitionAvailable}}Доступно
+              {{else}}Заблокировано{{/if}}
+            </small>
+          </span>
+        </button>
+        {{/each}}
+      </div>
+    </div>
+
+  </aside>
+  {{/if}}
+</div>

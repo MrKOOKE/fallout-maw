@@ -52,7 +52,11 @@ export function getActorFixedAbilityFunctionEntry(actor, fixedKey = "", {
   for (const item of (actor.items ?? [])) {
     if (item?.type !== "ability") continue;
     const entry = normalizeAbilityFunctions(item.system?.functions ?? [])
-      .find(candidate => candidate.type === ABILITY_FUNCTION_TYPES.fixed && candidate.fixedKey === key);
+      .find(candidate => (
+        candidate.type === ABILITY_FUNCTION_TYPES.fixed
+        && candidate.enabled !== false
+        && candidate.fixedKey === key
+      ));
     if (!entry) continue;
     if (activeOnly || pendingOnly) {
       const state = getAbilityFixedFunctionState(item);
@@ -113,6 +117,7 @@ export function getActorAtRandomActionPointCostSources(actor, actionKey = "") {
   const sources = [];
   for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.enabled === false) continue;
       if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.atRandom) continue;
       const settings = normalizeAtRandomSettings(abilityFunction.fixedSettings);
       if (settings.actionPointCostReduction <= 0) continue;

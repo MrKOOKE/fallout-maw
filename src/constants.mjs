@@ -17,6 +17,7 @@ export const TEMPLATES = Object.freeze({
     proficiencies: `systems/${SYSTEM_ID}/templates/actor/advancement-proficiencies.hbs`,
     abilities: `systems/${SYSTEM_ID}/templates/actor/advancement-abilities.hbs`,
     abilityDetails: `systems/${SYSTEM_ID}/templates/actor/parts/advancement-ability-details.hbs`,
+    abilityEvolutionPanel: `systems/${SYSTEM_ID}/templates/actor/parts/advancement-ability-evolution-panel.hbs`,
     navigation: `systems/${SYSTEM_ID}/templates/actor/parts/advancement-navigation.hbs`
   }),
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
@@ -84,6 +85,7 @@ export const TEMPLATES = Object.freeze({
     damageTypeSettings: `systems/${SYSTEM_ID}/templates/settings/damage-type-settings-config.hbs`,
     abilities: `systems/${SYSTEM_ID}/templates/settings/ability-settings-config.hbs`,
     abilityEditor: `systems/${SYSTEM_ID}/templates/settings/ability-catalog-item-editor.hbs`,
+    abilityEvolutionEditor: `systems/${SYSTEM_ID}/templates/settings/ability-evolution-editor.hbs`,
     diseases: `systems/${SYSTEM_ID}/templates/settings/disease-settings-config.hbs`,
     levels: `systems/${SYSTEM_ID}/templates/settings/level-settings-config.hbs`,
     needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,

@@ -4,8 +4,14 @@ import test from "node:test";
 
 const applicationPath = new URL("../src/advancement/application.mjs", import.meta.url);
 const abilitiesTemplatePath = new URL("../templates/actor/advancement-abilities.hbs", import.meta.url);
+const abilityDetailsTemplatePath = new URL("../templates/actor/parts/advancement-ability-details.hbs", import.meta.url);
+const evolutionTemplatePath = new URL("../templates/actor/parts/advancement-ability-evolution-panel.hbs", import.meta.url);
+const stylesheetPath = new URL("../styles/fallout-maw.css", import.meta.url);
 const applicationSource = await readFile(applicationPath, "utf8");
 const abilitiesTemplate = await readFile(abilitiesTemplatePath, "utf8");
+const abilityDetailsTemplate = await readFile(abilityDetailsTemplatePath, "utf8");
+const evolutionTemplate = await readFile(evolutionTemplatePath, "utf8");
+const stylesheet = await readFile(stylesheetPath, "utf8");
 
 function sourceBetween(start, end) {
   const startIndex = applicationSource.indexOf(start);
@@ -27,9 +33,11 @@ test("advancement context exits into page-specific preparation before developmen
 test("ability catalog preparation is synchronous and uses precomputed indexes", () => {
   const prepareCategories = sourceBetween("  #prepareAbilityCategories(", "  #prepareSelectedAbility()");
   assert.doesNotMatch(prepareCategories, /Promise\.all|actorHasAbility\(/);
-  assert.match(prepareCategories, /ownedAbilityIds = new Set/);
+  assert.match(prepareCategories, /currentOwnedAbilityIds = new Set/);
   assert.match(prepareCategories, /researchBySourceId = new Map/);
   assert.match(prepareCategories, /this\.#abilityById = new Map/);
+  assert.match(prepareCategories, /indexAbilityEvolutionFamily/);
+  assert.doesNotMatch(prepareCategories, /#prepareAbilityEvolutionFamilyEntries/);
   assert.doesNotMatch(applicationSource, /getCreatureOptions/);
   assert.match(applicationSource, /getCreatureRaceSummaries/);
 });
@@ -49,7 +57,159 @@ test("ability selection and category toggles do not render the full application"
   assert.match(localActions, /#renderAbilityDetails/);
 });
 
+test("owned ability families stay selectable while ordinary owned abilities stay filtered", () => {
+  const prepareCategories = sourceBetween("  #prepareAbilityCategories(", "  #prepareSelectedAbility()");
+  assert.match(prepareCategories, /familyOwned/);
+  assert.match(prepareCategories, /currentOwnedSourceIdByFamily/);
+  assert.match(prepareCategories, /currentOwnedEntry\.ability/);
+  assert.match(prepareCategories, /!abilityHasEvolutions\(ability\)/);
+  assert.doesNotMatch(prepareCategories, /filter\(ability => !ownedAbilityIds\.has/);
+  assert.match(abilitiesTemplate, /data-ability-family-source-id="\{\{familySourceId\}\}"/);
+  const selection = sourceBetween("  static async #onSelectAbility(", "  static async #onSelectAbilityEvolutionNode(");
+  assert.match(selection, /target\.dataset\.abilityFamilySourceId \|\| sourceId/);
+  assert.match(selection, /#selectedAbilityFamilySourceId = familySourceId/);
+  assert.match(selection, /#selectedAbilitySourceId = sourceId/);
+});
+
+test("a stale ability selection clears safely without consulting an undefined catalog entry", () => {
+  const prepareSelected = sourceBetween("  #prepareSelectedAbility()", "  #prepareAbilityEvolutionPanel()");
+  assert.doesNotMatch(prepareSelected, /\bentry\./);
+  assert.match(prepareSelected, /this\.#selectedAbilitySourceId = ""/);
+  assert.match(prepareSelected, /this\.#selectedAbilityFamilySourceId = ""/);
+});
+
+test("evolution panel is a non-modal pointer-transparent overlay with an interactive pane", () => {
+  assert.match(abilitiesTemplate, /advancement-ability-evolution-panel\.hbs/);
+  assert.match(evolutionTemplate, /data-ability-evolution-layer/);
+  assert.doesNotMatch(evolutionTemplate, /role=["']dialog|dialog-form|backdrop/);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-layer\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-panel\s*\{[^}]*pointer-events:\s*auto;/s);
+});
+
+test("nested evolution actions reuse the main source-id based acquisition controls", () => {
+  assert.match(abilityDetailsTemplate, /data-ability-source-id="\{\{selectedAbility\.sourceId\}\}"/);
+  assert.match(abilityDetailsTemplate, /data-action="startAbilityResearch"/);
+  assert.match(abilityDetailsTemplate, /data-action="spendAbilityResearch"/);
+  assert.match(abilityDetailsTemplate, /data-action="purchaseTraitAbility"/);
+  assert.match(abilityDetailsTemplate, /data-action="grantAbility"/);
+  assert.doesNotMatch(evolutionTemplate, /abilityEvolutionSelection|data-ability-evolution-selection/);
+  const researchSnapshot = sourceBetween("  #createAbilityResearchData(", "  async #applyRepeatAction(");
+  assert.match(researchSnapshot, /evolutionRootId/);
+  assert.match(researchSnapshot, /evolutionParentIds/);
+  assert.match(researchSnapshot, /evolutionAncestorIds:\s*entry\.ancestorSourceIds/);
+});
+
+test("irreversible evolution changes are rejected before research spends points", () => {
+  const spend = sourceBetween("  static async #onSpendAbilityResearch(", "  static async #onStartAbilityResearch(");
+  const preflight = spend.indexOf("hasUnsafeAbilityEvolutionAcquisitionChanges");
+  assert.ok(preflight >= 0);
+  assert.ok(preflight < spend.indexOf("this.#draft.development.points.researches ="));
+  const entry = sourceBetween("  #prepareAbilityEntry(", "  #getAbilityResearch(");
+  assert.match(entry, /evolutionAcquisitionBlocked/);
+  assert.match(entry, /evolutionAcquisitionBlocked = !owned[\s\S]*?hasUnsafeAbilityEvolutionAcquisitionChanges/);
+  assert.match(entry, /acquisitionAvailable = owned \|\| \([\s\S]*?evolutionAvailable[\s\S]*?!evolutionAcquisitionBlocked/);
+  assert.match(entry, /canPurchaseTrait: isFeature && !owned && acquisitionAvailable/);
+  assert.match(entry, /canSpendFree: !isFeature && !owned && acquisitionAvailable/);
+  assert.match(entry, /canStartManual: !isFeature && !owned && acquisitionAvailable/);
+});
+
+test("recursive advancement index preserves every graph ancestor for research snapshots", () => {
+  const indexer = sourceBetween("function indexAbilityEvolutionFamily(", "function collectOwnedAbilityLineageIds(");
+  assert.match(indexer, /ancestorSourceIds/);
+  assert.match(indexer, /getLocalEvolutionAncestorSourceIds/);
+  assert.match(indexer, /new Set\(\[\.\.\.ancestorSourceIds, \.\.\.localAncestorSourceIds\]\)/);
+});
+
+test("flattened nested graphs qualify locally-scoped link ids", () => {
+  const graph = sourceBetween("function collectAbilityEvolutionGraph(", "function collectCompletedEvolutionIds(");
+  assert.match(graph, /const id = `\$\{sourceId\}::\$\{localId\}`/);
+});
+
+test("evolution graph camera updates synchronously with bounds and never force-render the application", () => {
+  const camera = sourceBetween("  #activateAbilityEvolutionLayer(", "  #removeAbilityEvolutionLayer()");
+  assert.match(camera, /wheel/);
+  assert.match(camera, /pointermove/);
+  assert.match(camera, /event\.button !== 2/);
+  assert.match(camera, /contextmenu/);
+  assert.match(camera, /getCoalescedEvents/);
+  assert.match(camera, /#applyAbilityEvolutionViewport\(nextState\)/);
+  assert.match(camera, /clampGraphViewportToVisibleNode/);
+  assert.match(camera, /createGraphSegmentViewport/);
+  assert.match(camera, /ResizeObserver/);
+  assert.match(camera, /style\.transform = `translate\(/);
+  assert.match(camera, /snapToDevicePixel/);
+  assert.doesNotMatch(camera, /#queueAbilityEvolutionViewport|requestAnimationFrame/);
+  assert.doesNotMatch(camera, /forceRender\(/);
+});
+
+test("selecting an evolution node updates the main details and node highlight without rebuilding the graph", () => {
+  const selectNode = sourceBetween("  static async #onSelectAbilityEvolutionNode(", "  static async #onCloseAbilityEvolution(");
+  const details = sourceBetween("  async #renderAbilityDetails(", "  #syncAbilityEvolutionNodeSelection(");
+  const selection = sourceBetween("  #syncAbilityEvolutionNodeSelection(", "  #replaceAbilityEvolutionLayer(");
+  assert.match(selectNode, /refreshEvolutionGraph:\s*false/);
+  assert.match(details, /#syncAbilityEvolutionNodeSelection/);
+  assert.doesNotMatch(details, /abilityEvolutionSelection\.hbs|refreshEvolutionGraph:\s*true/);
+  assert.match(selection, /classList\.toggle\("selected"/);
+  assert.doesNotMatch(selection, /#replaceAbilityEvolutionLayer/);
+});
+
+test("evolution panel remains a stable child of the advancement window across renders and detaching", () => {
+  const overlay = sourceBetween("  #replaceAbilityEvolutionLayer(", "  #removeAbilityEvolutionLayer()");
+  assert.match(overlay, /\.window-content \[data-ability-evolution-layer\]/);
+  assert.match(overlay, /#canReconcileAbilityEvolutionLayers/);
+  assert.match(overlay, /#reconcileAbilityEvolutionLayer/);
+  assert.match(applicationSource, /this\.element\.append\(nextLayer\)/);
+  assert.match(overlay, /this\.element\?\.ownerDocument/);
+  assert.match(overlay, /layer\.ownerDocument\?\.defaultView/);
+  assert.match(overlay, /instanceof view\.HTMLElement/);
+  assert.match(overlay, /new view\.AbortController\(\)/);
+  assert.match(overlay, /#abilityEvolutionAnimatedFamilySourceId/);
+  assert.doesNotMatch(overlay, /#abilityEvolutionFrame|requestAnimationFrame/);
+  assert.doesNotMatch(overlay, /ownerDocument\.body|#moveAbilityEvolutionLayerToDocument|reserveOverlayZIndex/);
+  assert.match(stylesheet, /\.application\.fallout-maw-advancement-app:not\([^)]*minimized[^)]*\)\s*\{[^}]*overflow:\s*visible;/s);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-layer\s*\{[^}]*left:\s*calc\(100% \+ 1px\);[^}]*position:\s*absolute;/s);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-layer\.opening\s*\{[^}]*overflow:\s*clip;/s);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-layer\.opening \.fallout-maw-advancement-evolution-panel\s*\{[^}]*animation:/s);
+  const openingAnimation = stylesheet.slice(
+    stylesheet.indexOf("@keyframes fallout-maw-advancement-evolution-enter"),
+    stylesheet.indexOf(".fallout-maw-advancement-evolution-header")
+  );
+  assert.match(openingAnimation, /from\s*\{\s*transform:\s*translateX\(-100%\)/s);
+  assert.match(openingAnimation, /to\s*\{\s*transform:\s*translateX\(0\)/s);
+  assert.doesNotMatch(openingAnimation, /translateX\(100%\)/);
+});
+
+test("evolution nodes reuse the standard lazy ability tooltip with their short summary", () => {
+  const panel = sourceBetween("  #prepareAbilityEvolutionPanel()", "  #prepareAbilityEvolutionFamilyEntries(");
+  const tooltip = sourceBetween("  async #showAbilityDescriptionTooltip(", "  #clearAbilityDescriptionTooltip()");
+  assert.match(panel, /hasDescriptionTooltip/);
+  assert.match(panel, /tooltipMode/);
+  assert.doesNotMatch(panel, /TextEditor\.enrichHTML/);
+  assert.match(evolutionTemplate, /data-ability-description-source-id/);
+  assert.match(evolutionTemplate, /data-ability-description-mode="\{\{tooltipMode\}\}"/);
+  assert.doesNotMatch(evolutionTemplate, /fallout-maw-advancement-evolution-node-summary/);
+  assert.match(tooltip, /descriptionMode === "evolution-summary"/);
+  assert.match(tooltip, /fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip/);
+  assert.match(applicationSource, /#bindAbilityDescriptionTooltipEvents\(root\)/);
+  assert.match(applicationSource, /this\.element\.append\(nextLayer\)/);
+});
+
+test("advancement evolution links follow the vertical graph direction", () => {
+  const panel = sourceBetween("  #prepareAbilityEvolutionPanel()", "  #prepareAbilityEvolutionFamilyEntries(");
+  assert.match(panel, /const startX = from\.x \+ \(ABILITY_EVOLUTION_NODE_WIDTH \/ 2\)/);
+  assert.match(panel, /const startY = from\.y \+ ABILITY_EVOLUTION_NODE_HEIGHT/);
+  assert.match(panel, /const endX = to\.x \+ \(ABILITY_EVOLUTION_NODE_WIDTH \/ 2\)/);
+  assert.match(panel, /const endY = to\.y/);
+});
+
 test("incremental draft commits suppress unrelated document application renders", () => {
   const commit = sourceBetween("  async #applyDraftToActor(", "  #scheduleRepeatCommit()");
   assert.match(commit, /render:\s*false/);
+});
+
+test("unrelated actor resource updates do not rebuild the advancement window", () => {
+  const update = sourceBetween("  async #onActorUpdated(", "  async #onActiveEffectChanged(");
+  assert.match(update, /const affectsResearch = foundry\.utils\.hasProperty\(changes, "system\.researches"\)/);
+  assert.match(update, /if \(!affectsDraft && !affectsResearch\) return;/);
+  assert.ok(update.indexOf("if (!affectsDraft && !affectsResearch) return;") < update.indexOf("forceRender()"));
 });

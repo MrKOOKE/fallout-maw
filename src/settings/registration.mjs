@@ -40,7 +40,9 @@ import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from 
 import { SettingsPresetsConfig } from "../apps/settings-presets-config.mjs";
 import {
   invalidatePreparedRuntimeSettingsCache,
+  invalidateAbilityCatalogCache,
   refreshPreparedActors,
+  refreshPreparedActorsAfterSkillSettingsChange,
   syncSettingsIntoSystemConfig
 } from "./accessors.mjs";
 import {
@@ -170,7 +172,7 @@ export function registerSystemSettings() {
       advancement: createDefaultSkillAdvancementSettings()
     }),
     presetEffect: "actors",
-    onChange: refreshPreparedActors
+    onChange: refreshPreparedActorsAfterSkillSettingsChange
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING, {
@@ -258,7 +260,10 @@ export function registerSystemSettings() {
     type: Object,
     preset: true,
     default: getMainPresetDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(createDefaultSkillSettings())),
-    onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.abilityCatalogChanged`)
+    onChange: () => {
+      invalidateAbilityCatalogCache();
+      Hooks.callAll(`${FALLOUT_MAW.id}.abilityCatalogChanged`);
+    }
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING, {

@@ -25,7 +25,13 @@ import {
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
-import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import {
+  actorHasAbility,
+  completeAbilityResearch,
+  findCatalogAbility,
+  grantCatalogAbility,
+  hasUnsafeAbilityEvolutionAcquisitionChanges
+} from "../abilities/purchase.mjs";
 import { getSkillAdvancementMultiplierChanges } from "../abilities/evaluation.mjs";
 import {
   applyAdvancementPureCharacteristic,
@@ -35,6 +41,8 @@ import { formatResearchValue } from "../research/storage.mjs";
 import {
   ABILITY_ACQUISITION_ABILITY_MODES,
   ABILITY_ACQUISITION_CONDITION_TYPES,
+  abilityHasEvolutions,
+  getAbilityEvolutionFamilyIds,
   getAbilitySourceId,
   LOCKED_FEATURES_CATEGORY_ID,
   prepareAbilityItemData
@@ -51,6 +59,11 @@ import { applySkillBonusPercent } from "../utils/skill-value.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { prepareIndicatorEntry as prepareDisplayIndicatorEntry } from "../utils/actor-display-data.mjs";
 import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
+import {
+  clampGraphViewportToVisibleNode,
+  createGraphSegmentViewport,
+  readGraphViewportMetrics
+} from "../utils/graph-viewport.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 import { calculateLevelHealthBonus, usesIndependentHealthModel } from "../combat/independent-health.mjs";
 
@@ -62,21 +75,36 @@ const ADVANCEMENT_PAGES = ["development", "abilities", "proficiencies"];
 const ADVANCEMENT_PAGES_WITHOUT_PROFICIENCIES = ["development", "abilities"];
 const REPEAT_INITIAL_DELAY_MS = 180;
 const REPEAT_INTERVAL_MS = 45;
-
+const ABILITY_EVOLUTION_NODE_WIDTH = 184;
+const ABILITY_EVOLUTION_NODE_HEIGHT = 76;
+const ABILITY_EVOLUTION_ZOOM_MIN = 0.35;
+const ABILITY_EVOLUTION_ZOOM_MAX = 2.25;
+const ABILITY_EVOLUTION_GRID_SIZE = 22;
+const ABILITY_EVOLUTION_MAJOR_GRID_SIZE = 110;
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
   #abilityById = new Map();
   #abilityEntriesById = new Map();
+  #abilityEvolutionAnimatedFamilySourceId = "";
+  #abilityEvolutionAbortController = null;
+  #abilityEvolutionCompletedIds = new Set();
+  #abilityEvolutionGraph = { links: [], nodes: [] };
+  #abilityEvolutionLayer = null;
+  #abilityEvolutionPreparationContext = null;
+  #abilityEvolutionViewportMetrics = null;
+  #abilityEvolutionViewports = new Map();
   #abilityRequirementContext = null;
   #abilityRequirementRowsById = new Map();
   #abilityTooltipHTMLCache = new Map();
   #advancementPureValues = null;
   #actorUpdateHookId = null;
   #abilityTooltipAnchor = null;
+  #abilityTooltipDocument = null;
   #abilityTooltipDocumentAbortController = null;
   #abilityTooltipElement = null;
   #abilityTooltipPinned = false;
   #abilityTooltipTimer = null;
+  #abilityTooltipTimerView = null;
   #draft = null;
   #experienceSyncTimer = null;
   #expandedAbilityCategories = new Set();
@@ -90,6 +118,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #researchPointSessionSpent = 0;
   #repeatState = null;
   #selectedAbilitySourceId = "";
+  #selectedAbilityFamilySourceId = "";
   #skillPointSessionSpent = 0;
   #skillUpgradeCostLedger = new Map();
   #skillCostTooltipAnchor = null;
@@ -137,6 +166,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       startAbilityResearch: this.#onStartAbilityResearch,
       levelUp: this.#onLevelUp,
       purchaseTraitAbility: this.#onPurchaseTraitAbility,
+      closeAbilityEvolution: this.#onCloseAbilityEvolution,
+      resetAbilityEvolutionView: this.#onResetAbilityEvolutionView,
+      selectAbilityEvolutionNode: this.#onSelectAbilityEvolutionNode,
       resetDevelopment: this.#onResetDevelopment,
       toggleAbilityCategory: this.#onToggleAbilityCategory,
       toggleGMMode: this.#onToggleGMMode,
@@ -179,7 +211,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   _configureRenderParts(options) {
     const parts = super._configureRenderParts(options);
     parts.page.template = TEMPLATES.advancement[this.#page];
-    parts.page.templates = this.#page === "abilities" ? [TEMPLATES.advancement.abilityDetails] : [];
+    parts.page.templates = this.#page === "abilities"
+      ? [
+          TEMPLATES.advancement.abilityDetails,
+          TEMPLATES.advancement.abilityEvolutionPanel
+        ]
+      : [];
     return parts;
   }
 
@@ -421,6 +458,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     });
     const pointDisplays = this.#preparePointDisplays(remaining);
     const pageIndex = this.#getPageIndex();
+    const abilityEvolutionPanel = this.#prepareAbilityEvolutionPanel();
     return {
       ...(await super._prepareContext(options)),
       actor: this.actor,
@@ -434,7 +472,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       traitPointsDisplay: pointDisplays.traits,
       researchPointsDisplay: pointDisplays.researches,
       abilityCategories,
-      selectedAbility: this.#prepareSelectedAbility()
+      selectedAbility: this.#prepareSelectedAbility(),
+      abilityEvolutionPanel
     };
   }
 
@@ -452,6 +491,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#activateProficiencySliders();
     this.#activateAbilitySearch();
     this.#activateAbilityDescriptionTooltips();
+    this.#mountAbilityEvolutionLayer();
     this.#activateSkillCostTooltips();
     this.#restoreSkillCostTooltip();
   }
@@ -475,7 +515,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#clearAbilityDescriptionTooltip();
     this.#clearSkillCostTooltip();
     this.#abilityTooltipDocumentAbortController?.abort();
+    this.#abilityTooltipDocument = null;
     this.#abilityTooltipDocumentAbortController = null;
+    this.#removeAbilityEvolutionLayer();
     await this.#stopRepeat({ flush: true });
     if (this.#actorUpdateHookId !== null) {
       Hooks.off("updateActor", this.#actorUpdateHookId);
@@ -736,20 +778,34 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   #activateAbilityDescriptionTooltips() {
     const root = this.element;
-    if (!root || root.dataset.abilityDescriptionTooltipsBound === "true") return;
-    root.dataset.abilityDescriptionTooltipsBound = "true";
-    root.addEventListener("pointerdown", event => this.#onAbilityDescriptionMiddlePointerDown(event), { capture: true });
-    root.addEventListener("mousedown", event => this.#onAbilityDescriptionMiddlePointerDown(event), { capture: true });
-    root.addEventListener("pointerover", event => this.#onAbilityDescriptionPointerOver(event));
-    root.addEventListener("pointerout", event => this.#onAbilityDescriptionPointerOut(event));
-    root.addEventListener("auxclick", event => this.#onAbilityDescriptionAuxClick(event));
+    if (!root) return;
+    this.#bindAbilityDescriptionTooltipEvents(root);
+    this.#bindAbilityDescriptionTooltipDocument(root.ownerDocument ?? globalThis.document);
+  }
 
+  #bindAbilityDescriptionTooltipDocument(ownerDocument) {
+    if (!ownerDocument || (this.#abilityTooltipDocument === ownerDocument
+      && this.#abilityTooltipDocumentAbortController)) return;
+    const view = ownerDocument?.defaultView ?? globalThis.window;
     this.#abilityTooltipDocumentAbortController?.abort();
-    this.#abilityTooltipDocumentAbortController = new AbortController();
-    document.addEventListener("pointerdown", event => this.#onAbilityDescriptionDocumentPointerDown(event), {
+    this.#abilityTooltipDocument = ownerDocument;
+    this.#abilityTooltipDocumentAbortController = new view.AbortController();
+    ownerDocument.addEventListener("pointerdown", event => this.#onAbilityDescriptionDocumentPointerDown(event), {
       capture: true,
       signal: this.#abilityTooltipDocumentAbortController.signal
     });
+  }
+
+  #bindAbilityDescriptionTooltipEvents(root, { signal } = {}) {
+    if (!root || root.dataset.abilityDescriptionTooltipsBound === "true") return;
+    root.dataset.abilityDescriptionTooltipsBound = "true";
+    const eventOptions = signal ? { signal } : undefined;
+    const captureOptions = signal ? { capture: true, signal } : { capture: true };
+    root.addEventListener("pointerdown", event => this.#onAbilityDescriptionMiddlePointerDown(event), captureOptions);
+    root.addEventListener("mousedown", event => this.#onAbilityDescriptionMiddlePointerDown(event), captureOptions);
+    root.addEventListener("pointerover", event => this.#onAbilityDescriptionPointerOver(event), eventOptions);
+    root.addEventListener("pointerout", event => this.#onAbilityDescriptionPointerOut(event), eventOptions);
+    root.addEventListener("auxclick", event => this.#onAbilityDescriptionAuxClick(event), eventOptions);
   }
 
   #onAbilityDescriptionMiddlePointerDown(event) {
@@ -767,7 +823,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     this.#clearAbilityDescriptionTooltip();
     this.#abilityTooltipAnchor = anchor;
-    this.#abilityTooltipTimer = window.setTimeout(() => {
+    const view = anchor.ownerDocument?.defaultView ?? globalThis.window;
+    this.#abilityTooltipTimerView = view;
+    this.#abilityTooltipTimer = view.setTimeout(() => {
+      this.#abilityTooltipTimer = null;
+      this.#abilityTooltipTimerView = null;
       void this.#showAbilityDescriptionTooltip(anchor);
     }, 500);
   }
@@ -809,25 +869,35 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   async #showAbilityDescriptionTooltip(anchor, { pinned = false } = {}) {
     if (this.#abilityTooltipTimer) {
-      window.clearTimeout(this.#abilityTooltipTimer);
+      this.#abilityTooltipTimerView?.clearTimeout(this.#abilityTooltipTimer);
       this.#abilityTooltipTimer = null;
+      this.#abilityTooltipTimerView = null;
     }
     if (!anchor?.isConnected || this.#abilityTooltipAnchor !== anchor) return;
 
     const sourceId = String(anchor.dataset.abilityDescriptionSourceId ?? "");
+    const descriptionMode = String(anchor.dataset.abilityDescriptionMode ?? "full");
     const source = this.#abilityById.get(sourceId);
     if (!source) return;
-    let html = this.#abilityTooltipHTMLCache.get(sourceId);
+    const cacheKey = `${descriptionMode}\u0000${sourceId}`;
+    let html = this.#abilityTooltipHTMLCache.get(cacheKey);
     if (html === undefined) {
-      html = await renderAbilityDescriptionTooltipHTML(source.ability, {
+      const summary = String(source.ability?.evolutionSummary ?? "").trim();
+      const tooltipAbility = descriptionMode === "evolution-summary" && summary
+        ? { ...source.ability, description: summary }
+        : source.ability;
+      html = await renderAbilityDescriptionTooltipHTML(tooltipAbility, {
         actor: this.actor,
         requirementRows: this.#abilityRequirementRowsById.get(sourceId) ?? []
       });
-      this.#abilityTooltipHTMLCache.set(sourceId, html);
+      this.#abilityTooltipHTMLCache.set(cacheKey, html);
     }
     if (!html || !anchor.isConnected || this.#abilityTooltipAnchor !== anchor) return;
 
-    const tooltip = document.createElement("aside");
+    const ownerDocument = anchor.ownerDocument ?? globalThis.document;
+    const view = ownerDocument?.defaultView ?? globalThis.window;
+    this.#bindAbilityDescriptionTooltipDocument(ownerDocument);
+    const tooltip = ownerDocument.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip";
     tooltip.classList.toggle("pinned", pinned);
     tooltip.style.pointerEvents = "auto";
@@ -842,17 +912,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       if (this.#abilityTooltipAnchor?.contains(event.relatedTarget)) return;
       this.#clearAbilityDescriptionTooltip();
     });
-    document.body.append(tooltip);
+    (ownerDocument.body ?? ownerDocument.documentElement).append(tooltip);
     this.#abilityTooltipElement = tooltip;
     this.#abilityTooltipPinned = pinned;
     this.#positionAdvancementTooltip(tooltip, anchor);
-    requestAnimationFrame(() => this.#positionAdvancementTooltip(tooltip, anchor));
+    view.requestAnimationFrame(() => this.#positionAdvancementTooltip(tooltip, anchor));
   }
 
   #clearAbilityDescriptionTooltip() {
     if (this.#abilityTooltipTimer) {
-      window.clearTimeout(this.#abilityTooltipTimer);
+      this.#abilityTooltipTimerView?.clearTimeout(this.#abilityTooltipTimer);
       this.#abilityTooltipTimer = null;
+      this.#abilityTooltipTimerView = null;
     }
     this.#abilityTooltipElement?.remove();
     this.#abilityTooltipElement = null;
@@ -1107,30 +1178,351 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     const sourceId = target.dataset.abilitySourceId ?? "";
     if (!sourceId) return undefined;
+    const familySourceId = target.dataset.abilityFamilySourceId || sourceId;
+    if (familySourceId !== this.#selectedAbilityFamilySourceId) {
+      this.#abilityEvolutionViewports.delete(familySourceId);
+    }
+    this.#selectedAbilityFamilySourceId = familySourceId;
     this.#selectedAbilitySourceId = sourceId;
     for (const entry of this.element?.querySelectorAll?.("[data-ability-entry]") ?? []) {
-      entry.classList.toggle("selected", entry.dataset.abilitySourceId === sourceId);
+      entry.classList.toggle("selected", entry.dataset.abilityFamilySourceId === familySourceId);
     }
     return this.#renderAbilityDetails(sourceId);
   }
 
-  async #renderAbilityDetails(sourceId = this.#selectedAbilitySourceId) {
-    const selectedAbility = this.#abilityEntriesById.get(sourceId) ?? null;
+  static async #onSelectAbilityEvolutionNode(event, target) {
+    event.preventDefault();
+    const sourceId = String(target.dataset.abilitySourceId ?? "");
+    if (!sourceId || !this.#selectedAbilityFamilySourceId) return undefined;
+    this.#selectedAbilitySourceId = sourceId;
+    return this.#renderAbilityDetails(sourceId, { refreshEvolutionGraph: false });
+  }
+
+  static async #onCloseAbilityEvolution(event) {
+    event.preventDefault();
+    this.#abilityEvolutionViewports.delete(this.#selectedAbilityFamilySourceId);
+    this.#abilityEvolutionAnimatedFamilySourceId = "";
+    this.#selectedAbilityFamilySourceId = "";
+    this.#removeAbilityEvolutionLayer();
+  }
+
+  static #onResetAbilityEvolutionView(event) {
+    event.preventDefault();
+    const familySourceId = this.#selectedAbilityFamilySourceId;
+    if (!familySourceId) return undefined;
+    const state = this.#createAbilityEvolutionFocusViewport();
+    this.#applyAbilityEvolutionViewport(state);
+    return undefined;
+  }
+
+  async #renderAbilityDetails(sourceId = this.#selectedAbilitySourceId, { refreshEvolutionGraph = true } = {}) {
+    const selectionKey = `${this.#selectedAbilityFamilySourceId}\u0000${sourceId}`;
+    const abilityEvolutionPanel = refreshEvolutionGraph ? this.#prepareAbilityEvolutionPanel() : null;
+    const abilityEvolutionSelection = refreshEvolutionGraph
+      ? {
+          selectedAbility: abilityEvolutionPanel?.selectedAbility ?? null
+        }
+      : this.#prepareAbilityEvolutionSelection();
+    const selectedAbility = abilityEvolutionSelection.selectedAbility
+      ?? this.#abilityEntriesById.get(sourceId)
+      ?? null;
     const remaining = calculateRemainingDevelopmentPoints(this.#draft?.development);
     const pointDisplays = this.#preparePointDisplays(remaining);
-    const html = await foundry.applications.handlebars.renderTemplate(TEMPLATES.advancement.abilityDetails, {
-      isGMMode: this.#gmMode,
-      researchPointsDisplay: pointDisplays.researches,
-      selectedAbility,
-      traitPointsDisplay: pointDisplays.traits
-    });
-    if (sourceId !== this.#selectedAbilitySourceId) return;
+    const [detailsHTML, evolutionHTML] = await Promise.all([
+      foundry.applications.handlebars.renderTemplate(TEMPLATES.advancement.abilityDetails, {
+        isGMMode: this.#gmMode,
+        researchPointsDisplay: pointDisplays.researches,
+        selectedAbility,
+        traitPointsDisplay: pointDisplays.traits
+      }),
+      refreshEvolutionGraph
+        ? foundry.applications.handlebars.renderTemplate(TEMPLATES.advancement.abilityEvolutionPanel, {
+            abilityEvolutionPanel
+          })
+        : ""
+    ]);
+    if (selectionKey !== `${this.#selectedAbilityFamilySourceId}\u0000${this.#selectedAbilitySourceId}`) return;
     const current = this.element?.querySelector?.("[data-ability-details-region]");
-    if (!current) return;
-    const template = document.createElement("template");
-    template.innerHTML = html.trim();
-    const replacement = template.content.firstElementChild;
-    if (replacement) current.replaceWith(replacement);
+    if (current) {
+      const ownerDocument = this.element?.ownerDocument ?? globalThis.document;
+      const template = ownerDocument.createElement("template");
+      template.innerHTML = detailsHTML.trim();
+      const replacement = template.content.firstElementChild;
+      if (replacement) current.replaceWith(replacement);
+    }
+    if (refreshEvolutionGraph) this.#replaceAbilityEvolutionLayer(evolutionHTML);
+    else this.#syncAbilityEvolutionNodeSelection(sourceId);
+  }
+
+  #syncAbilityEvolutionNodeSelection(sourceId = "") {
+    const layer = this.#abilityEvolutionLayer;
+    if (!layer?.isConnected) return;
+    for (const node of layer.querySelectorAll("[data-ability-evolution-node]")) {
+      const selected = node.dataset.abilitySourceId === sourceId;
+      node.classList.toggle("selected", selected);
+      node.setAttribute("aria-pressed", String(selected));
+    }
+  }
+
+  #replaceAbilityEvolutionLayer(html = "") {
+    const ownerDocument = this.element?.ownerDocument ?? globalThis.document;
+    const view = ownerDocument?.defaultView ?? globalThis.window;
+    const template = ownerDocument.createElement("template");
+    template.innerHTML = String(html ?? "").trim();
+    const layer = template.content.firstElementChild;
+    if (!(layer instanceof view.HTMLElement) || layer.dataset.abilityEvolutionOpen !== "true") {
+      this.#abilityEvolutionAnimatedFamilySourceId = "";
+      this.#removeAbilityEvolutionLayer();
+      return;
+    }
+    this.#adoptAbilityEvolutionLayer(layer);
+  }
+
+  #mountAbilityEvolutionLayer() {
+    const nextLayer = this.element?.querySelector?.(".window-content [data-ability-evolution-layer]");
+    const ownerDocument = this.element?.ownerDocument ?? globalThis.document;
+    const view = ownerDocument?.defaultView ?? globalThis.window;
+    if (!(nextLayer instanceof view.HTMLElement) || nextLayer.dataset.abilityEvolutionOpen !== "true") {
+      nextLayer?.remove?.();
+      this.#abilityEvolutionAnimatedFamilySourceId = "";
+      this.#removeAbilityEvolutionLayer();
+      return;
+    }
+    this.#adoptAbilityEvolutionLayer(nextLayer);
+  }
+
+  #adoptAbilityEvolutionLayer(nextLayer) {
+    const currentLayer = this.#abilityEvolutionLayer;
+    if (currentLayer?.isConnected
+      && this.#canReconcileAbilityEvolutionLayers(currentLayer, nextLayer)) {
+      this.#reconcileAbilityEvolutionLayer(currentLayer, nextLayer);
+      nextLayer.remove();
+      return;
+    }
+
+    this.#removeAbilityEvolutionLayer();
+    const nextFamilySourceId = String(nextLayer.dataset.abilityFamilySourceId ?? "");
+    if (nextFamilySourceId !== this.#abilityEvolutionAnimatedFamilySourceId) {
+      nextLayer.classList.add("opening");
+      this.#abilityEvolutionAnimatedFamilySourceId = nextFamilySourceId;
+    }
+    this.element.append(nextLayer);
+    this.#activateAbilityEvolutionLayer(nextLayer);
+  }
+
+  #canReconcileAbilityEvolutionLayers(currentLayer, nextLayer) {
+    if (currentLayer.dataset.abilityFamilySourceId !== nextLayer.dataset.abilityFamilySourceId) return false;
+    return getAbilityEvolutionGraphFingerprint(currentLayer) === getAbilityEvolutionGraphFingerprint(nextLayer);
+  }
+
+  #reconcileAbilityEvolutionLayer(currentLayer, nextLayer) {
+    const currentNodes = new Map(Array.from(currentLayer.querySelectorAll("[data-ability-evolution-node]"))
+      .map(node => [node.dataset.abilitySourceId, node]));
+    for (const nextNode of nextLayer.querySelectorAll("[data-ability-evolution-node]")) {
+      const currentNode = currentNodes.get(nextNode.dataset.abilitySourceId);
+      if (!currentNode) continue;
+      currentNode.className = nextNode.className;
+      currentNode.setAttribute("aria-pressed", nextNode.getAttribute("aria-pressed") ?? "false");
+      currentNode.dataset.currentOwned = nextNode.dataset.currentOwned ?? "false";
+      if (nextNode.hasAttribute("data-ability-description-source-id")) {
+        currentNode.dataset.abilityDescriptionSourceId = nextNode.dataset.abilityDescriptionSourceId;
+        currentNode.dataset.abilityDescriptionMode = nextNode.dataset.abilityDescriptionMode ?? "full";
+      } else {
+        delete currentNode.dataset.abilityDescriptionSourceId;
+        delete currentNode.dataset.abilityDescriptionMode;
+      }
+      const currentStatus = currentNode.querySelector("small");
+      const nextStatus = nextNode.querySelector("small");
+      if (currentStatus && nextStatus) currentStatus.textContent = nextStatus.textContent;
+    }
+
+    const currentLinks = new Map(Array.from(currentLayer.querySelectorAll("[data-ability-evolution-link-id]"))
+      .map(link => [link.dataset.abilityEvolutionLinkId, link]));
+    for (const nextLink of nextLayer.querySelectorAll("[data-ability-evolution-link-id]")) {
+      const currentLink = currentLinks.get(nextLink.dataset.abilityEvolutionLinkId);
+      if (currentLink) currentLink.setAttribute("class", nextLink.getAttribute("class") ?? "");
+    }
+
+    this.#abilityEvolutionGraph = collectRenderedAbilityEvolutionGraph(currentLayer);
+  }
+
+  #activateAbilityEvolutionLayer(layer) {
+    this.#abilityEvolutionLayer = layer;
+    layer.dataset.abilityEvolutionOwner = this.id;
+    const view = layer.ownerDocument?.defaultView ?? globalThis.window;
+    this.#abilityEvolutionAbortController = new view.AbortController();
+    const { signal } = this.#abilityEvolutionAbortController;
+    const viewport = layer.querySelector("[data-ability-evolution-viewport]");
+    const familySourceId = String(layer.dataset.abilityFamilySourceId ?? "");
+    if (!(viewport instanceof view.HTMLElement)) return;
+    this.#abilityEvolutionGraph = collectRenderedAbilityEvolutionGraph(layer);
+    this.#abilityEvolutionViewportMetrics = readGraphViewportMetrics(viewport);
+    const initialState = this.#abilityEvolutionViewports.get(familySourceId)
+      ?? this.#createAbilityEvolutionFocusViewport();
+    this.#applyAbilityEvolutionViewport(initialState);
+    layer.querySelector(".fallout-maw-advancement-evolution-panel")?.addEventListener("animationend", () => {
+      layer.classList.remove("opening");
+    }, { once: true, signal });
+    view.setTimeout(() => layer.classList.remove("opening"), 240);
+    if (typeof view.ResizeObserver === "function") {
+      const resizeObserver = new view.ResizeObserver(() => {
+        this.#abilityEvolutionViewportMetrics = readGraphViewportMetrics(viewport);
+        const state = this.#abilityEvolutionViewports.get(familySourceId) ?? initialState;
+        this.#applyAbilityEvolutionViewport(state);
+      });
+      resizeObserver.observe(viewport);
+      signal.addEventListener("abort", () => resizeObserver.disconnect(), { once: true });
+    }
+
+    let panState = null;
+    viewport.addEventListener("wheel", event => {
+      event.preventDefault();
+      const state = this.#abilityEvolutionViewports.get(familySourceId) ?? initialState;
+      const metrics = readGraphViewportMetrics(viewport);
+      this.#abilityEvolutionViewportMetrics = metrics;
+      const localX = (event.clientX - metrics.left) / metrics.scaleX;
+      const localY = (event.clientY - metrics.top) / metrics.scaleY;
+      const worldX = (localX - state.x) / state.zoom;
+      const worldY = (localY - state.y) / state.zoom;
+      const zoom = clampAbilityEvolutionZoom(state.zoom * Math.exp(-event.deltaY * 0.0015));
+      const nextState = {
+        x: localX - (worldX * zoom),
+        y: localY - (worldY * zoom),
+        zoom
+      };
+      this.#applyAbilityEvolutionViewport(nextState);
+      if (panState) {
+        const applied = this.#abilityEvolutionViewports.get(familySourceId) ?? nextState;
+        panState.startX = event.clientX;
+        panState.startY = event.clientY;
+        panState.originX = applied.x;
+        panState.originY = applied.y;
+        panState.screenScaleX = metrics.scaleX;
+        panState.screenScaleY = metrics.scaleY;
+      }
+    }, { passive: false, signal });
+
+    viewport.addEventListener("pointerdown", event => {
+      if (event.button !== 2) return;
+      event.preventDefault();
+      this.#clearAbilityDescriptionTooltip();
+      const state = this.#abilityEvolutionViewports.get(familySourceId) ?? initialState;
+      const metrics = readGraphViewportMetrics(viewport);
+      this.#abilityEvolutionViewportMetrics = metrics;
+      panState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: state.x,
+        originY: state.y,
+        screenScaleX: metrics.scaleX,
+        screenScaleY: metrics.scaleY
+      };
+      viewport.classList.add("panning");
+      viewport.setPointerCapture?.(event.pointerId);
+    }, { signal });
+    viewport.addEventListener("contextmenu", event => event.preventDefault(), { signal });
+
+    viewport.addEventListener("pointermove", event => {
+      if (!panState || panState.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      const samples = event.getCoalescedEvents?.();
+      const pointer = samples?.length ? samples[samples.length - 1] : event;
+      const current = this.#abilityEvolutionViewports.get(familySourceId) ?? initialState;
+      const nextState = {
+        x: panState.originX + ((pointer.clientX - panState.startX) / panState.screenScaleX),
+        y: panState.originY + ((pointer.clientY - panState.startY) / panState.screenScaleY),
+        zoom: current.zoom
+      };
+      this.#applyAbilityEvolutionViewport(nextState);
+    }, { signal });
+
+    const stopPan = event => {
+      if (!panState || panState.pointerId !== event.pointerId) return;
+      if (event.type === "pointerup") {
+        const current = this.#abilityEvolutionViewports.get(familySourceId) ?? initialState;
+        this.#applyAbilityEvolutionViewport({
+          x: panState.originX + ((event.clientX - panState.startX) / panState.screenScaleX),
+          y: panState.originY + ((event.clientY - panState.startY) / panState.screenScaleY),
+          zoom: current.zoom
+        });
+      }
+      viewport.releasePointerCapture?.(event.pointerId);
+      viewport.classList.remove("panning");
+      panState = null;
+    };
+    viewport.addEventListener("pointerup", stopPan, { signal });
+    viewport.addEventListener("pointercancel", stopPan, { signal });
+  }
+
+  #applyAbilityEvolutionViewport(state = {}) {
+    const layer = this.#abilityEvolutionLayer;
+    const stage = layer?.querySelector?.("[data-ability-evolution-stage]");
+    const view = layer?.ownerDocument?.defaultView ?? globalThis.window;
+    const viewport = layer?.querySelector?.("[data-ability-evolution-viewport]");
+    if (!(stage instanceof view.HTMLElement) || !(viewport instanceof view.HTMLElement)) return;
+    const metrics = this.#abilityEvolutionViewportMetrics ?? readGraphViewportMetrics(viewport);
+    this.#abilityEvolutionViewportMetrics = metrics;
+    const constrained = clampGraphViewportToVisibleNode({
+      x: Number(state.x) || 0,
+      y: Number(state.y) || 0,
+      zoom: clampAbilityEvolutionZoom(state.zoom)
+    }, {
+      height: metrics.height,
+      nodeHeight: ABILITY_EVOLUTION_NODE_HEIGHT,
+      nodeWidth: ABILITY_EVOLUTION_NODE_WIDTH,
+      nodes: this.#abilityEvolutionGraph.nodes,
+      width: metrics.width
+    });
+    const x = snapToDevicePixel(constrained.x, view);
+    const y = snapToDevicePixel(constrained.y, view);
+    const zoom = constrained.zoom;
+    const familySourceId = String(layer.dataset.abilityFamilySourceId ?? "");
+    if (familySourceId) this.#abilityEvolutionViewports.set(familySourceId, { x, y, zoom });
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+    viewport.style.backgroundPosition = [
+      `${x}px ${y}px`,
+      `${x}px ${y}px`,
+      `${x}px ${y}px`
+    ].join(", ");
+    viewport.style.backgroundSize = [
+      `${ABILITY_EVOLUTION_GRID_SIZE * zoom}px ${ABILITY_EVOLUTION_GRID_SIZE * zoom}px`,
+      `${ABILITY_EVOLUTION_MAJOR_GRID_SIZE * zoom}px ${ABILITY_EVOLUTION_MAJOR_GRID_SIZE * zoom}px`,
+      `${ABILITY_EVOLUTION_MAJOR_GRID_SIZE * zoom}px ${ABILITY_EVOLUTION_MAJOR_GRID_SIZE * zoom}px`
+    ].join(", ");
+    const label = layer.querySelector("[data-ability-evolution-zoom]");
+    if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+  }
+
+  #createAbilityEvolutionFocusViewport() {
+    const viewport = this.#abilityEvolutionLayer?.querySelector?.("[data-ability-evolution-viewport]");
+    const metrics = this.#abilityEvolutionViewportMetrics ?? readGraphViewportMetrics(viewport);
+    this.#abilityEvolutionViewportMetrics = metrics;
+    return createGraphSegmentViewport({
+      focusNodeIds: this.#abilityEvolutionGraph.nodes
+        .filter(node => node.currentOwned)
+        .map(node => node.id),
+      height: metrics.height,
+      links: this.#abilityEvolutionGraph.links,
+      maxZoom: 0.9,
+      minZoom: ABILITY_EVOLUTION_ZOOM_MIN,
+      nodeHeight: ABILITY_EVOLUTION_NODE_HEIGHT,
+      nodeWidth: ABILITY_EVOLUTION_NODE_WIDTH,
+      nodes: this.#abilityEvolutionGraph.nodes,
+      padding: 28,
+      width: metrics.width
+    });
+  }
+
+  #removeAbilityEvolutionLayer() {
+    const layer = this.#abilityEvolutionLayer;
+    if (layer?.contains(this.#abilityTooltipAnchor)) this.#clearAbilityDescriptionTooltip();
+    this.#abilityEvolutionAbortController?.abort();
+    this.#abilityEvolutionAbortController = null;
+    layer?.remove();
+    this.#abilityEvolutionGraph = { links: [], nodes: [] };
+    this.#abilityEvolutionLayer = null;
+    this.#abilityEvolutionViewportMetrics = null;
   }
 
   static async #onSpendAbilityResearch(event, target) {
@@ -1141,6 +1533,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (this.#abilityEntriesById.get(sourceId)?.evolutionAvailable === false) return this.forceRender();
+    if (hasUnsafeAbilityEvolutionAcquisitionChanges(this.actor, entry.ability, entry.incomingSourceIds)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (entry.ability.system?.acquisition?.onlyManual) return this.forceRender();
     const research = this.#getAbilityResearch(sourceId);
@@ -1193,6 +1587,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (this.#abilityEntriesById.get(sourceId)?.evolutionAvailable === false) return this.forceRender();
+    if (hasUnsafeAbilityEvolutionAcquisitionChanges(this.actor, entry.ability, entry.incomingSourceIds)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (this.#getAbilityResearch(sourceId)) return this.forceRender();
 
@@ -1210,6 +1606,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || entry.category?.id !== LOCKED_FEATURES_CATEGORY_ID || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (this.#abilityEntriesById.get(sourceId)?.evolutionAvailable === false) return this.forceRender();
+    if (hasUnsafeAbilityEvolutionAcquisitionChanges(this.actor, entry.ability, entry.incomingSourceIds)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
 
     const available = Math.max(0, toInteger(this.#draft.development.points.traits));
@@ -1243,6 +1641,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (this.#abilityEntriesById.get(sourceId)?.evolutionAvailable === false) return this.forceRender();
+    if (hasUnsafeAbilityEvolutionAcquisitionChanges(this.actor, entry.ability, entry.incomingSourceIds)) return this.forceRender();
 
     const granted = await grantCatalogAbility(this.actor, sourceId);
     if (granted) {
@@ -1253,7 +1653,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           reason: "abilityGranted"
         });
       }
-      this.#selectedAbilitySourceId = "";
+      if (!abilityHasEvolutions(entry.rootAbility ?? entry.ability)) {
+        this.#selectedAbilitySourceId = "";
+        this.#selectedAbilityFamilySourceId = "";
+      }
       this.#syncDraftFromActor();
     }
     return this.forceRender();
@@ -1749,7 +2152,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     races = []
   } = {}) {
     const catalog = getAbilityCatalog();
-    const ownedAbilityIds = new Set(this.actor.items
+    const currentOwnedAbilityIds = new Set(this.actor.items
       .filter(item => item.type === "ability")
       .map(item => getAbilitySourceId(item))
       .filter(Boolean));
@@ -1760,7 +2163,23 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#abilityById = new Map();
     for (const category of catalog.categories ?? []) {
       for (const ability of category.abilities ?? []) {
-        this.#abilityById.set(String(ability?.id ?? ""), { ability, category });
+        indexAbilityEvolutionFamily(ability, category, this.#abilityById);
+      }
+    }
+    const requirementOwnedAbilityIds = collectOwnedAbilityLineageIds(currentOwnedAbilityIds, this.#abilityById);
+    const ownedFamilyRootIds = new Set([...currentOwnedAbilityIds]
+      .map(sourceId => String(this.#abilityById.get(sourceId)?.rootAbility?.id ?? "").trim())
+      .filter(Boolean));
+    const currentOwnedSourceIdByFamily = new Map();
+    for (const sourceId of currentOwnedAbilityIds) {
+      const indexed = this.#abilityById.get(sourceId);
+      const familySourceId = String(indexed?.rootAbility?.id ?? "").trim();
+      if (!familySourceId) continue;
+      const previousSourceId = currentOwnedSourceIdByFamily.get(familySourceId);
+      const previousDepth = this.#abilityById.get(previousSourceId)?.ancestorSourceIds?.length ?? -1;
+      const currentDepth = indexed?.ancestorSourceIds?.length ?? 0;
+      if (!previousSourceId || currentDepth > previousDepth) {
+        currentOwnedSourceIdByFamily.set(familySourceId, sourceId);
       }
     }
     this.#abilityEntriesById.clear();
@@ -1770,9 +2189,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       ...requirementContext,
       abilityById: this.#abilityById,
       characteristicSettings,
-      ownedAbilityIds,
+      ownedAbilityIds: requirementOwnedAbilityIds,
       races,
       skillSettings
+    };
+    this.#abilityEvolutionPreparationContext = {
+      currentOwnedAbilityIds,
+      remaining,
+      researchBySourceId,
+      requirementContext: this.#abilityRequirementContext,
+      skillByKey
     };
 
     return (catalog.categories ?? []).map(category => {
@@ -1781,13 +2207,36 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       const traitRemaining = Math.max(0, toInteger(remaining.traits));
       const abilities = (category.abilities ?? [])
         .filter(ability => ability?.visible !== false)
-        .filter(ability => !ownedAbilityIds.has(String(ability?.id ?? "")))
-        .map(ability => this.#prepareAbilityEntry(category, ability, remaining, {
-          ownedAbilityIds,
-          researchBySourceId,
-          requirementContext: this.#abilityRequirementContext,
-          skillByKey
-        }));
+        .map(ability => {
+          const familySourceId = String(ability?.id ?? "");
+          const familyOwned = ownedFamilyRootIds.has(familySourceId);
+          if (familyOwned && !abilityHasEvolutions(ability)) return null;
+          const rootEntry = this.#prepareAbilityEntry(category, ability, remaining, {
+            familyOwned,
+            familyHasEvolution: abilityHasEvolutions(ability),
+            familySourceId,
+            ownedOverride: familyOwned,
+            ownedAbilityIds: currentOwnedAbilityIds,
+            researchBySourceId,
+            requirementContext: this.#abilityRequirementContext,
+            skillByKey
+          });
+          const currentOwnedSourceId = currentOwnedSourceIdByFamily.get(familySourceId);
+          const currentOwnedEntry = this.#abilityById.get(currentOwnedSourceId);
+          if (!familyOwned || !currentOwnedEntry || currentOwnedSourceId === familySourceId) return rootEntry;
+          return this.#prepareAbilityEntry(category, currentOwnedEntry.ability, remaining, {
+            evolutionParentIds: currentOwnedEntry.incomingSourceIds,
+            familyOwned: true,
+            familyHasEvolution: true,
+            familySourceId,
+            isEvolution: true,
+            ownedAbilityIds: currentOwnedAbilityIds,
+            researchBySourceId,
+            requirementContext: this.#abilityRequirementContext,
+            skillByKey
+          });
+        })
+        .filter(Boolean);
       return {
         ...category,
         displayName: isFeatures
@@ -1805,9 +2254,107 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const selected = this.#abilityEntriesById.get(this.#selectedAbilitySourceId) ?? null;
     if (!selected) {
       this.#selectedAbilitySourceId = "";
+      this.#selectedAbilityFamilySourceId = "";
       return null;
     }
     return selected;
+  }
+
+  #prepareAbilityEvolutionPanel() {
+    this.#abilityEvolutionCompletedIds = new Set();
+    const familySourceId = this.#selectedAbilityFamilySourceId;
+    const familyEntry = this.#abilityById.get(familySourceId);
+    const rootAbility = familyEntry?.rootAbility ?? familyEntry?.ability;
+    if (!familySourceId || !familyEntry || !abilityHasEvolutions(rootAbility)) return null;
+
+    this.#prepareAbilityEvolutionFamilyEntries(rootAbility, familyEntry.category);
+    const familyIds = getAbilityEvolutionFamilyIds(rootAbility);
+    if (!familyIds.has(this.#selectedAbilitySourceId)) this.#selectedAbilitySourceId = rootAbility.id;
+    const graph = collectAbilityEvolutionGraph(rootAbility);
+    const currentOwnedIds = this.#abilityEvolutionPreparationContext?.currentOwnedAbilityIds ?? new Set();
+    const completedIds = collectCompletedEvolutionIds(graph.links, currentOwnedIds);
+    this.#abilityEvolutionCompletedIds = completedIds;
+    const { selectedAbility: selectedAbilityView } = this.#prepareAbilityEvolutionSelection();
+    const nodeViews = graph.nodes.map(node => {
+      const entry = this.#abilityEntriesById.get(node.ability.id) ?? null;
+      const currentOwned = currentOwnedIds.has(node.ability.id);
+      const completed = completedIds.has(node.ability.id);
+      return {
+        ...node,
+        acquisitionAvailable: entry?.acquisitionAvailable !== false,
+        completed,
+        currentOwned,
+        hasDescriptionTooltip: entry?.hasDescriptionTooltip === true
+          || Boolean(String(node.ability?.evolutionSummary ?? "").trim()),
+        researchActive: entry?.researchActive === true,
+        selected: node.ability.id === this.#selectedAbilitySourceId,
+        stateClass: currentOwned
+          ? "current"
+          : completed
+            ? "completed"
+            : entry?.acquisitionAvailable === false
+              ? "locked"
+              : entry?.researchActive
+                ? "research-active"
+                : "available",
+        tooltipMode: entry?.isEvolution ? "evolution-summary" : "full",
+        style: `left:${node.x}px;top:${node.y}px`
+      };
+    });
+    const positionById = new Map(graph.nodes.map(node => [node.ability.id, node]));
+    const linkViews = graph.links.flatMap(link => {
+      const from = positionById.get(link.fromId);
+      const to = positionById.get(link.toId);
+      if (!from || !to) return [];
+      const startX = from.x + (ABILITY_EVOLUTION_NODE_WIDTH / 2);
+      const startY = from.y + ABILITY_EVOLUTION_NODE_HEIGHT;
+      const endX = to.x + (ABILITY_EVOLUTION_NODE_WIDTH / 2);
+      const endY = to.y;
+      const direction = endY >= startY ? 1 : -1;
+      const bend = Math.max(24, Math.abs(endY - startY) * 0.45);
+      return [{
+        ...link,
+        completed: completedIds.has(link.fromId) && completedIds.has(link.toId),
+        path: `M ${startX} ${startY} C ${startX} ${startY + (direction * bend)}, ${endX} ${endY - (direction * bend)}, ${endX} ${endY}`
+      }];
+    });
+    return {
+      familySourceId,
+      links: linkViews,
+      nodes: nodeViews,
+      rootAbility,
+      selectedAbility: selectedAbilityView
+    };
+  }
+
+  #prepareAbilityEvolutionSelection() {
+    const selectedAbility = this.#abilityEntriesById.get(this.#selectedAbilitySourceId) ?? null;
+    const selectedAbilityView = selectedAbility
+      && this.#abilityEvolutionCompletedIds.has(selectedAbility.sourceId)
+      && !selectedAbility.currentOwned
+      ? { ...selectedAbility, statusLabel: "Пройдено" }
+      : selectedAbility;
+    return {
+      selectedAbility: selectedAbilityView
+    };
+  }
+
+  #prepareAbilityEvolutionFamilyEntries(rootAbility, category) {
+    const context = this.#abilityEvolutionPreparationContext;
+    if (!context) return;
+    for (const sourceId of getAbilityEvolutionFamilyIds(rootAbility, { includeRoot: false })) {
+      const catalogEntry = this.#abilityById.get(sourceId);
+      if (!catalogEntry) continue;
+      this.#prepareAbilityEntry(category, catalogEntry.ability, context.remaining, {
+        evolutionParentIds: catalogEntry.incomingSourceIds,
+        familySourceId: rootAbility.id,
+        isEvolution: true,
+        ownedAbilityIds: context.currentOwnedAbilityIds,
+        researchBySourceId: context.researchBySourceId,
+        requirementContext: context.requirementContext,
+        skillByKey: context.skillByKey
+      });
+    }
   }
 
   #getTraitSessionTotal(traitRemaining = 0) {
@@ -1815,19 +2362,27 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #prepareAbilityEntry(category, ability, remaining = {}, {
+    evolutionParentIds = [],
+    familyOwned = false,
+    familyHasEvolution = null,
+    familySourceId = "",
+    isEvolution = false,
+    ownedOverride = null,
     ownedAbilityIds = new Set(),
     researchBySourceId = new Map(),
     requirementContext = {},
     skillByKey = new Map()
   } = {}) {
     const sourceId = String(ability?.id ?? "");
+    const resolvedFamilySourceId = String(familySourceId || sourceId);
     const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const cost = Math.max(0, toInteger(ability?.system?.cost));
     const research = researchBySourceId.get(sourceId) ?? null;
     const target = Math.max(1, Number(research?.target) || cost || 1);
     const progress = research ? Math.min(target, Math.max(0, Number(research.progress) || 0)) : 0;
     const remainingCost = Math.max(0, target - progress);
-    const owned = ownedAbilityIds.has(sourceId);
+    const currentOwned = ownedAbilityIds.has(sourceId);
+    const owned = ownedOverride == null ? currentOwned : Boolean(ownedOverride);
     const onlyFree = Boolean(ability?.system?.acquisition?.onlyFree);
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
     const completed = Boolean(research) && progress >= target;
@@ -1836,13 +2391,31 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       ?? "";
     const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability, requirementContext);
     const requirementsMet = requirementRows.every(requirement => requirement.met);
-    const acquisitionAvailable = this.#gmMode || requirementsMet;
+    const evolutionAvailable = !isEvolution || evolutionParentIds.some(parentId => ownedAbilityIds.has(parentId));
+    const evolutionAcquisitionBlocked = !owned
+      && isEvolution
+      && evolutionAvailable
+      && hasUnsafeAbilityEvolutionAcquisitionChanges(this.actor, ability, evolutionParentIds);
+    const acquisitionAvailable = owned || (
+      evolutionAvailable
+      && !evolutionAcquisitionBlocked
+      && (this.#gmMode || requirementsMet)
+    );
     const requirementLabel = getAbilityAcquisitionRequirementLabel(requirementRows);
     this.#abilityRequirementRowsById.set(sourceId, requirementRows);
     const entry = {
       ...ability,
       sourceId,
       categoryId: category.id,
+      currentOwned,
+      evolutionAcquisitionBlocked,
+      evolutionAvailable,
+      evolutionLocked: !evolutionAvailable,
+      evolutionParentIds,
+      familyOwned,
+      familySourceId: resolvedFamilySourceId,
+      hasEvolution: familyHasEvolution == null ? abilityHasEvolutions(ability) : Boolean(familyHasEvolution),
+      isEvolution,
       isFeature,
       cost,
       progress,
@@ -1856,14 +2429,28 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       requirementLabel,
       hasDescriptionTooltip: Boolean(String(ability?.description ?? "").trim() || requirementRows.length),
       canPurchaseTrait: isFeature && !owned && acquisitionAvailable && toInteger(remaining.traits) > 0,
+      canGrant: !owned && evolutionAvailable && !evolutionAcquisitionBlocked,
       canSpendFree: !isFeature && !owned && acquisitionAvailable && Boolean(research) && !onlyManual && (completed || (remainingCost > 0 && toInteger(remaining.researches) > 0)),
       canSelectRewardChanges: completed,
       freeSpendAmount: Math.min(toInteger(remaining.researches), remainingCost),
       canStartManual: !isFeature && !owned && acquisitionAvailable && !research,
       researchId: research?.id ?? "",
       researchActive: Boolean(research),
-      selected: sourceId === this.#selectedAbilitySourceId,
-      statusLabel: owned ? "Изучено" : !acquisitionAvailable ? "Недоступно" : research ? "Исследуется" : "Не изучено",
+      selected: resolvedFamilySourceId === this.#selectedAbilityFamilySourceId
+        || sourceId === this.#selectedAbilitySourceId,
+      statusLabel: currentOwned
+        ? "Текущая версия"
+        : familyOwned
+          ? "Эволюция активна"
+          : evolutionAcquisitionBlocked
+            ? "Недоступно: изменения при приобретении"
+            : !evolutionAvailable
+              ? "Нужна предыдущая эволюция"
+              : !acquisitionAvailable
+                ? "Недоступно"
+                : research
+                  ? "Исследуется"
+                  : "Не изучено",
       acquisitionLabel: onlyFree ? "Только свободные ОИ" : onlyManual ? "Только ручное исследование" : "Свободные ОИ или ручное исследование",
       manualLabel: skillLabel ? `${skillLabel}, сложность ${toInteger(ability?.system?.acquisition?.difficulty ?? 60)}` : ""
     };
@@ -1880,7 +2467,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const skillSettings = getSkillSettings();
     const skillKey = String(ability.system?.acquisition?.skillKey || skillSettings[0]?.key || "");
     const target = Math.max(1, toInteger(ability.system?.cost));
-    const itemData = prepareAbilityItemData(ability, { categoryId: entry.category.id });
+    const rootSourceId = String(entry.rootAbility?.id ?? "");
+    const itemData = prepareAbilityItemData(ability, {
+      categoryId: entry.category.id,
+      evolutionRootId: rootSourceId && rootSourceId !== ability.id ? rootSourceId : "",
+      evolutionParentIds: entry.incomingSourceIds ?? [],
+      evolutionAncestorIds: entry.ancestorSourceIds ?? []
+    });
     const initialProgress = toInteger(ability.system?.cost) <= 0 ? target : progress;
     return {
       name: ability.name,
@@ -2208,6 +2801,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       "system.progression",
       "name"
     ].some(path => foundry.utils.hasProperty(changes, path));
+    const affectsResearch = foundry.utils.hasProperty(changes, "system.researches");
+    if (!affectsDraft && !affectsResearch) return;
 
     this.#invalidateActorDerivedCaches();
     if (affectsDraft && this.#draft) this.#syncDraftFromActor();
@@ -2329,6 +2924,188 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #hasDraftChanges() {
     return JSON.stringify(this.#draft) !== JSON.stringify(this.#snapshot);
   }
+}
+
+function indexAbilityEvolutionFamily(
+  ability,
+  category,
+  index,
+  { ancestorSourceIds = [], rootAbility = ability, parentAbility = null, ownerAbility = null } = {}
+) {
+  const sourceId = String(ability?.id ?? "").trim();
+  if (!sourceId || index.has(sourceId)) return;
+  const ownerEvolution = ownerAbility?.system?.evolution;
+  const incomingSourceIds = ownerEvolution
+    ? (ownerEvolution.links ?? [])
+      .filter(link => String(link?.toId ?? "") === sourceId)
+      .map(link => String(link?.fromId ?? "").trim())
+      .filter(Boolean)
+    : [];
+  index.set(sourceId, {
+    ability,
+    ancestorSourceIds,
+    category,
+    incomingSourceIds,
+    ownerAbility,
+    parentAbility,
+    rootAbility
+  });
+  for (const node of ability?.system?.evolution?.nodes ?? []) {
+    const localAncestorSourceIds = getLocalEvolutionAncestorSourceIds(ability, node?.id ?? node?.ability?.id);
+    indexAbilityEvolutionFamily(node?.ability, category, index, {
+      ancestorSourceIds: Array.from(new Set([...ancestorSourceIds, ...localAncestorSourceIds])),
+      rootAbility,
+      parentAbility: ability,
+      ownerAbility: ability
+    });
+  }
+}
+
+function getLocalEvolutionAncestorSourceIds(ownerAbility = {}, nodeId = "") {
+  const rootId = String(ownerAbility?.id ?? "").trim();
+  const links = ownerAbility?.system?.evolution?.links ?? [];
+  const ancestors = [];
+  const visited = new Set([String(nodeId ?? "").trim()]);
+  let currentId = String(nodeId ?? "").trim();
+  while (currentId) {
+    const incoming = links.find(link => String(link?.toId ?? "") === currentId);
+    const parentId = String(incoming?.fromId ?? "").trim();
+    if (!parentId || visited.has(parentId)) break;
+    ancestors.unshift(parentId);
+    if (parentId === rootId) break;
+    visited.add(parentId);
+    currentId = parentId;
+  }
+  return ancestors;
+}
+
+function collectOwnedAbilityLineageIds(currentOwnedIds = new Set(), abilityById = new Map()) {
+  const result = new Set(currentOwnedIds);
+  const pending = [...currentOwnedIds];
+  while (pending.length) {
+    const sourceId = pending.pop();
+    const entry = abilityById.get(sourceId);
+    const predecessors = [
+      ...(entry?.incomingSourceIds ?? []),
+      String(entry?.rootAbility?.id ?? "").trim()
+    ];
+    for (const predecessorId of predecessors) {
+      if (!predecessorId || result.has(predecessorId)) continue;
+      result.add(predecessorId);
+      pending.push(predecessorId);
+    }
+  }
+  return result;
+}
+
+function collectAbilityEvolutionGraph(rootAbility = {}) {
+  const nodes = [];
+  const links = [];
+  const nodeIds = new Set();
+  const linkIds = new Set();
+  const visit = (ability, originX = 0, originY = 0) => {
+    const sourceId = String(ability?.id ?? "").trim();
+    if (!sourceId || nodeIds.has(sourceId)) return;
+    nodeIds.add(sourceId);
+    nodes.push({ ability, x: originX, y: originY });
+    const evolution = ability?.system?.evolution ?? {};
+    const positions = new Map([[sourceId, { x: originX, y: originY }]]);
+    for (const node of evolution.nodes ?? []) {
+      const nodeSourceId = String(node?.ability?.id ?? node?.id ?? "").trim();
+      if (!nodeSourceId) continue;
+      positions.set(nodeSourceId, {
+        x: originX + (Number(node?.x) || 0),
+        y: originY + (Number(node?.y) || 0)
+      });
+    }
+    for (const link of evolution.links ?? []) {
+      const fromId = String(link?.fromId ?? "").trim();
+      const toId = String(link?.toId ?? "").trim();
+      if (!positions.has(fromId) || !positions.has(toId)) continue;
+      // Link ids are local to each nested evolution graph. Qualify them by the
+      // owning ability before flattening so identical generated ids at deeper
+      // matryoshka levels cannot hide edges from the panel or completion walk.
+      const localId = String(link?.id ?? `${fromId}:${toId}`);
+      const id = `${sourceId}::${localId}`;
+      if (linkIds.has(id)) continue;
+      linkIds.add(id);
+      links.push({ id, fromId, toId });
+    }
+    for (const node of evolution.nodes ?? []) {
+      const nodeSourceId = String(node?.ability?.id ?? node?.id ?? "").trim();
+      const position = positions.get(nodeSourceId);
+      if (!position) continue;
+      visit(node?.ability, position.x, position.y);
+    }
+  };
+  visit(rootAbility);
+  return { links, nodes };
+}
+
+function collectCompletedEvolutionIds(links = [], currentOwnedIds = new Set()) {
+  const incomingById = new Map();
+  const graphIds = new Set();
+  for (const link of links) {
+    graphIds.add(link.fromId);
+    graphIds.add(link.toId);
+    const incoming = incomingById.get(link.toId) ?? [];
+    incoming.push(link.fromId);
+    incomingById.set(link.toId, incoming);
+  }
+  const completed = new Set([...currentOwnedIds].filter(sourceId => graphIds.has(sourceId)));
+  const pending = [...completed];
+  while (pending.length) {
+    const sourceId = pending.pop();
+    for (const predecessorId of incomingById.get(sourceId) ?? []) {
+      if (completed.has(predecessorId)) continue;
+      completed.add(predecessorId);
+      pending.push(predecessorId);
+    }
+  }
+  return completed;
+}
+
+function collectRenderedAbilityEvolutionGraph(layer) {
+  if (!layer) return { links: [], nodes: [] };
+  const nodes = Array.from(layer.querySelectorAll("[data-ability-evolution-node]"), node => ({
+    currentOwned: node.dataset.currentOwned === "true",
+    id: String(node.dataset.abilitySourceId ?? ""),
+    x: Number(node.dataset.nodeX) || 0,
+    y: Number(node.dataset.nodeY) || 0
+  })).filter(node => node.id);
+  const links = Array.from(layer.querySelectorAll("[data-ability-evolution-link-id]"), link => ({
+    fromId: String(link.dataset.fromId ?? ""),
+    toId: String(link.dataset.toId ?? "")
+  })).filter(link => link.fromId && link.toId);
+  return { links, nodes };
+}
+
+function getAbilityEvolutionGraphFingerprint(layer) {
+  if (!layer) return "";
+  const nodes = Array.from(layer.querySelectorAll("[data-ability-evolution-node]"), node => [
+    node.dataset.abilitySourceId ?? "",
+    node.getAttribute("style") ?? "",
+    node.querySelector("img")?.getAttribute("src") ?? "",
+    node.querySelector("strong")?.textContent ?? ""
+  ].join("\u0001")).join("\u0002");
+  const links = Array.from(layer.querySelectorAll("[data-ability-evolution-link-id]"), link => [
+    link.dataset.abilityEvolutionLinkId ?? "",
+    link.getAttribute("d") ?? ""
+  ].join("\u0001")).join("\u0002");
+  return `${nodes}\u0003${links}`;
+}
+
+function clampAbilityEvolutionZoom(value) {
+  const zoom = Number(value);
+  return Math.max(
+    ABILITY_EVOLUTION_ZOOM_MIN,
+    Math.min(ABILITY_EVOLUTION_ZOOM_MAX, Number.isFinite(zoom) ? zoom : 1)
+  );
+}
+
+function snapToDevicePixel(value, view = globalThis.window) {
+  const ratio = Math.max(1, Number(view?.devicePixelRatio) || 1);
+  return Math.round((Number(value) || 0) * ratio) / ratio;
 }
 
 function abilityAcquisitionRequirementsMet(actor, ability = {}, context = {}) {
@@ -2716,10 +3493,12 @@ function renderAbilityRequirementTooltipRow(requirement) {
 
 function positionAbilityDescriptionTooltip(element, anchor, { layerElement = null } = {}) {
   if (!element || !anchor?.isConnected) return;
+  const ownerDocument = element.ownerDocument ?? anchor.ownerDocument ?? globalThis.document;
+  const view = ownerDocument?.defaultView ?? globalThis.window;
   const margin = 8;
   const gap = 12;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const viewportWidth = view.innerWidth || ownerDocument?.documentElement?.clientWidth || 0;
+  const viewportHeight = view.innerHeight || ownerDocument?.documentElement?.clientHeight || 0;
   syncTooltipLayerWithApplication(element, layerElement);
   const anchorRect = anchor.getBoundingClientRect();
   let tooltipRect = element.getBoundingClientRect();

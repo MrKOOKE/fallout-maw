@@ -1,0 +1,43 @@
+<div class="fallout-maw-evolution-editor-layout">
+  <header class="fallout-maw-evolution-toolbar">
+    <div>
+      <strong>{{rootAbility.name}}</strong>
+      <span>{{nodes.length}} узл.</span>
+    </div>
+    <div class="fallout-maw-inline-controls">
+      <button type="button" data-action="addEvolutionNode"><i class="fa-solid fa-plus"></i> Добавить после выбранного</button>
+      <button type="button" data-action="editEvolutionNode" {{#unless canEditSelected}}disabled{{/unless}}><i class="fa-solid fa-pen"></i> Открыть способность</button>
+      <button type="button" data-action="deleteEvolutionNode" {{#unless canDeleteSelected}}disabled{{/unless}}><i class="fa-solid fa-trash"></i> Удалить ветку</button>
+      <button type="button" data-action="resetEvolutionView" title="Вернуть камеру"><i class="fa-solid fa-crosshairs"></i></button>
+      <span class="fallout-maw-evolution-zoom" data-evolution-zoom-label>{{viewport.zoom}}%</span>
+    </div>
+  </header>
+
+  <div class="fallout-maw-evolution-workspace">
+    <div class="fallout-maw-evolution-viewport" data-evolution-viewport>
+      <div class="fallout-maw-evolution-stage" data-evolution-stage>
+        <svg class="fallout-maw-evolution-links" aria-hidden="true">
+          {{#each links}}
+          <path d="{{path}}" data-evolution-link-id="{{id}}"></path>
+          {{/each}}
+        </svg>
+        {{#each nodes}}
+        <button type="button"
+                class="fallout-maw-evolution-node{{#if isRoot}} root{{/if}}{{#if selected}} selected{{/if}}"
+                style="left: {{x}}px; top: {{y}}px;"
+                data-action="selectEvolutionNode"
+                data-evolution-node
+                data-node-id="{{id}}">
+          <img src="{{ability.img}}" alt="" draggable="false">
+          <span>
+            <strong>{{ability.name}}</strong>
+            {{#if isRoot}}<small>Исходная способность</small>{{else}}<small>{{childCount}} след.</small>{{/if}}
+          </span>
+        </button>
+        {{/each}}
+      </div>
+      <div class="fallout-maw-evolution-help">Колесо — масштаб · ПКМ — камера · ЛКМ по узлу — перемещение по сетке · Shift — свободно · двойной клик — открыть</div>
+    </div>
+
+  </div>
+</div>

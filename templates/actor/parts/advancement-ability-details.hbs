@@ -16,7 +16,7 @@
   </div>
   <div class="fallout-maw-advancement-talent-action-panel" data-ability-source-id="{{selectedAbility.sourceId}}" data-research-id="{{selectedAbility.researchId}}">
     {{#if isGMMode}}
-    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="grantAbility">Выдать</button>
+    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="grantAbility" {{#unless selectedAbility.canGrant}}disabled{{/unless}}>Выдать</button>
     {{else if selectedAbility.isFeature}}
     <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="purchaseTraitAbility" {{#unless selectedAbility.canPurchaseTrait}}disabled{{/unless}}>Приобрести</button>
     <div class="fallout-maw-advancement-talents-points">Особенности: {{traitPointsDisplay}}</div>

@@ -482,6 +482,15 @@ export const ABILITY_CHANGE_TYPES = Object.freeze({
   downgrade: "downgrade"
 });
 
+export const ABILITY_EVOLUTION_MAX_DEPTH = 12;
+export const ABILITY_EVOLUTION_ZOOM_MIN = 0.25;
+export const ABILITY_EVOLUTION_ZOOM_MAX = 2.5;
+export const ABILITY_EVOLUTION_LAYOUT_TOP_DOWN = "top-down";
+const LEGACY_EVOLUTION_CHILD_X_GAP = 270;
+const LEGACY_EVOLUTION_SIBLING_Y_GAP = 116;
+const EVOLUTION_CHILD_Y_GAP = 150;
+const EVOLUTION_SIBLING_X_GAP = 230;
+
 export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSettings()) {
   const skills = normalizeSkillSettings(skillSettings);
   return {
@@ -604,7 +613,8 @@ export function createKnockOffBalanceAbilityCatalogEntry() {
 
 export function normalizeAbilityCatalog(value = {}, skillSettings = createDefaultSkillSettings()) {
   const sourceCategories = Array.isArray(value?.categories) ? value.categories : [];
-  const categories = sourceCategories.map((category, index) => normalizeAbilityCategory(category, index));
+  const abilityIds = new Set();
+  const categories = sourceCategories.map((category, index) => normalizeAbilityCategory(category, index, { abilityIds }));
   const hasFeatures = categories.some(category => category.id === LOCKED_FEATURES_CATEGORY_ID);
   const normalized = hasFeatures ? categories : [
     createAbilityCategory({
@@ -626,14 +636,20 @@ export function normalizeAbilityCatalog(value = {}, skillSettings = createDefaul
   };
 }
 
-export function normalizeAbilityEntry(value = {}, index = 0) {
-  const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
+export function normalizeAbilityEntry(value = {}, index = 0, {
+  evolutionDepth = 0,
+  abilityIds = null
+} = {}) {
+  const reservedIds = abilityIds instanceof Set ? abilityIds : new Set();
+  const id = getUniqueAbilityId(value?.id, reservedIds, `ability-${index + 1}`);
+  reservedIds.add(id);
   const system = value?.system ?? {};
   return {
     id,
     name: String(value?.name ?? "").trim() || `Новая способность ${index + 1}`,
     img: String(value?.img ?? "").trim() || "icons/svg/aura.svg",
     visible: value?.visible !== false,
+    evolutionSummary: String(value?.evolutionSummary ?? system.evolutionSummary ?? "").trim(),
     description: String(value?.description ?? system.description ?? "").trim(),
     system: {
       category: String(system.category ?? value?.category ?? "").trim(),
@@ -642,9 +658,228 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
       acquisition: normalizeAbilityAcquisition(system.acquisition ?? value?.acquisition),
       acquisitionRequirements: normalizeAbilityAcquisitionConditions(system.acquisitionRequirements ?? value?.acquisitionRequirements),
       functions: normalizeAbilityFunctions(system.functions ?? value?.functions),
-      constructs: normalizeAbilityConstructs(system.constructs ?? value?.constructs)
+      constructs: normalizeAbilityConstructs(system.constructs ?? value?.constructs),
+      evolution: normalizeAbilityEvolution(system.evolution ?? value?.evolution, {
+        rootId: id,
+        depth: evolutionDepth,
+        abilityIds: reservedIds
+      })
     }
   };
+}
+
+export function createDefaultAbilityEvolution() {
+  return {
+    layoutDirection: ABILITY_EVOLUTION_LAYOUT_TOP_DOWN,
+    nodes: [],
+    links: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+export function normalizeAbilityEvolution(value = {}, {
+  rootId = "",
+  depth = 0,
+  abilityIds = null
+} = {}) {
+  if (depth >= ABILITY_EVOLUTION_MAX_DEPTH) return createDefaultAbilityEvolution();
+  const source = value && typeof value === "object" ? value : {};
+  const migrateLegacyLayout = source.layoutDirection !== ABILITY_EVOLUTION_LAYOUT_TOP_DOWN;
+  const sourceNodes = Array.isArray(source.nodes) ? source.nodes : Object.values(source.nodes ?? {});
+  const reservedIds = abilityIds instanceof Set ? abilityIds : new Set([rootId].filter(Boolean));
+  const nodeIds = new Set();
+  const nodes = [];
+  for (const [index, sourceNode] of sourceNodes.entries()) {
+    const abilitySource = sourceNode?.ability ?? sourceNode?.data ?? sourceNode ?? {};
+    const id = getUniqueAbilityId(sourceNode?.id ?? abilitySource?.id, reservedIds, `evolution-${index + 1}`);
+    const ability = normalizeAbilityEntry({
+      ...abilitySource,
+      id
+    }, index, { evolutionDepth: depth + 1, abilityIds: reservedIds });
+    nodeIds.add(ability.id);
+    const fallbackX = getDefaultTopDownEvolutionX(index);
+    const fallbackY = EVOLUTION_CHILD_Y_GAP + (Math.floor(index / 3) * EVOLUTION_CHILD_Y_GAP);
+    const hasLegacyCoordinates = Number.isFinite(Number(sourceNode?.x)) && Number.isFinite(Number(sourceNode?.y));
+    const sourceX = normalizeEvolutionCoordinate(sourceNode?.x, fallbackX);
+    const sourceY = normalizeEvolutionCoordinate(sourceNode?.y, fallbackY);
+    const position = migrateLegacyLayout && hasLegacyCoordinates
+      ? migrateLegacyEvolutionPosition(sourceX, sourceY)
+      : { x: sourceX, y: sourceY };
+    nodes.push({
+      id: ability.id,
+      x: position.x,
+      y: position.y,
+      ability
+    });
+  }
+
+  const validEndpointIds = new Set([String(rootId ?? "").trim(), ...nodeIds].filter(Boolean));
+  const sourceLinks = Array.isArray(source.links) ? source.links : Object.values(source.links ?? {});
+  const pairKeys = new Set();
+  const incomingIds = new Set();
+  const linkIds = new Set();
+  const links = [];
+  for (const sourceLink of sourceLinks) {
+    const fromId = String(sourceLink?.fromId ?? sourceLink?.fromNodeId ?? "").trim();
+    const toId = String(sourceLink?.toId ?? sourceLink?.toNodeId ?? "").trim();
+    const pairKey = `${fromId}\u0000${toId}`;
+    if (
+      !fromId
+      || !toId
+      || toId === rootId
+      || fromId === toId
+      || !validEndpointIds.has(fromId)
+      || !validEndpointIds.has(toId)
+      || pairKeys.has(pairKey)
+      || incomingIds.has(toId)
+      || evolutionLinkCreatesCycle(links, fromId, toId)
+    ) continue;
+    pairKeys.add(pairKey);
+    incomingIds.add(toId);
+    const id = getUniqueAbilityId(sourceLink?.id, linkIds, `evolution-link-${links.length + 1}`);
+    linkIds.add(id);
+    links.push({
+      id,
+      fromId,
+      toId
+    });
+  }
+
+  return {
+    layoutDirection: ABILITY_EVOLUTION_LAYOUT_TOP_DOWN,
+    nodes,
+    links,
+    viewport: migrateLegacyLayout
+      ? { ...normalizeAbilityEvolutionViewport(source.viewport), x: 0, y: 0 }
+      : normalizeAbilityEvolutionViewport(source.viewport)
+  };
+}
+
+export function normalizeAbilityEvolutionViewport(value = {}) {
+  const zoom = Number(value?.zoom);
+  return {
+    x: normalizeEvolutionCoordinate(value?.x, 0),
+    y: normalizeEvolutionCoordinate(value?.y, 0),
+    zoom: Math.max(
+      ABILITY_EVOLUTION_ZOOM_MIN,
+      Math.min(ABILITY_EVOLUTION_ZOOM_MAX, Number.isFinite(zoom) ? zoom : 1)
+    )
+  };
+}
+
+export function abilityHasEvolutions(ability = {}) {
+  return Boolean(ability?.system?.evolution?.nodes?.length);
+}
+
+export function getAbilityEvolutionFamilyIds(ability = {}, { includeRoot = true } = {}) {
+  const ids = new Set();
+  const visit = entry => {
+    const id = String(entry?.id ?? "").trim();
+    if (id) ids.add(id);
+    for (const node of entry?.system?.evolution?.nodes ?? []) visit(node?.ability);
+  };
+  visit(ability);
+  if (!includeRoot) ids.delete(String(ability?.id ?? "").trim());
+  return ids;
+}
+
+export function findAbilityInEvolutionFamily(rootAbility = {}, sourceId = "") {
+  const targetId = String(sourceId ?? "").trim();
+  if (!targetId) return null;
+  const visit = (ability, parentAbility = null, ownerAbility = null, ancestorSourceIds = []) => {
+    if (String(ability?.id ?? "").trim() === targetId) {
+      const ownerEvolution = ownerAbility?.system?.evolution ?? null;
+      return {
+        ability,
+        parentAbility,
+        ownerAbility,
+        rootAbility,
+        ancestorSourceIds,
+        incomingSourceIds: ownerEvolution
+          ? ownerEvolution.links
+            .filter(link => link.toId === targetId)
+            .map(link => link.fromId)
+          : []
+      };
+    }
+    for (const node of ability?.system?.evolution?.nodes ?? []) {
+      const localAncestors = getEvolutionAncestorSourceIds(ability, node?.id);
+      const found = visit(node?.ability, ability, ability, Array.from(new Set([
+        ...ancestorSourceIds,
+        ...localAncestors
+      ])));
+      if (found) return found;
+    }
+    return null;
+  };
+  return visit(rootAbility);
+}
+
+function getEvolutionAncestorSourceIds(ownerAbility, nodeId) {
+  const rootId = String(ownerAbility?.id ?? "").trim();
+  const links = ownerAbility?.system?.evolution?.links ?? [];
+  const ancestors = [];
+  const visited = new Set([String(nodeId ?? "").trim()]);
+  let currentId = String(nodeId ?? "").trim();
+  while (currentId) {
+    const incoming = links.find(link => link.toId === currentId);
+    const parentId = String(incoming?.fromId ?? "").trim();
+    if (!parentId || visited.has(parentId)) break;
+    ancestors.unshift(parentId);
+    if (parentId === rootId) break;
+    visited.add(parentId);
+    currentId = parentId;
+  }
+  return ancestors;
+}
+
+function normalizeEvolutionCoordinate(value, fallback = 0) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return Number(fallback) || 0;
+  return Math.max(-100000, Math.min(100000, numeric));
+}
+
+function getDefaultTopDownEvolutionX(index = 0) {
+  const normalizedIndex = Math.max(0, Number(index) || 0);
+  if (!normalizedIndex) return 0;
+  const distance = Math.ceil(normalizedIndex / 2) * EVOLUTION_SIBLING_X_GAP;
+  return normalizedIndex % 2 === 1 ? -distance : distance;
+}
+
+function migrateLegacyEvolutionPosition(x = 0, y = 0) {
+  return {
+    x: normalizeEvolutionCoordinate(Math.round((y * EVOLUTION_SIBLING_X_GAP) / LEGACY_EVOLUTION_SIBLING_Y_GAP)),
+    y: normalizeEvolutionCoordinate(Math.round((x * EVOLUTION_CHILD_Y_GAP) / LEGACY_EVOLUTION_CHILD_X_GAP))
+  };
+}
+
+function getUniqueAbilityId(value, reservedIds, fallback = "ability") {
+  const preferred = String(value ?? "").trim() || String(foundry.utils.randomID?.() ?? "").trim() || fallback;
+  if (!reservedIds.has(preferred)) return preferred;
+  for (let suffix = 2; suffix < Number.MAX_SAFE_INTEGER; suffix += 1) {
+    const candidate = `${preferred}-${suffix}`;
+    if (!reservedIds.has(candidate)) return candidate;
+  }
+  return `${fallback}-${Date.now()}`;
+}
+
+function evolutionLinkCreatesCycle(links, fromId, toId) {
+  const outgoing = new Map();
+  for (const link of links) {
+    const targets = outgoing.get(link.fromId) ?? [];
+    targets.push(link.toId);
+    outgoing.set(link.fromId, targets);
+  }
+  const pending = [toId];
+  const visited = new Set();
+  while (pending.length) {
+    const current = pending.pop();
+    if (current === fromId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    pending.push(...(outgoing.get(current) ?? []));
+  }
+  return false;
 }
 
 export function normalizeAbilityFunctions(value = []) {
@@ -867,8 +1102,21 @@ export function createAbilityAcquisitionCondition(type = "") {
   });
 }
 
-export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
-  const normalized = normalizeAbilityEntry(ability);
+export function prepareAbilityItemData(ability = {}, {
+  categoryId = "",
+  evolutionRootId = "",
+  evolutionParentIds = [],
+  evolutionAncestorIds = []
+} = {}) {
+  // Actor Items only need the purchased snapshot. Descendant graphs stay in the
+  // catalog so runtime preparation never walks or stores the whole evolution tree.
+  const normalized = normalizeAbilityEntry({
+    ...ability,
+    system: {
+      ...(ability?.system ?? {}),
+      evolution: null
+    }
+  });
   return {
     name: normalized.name,
     type: "ability",
@@ -880,14 +1128,25 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
       formula: normalized.system.formula,
       acquisition: foundry.utils.deepClone(normalized.system.acquisition),
       acquisitionRequirements: foundry.utils.deepClone(normalized.system.acquisitionRequirements),
-      functions: foundry.utils.deepClone(normalized.system.functions),
+      // Disabled fixed rows are catalog authoring switches. Omitting them from
+      // actor snapshots makes every runtime path inert without repeated checks.
+      functions: foundry.utils.deepClone(normalized.system.functions.filter(entry => (
+        entry.type !== ABILITY_FUNCTION_TYPES.fixed || entry.enabled !== false
+      ))),
       constructs: foundry.utils.deepClone(normalized.system.constructs)
     },
     flags: {
       "fallout-maw": {
         [ABILITY_SOURCE_FLAG]: {
           id: normalized.id,
-          categoryId
+          categoryId,
+          evolutionRootId: String(evolutionRootId ?? "").trim(),
+          evolutionParentIds: Array.from(new Set((evolutionParentIds ?? [])
+            .map(value => String(value ?? "").trim())
+            .filter(Boolean))),
+          evolutionAncestorIds: Array.from(new Set((evolutionAncestorIds ?? [])
+            .map(value => String(value ?? "").trim())
+            .filter(Boolean)))
         }
       }
     }
@@ -902,22 +1161,23 @@ export function getAbilitySourceCategoryId(item) {
   return String(item?.getFlag?.("fallout-maw", ABILITY_SOURCE_FLAG)?.categoryId ?? item?.flags?.["fallout-maw"]?.[ABILITY_SOURCE_FLAG]?.categoryId ?? "");
 }
 
-function createAbilityCategory({ id = "", name = "", locked = false, abilities = [] } = {}) {
+function createAbilityCategory({ id = "", name = "", locked = false, abilities = [] } = {}, { abilityIds = null } = {}) {
   return {
     id: String(id || foundry.utils.randomID()),
     name: String(name || "Новая категория"),
     locked: Boolean(locked),
-    abilities: (Array.isArray(abilities) ? abilities : []).map(normalizeAbilityEntry)
+    abilities: (Array.isArray(abilities) ? abilities : [])
+      .map((ability, index) => normalizeAbilityEntry(ability, index, { abilityIds }))
   };
 }
 
-function normalizeAbilityCategory(value = {}, index = 0) {
+function normalizeAbilityCategory(value = {}, index = 0, { abilityIds = null } = {}) {
   return createAbilityCategory({
     id: String(value?.id ?? "").trim() || `category-${index + 1}`,
     name: String(value?.name ?? "").trim() || `Категория ${index + 1}`,
     locked: Boolean(value?.locked),
     abilities: value?.abilities
-  });
+  }, { abilityIds });
 }
 
 function normalizeAbilityAcquisition(value = {}) {
@@ -1035,6 +1295,7 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
+    enabled: value?.enabled !== false,
     includeInPureValues: type === ABILITY_FUNCTION_TYPES.effectChanges
       && Boolean(value?.includeInPureValues)
       && hasAdvancementPureValueFunctionChanges({ changes, penalties }),
@@ -2188,7 +2449,8 @@ export function normalizeReactiveSettings(value = {}) {
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
     durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 6)),
-    movementPointsPerActionPoint: Math.max(1, toInteger(value?.movementPointsPerActionPoint ?? 4))
+    movementPointsPerActionPoint: Math.max(1, toInteger(value?.movementPointsPerActionPoint ?? 4)),
+    actionPointsPerThreshold: Math.max(1, toInteger(value?.actionPointsPerThreshold ?? 1))
   };
 }
 

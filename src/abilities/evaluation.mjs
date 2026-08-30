@@ -105,7 +105,7 @@ export function getAbilityEffectProjectionFromNormalizedFunctions(
   const fixedFunctionsEnabled = getActiveRulesProfile().fixedAbilityFunctionsEnabled !== false;
   for (const entry of normalizedFunctions ?? []) {
     if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.fixed].includes(entry.type)) continue;
-    if (entry.type === ABILITY_FUNCTION_TYPES.fixed && !fixedFunctionsEnabled) continue;
+    if (entry.type === ABILITY_FUNCTION_TYPES.fixed && (!fixedFunctionsEnabled || entry.enabled === false)) continue;
     for (const change of getConditionalFunctionChanges(actor, entry, context)) {
       if (!change.key || change.value === "") continue;
       const index = changes.length;
@@ -187,6 +187,7 @@ export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) 
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
       if (
         abilityFunction.type !== ABILITY_FUNCTION_TYPES.fixed
+        || abilityFunction.enabled === false
         || abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment
       ) continue;
       signatureSkillsDisabled = true;

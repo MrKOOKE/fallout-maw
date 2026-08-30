@@ -40,11 +40,12 @@ function setProperty(object, path, value) {
 }
 
 let settingReads = 0;
+const settingValues = new Map();
 globalThis.game = {
   settings: {
-    get() {
+    get(_namespace, key) {
       settingReads += 1;
-      return undefined;
+      return settingValues.get(key);
     }
   }
 };
@@ -70,8 +71,11 @@ const {
   classifyActorUpdate
 } = await import("../src/events/foundry-document-events.mjs");
 const {
+  getAbilityCatalog,
+  invalidateAbilityCatalogCache,
   invalidatePreparedRuntimeSettingsCache,
   getPreparedRuntimeSettings,
+  refreshPreparedActorsAfterSkillSettingsChange,
   syncSettingsIntoSystemConfig
 } = await import("../src/settings/accessors.mjs");
 const {
@@ -218,4 +222,34 @@ test("prepared runtime settings normalize once until Foundry settings refresh", 
   const third = getPreparedRuntimeSettings();
   assert.notEqual(third, first);
   assert.ok(settingReads > readsAfterBuild);
+});
+
+test("skill settings refresh invalidates a cached default ability catalog", () => {
+  const catalogSource = { categories: [] };
+  settingValues.set("abilitiesCatalog", catalogSource);
+  settingValues.set("skillSettings", {
+    entries: [{ key: "oldSkill", label: "Старый навык", formula: "0" }]
+  });
+  invalidateAbilityCatalogCache();
+
+  try {
+    const first = getAbilityCatalog();
+    assert.ok(first.categories.some(category => category.id === "skill-oldSkill"));
+
+    settingValues.set("skillSettings", {
+      entries: [{ key: "newSkill", label: "Новый навык", formula: "0" }]
+    });
+    assert.equal(getAbilityCatalog(), first, "the catalog source identity alone keeps the cached fallback");
+
+    refreshPreparedActorsAfterSkillSettingsChange();
+    const refreshed = getAbilityCatalog();
+    assert.notEqual(refreshed, first);
+    assert.equal(refreshed.categories.some(category => category.id === "skill-oldSkill"), false);
+    assert.ok(refreshed.categories.some(category => (
+      category.id === "skill-newSkill" && category.name === "Новый навык"
+    )));
+  } finally {
+    settingValues.clear();
+    invalidateAbilityCatalogCache();
+  }
 });

@@ -52,12 +52,57 @@ test("ability copy names stay readable and unique across repeated copies", () =>
   );
 });
 
+test("ability copy remaps every evolution source and internal graph reference", () => {
+  let sequence = 0;
+  const original = {
+    id: "root-old",
+    name: "Реактивный",
+    system: {
+      acquisitionRequirements: [],
+      evolution: {
+        nodes: [{
+          id: "node-old",
+          x: 200,
+          y: 0,
+          ability: {
+            id: "node-old",
+            name: "Реактивный II",
+            system: {
+              acquisitionRequirements: [{ abilityIds: ["root-old", "external"] }],
+              evolution: { nodes: [], links: [] }
+            }
+          }
+        }],
+        links: [{ id: "link-old", fromId: "root-old", toId: "node-old" }]
+      }
+    }
+  };
+  const copy = createAbilityCatalogCopy(original, {
+    id: "root-new",
+    idFactory: () => `generated-${++sequence}`
+  });
+
+  const [node] = copy.system.evolution.nodes;
+  const [link] = copy.system.evolution.links;
+  assert.equal(node.id, "generated-1");
+  assert.equal(node.ability.id, node.id);
+  assert.notEqual(link.id, "link-old");
+  assert.equal(link.fromId, "root-new");
+  assert.equal(link.toId, node.id);
+  assert.deepEqual(node.ability.system.acquisitionRequirements[0].abilityIds, ["root-new", "external"]);
+});
+
 test("ability settings list exposes and handles the copy action", () => {
   const appSource = fs.readFileSync(path.join(ROOT, "src/apps/ability-settings-config.mjs"), "utf8");
   const stylesheetSource = fs.readFileSync(path.join(ROOT, "styles/fallout-maw.css"), "utf8");
   const templateSource = fs.readFileSync(path.join(ROOT, "templates/settings/ability-settings-config.hbs"), "utf8");
 
   assert.match(appSource, /copyAbility:\s*this\.#onCopyAbility/);
+  assert.match(
+    appSource,
+    /this\.catalog\s*=\s*foundry\.utils\.deepClone\(getAbilityCatalog\(\)\)/,
+    "the editor must not mutate the shared normalized runtime cache"
+  );
   assert.match(appSource, /createAbilityCatalogCopy\(ability/);
   assert.match(appSource, /new AbilityCatalogItemEditor\(this,\s*categoryId,\s*copy\.id\)\.render\(true\)/);
   assert.match(templateSource, /data-action="copyAbility"/);
@@ -85,13 +130,14 @@ test("ability settings confirms before mutating the catalog on deletion", () => 
 
 test("ability editor saves its draft only while closing", () => {
   const source = fs.readFileSync(path.join(ROOT, "src/apps/ability-catalog-item-editor.mjs"), "utf8");
-  const closeStart = source.indexOf("async close(options = {})");
+  const closeStart = source.indexOf("  close(options = {})");
   const closeEnd = source.indexOf("static #onSelectTab", closeStart);
   const close = source.slice(closeStart, closeEnd);
 
   assert.equal(source.match(/catalogApp\.saveAbility\(/g)?.length, 1);
-  assert.match(close, /if \(this\.form\) this\.#syncFromForm\(\);/);
-  assert.match(close, /this\.#closeSavePromise = this\.catalogApp\.saveAbility\(this\.categoryId, this\.ability\);/);
-  assert.match(close, /const saved = await this\.#closeSavePromise;/);
+  assert.match(close, /this\.#closeSavePromise \?\?= this\.#saveAndClose\(options\)/);
+  assert.match(close, /this\.syncAbilityDraft\(\);[\s\S]*?await this\.#closeChildEditors\(\);/);
+  assert.match(close, /const saved = await this\.catalogApp\.saveAbility\(this\.categoryId, this\.ability\);/);
+  assert.match(close, /this\.catalogApp\.releaseChildEditor\?\.\(this\)/);
   assert.doesNotMatch(source, /autosave|#queueAutosave|#flushAutosave/i);
 });

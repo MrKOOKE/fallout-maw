@@ -155,6 +155,26 @@
   </section>
   {{/unless}}
 
+  <section class="fallout-maw-panel fallout-maw-evolution-settings-panel">
+    <div class="fallout-maw-panel-header">
+      <div>
+        <h2>Эволюция</h2>
+        <p class="fallout-maw-form-hint">Ветка содержит узлов: {{evolutionNodeCount}}. Каждый узел открывается как полноценная способность.</p>
+      </div>
+      <button type="button" data-action="openEvolutionEditor"><i class="fa-solid fa-diagram-project"></i> Настроить ветку</button>
+    </div>
+  </section>
+
+  {{#if showEvolutionSummary}}
+  <section class="fallout-maw-panel fallout-maw-description-panel">
+    <h2>Краткое описание эволюции</h2>
+    <p class="fallout-maw-form-hint">Эта сводка показывается до приобретения узла. Полный текст ниже попадёт в купленную способность.</p>
+    <prose-mirror data-field="evolutionSummary" value="{{ability.evolutionSummary}}" class="sized" compact>
+      {{{evolutionSummaryHTML}}}
+    </prose-mirror>
+  </section>
+  {{/if}}
+
   <section class="fallout-maw-panel fallout-maw-description-panel">
     <h2>Описание</h2>
     <prose-mirror data-field="description" value="{{ability.description}}" class="sized" compact>
@@ -205,6 +225,64 @@
 
     {{#if isFixed}}
     <input type="hidden" data-field="fixedKey" value="{{fixedKey}}">
+    <div class="fallout-maw-inline-checkbox fallout-maw-fixed-function-enabled">
+      <span>Функция включена</span>
+      <input aria-label="Функция включена" type="checkbox" data-field="functionEnabled" {{checked enabled}}>
+    </div>
+    {{#if fixedReactiveSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Реактивный</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.reactive.energyCost" value="{{fixedReactiveSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.reactive.durationAmount" value="{{fixedReactiveSettings.durationAmount}}" min="1" step="1">
+              <select data-field="fixed.reactive.durationUnit">
+                {{#each fixedReactiveSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Конвертация ОП в ОД</strong>
+          <label>
+            <span>ОП на порог</span>
+            <input type="number" data-field="fixed.reactive.movementPointsPerActionPoint" value="{{fixedReactiveSettings.movementPointsPerActionPoint}}" min="1" step="1">
+          </label>
+          <label>
+            <span>ОД за порог</span>
+            <input type="number" data-field="fixed.reactive.actionPointsPerThreshold" value="{{fixedReactiveSettings.actionPointsPerThreshold}}" min="1" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.reactive.overloadEnergyCost" value="{{fixedReactiveSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.reactive.overloadDurationAmount" value="{{fixedReactiveSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.reactive.overloadDurationUnit">
+                {{#each fixedReactiveSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedDeusSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Бог из машины</h3>

@@ -4,6 +4,7 @@ import {
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
   ABILITY_SOURCE_FLAG,
+  findAbilityInEvolutionFamily,
   getAbilitySourceId,
   normalizeAbilityFunctions,
   prepareAbilityItemData
@@ -26,13 +27,16 @@ import { getResearchById } from "../research/storage.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const REWARD_SELECTION_ABORTED = Symbol("abilityRewardSelectionAborted");
+const abilityGrantsInFlight = new WeakMap();
 
 export function findCatalogAbility(sourceId = "", catalog = getAbilityCatalog()) {
   const normalizedSourceId = String(sourceId ?? "").trim();
   if (!normalizedSourceId) return null;
   for (const category of catalog.categories ?? []) {
-    const ability = (category.abilities ?? []).find(entry => entry.id === normalizedSourceId);
-    if (ability) return { ability, category };
+    for (const rootAbility of category.abilities ?? []) {
+      const entry = findAbilityInEvolutionFamily(rootAbility, normalizedSourceId);
+      if (entry) return { ...entry, category };
+    }
   }
   return null;
 }
@@ -40,16 +44,48 @@ export function findCatalogAbility(sourceId = "", catalog = getAbilityCatalog())
 export function actorHasAbility(actor, sourceId = "") {
   const normalizedSourceId = String(sourceId ?? "").trim();
   if (!normalizedSourceId) return false;
-  return actor?.items?.some?.(item => item.type === "ability" && getAbilitySourceId(item) === normalizedSourceId) ?? false;
+  return actor?.items?.some?.(item => {
+    if (item.type !== "ability") return false;
+    if (getAbilitySourceId(item) === normalizedSourceId) return true;
+    const source = item.getFlag?.(FALLOUT_MAW.id, ABILITY_SOURCE_FLAG)
+      ?? item.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG]
+      ?? {};
+    return String(source.evolutionRootId ?? "") === normalizedSourceId
+      || (source.evolutionAncestorIds ?? []).some(id => String(id ?? "") === normalizedSourceId);
+  }) ?? false;
 }
 
-export async function grantCatalogAbility(actor, sourceId = "") {
+export async function grantCatalogAbility(actor, sourceId = "", catalog = getAbilityCatalog()) {
   if (!actor || actorHasAbility(actor, sourceId)) return null;
-  const entry = findCatalogAbility(sourceId);
+  const entry = findCatalogAbility(sourceId, catalog);
   if (!entry) return null;
-  const itemData = prepareAbilityItemData(entry.ability, { categoryId: entry.category.id });
+  const itemData = prepareCatalogAbilityItemData(entry);
   const result = await grantAbilityItemData(actor, itemData, { sourceId });
   return result.item;
+}
+
+export function prepareCatalogAbilityItemData(entry = {}) {
+  if (!entry?.ability || !entry?.category) return null;
+  return prepareAbilityItemData(entry.ability, {
+    categoryId: entry.category.id,
+    evolutionRootId: getEvolutionRootId(entry),
+    evolutionParentIds: entry.incomingSourceIds,
+    evolutionAncestorIds: entry.ancestorSourceIds
+  });
+}
+
+export function hasUnsafeAbilityEvolutionAcquisitionChanges(
+  actor,
+  abilityOrData = {},
+  parentSourceIds = [],
+  { predecessor = null } = {}
+) {
+  const ownedPredecessor = predecessor ?? findOwnedEvolutionPredecessor(actor, parentSourceIds);
+  if (!ownedPredecessor) return false;
+  return Boolean(
+    getAbilityAcquisitionChanges(ownedPredecessor).length
+    || getAbilityAcquisitionChanges(abilityOrData).length
+  );
 }
 
 /**
@@ -71,21 +107,77 @@ export async function grantAbilityItemData(actor, itemData = {}, {
   delete normalizedItemData.id;
 
   const resolvedSourceId = getRewardAbilitySourceId(normalizedItemData) || String(sourceId ?? "").trim();
-  if (resolvedSourceId && actorHasAbility(actor, resolvedSourceId)) {
-    return { item: null, cancelled: false };
-  }
+  const evolution = resolveAbilityEvolutionGrant(normalizedItemData, resolvedSourceId);
+  const lockSourceIds = evolution.isEvolution
+    ? [resolvedSourceId, ...evolution.parentSourceIds]
+    : [resolvedSourceId];
+  return withAbilityGrantLock(actor, lockSourceIds, async () => {
+    if (resolvedSourceId && actorHasAbility(actor, resolvedSourceId)) {
+      return { item: null, cancelled: false };
+    }
 
-  const preparedItemData = await applyLimitedChangeSelectionsToGrant(normalizedItemData, actor, {
-    limitContext,
-    evaluateLimit,
-    chooseLimitedChanges
+    if (evolution.isEvolution) {
+      const predecessor = findOwnedEvolutionPredecessor(actor, evolution.parentSourceIds);
+      const unsafeAcquisitionChanges = predecessor && hasUnsafeAbilityEvolutionAcquisitionChanges(
+        actor,
+        normalizedItemData,
+        evolution.parentSourceIds,
+        { predecessor }
+      );
+      if (!predecessor || unsafeAcquisitionChanges) {
+        if (unsafeAcquisitionChanges) {
+          ui.notifications.warn("Эволюция с изменениями при приобретении заблокирована: прежние изменения нельзя безопасно применить повторно.");
+        }
+        return { item: null, cancelled: false, blocked: true };
+      }
+      applyEvolutionSourceFlag(normalizedItemData, resolvedSourceId, evolution);
+
+      const preparedItemData = await applyLimitedChangeSelectionsToGrant(normalizedItemData, actor, {
+        limitContext,
+        evaluateLimit,
+        chooseLimitedChanges
+      });
+      if (!preparedItemData) return { item: null, cancelled: true };
+
+      const predecessorId = String(predecessor.id ?? predecessor._id ?? "").trim();
+      if (!predecessorId || typeof actor.updateEmbeddedDocuments !== "function") {
+        return { item: null, cancelled: false, blocked: true };
+      }
+      const previousFlags = foundry.utils.deepClone(
+        predecessor.toObject?.().flags ?? predecessor.flags ?? {}
+      );
+      const nextFlags = foundry.utils.deepClone(preparedItemData.flags ?? {});
+      const mergedFlags = {
+        ...previousFlags,
+        ...nextFlags,
+        // An evolution is a new ability definition. Preserve foreign module
+        // namespaces, but never carry the predecessor's Fallout runtime state.
+        [FALLOUT_MAW.id]: nextFlags[FALLOUT_MAW.id] ?? {}
+      };
+      const updates = await actor.updateEmbeddedDocuments("Item", [{
+        ...preparedItemData,
+        flags: mergedFlags,
+        _id: predecessorId
+      }], {
+        ...createOptions,
+        diff: false,
+        recursive: false
+      });
+      return { item: updates?.[0] ?? null, cancelled: false };
+    }
+
+    const preparedItemData = await applyLimitedChangeSelectionsToGrant(normalizedItemData, actor, {
+      limitContext,
+      evaluateLimit,
+      chooseLimitedChanges
+    });
+    if (!preparedItemData) return { item: null, cancelled: true };
+
+    const created = await actor.createEmbeddedDocuments("Item", [preparedItemData], createOptions);
+    const item = created?.[0] ?? null;
+    await applyAbilityAcquisitionChanges(actor, item);
+    return { item, cancelled: false };
   });
-  if (!preparedItemData) return { item: null, cancelled: true };
-
-  const created = await actor.createEmbeddedDocuments("Item", [preparedItemData], createOptions);
-  const item = created?.[0] ?? null;
-  await applyAbilityAcquisitionChanges(actor, item);
-  return { item, cancelled: false };
 }
 
 export async function completeAbilityResearch(actor, researchId = "", options = {}) {
@@ -122,8 +214,10 @@ export async function grantAbilityResearchReward(actor, research = {}) {
     sourceId,
     limitContext: "ability reward change limit"
   });
-  if (result.cancelled) {
-    ui.notifications.warn("Выбор изменений способности не завершён. Завершённое исследование оставлено без выдачи награды.");
+  if (result.cancelled || result.blocked) {
+    if (result.cancelled) {
+      ui.notifications.warn("Выбор изменений способности не завершён. Завершённое исследование оставлено без выдачи награды.");
+    }
     return REWARD_SELECTION_ABORTED;
   }
   return result.item;
@@ -144,11 +238,84 @@ function getAbilityRewardItemData(research = {}) {
 function getCatalogAbilityRewardItemData(sourceId = "") {
   const entry = findCatalogAbility(sourceId);
   if (!entry) return null;
-  return prepareAbilityItemData(entry.ability, { categoryId: entry.category.id });
+  return prepareCatalogAbilityItemData(entry);
 }
 
 function getRewardAbilitySourceId(itemData = {}) {
   return String(itemData?.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
+}
+
+function getEvolutionRootId(entry = {}) {
+  const sourceId = String(entry?.ability?.id ?? "").trim();
+  const rootId = String(entry?.rootAbility?.id ?? "").trim();
+  return rootId && rootId !== sourceId ? rootId : "";
+}
+
+function resolveAbilityEvolutionGrant(itemData = {}, sourceId = "") {
+  const sourceFlag = itemData?.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG] ?? {};
+  const hasStoredEvolutionMetadata = Object.hasOwn(sourceFlag, "evolutionRootId")
+    && Array.isArray(sourceFlag.evolutionParentIds);
+  let rootSourceId = String(sourceFlag.evolutionRootId ?? "").trim();
+  let parentValues = Array.isArray(sourceFlag.evolutionParentIds) ? sourceFlag.evolutionParentIds : [];
+  let ancestorValues = Array.isArray(sourceFlag.evolutionAncestorIds) ? sourceFlag.evolutionAncestorIds : [];
+  if (!hasStoredEvolutionMetadata) {
+    const catalogEntry = sourceId ? findCatalogAbility(sourceId) : null;
+    rootSourceId ||= getEvolutionRootId(catalogEntry);
+    if (!parentValues.length) parentValues = catalogEntry?.incomingSourceIds ?? [];
+    if (!ancestorValues.length) ancestorValues = catalogEntry?.ancestorSourceIds ?? [];
+  }
+  const parentSourceIds = Array.from(new Set(parentValues
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean)));
+  const ancestorSourceIds = Array.from(new Set(ancestorValues
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean)));
+  return {
+    isEvolution: Boolean(rootSourceId && rootSourceId !== sourceId && parentSourceIds.length),
+    rootSourceId,
+    parentSourceIds,
+    ancestorSourceIds
+  };
+}
+
+function findOwnedEvolutionPredecessor(actor, parentSourceIds = []) {
+  const parentIds = new Set(parentSourceIds);
+  const matches = (actor?.items?.contents ?? Array.from(actor?.items ?? []))
+    .filter(item => item?.type === "ability" && parentIds.has(getAbilitySourceId(item)));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function applyEvolutionSourceFlag(itemData = {}, sourceId = "", evolution = {}) {
+  itemData.flags ??= {};
+  itemData.flags[FALLOUT_MAW.id] ??= {};
+  const previous = itemData.flags[FALLOUT_MAW.id][ABILITY_SOURCE_FLAG] ?? {};
+  itemData.flags[FALLOUT_MAW.id][ABILITY_SOURCE_FLAG] = {
+    ...previous,
+    id: sourceId,
+    evolutionRootId: evolution.rootSourceId,
+    evolutionParentIds: [...evolution.parentSourceIds],
+    evolutionAncestorIds: [...evolution.ancestorSourceIds]
+  };
+}
+
+async function withAbilityGrantLock(actor, sourceIds = [], operation) {
+  const lockIds = Array.from(new Set((Array.isArray(sourceIds) ? sourceIds : [sourceIds])
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean)));
+  if (!lockIds.length) return operation();
+  let inFlight = abilityGrantsInFlight.get(actor);
+  if (!inFlight) {
+    inFlight = new Set();
+    abilityGrantsInFlight.set(actor, inFlight);
+  }
+  if (lockIds.some(sourceId => inFlight.has(sourceId))) return { item: null, cancelled: false, blocked: true };
+  for (const sourceId of lockIds) inFlight.add(sourceId);
+  try {
+    return await operation();
+  } finally {
+    for (const sourceId of lockIds) inFlight.delete(sourceId);
+    if (!inFlight.size) abilityGrantsInFlight.delete(actor);
+  }
 }
 
 async function applyLimitedChangeSelectionsToGrant(itemData = {}, actor = null, {

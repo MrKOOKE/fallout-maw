@@ -16,7 +16,10 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
 
   constructor(options = {}) {
     super(options);
-    this.catalog = getAbilityCatalog();
+    // The accessor keeps a shared normalized read cache for hot runtime paths.
+    // Editors always work on an isolated draft so unsaved form mutations cannot
+    // leak into advancement, purchase, or requirement checks.
+    this.catalog = foundry.utils.deepClone(getAbilityCatalog());
   }
 
   static DEFAULT_OPTIONS = {

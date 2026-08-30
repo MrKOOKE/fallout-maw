@@ -1198,6 +1198,181 @@ body #prosemirror-dropdown {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
 
+/* Ability evolution graph ------------------------------------------------- */
+.ability-catalog-item-editor .fallout-maw-evolution-settings-panel .fallout-maw-panel-header > div:first-child {
+  min-width: 0;
+}
+
+.ability-catalog-item-editor .fallout-maw-fixed-function-enabled {
+  width: min(22rem, 100%);
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-border-light-2) 60%, transparent);
+  border-radius: 0.35rem;
+}
+
+.ability-evolution-editor .window-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.fallout-maw-evolution-editor-layout {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 34rem;
+  background: linear-gradient(150deg, rgba(12, 12, 18, 0.98), rgba(25, 20, 29, 0.96));
+  color: var(--color-text-light-highlight);
+}
+
+.fallout-maw-evolution-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid rgba(213, 178, 122, 0.4);
+  background: rgba(7, 7, 11, 0.88);
+}
+
+.fallout-maw-evolution-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.fallout-maw-evolution-toolbar button {
+  width: auto;
+  min-width: 2.2rem;
+}
+
+.fallout-maw-evolution-zoom {
+  min-width: 3rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fallout-maw-evolution-workspace {
+  position: relative;
+  min-height: 0;
+}
+
+.fallout-maw-evolution-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background-color: rgba(7, 8, 13, 0.9);
+  background-image:
+    radial-gradient(circle, rgba(213, 178, 122, 0.22) 1px, transparent 1px),
+    linear-gradient(rgba(213, 178, 122, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(213, 178, 122, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px, 120px 120px, 120px 120px;
+}
+
+.fallout-maw-evolution-viewport.panning,
+.fallout-maw-evolution-viewport.dragging-node {
+  cursor: grabbing;
+}
+
+.fallout-maw-evolution-stage {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 1px;
+  height: 1px;
+  transform-origin: 0 0;
+}
+
+.fallout-maw-evolution-links {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fallout-maw-evolution-links path {
+  fill: none;
+  stroke: rgba(221, 178, 104, 0.72);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 4px rgba(221, 178, 104, 0.25));
+}
+
+.fallout-maw-evolution-viewport.dragging-node .fallout-maw-evolution-links path {
+  filter: none;
+}
+
+.fallout-maw-evolution-node {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 3.3rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  width: 190px;
+  height: 82px;
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid rgba(213, 178, 122, 0.55);
+  border-radius: 0.5rem;
+  background: linear-gradient(140deg, rgba(48, 39, 50, 0.98), rgba(19, 18, 27, 0.98));
+  color: #f0dfc2;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 0.3rem 0.9rem rgba(0, 0, 0, 0.38);
+  transition: none;
+}
+
+.fallout-maw-evolution-node.root {
+  border-color: rgba(156, 204, 121, 0.78);
+}
+
+.fallout-maw-evolution-node.selected {
+  border-color: #f1c578;
+  box-shadow: 0 0 0 2px rgba(241, 197, 120, 0.3), 0 0 1.2rem rgba(241, 197, 120, 0.28);
+}
+
+.fallout-maw-evolution-node img {
+  display: block;
+  image-rendering: auto;
+  width: 3.2rem;
+  height: 3.2rem;
+  border: 0;
+  object-fit: cover;
+}
+
+.fallout-maw-evolution-node span,
+.fallout-maw-evolution-node strong,
+.fallout-maw-evolution-node small {
+  display: block;
+  min-width: 0;
+}
+
+.fallout-maw-evolution-node strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-evolution-node small {
+  margin-top: 0.25rem;
+  color: rgba(240, 223, 194, 0.68);
+}
+
+.fallout-maw-evolution-help {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.3rem;
+  background: rgba(0, 0, 0, 0.66);
+  color: rgba(255, 255, 255, 0.66);
+  pointer-events: none;
+}
+
 .fallout-maw-special-mix-dialog {
   display: grid;
   gap: 12px;
@@ -12784,6 +12959,277 @@ html.fallout-maw-token-action-hud-open #hotbar {
   margin-top: auto;
   padding: 0.35rem;
   text-align: center;
+}
+
+/* Advancement ability evolution panel ----------------------------------- */
+.application.fallout-maw-advancement-app:not(.minimized, .minimizing) {
+  overflow: visible;
+}
+
+.fallout-maw-advancement-evolution-layer {
+  bottom: -1px;
+  left: calc(100% + 1px);
+  pointer-events: none;
+  position: absolute;
+  top: -1px;
+  width: clamp(25rem, 34vw, 34rem);
+  z-index: 1;
+}
+
+.fallout-maw-advancement-evolution-panel {
+  --fallout-maw-evolution-border: rgba(218, 184, 103, 0.42);
+  --fallout-maw-evolution-text: #eee2c7;
+  background:
+    linear-gradient(90deg, rgba(222, 190, 112, 0.04) 0 1px, transparent 1px 32px),
+    linear-gradient(180deg, rgba(24, 24, 21, 0.99), rgba(8, 9, 8, 0.995));
+  border-left: 1px solid var(--fallout-maw-evolution-border);
+  bottom: 0;
+  box-shadow: -14px 0 34px rgba(0, 0, 0, 0.48);
+  color: var(--fallout-maw-evolution-text);
+  display: grid;
+  grid-template-rows: auto auto minmax(12rem, 1fr);
+  max-width: calc(100vw - 1rem);
+  pointer-events: auto;
+  position: absolute;
+  left: 0;
+  right: auto;
+  top: 0;
+  width: 100%;
+}
+
+.fallout-maw-advancement-evolution-layer.opening {
+  overflow: clip;
+}
+
+.fallout-maw-advancement-evolution-layer.opening .fallout-maw-advancement-evolution-panel {
+  animation: fallout-maw-advancement-evolution-enter 140ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  will-change: transform;
+}
+
+@keyframes fallout-maw-advancement-evolution-enter {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.fallout-maw-advancement-evolution-header {
+  align-items: center;
+  background: rgba(5, 6, 5, 0.92);
+  border-bottom: 1px solid var(--fallout-maw-evolution-border);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.45rem 0.65rem 0.45rem 0.85rem;
+}
+
+.fallout-maw-advancement-evolution-header > div {
+  display: grid;
+  min-width: 0;
+}
+
+.fallout-maw-advancement-evolution-header span {
+  color: rgba(238, 226, 199, 0.68);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fallout-maw-advancement-evolution-header strong {
+  color: #f4d990;
+  font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-advancement-evolution-mark {
+  color: #e7c877;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  filter: drop-shadow(0 0 4px rgba(231, 200, 119, 0.28));
+}
+
+.fallout-maw-advancement-evolution-header button,
+.fallout-maw-advancement-evolution-toolbar button {
+  align-items: center;
+  background: rgba(38, 36, 29, 0.86);
+  border: 1px solid rgba(218, 184, 103, 0.32);
+  color: var(--fallout-maw-evolution-text);
+  display: inline-flex;
+  flex: 0 0 2rem;
+  height: 2rem;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  width: 2rem;
+}
+
+.fallout-maw-advancement-evolution-header button:hover,
+.fallout-maw-advancement-evolution-toolbar button:hover {
+  background: rgba(218, 184, 103, 0.14);
+  border-color: rgba(242, 216, 148, 0.72);
+}
+
+.fallout-maw-advancement-evolution-toolbar {
+  align-items: center;
+  background: rgba(11, 12, 10, 0.88);
+  border-bottom: 1px solid rgba(218, 184, 103, 0.2);
+  color: rgba(238, 226, 199, 0.58);
+  display: flex;
+  font-size: 0.74rem;
+  gap: 0.6rem;
+  justify-content: space-between;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.fallout-maw-advancement-evolution-toolbar > div {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.fallout-maw-advancement-evolution-toolbar output {
+  color: #f4d990;
+  font-variant-numeric: tabular-nums;
+  min-width: 3rem;
+  text-align: right;
+}
+
+.fallout-maw-advancement-evolution-viewport {
+  background-color: rgba(5, 7, 5, 0.9);
+  background-image:
+    radial-gradient(circle, rgba(218, 184, 103, 0.2) 1px, transparent 1px),
+    linear-gradient(rgba(218, 184, 103, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(218, 184, 103, 0.035) 1px, transparent 1px);
+  background-size: 22px 22px, 110px 110px, 110px 110px;
+  cursor: grab;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+}
+
+.fallout-maw-advancement-evolution-viewport.panning {
+  cursor: grabbing;
+}
+
+.fallout-maw-advancement-evolution-stage {
+  height: 1px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: 0 0;
+  width: 1px;
+}
+
+.fallout-maw-advancement-evolution-links {
+  height: 1px;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 1px;
+}
+
+.fallout-maw-advancement-evolution-links path {
+  fill: none;
+  filter: drop-shadow(0 0 3px rgba(218, 184, 103, 0.22));
+  stroke: rgba(218, 184, 103, 0.48);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-advancement-evolution-links path.completed {
+  stroke: rgba(135, 203, 112, 0.82);
+}
+
+.fallout-maw-advancement-evolution-node {
+  align-items: center;
+  background: linear-gradient(145deg, rgba(41, 39, 33, 0.98), rgba(15, 16, 14, 0.99));
+  border: 1px solid rgba(218, 184, 103, 0.48);
+  border-radius: 0.35rem;
+  box-shadow: 0 6px 13px rgba(0, 0, 0, 0.36);
+  color: var(--fallout-maw-evolution-text);
+  cursor: pointer;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  height: 76px;
+  margin: 0;
+  overflow: visible;
+  padding: 0.42rem;
+  position: absolute;
+  text-align: left;
+  width: 184px;
+  z-index: 2;
+}
+
+.fallout-maw-advancement-evolution-node:hover,
+.fallout-maw-advancement-evolution-node:focus-visible,
+.fallout-maw-advancement-evolution-node.selected {
+  background: linear-gradient(145deg, rgba(63, 54, 37, 0.99), rgba(24, 23, 18, 0.99));
+  border-color: #f1cc79;
+  box-shadow: 0 0 0 2px rgba(241, 204, 121, 0.16), 0 7px 16px rgba(0, 0, 0, 0.42);
+  z-index: 5;
+}
+
+.fallout-maw-advancement-evolution-node.current {
+  border-color: rgba(125, 219, 117, 0.88);
+}
+
+.fallout-maw-advancement-evolution-node.completed {
+  border-color: rgba(125, 219, 117, 0.5);
+}
+
+.fallout-maw-advancement-evolution-node.research-active {
+  border-color: rgba(96, 176, 235, 0.86);
+}
+
+.fallout-maw-advancement-evolution-node.locked {
+  filter: grayscale(0.75);
+  opacity: 0.62;
+}
+
+.fallout-maw-advancement-evolution-node img {
+  border: 1px solid rgba(218, 184, 103, 0.36);
+  display: block;
+  height: 3rem;
+  image-rendering: auto;
+  object-fit: cover;
+  width: 3rem;
+}
+
+.fallout-maw-advancement-evolution-node > span {
+  display: grid;
+  min-width: 0;
+}
+
+.fallout-maw-advancement-evolution-node strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-advancement-evolution-node small {
+  color: rgba(238, 226, 199, 0.62);
+  margin-top: 0.18rem;
+}
+
+@media (max-width: 700px) {
+  .fallout-maw-advancement-evolution-layer {
+    width: 100vw;
+  }
+
+  .fallout-maw-advancement-evolution-panel {
+    width: 100vw;
+  }
+}
+
+.application.fallout-maw-advancement-app:is(.minimized, .minimizing) > .fallout-maw-advancement-evolution-layer {
+  display: none;
 }
 
 .application.fallout-maw-ability-change-dialog .window-content {

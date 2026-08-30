@@ -20,10 +20,12 @@
               data-ability-entry
               data-ability-search-text="{{name}} {{acquisitionLabel}} {{manualLabel}} {{requirementLabel}}"
               data-ability-source-id="{{sourceId}}"
+              data-ability-family-source-id="{{familySourceId}}"
               {{#if hasDescriptionTooltip}}data-ability-description-source-id="{{sourceId}}"{{/if}}
             >
               <img class="fallout-maw-advancement-talent-icon" src="{{img}}" alt="">
               <span class="fallout-maw-advancement-talent-name">{{name}}</span>
+              {{#if hasEvolution}}<i class="fa-solid fa-code-branch fallout-maw-advancement-evolution-mark" title="Есть ветка эволюции"></i>{{/if}}
             </button>
             {{else}}
             <p class="fallout-maw-empty-list fallout-maw-advancement-talent-empty">В каталоге нет способностей.</p>
@@ -36,4 +38,5 @@
 
     {{> "systems/fallout-maw/templates/actor/parts/advancement-ability-details.hbs"}}
   </section>
+  {{> "systems/fallout-maw/templates/actor/parts/advancement-ability-evolution-panel.hbs"}}
 </div>

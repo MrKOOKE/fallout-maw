@@ -806,32 +806,33 @@ async function migrateExistingWorld() {
   const main = requirePreset(MAIN_PRESET_ID);
   const migrationState = getPresetState();
   const isExistingWorld = isExistingWorldForPresetMigration();
-  const currentEntries = captureCurrentSettings({
-    useStoredOnly: true,
-    fallbackPreset: runtime.migrationSeed ?? main
-  });
   const worldName = normalizeName(game.world?.title, game.world?.id || "World");
-  let personal = null;
   const finalizeMainSeed = Boolean(main.seedPending || migrationState.migrationFinalizeMain);
+  const personalId = migrationState.migrationPresetId || randomPresetId();
+  if (!migrationState.migrationPresetId || migrationState.migrationFinalizeMain !== finalizeMainSeed) {
+    await updatePresetState({
+      migrationPresetId: personalId,
+      migrationFinalizeMain: finalizeMainSeed
+    });
+  }
 
+  let currentEntries = null;
+  let personal;
   if (isExistingWorld) {
-    const personalId = migrationState.migrationPresetId || randomPresetId();
-    if (!migrationState.migrationPresetId || migrationState.migrationFinalizeMain !== finalizeMainSeed) {
-      await updatePresetState({
-        migrationPresetId: personalId,
-        migrationFinalizeMain: finalizeMainSeed
-      });
-    }
+    currentEntries = captureCurrentSettings({
+      useStoredOnly: true,
+      fallbackPreset: runtime.migrationSeed ?? main
+    });
     personal = await makePreset({
       id: personalId,
       name: worldName,
       settings: currentEntries
     });
-    await savePresetCopies(personal);
-  }
+  } else personal = clonePresetFromMain(main, { id: personalId, name: worldName });
+  await savePresetCopies(personal);
 
-  let activeId = MAIN_PRESET_ID;
-  let activePreset = main;
+  let activeId = personal.id;
+  let activePreset = personal;
   if (finalizeMainSeed && isExistingWorld) {
     activePreset = await makePreset({
       ...main,
@@ -842,9 +843,7 @@ async function migrateExistingWorld() {
       settings: currentEntries
     });
     await savePresetCopies(activePreset);
-  } else if (personal) {
-    activeId = personal.id;
-    activePreset = personal;
+    activeId = MAIN_PRESET_ID;
   }
 
   await applyPresetAtomically(activePreset, {
@@ -1028,25 +1027,16 @@ function captureCurrentSettings({ useStoredOnly = false, fallbackPreset = null }
   return entries;
 }
 
-function worldHasStoredManagedSettings() {
-  const worldStorage = game.settings.storage.get("world");
-  return getManagedPresetSettings().some(setting => Boolean(worldStorage.getSetting(setting.id, null)));
-}
-
 function isExistingWorldForPresetMigration() {
-  if (worldHasStoredManagedSettings() || Number(game.world?.playtime || 0) > 0) return true;
+  // Foundry and ready-time initialization may materialize world Setting
+  // documents during a world's very first launch. Their registered defaults
+  // are not evidence of a legacy world and must never replace the packaged
+  // Fallout-MaW preset used to seed a new world.
+  if (Number(game.world?.playtime || 0) > 0) return true;
 
   const previousSystemVersion = String(game.world?.systemVersion ?? game.world?._source?.systemVersion ?? "");
   const currentSystemVersion = String(game.system?.version ?? "");
   if (previousSystemVersion && currentSystemVersion && previousSystemVersion !== currentSystemVersion) return true;
-
-  const worldStorage = game.settings.storage.get("world");
-  const storedSettings = worldStorage?.contents
-    ?? Array.from(worldStorage?.values?.() ?? []);
-  if (storedSettings.some(document => {
-    const key = String(document?.key ?? "");
-    return key.startsWith(`${SYSTEM_ID}.`) && key !== `${SYSTEM_ID}.${SETTINGS_PRESET_STATE_SETTING}`;
-  })) return true;
 
   return ["actors", "items", "scenes", "journal", "tables", "playlists", "macros", "cards"]
     .some(collectionName => Number(game[collectionName]?.size ?? game[collectionName]?.contents?.length ?? 0) > 0);

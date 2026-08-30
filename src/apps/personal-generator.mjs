@@ -2,12 +2,16 @@ import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { DEFAULT_PERSONAL_NAME_BLOCKS } from "../data/personal-name-library.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
-import { actorHasAbility, findCatalogAbility, grantAbilityItemData } from "../abilities/purchase.mjs";
+import {
+  actorHasAbility,
+  findCatalogAbility,
+  grantAbilityItemData,
+  prepareCatalogAbilityItemData
+} from "../abilities/purchase.mjs";
 import {
   ABILITY_CATALOG_DRAG_TYPE,
   getAbilitySourceCategoryId,
-  getAbilitySourceId,
-  prepareAbilityItemData
+  getAbilitySourceId
 } from "../settings/abilities.mjs";
 import {
   PERSONAL_GENERATOR_PRESETS_SETTING,
@@ -1326,9 +1330,7 @@ async function createPersonalGeneratorAbilityItems(actor, abilitiesData = []) {
     let result;
     if (catalogEntry) {
       if (actorHasAbility(actor, sourceId)) continue;
-      const itemData = prepareAbilityItemData(catalogEntry.ability, {
-        categoryId: catalogEntry.category.id
-      });
+      const itemData = prepareCatalogAbilityItemData(catalogEntry);
       result = await grantAbilityItemData(actor, itemData, {
         sourceId,
         createOptions: { render: false }
@@ -1768,8 +1770,12 @@ async function createEmbeddedAbilityData(entry = {}) {
   if (sourceId) {
     const catalogEntry = findCatalogAbility(sourceId);
     if (!catalogEntry) return null;
-    return prepareAbilityItemData(catalogEntry.ability, {
-      categoryId: String(entry.categoryId ?? catalogEntry.category?.id ?? "").trim()
+    return prepareCatalogAbilityItemData({
+      ...catalogEntry,
+      category: {
+        ...catalogEntry.category,
+        id: String(entry.categoryId ?? catalogEntry.category?.id ?? "").trim()
+      }
     });
   }
 

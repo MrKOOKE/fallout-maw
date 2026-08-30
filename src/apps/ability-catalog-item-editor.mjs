@@ -70,6 +70,8 @@ import {
   createAbilityTrialBranch,
   createAbilityTrialEntry,
   createAbilityTrialLink,
+  abilityHasEvolutions,
+  findAbilityInEvolutionFamily,
   getAbilityFunctionEffectDurationSeconds,
   normalizeAbilityEntry,
   normalizeAbilityConstructs,
@@ -114,6 +116,7 @@ import {
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeReactiveSettings,
   normalizeRicochetSettings,
   normalizeReaperSettings,
   normalizeToTheEndSettings,
@@ -199,6 +202,7 @@ import {
 } from "./ability-accumulation-ui.mjs";
 import { findCatalogAbility } from "../abilities/purchase.mjs";
 import { createAttackActionTrial } from "../abilities/attack-action-settings.mjs";
+import { AbilityEvolutionEditor } from "./ability-evolution-editor.mjs";
 
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const ATTACK_HIT_OUTCOME_KEYS = Object.freeze([
@@ -210,15 +214,22 @@ const ATTACK_HIT_OUTCOME_KEYS = Object.freeze([
 
 export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #activeTab = "details";
+  #childEditors = new Set();
   #functionPickerActive = false;
   #fixedFunctionPickerActive = false;
+  #isEvolutionNode = false;
   #closeSavePromise = null;
 
   constructor(catalogApp, categoryId, abilityId, options = {}) {
-    super(options);
+    const { isEvolutionNode = false, ...applicationOptions } = options;
+    super({
+      ...applicationOptions,
+      id: applicationOptions.id ?? `fallout-maw-ability-catalog-item-editor-${abilityId}`
+    });
     this.catalogApp = catalogApp;
     this.categoryId = categoryId;
     this.abilityId = abilityId;
+    this.#isEvolutionNode = isEvolutionNode === true;
     this.ability = normalizeAbilityEntry(catalogApp.getAbility(categoryId, abilityId));
   }
 
@@ -238,6 +249,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       editAbilityImage: this.#onEditAbilityImage,
+      openEvolutionEditor: this.#onOpenEvolutionEditor,
       selectTab: this.#onSelectTab,
       addFunction: this.#onAddFunction,
       deleteFunction: this.#onDeleteFunction,
@@ -343,6 +355,34 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return `${this.#isFeature ? "Особенность" : "Способность"}: ${this.ability.name}`;
   }
 
+  getAbility(_categoryId, abilityId) {
+    return findAbilityInEvolutionFamily(this.ability, abilityId)?.ability ?? null;
+  }
+
+  syncAbilityDraft() {
+    if (this.form) this.#syncFromForm();
+    return this.ability;
+  }
+
+  releaseChildEditor(editor) {
+    this.#childEditors.delete(editor);
+  }
+
+  async saveAbility(_categoryId, ability) {
+    const normalized = normalizeAbilityEntry(ability);
+    if (normalized.id === this.ability.id) {
+      this.ability = normalized;
+      return this.ability;
+    }
+    const found = findAbilityInEvolutionFamily(this.ability, normalized.id);
+    const node = found?.ownerAbility?.system?.evolution?.nodes
+      ?.find(entry => entry.id === normalized.id);
+    if (!node) return null;
+    node.ability = normalized;
+    this.ability = normalizeAbilityEntry(this.ability);
+    return findAbilityInEvolutionFamily(this.ability, normalized.id)?.ability ?? null;
+  }
+
   get #isFeature() {
     return this.categoryId === LOCKED_FEATURES_CATEGORY_ID;
   }
@@ -350,10 +390,14 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     const isDetailsTab = this.#activeTab === "details";
     const isFunctionsTab = this.#activeTab === "functions";
+    const showEvolutionSummary = isDetailsTab && this.#isEvolutionNode;
     const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
     const rulesProfile = getActiveRulesProfile();
     const descriptionHTML = isDetailsTab ? await TextEditor.enrichHTML(this.ability.description ?? "", {
+      secrets: game.user?.isGM ?? false
+    }) : "";
+    const evolutionSummaryHTML = showEvolutionSummary ? await TextEditor.enrichHTML(this.ability.evolutionSummary ?? "", {
       secrets: game.user?.isGM ?? false
     }) : "";
     const abilityConstructs = isFunctionsTab
@@ -379,6 +423,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
         }
       },
       descriptionHTML,
+      evolutionSummaryHTML,
+      showEvolutionSummary,
+      evolutionNodeCount: this.ability.system?.evolution?.nodes?.length ?? 0,
+      hasEvolutions: abilityHasEvolutions(this.ability),
       canAddFunction: true,
       showFunctionPicker: this.#functionPickerActive,
       showFixedFunctionPicker: rulesProfile.fixedAbilityFunctionsEnabled !== false
@@ -484,14 +532,28 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.ability;
   }
 
-  async close(options = {}) {
-    if (!this.#closeSavePromise) {
-      if (this.form) this.#syncFromForm();
-      this.#closeSavePromise = this.catalogApp.saveAbility(this.categoryId, this.ability);
-    }
-    const saved = await this.#closeSavePromise;
+  close(options = {}) {
+    this.#closeSavePromise ??= this.#saveAndClose(options);
+    return this.#closeSavePromise;
+  }
+
+  async #saveAndClose(options) {
+    this.syncAbilityDraft();
+    await this.#closeChildEditors();
+    const saved = await this.catalogApp.saveAbility(this.categoryId, this.ability);
     if (saved) this.ability = saved;
-    return super.close(options);
+    try {
+      return await super.close(options);
+    } finally {
+      this.catalogApp.releaseChildEditor?.(this);
+    }
+  }
+
+  async #closeChildEditors() {
+    for (const editor of [...this.#childEditors]) {
+      await editor.close();
+      this.#childEditors.delete(editor);
+    }
   }
 
   static #onSelectTab(event, target) {
@@ -516,6 +578,22 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       }
     });
     return picker.render(true);
+  }
+
+  static async #onOpenEvolutionEditor(event) {
+    event.preventDefault();
+    this.#syncFromForm();
+    await this.#closeChildEditors();
+    const editor = new AbilityEvolutionEditor(this, this.categoryId, this.ability.id, {
+      id: `fallout-maw-ability-evolution-editor-${this.ability.id}`
+    });
+    this.#childEditors.add(editor);
+    try {
+      return await this.renderChild(editor);
+    } catch (error) {
+      this.#childEditors.delete(editor);
+      throw error;
+    }
   }
 
   static #onAddFunction(event) {
@@ -2120,6 +2198,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       ...this.ability,
       name: this.form.querySelector("[data-field='name']")?.value ?? this.ability.name,
       img: this.form.querySelector("[data-field='img']")?.value ?? this.ability.img,
+      evolutionSummary: readFieldValue(
+        this.form.querySelector("[data-field='evolutionSummary']"),
+        this.ability.evolutionSummary
+      ),
       description: readFieldValue(this.form.querySelector("[data-field='description']"), this.ability.description),
       system: {
         ...(this.ability.system ?? {}),
@@ -2156,6 +2238,9 @@ function readAbilityFunctions(root, previousValue = []) {
     return {
       id,
       type,
+      enabled: type === ABILITY_FUNCTION_TYPES.fixed
+        ? Boolean(row.querySelector("[data-field='functionEnabled']")?.checked)
+        : previousFunction?.enabled !== false,
       includeInPureValues: Boolean(row.querySelector("[data-advancement-pure-values-input]")?.checked),
       fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
       fixedSettings: readFixedFunctionSettings(row),
@@ -2537,6 +2622,22 @@ function syncFixedRescueCountVisibility(select) {
 
 function readFixedFunctionSettings(row) {
   const fixedKey = row.querySelector("[data-field='fixedKey']")?.value ?? "";
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.reactive.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.reactive.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.reactive.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.reactive.overloadDurationUnit']")?.value
+      ),
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.reactive.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.reactive.durationUnit']")?.value
+      ),
+      movementPointsPerActionPoint: row.querySelector("[data-field='fixed.reactive.movementPointsPerActionPoint']")?.value,
+      actionPointsPerThreshold: row.querySelector("[data-field='fixed.reactive.actionPointsPerThreshold']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing) {
     return {
       energyCost: row.querySelector("[data-field='fixed.curse.energyCost']")?.value,
@@ -3486,6 +3587,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedAllOrNothingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? prepareAllOrNothingSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedReactiveSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive
+    ? prepareReactiveSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
     ? prepareReaperSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3676,6 +3780,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
+    fixedReactiveSettings,
     fixedReaperSettings,
     fixedVirtuosoSettings,
     fixedVersatileDevelopmentSettings,
@@ -3994,6 +4099,19 @@ function prepareChangeForDisplay(change, index, conditions = []) {
     priority: change.priority ?? "",
     typeChoices: buildChangeTypeChoices(change.type),
     accumulatorExchangeSettings: prepareAbilityAccumulatorExchangeForDisplay(change, conditions)
+  };
+}
+
+function prepareReactiveSettingsForDisplay(settings = {}) {
+  const normalized = normalizeReactiveSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
   };
 }
 

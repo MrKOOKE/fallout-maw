@@ -123,10 +123,16 @@ async function advanceReactiveEffect(effect, movementSpent) {
   const data = currentEffect?.getFlag?.(SYSTEM_ID, REACTIVE_EFFECT_FLAG_KEY);
   if (!actor || !data || !isLiveReactiveEffect(currentEffect, getWorldTime())) return null;
 
-  const threshold = Math.max(1, toInteger(data.movementPointsPerActionPoint ?? 4));
-  const total = Math.max(0, toInteger(data.movementPointProgress)) + Math.max(0, toInteger(movementSpent));
-  const gainedActionPoints = Math.floor(total / threshold);
-  const movementPointProgress = total % threshold;
+  const {
+    movementPointTotal,
+    gainedActionPoints,
+    movementPointProgress
+  } = calculateReactiveActionPointReward({
+    movementPointProgress: data.movementPointProgress,
+    movementSpent,
+    movementPointsPerActionPoint: data.movementPointsPerActionPoint,
+    actionPointsPerThreshold: data.actionPointsPerThreshold
+  });
   await currentEffect.update({
     [`flags.${SYSTEM_ID}.${REACTIVE_EFFECT_FLAG_KEY}.movementPointProgress`]: movementPointProgress
   }, { animate: false });
@@ -141,7 +147,7 @@ async function advanceReactiveEffect(effect, movementSpent) {
     ], { animate: false });
   } catch (error) {
     await currentEffect.update({
-      [`flags.${SYSTEM_ID}.${REACTIVE_EFFECT_FLAG_KEY}.movementPointProgress`]: total
+      [`flags.${SYSTEM_ID}.${REACTIVE_EFFECT_FLAG_KEY}.movementPointProgress`]: movementPointTotal
     }, { animate: false });
     throw error;
   }
@@ -179,12 +185,40 @@ function buildReactiveEffectData(actor, abilityItem, abilityFunction, settings) 
           sourceItemUuid: String(abilityItem.uuid ?? ""),
           abilityFunctionId: String(abilityFunction.id ?? ""),
           movementPointsPerActionPoint: settings.movementPointsPerActionPoint,
+          actionPointsPerThreshold: settings.actionPointsPerThreshold,
           movementPointProgress: 0,
           expiresAt: startTime + settings.durationSeconds
         }
       }
     }
   };
+}
+
+/**
+ * Convert actually spent Movement Points into the configured one-time Action Point reward.
+ * The reward defaults to one so effects created before the setting was introduced
+ * keep their original behaviour.
+ */
+export function calculateReactiveActionPointReward({
+  movementPointProgress = 0,
+  movementSpent = 0,
+  movementPointsPerActionPoint = 4,
+  actionPointsPerThreshold = 1
+} = {}) {
+  const threshold = Math.max(1, toInteger(movementPointsPerActionPoint ?? 4));
+  const multiplier = normalizeReactiveActionPointsPerThreshold(actionPointsPerThreshold);
+  const movementPointTotal = Math.max(0, toInteger(movementPointProgress))
+    + Math.max(0, toInteger(movementSpent));
+  const completedThresholds = Math.floor(movementPointTotal / threshold);
+  return {
+    movementPointTotal,
+    gainedActionPoints: completedThresholds * multiplier,
+    movementPointProgress: movementPointTotal % threshold
+  };
+}
+
+function normalizeReactiveActionPointsPerThreshold(value = 1) {
+  return Math.max(1, toInteger(value ?? 1));
 }
 
 function buildOneTimeActionPointEffectData(actor, value) {

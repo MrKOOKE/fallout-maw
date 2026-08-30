@@ -147,6 +147,8 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
 const SKILL_CHECK_RESULT_MODES = new Set(["standard", "criticalSuccess", "success", "failure", "criticalFailure"]);
 const SKILL_CHECK_EDGE_MODES = new Set(["none", "advantage", "disadvantage"]);
 let preparedRuntimeSettingsCache = null;
+let abilityCatalogCacheSource = null;
+let abilityCatalogCacheValue = null;
 
 export function normalizeSkillCheckControl(value = {}) {
   const source = foundry.utils.mergeObject(
@@ -293,7 +295,11 @@ export function getProficiencySettings(rulesProfile = getActiveRulesProfile()) {
 
 export function getAbilityCatalog() {
   try {
-    return normalizeAbilityCatalog(game.settings.get(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING), getSkillSettings());
+    const source = game.settings.get(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING);
+    if (source === abilityCatalogCacheSource && abilityCatalogCacheValue) return abilityCatalogCacheValue;
+    abilityCatalogCacheSource = source;
+    abilityCatalogCacheValue = normalizeAbilityCatalog(source, getSkillSettings());
+    return abilityCatalogCacheValue;
   } catch (_error) {
     return createDefaultAbilityCatalog(getSkillSettings());
   }
@@ -302,7 +308,13 @@ export function getAbilityCatalog() {
 export async function setAbilityCatalog(catalog) {
   const normalized = normalizeAbilityCatalog(catalog, getSkillSettings());
   await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, normalized);
+  invalidateAbilityCatalogCache();
   return normalized;
+}
+
+export function invalidateAbilityCatalogCache() {
+  abilityCatalogCacheSource = null;
+  abilityCatalogCacheValue = null;
 }
 
 export function getProficiencyInfluenceSettings(proficiency = null) {
@@ -760,6 +772,12 @@ export function syncSettingsIntoSystemConfig() {
 export function refreshPreparedActors() {
   syncSettingsIntoSystemConfig();
   refreshPreparedActorsAfterConfig();
+}
+
+/** Refresh actors and any ability-catalog fallback derived from skill settings. */
+export function refreshPreparedActorsAfterSkillSettingsChange() {
+  invalidateAbilityCatalogCache();
+  refreshPreparedActors();
 }
 
 /** Refresh prepared Actor data after CONFIG has already been synchronized. */
