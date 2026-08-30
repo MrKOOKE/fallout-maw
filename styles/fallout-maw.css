@@ -7794,6 +7794,53 @@ label.fallout-maw-mitigation-cell {
   grid-column: 4;
 }
 
+.fallout-maw-tile-special-property-header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.fallout-maw-tile-special-property-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.fallout-maw-tile-special-property-row {
+  align-items: end;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(135px, 1fr) minmax(150px, 1fr) auto;
+}
+
+.fallout-maw-tile-special-property-row > label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.fallout-maw-tile-special-property-row > button:last-child {
+  grid-column: 3;
+}
+
+.fallout-maw-tile-hitbox-status {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin: 0 0 0.5rem;
+}
+
+.fallout-maw-tile-hitbox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fallout-maw-tile-hitbox-actions > button {
+  flex: 1 1 180px;
+}
+
 .fallout-maw-skill-row {
   grid-template-columns: minmax(160px, 1fr) 70px 70px 70px;
 }

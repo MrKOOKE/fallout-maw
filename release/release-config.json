@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "productId": "fallout-maw",
+  "channel": "stable",
+  "minimumLauncherVersion": "1.0.0",
+  "releaseNotes": "",
+  "allowlist": [
+    "system.json",
+    "README.md",
+    "assets",
+    "audio",
+    "calendar",
+    "icons",
+    "lang",
+    "Library-animation",
+    "packs",
+    "simple-quest",
+    "src",
+    "storage",
+    "styles",
+    "templates"
+  ],
+  "exclude": [
+    "assets/LOST/",
+    "assets/Karty/LOST/",
+    "Library-animation/Generic/Portals/Masked/Masks/Background_Maker.blend",
+    "simple-quest/assets/assets.zip",
+    "simple-quest/assets/icons.zip",
+    "simple-quest/index.js.map",
+    "simple-quest/styles/module.css.map"
+  ],
+  "preserve": [
+    "storage/"
+  ],
+  "foundry": {
+    "manifestUrl": null,
+    "downloadUrl": null
+  }
+}

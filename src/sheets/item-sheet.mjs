@@ -152,6 +152,7 @@ import {
   normalizeHeightenedConcentrationSettings,
   normalizeHuntingGroundsSettings,
   normalizeTempoSettings,
+  normalizeFalseBreachSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -7372,6 +7373,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedTempoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo
     ? normalizeTempoSettings(entry?.fixedSettings)
     : null;
+  const fixedFalseBreachSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach
+    ? prepareFalseBreachSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -7539,6 +7543,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedWhirlwindSettings,
     fixedHuntingGroundsSettings,
     fixedTempoSettings,
+    fixedFalseBreachSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
@@ -7989,6 +7994,22 @@ function prepareHuntingGroundsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
     targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
+  };
+}
+
+function prepareFalseBreachSettingsForDisplay(settings = {}) {
+  const normalized = normalizeFalseBreachSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  const markDuration = splitAbilityDurationSeconds(normalized.markDurationSeconds);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    markDurationAmount: markDuration.amount,
+    markDurationUnitChoices: buildAbilityDurationUnitChoices(markDuration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
   };
 }
 
@@ -10422,6 +10443,25 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-hunting-grounds-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-false-breach-duration-amount]")?.value,
+        row.querySelector("[data-fixed-false-breach-duration-unit]")?.value
+      );
+      const markDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-false-breach-mark-duration-amount]")?.value,
+        row.querySelector("[data-fixed-false-breach-mark-duration-unit]")?.value
+      );
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-false-breach-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-false-breach-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.markDurationSeconds`, markDurationSeconds);
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       continue;
     }

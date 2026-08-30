@@ -21,6 +21,36 @@
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
+    "Tile": {
+      "Tabs": {
+        "Additional": "Additional"
+      },
+      "AdditionalHint": "Additional rules associated with this Tile.",
+      "SpecialProperties": "Special Properties",
+      "AddSpecialProperty": "Add",
+      "NoSpecialProperties": "No special properties are configured.",
+      "ChooseSpecialProperty": "Choose a special property",
+      "Cover": "Cover",
+      "CoverType": "Cover type",
+      "ChooseCover": "Choose cover",
+      "MissingCover": "{key} (unavailable)",
+      "CoverHint": "While aiming, the green hitbox blocks rays only to the part of the target silhouette inside the red attack area. The selected type caps this Tile's cover strength; the result uses the same percentage thresholds as walls and unions blocked rays.",
+      "Hitbox": "Hitbox",
+      "HitboxNone": "No separate hitbox is configured, so this Tile has no cover geometry.",
+      "HitboxManual": "Manual outline: {count} vertices.",
+      "HitboxRimWorld": "RimWorld occupied-cell outline: {count} vertices.",
+      "DrawHitbox": "Draw hitbox",
+      "RedrawHitbox": "Redraw hitbox",
+      "ClearManualHitbox": "Remove manual outline",
+      "HitboxHint": "A manual outline overrides the RimWorld import. It follows the Tile's position, rotation, and dimensions and is used both for Tile selection and cover calculation. Presentation-only image scale and mirroring do not change the physical outline.",
+      "HitboxDrawInstructions": "Draw the hitbox outline: left-click adds a vertex; click the first vertex or double-click to save; right-click removes the last vertex; Escape cancels.",
+      "HitboxPreviewName": "Tile hitbox",
+      "HitboxInvalid": "The outline needs at least three vertices, non-zero area, and no self-intersections.",
+      "HitboxPointLimit": "The 64-vertex limit has been reached.",
+      "HitboxUnavailable": "Open the Scene containing this Tile before drawing its hitbox.",
+      "HitboxSaved": "The Tile hitbox was saved.",
+      "HitboxEditFailed": "The Tile hitbox could not be saved. Details were written to the console."
+    },
     "Ability": {
       "Category": {
         "Label": "Category",

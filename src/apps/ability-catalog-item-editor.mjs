@@ -127,6 +127,7 @@ import {
   normalizeHeightenedConcentrationSettings,
   normalizeHuntingGroundsSettings,
   normalizeTempoSettings,
+  normalizeFalseBreachSettings,
   normalizeKnockOffBalanceSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
@@ -2707,6 +2708,27 @@ function readFixedFunctionSettings(row) {
       attackMovementLossReductionPercentPerTempo: row.querySelector("[data-field='fixed.tempo.attackMovementLossReductionPercentPerTempo']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.falseBreach.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.falseBreach.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.falseBreach.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.falseBreach.overloadDurationUnit']")?.value
+      ),
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.falseBreach.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.falseBreach.durationUnit']")?.value
+      ),
+      dodgeBonus: row.querySelector("[data-field='fixed.falseBreach.dodgeBonus']")?.value,
+      markDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.falseBreach.markDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.falseBreach.markDurationUnit']")?.value
+      ),
+      incomingDamagePercent: row.querySelector("[data-field='fixed.falseBreach.incomingDamagePercent']")?.value,
+      attackAdvantage: row.querySelector("[data-field='fixed.falseBreach.attackAdvantage']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return {
       energyCost: row.querySelector("[data-field='fixed.lunge.energyCost']")?.value,
@@ -3509,6 +3531,9 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedTempoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo
     ? normalizeTempoSettings(normalized.fixedSettings)
     : null;
+  const fixedFalseBreachSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach
+    ? prepareFalseBreachSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -3666,6 +3691,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedWhirlwindSettings,
     fixedHuntingGroundsSettings,
     fixedTempoSettings,
+    fixedFalseBreachSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
@@ -4065,6 +4091,22 @@ function prepareHuntingGroundsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
     targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
+  };
+}
+
+function prepareFalseBreachSettingsForDisplay(settings = {}) {
+  const normalized = normalizeFalseBreachSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  const markDuration = splitDurationSeconds(normalized.markDurationSeconds);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    markDurationAmount: markDuration.amount,
+    markDurationUnitChoices: buildDurationUnitChoices(markDuration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
   };
 }
 

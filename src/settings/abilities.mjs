@@ -198,6 +198,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   whirlwind: "whirlwind",
   huntingGrounds: "huntingGrounds",
   tempo: "tempo",
+  falseBreach: "falseBreach",
   lunge: "lunge",
   doubleAttack: "doubleAttack",
   counterAttack: "counterAttack",
@@ -2256,6 +2257,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.tempo) {
     return normalizeTempoSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach) {
+    return normalizeFalseBreachSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return normalizeLungeSettings(value);
   }
@@ -2925,6 +2929,19 @@ export function normalizeTempoSettings(value = {}) {
       0,
       toInteger(value?.attackMovementLossReductionPercentPerTempo ?? 20)
     )
+  };
+}
+
+export function normalizeFalseBreachSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 10)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 12)),
+    dodgeBonus: Math.max(0, toInteger(value?.dodgeBonus ?? 30)),
+    markDurationSeconds: Math.max(1, toInteger(value?.markDurationSeconds ?? 12)),
+    incomingDamagePercent: Math.max(0, toInteger(value?.incomingDamagePercent ?? 10)),
+    attackAdvantage: Math.max(0, toInteger(value?.attackAdvantage ?? 1))
   };
 }
 

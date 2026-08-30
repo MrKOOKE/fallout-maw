@@ -900,6 +900,62 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedFalseBreachSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Ложная брешь</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label><span>Расход энергии</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedFalseBreachSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label>
+            <span>Длительность эффекта</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedFalseBreachSettings.durationAmount}}" min="1" step="1" data-fixed-false-breach-duration-amount>
+              <select data-fixed-false-breach-duration-unit>
+                {{#each fixedFalseBreachSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+          <label><span>Уклонение</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.dodgeBonus" value="{{fixedFalseBreachSettings.dodgeBonus}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Метка за промах</strong>
+          <label>
+            <span>Длительность метки</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedFalseBreachSettings.markDurationAmount}}" min="1" step="1" data-fixed-false-breach-mark-duration-amount>
+              <select data-fixed-false-breach-mark-duration-unit>
+                {{#each fixedFalseBreachSettings.markDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+          <label><span>Входящий урон, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.incomingDamagePercent" value="{{fixedFalseBreachSettings.incomingDamagePercent}}" min="0" step="1"></label>
+          <label><span>Преимущество атак против отмеченного</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackAdvantage" value="{{fixedFalseBreachSettings.attackAdvantage}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label><span>Доп. расход энергии</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedFalseBreachSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedFalseBreachSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-false-breach-overload-duration-amount>
+              <select data-fixed-false-breach-overload-duration-unit>
+                {{#each fixedFalseBreachSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedLungeSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

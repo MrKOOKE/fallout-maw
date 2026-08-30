@@ -2,6 +2,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
+import { getFalseBreachDisplayedDodgeDifficulty } from "../abilities/false-breach.mjs";
 import {
   getCombatVisualizationLayer,
   playWeaponAttackAnimations,
@@ -157,6 +158,10 @@ import {
   queueAttackAutoCoverSync,
   syncAttackAutoCoverNow
 } from "../canvas/cover.mjs";
+import {
+  getCoverSampleMasksIntersectingSegments,
+  resolveCoverFromSampleMasks
+} from "../canvas/cover-contours.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, requestReactionEvent } from "./reaction-hub.mjs";
 import {
   createAttackActionDirectionModifier,
@@ -12194,9 +12199,9 @@ function getAimedElevationTargets(attackerToken, geometry, targets = []) {
 function getAttackAutoCoverStates(attackerToken, geometry, targets = []) {
   if (!attackerToken || !geometry || geometry.type === VOLLEY_ACTION_KEY) return [];
   const settings = getCoverSettings().entries
-    .filter(entry => Math.max(0, toInteger(entry.overlapPercent)) > 0)
     .sort((left, right) => Math.max(0, toInteger(right.overlapPercent)) - Math.max(0, toInteger(left.overlapPercent)));
   if (!settings.length) return [];
+  const hasWallCoverThreshold = settings.some(entry => Math.max(0, toInteger(entry.overlapPercent)) > 0);
 
   const targetTokenUuidAllowlist = new Set((targets ?? []).map(getTokenDocumentUuid).filter(Boolean));
   const ricochetEntries = Array.isArray(geometry?.ricochetCone?.strips)
@@ -12213,8 +12218,27 @@ function getAttackAutoCoverStates(attackerToken, geometry, targets = []) {
     const obstructionGeometry = ricochetEntry?.segment
       ? { ...geometry, origin: ricochetEntry.segment.origin }
       : geometry;
-    const obstructionPercent = getTokenAttackObstructionPercent(attackerToken, target, obstructionGeometry);
-    const cover = settings.find(entry => obstructionPercent >= Math.max(0, toInteger(entry.overlapPercent)));
+    const targetPolygon = ricochetEntry
+      ? getTokenWorldPolygon(target)
+      : getTokenAttackCoverPolygon(target, obstructionGeometry);
+    const coverSamplePoints = targetPolygon
+      ? getTokenActorCoverSamplePoints(target, obstructionGeometry.origin, targetPolygon)
+      : [];
+    const contourMasks = getCoverSampleMasksIntersectingSegments(
+      target.document?.parent ?? target.scene ?? canvas.scene,
+      obstructionGeometry.origin,
+      coverSamplePoints,
+      target.document?._source?.level ?? target.document?.level ?? target.level?.id ?? ""
+    );
+    const wallMask = hasWallCoverThreshold
+      ? getTokenAttackObstructionMask(attackerToken, obstructionGeometry, coverSamplePoints)
+      : null;
+    const { cover, obstructionPercent } = resolveCoverFromSampleMasks(
+      settings,
+      wallMask,
+      contourMasks,
+      coverSamplePoints.length
+    );
     states.push({
       actorUuid: target.actor.uuid,
       targetTokenUuid: target.document?.uuid ?? "",
@@ -12237,17 +12261,17 @@ function getAttackAutoCoverSignature(states = []) {
     .join("|");
 }
 
-function getTokenAttackObstructionPercent(attackerToken, target, geometry) {
-  const samples = getTokenActorCoverSamplePoints(target, geometry.origin);
-  if (!samples.length) return 0;
-  const blocked = samples.reduce((total, point) => (
-    total + (isAttackCoverSampleBlocked(attackerToken, target, point, geometry.origin) ? 1 : 0)
-  ), 0);
-  return Math.round((blocked / samples.length) * 100);
+function getTokenAttackObstructionMask(attackerToken, geometry, preparedSamples = []) {
+  const samples = Array.isArray(preparedSamples) ? preparedSamples : [];
+  const mask = new Uint8Array(samples.length);
+  for (let index = 0; index < samples.length; index += 1) {
+    if (isAttackCoverSampleBlocked(attackerToken, samples[index], geometry.origin)) mask[index] = 1;
+  }
+  return mask;
 }
 
-function getTokenActorCoverSamplePoints(target, origin) {
-  const polygon = getTokenWorldPolygon(target);
+function getTokenActorCoverSamplePoints(target, origin, targetPolygon = null) {
+  const polygon = targetPolygon ?? getTokenWorldPolygon(target);
   const points = [];
   for (const point of getAttackIntersectionTestPoints(polygon, origin)) {
     addUniquePoint(points, withTokenAimElevation(target, point));
@@ -12276,7 +12300,7 @@ function addTokenCoverGridSamplePoints(points, target, polygon) {
   }
 }
 
-function isAttackCoverSampleBlocked(attackerToken, target, point, origin) {
+function isAttackCoverSampleBlocked(attackerToken, point, origin) {
   return !hasLineOfSight(attackerToken, point, origin);
 }
 
@@ -15210,6 +15234,42 @@ function getTokenAttackIntersectionPolygon(token, geometry) {
   return getPolygonPointObjects(intersection).length >= 3 ? intersection : null;
 }
 
+function getTokenAttackCoverPolygon(token, geometry) {
+  const tokenPolygon = getTokenWorldPolygon(token);
+  if (!tokenPolygon || geometry?.ricochetCone) return tokenPolygon;
+  const attackPolygon = getUnclippedAttackAreaPolygon(geometry);
+  if (!attackPolygon) return tokenPolygon;
+  const intersection = tokenPolygon.intersectPolygon?.(attackPolygon);
+  return getPolygonPointObjects(intersection).length >= 3 ? intersection : null;
+}
+
+function getUnclippedAttackAreaPolygon(geometry) {
+  const origin = geometry?.origin;
+  const distance = Math.max(0, Number(geometry?.distance) || 0);
+  const halfAngle = Math.min(Math.PI, Math.max(0, Number(geometry?.halfAngle) || 0));
+  if (!origin || distance <= GEOMETRY_EPSILON || halfAngle <= GEOMETRY_EPSILON) return null;
+
+  const values = [];
+  if (halfAngle >= Math.PI - GEOMETRY_EPSILON) {
+    const segments = 48;
+    for (let index = 0; index < segments; index += 1) {
+      const angle = (Math.PI * 2 * index) / segments;
+      values.push(origin.x + (Math.cos(angle) * distance), origin.y + (Math.sin(angle) * distance));
+    }
+  } else {
+    values.push(origin.x, origin.y);
+    const segments = 24;
+    for (let index = 0; index <= segments; index += 1) {
+      const step = -halfAngle + ((halfAngle * 2 * index) / segments);
+      values.push(
+        origin.x + (Math.cos((Number(geometry.angle) || 0) + step) * distance),
+        origin.y + (Math.sin((Number(geometry.angle) || 0) + step) * distance)
+      );
+    }
+  }
+  return new PIXI.Polygon(values);
+}
+
 function getAttackAreaPolygon(geometry) {
   const points = getAttackPolygonPoints(geometry);
   if (!Array.isArray(points) || points.length < 3) return null;
@@ -15788,8 +15848,14 @@ function getAimedTargetUnderPointer(pointer, targets = []) {
   return targets.find(target => getTokenWorldPolygon(target)?.contains?.(pointer.x, pointer.y)) ?? null;
 }
 
-function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0, { innateDifficultyIgnorePercent = 0, ignoreCover = false } = {}) {
-  const dodge = getDodgeDifficulty(targetActor, { ignoreCover });
+function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0, {
+  innateDifficultyIgnorePercent = 0,
+  ignoreCover = false,
+  dodgeDifficulty = null
+} = {}) {
+  const dodge = Number.isFinite(dodgeDifficulty)
+    ? Math.max(0, toInteger(dodgeDifficulty))
+    : getDodgeDifficulty(targetActor, { ignoreCover });
   const limb = targetActor.system?.limbs?.[limbKey];
   const limbPercent = toInteger(limb?.aimedDifficultyPercent);
   const limbBonus = Math.max(0, toInteger(limb?.aimedDifficultyBonus));
@@ -15985,10 +16051,14 @@ function getActorWeaponSetKeys(actor, race = null) {
   return keys;
 }
 
-function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, difficultyBonus = 0) {
+function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, difficultyBonus = 0, {
+  dodgeDifficulty = null
+} = {}) {
   const base = aimed
-    ? getAimedAttackDifficulty(targetActor, limbKey, 0)
-    : getDodgeDifficulty(targetActor);
+    ? getAimedAttackDifficulty(targetActor, limbKey, 0, { dodgeDifficulty })
+    : Number.isFinite(dodgeDifficulty)
+      ? Math.max(0, toInteger(dodgeDifficulty))
+      : getDodgeDifficulty(targetActor);
   return base + Math.max(0, toInteger(difficultyBonus));
 }
 
@@ -16011,7 +16081,7 @@ function getGeneralAttackHitChance(attackerActor, weapon, targetActor, {
   const finalSkillValue = skillState.value
     + getWeaponAccuracyModifier(weapon, weaponFunctionId, context)
     + toInteger(accuracyBonus);
-  const difficulty = getDodgeDifficulty(targetActor)
+  const difficulty = getDisplayedAttackDodgeDifficulty(targetActor)
     + Math.max(0, toInteger(difficultyBonus))
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, {
@@ -16163,11 +16233,14 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
 }
 
 function getAimedAttackHitChanceFromBasis(basis, limbKey = "", blockerBonus = 0, options = {}) {
+  const dodgeDifficulty = getDisplayedAttackDodgeDifficulty(basis?.targetActor, {
+    ignoreCover: options.ignoreCover
+  });
   const difficulty = getAimedAttackDifficulty(
     basis?.targetActor,
     limbKey,
     blockerBonus + toInteger(basis?.requirementPenalty),
-    options
+    { ...options, dodgeDifficulty }
   );
   return getSkillCheckSuccessChance(
     basis?.attackerActor,
@@ -16205,7 +16278,8 @@ function getDirectedAttackHitChance(attackerActor, weapon, targetActor, {
     targetActor,
     limbKey,
     Boolean(limbKey),
-    difficultyBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
+    difficultyBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId),
+    { dodgeDifficulty: getDisplayedAttackDodgeDifficulty(targetActor) }
   );
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, {
     ...mergeSkillCriticalChanceModifiers(
@@ -16329,6 +16403,13 @@ function getDodgeDifficulty(actor, { ignoreCover = false } = {}) {
   const value = toInteger(actor.system?.resources?.dodge?.value);
   if (!ignoreCover) return value;
   return Math.max(0, value - getActorCoverDodgeAdjustment(actor));
+}
+
+function getDisplayedAttackDodgeDifficulty(actor, { ignoreCover = false } = {}) {
+  return getFalseBreachDisplayedDodgeDifficulty(
+    actor,
+    getDodgeDifficulty(actor, { ignoreCover })
+  );
 }
 
 function truncateRicochetTrajectory(trajectory, segment, point, { projected = false } = {}) {

@@ -75,6 +75,7 @@ import {
   normalizeWhirlwindSettings,
   normalizeHuntingGroundsSettings,
   normalizeTempoSettings,
+  normalizeFalseBreachSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 export { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
@@ -234,6 +235,11 @@ import {
   registerHuntingGroundsRuntime
 } from "./hunting-grounds.mjs";
 import { registerTempoRuntime } from "./tempo.mjs";
+import {
+  activateFalseBreachEffect,
+  findActiveFalseBreachEffect,
+  registerFalseBreachRuntime
+} from "./false-breach.mjs";
 import {
   LIVING_STEEL_DAMAGE_INTERCEPTOR_ID,
   actorHasLivingSteel,
@@ -859,6 +865,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.falseBreach,
+    label: "Ложная брешь",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.falseBreach,
+      fixedSettings: normalizeFalseBreachSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
     label: "Всему свой подход",
     passive: true,
@@ -1071,6 +1086,7 @@ function registerFixedAbilityRuntimeHooks() {
   registerReactiveRuntime();
   registerHuntingGroundsRuntime();
   registerTempoRuntime();
+  registerFalseBreachRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
     applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
     apply: runFixedAbilityRuntimeHandler(applyLivingSteelFinalHealthDamage),
@@ -1583,6 +1599,12 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
     const used = await useHuntingGrounds(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach) {
+    const used = await useFalseBreach(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -7396,6 +7418,44 @@ async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
     actor,
     abilityItem,
     `Установлена зона ${settings.zoneSizeMeters}×${settings.zoneSizeMeters}×${settings.zoneSizeMeters} м на ${formatDuration(settings.durationSeconds)}.`
+  );
+  return true;
+}
+
+async function useFalseBreach(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeFalseBreachSettings(abilityFunction.fixedSettings);
+  if (findActiveFalseBreachEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  const effect = await activateFalseBreachEffect({
+    actor,
+    abilityItem,
+    abilityFunction,
+    settings
+  });
+  if (!effect) {
+    await refundEnergy(actor, energyCost);
+    ui.notifications.warn(`${abilityName}: эффект создать не удалось; энергия возвращена.`);
+    return false;
+  }
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `Уклонение +${settings.dodgeBonus} на ${formatDuration(settings.durationSeconds)}.`
   );
   return true;
 }

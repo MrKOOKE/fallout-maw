@@ -9,3 +9,6 @@ assets/
 !/simple-quest/assets/**
 packs/
 /scripts/
+/launcher/**/bin/
+/launcher/**/obj/
+/release/publisher.local.json

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "provider": "s3-compatible",
+  "endpoint": "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com",
+  "region": "auto",
+  "bucket": "fallout-maw-releases",
+  "publicBaseUrl": "https://downloads.example.com/fallout-maw/",
+  "credentials": {
+    "accessKeyIdEnv": "FALLOUT_MAW_RELEASE_ACCESS_KEY_ID",
+    "secretAccessKeyEnv": "FALLOUT_MAW_RELEASE_SECRET_ACCESS_KEY"
+  },
+  "upload": {
+    "immutableCacheControl": "public, max-age=31536000, immutable",
+    "mutableCacheControl": "no-cache",
+    "publishMutableLast": [
+      "foundry/system.json",
+      "channels/stable.json.sig",
+      "channels/stable.json"
+    ]
+  }
+}

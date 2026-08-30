@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>Fallout-TTG-Launcher</AssemblyName>
+    <Title>Fallout TTG Launcher</Title>
+    <Product>Fallout TTG Launcher</Product>
+    <RootNamespace>FalloutMaW.Launcher</RootNamespace>
+    <Version>1.0.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>embedded</DebugType>
+    <PublisherManifestUrlBase64 Condition="'$(PublisherManifestUrlBase64)' == ''"></PublisherManifestUrlBase64>
+    <PublisherPublicKeyBase64 Condition="'$(PublisherPublicKeyBase64)' == ''"></PublisherPublicKeyBase64>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FalloutMaW.Launcher.Core\FalloutMaW.Launcher.Core.csproj" />
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>PublisherManifestUrlBase64</_Parameter1>
+      <_Parameter2>$(PublisherManifestUrlBase64)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>PublisherPublicKeyBase64</_Parameter1>
+      <_Parameter2>$(PublisherPublicKeyBase64)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

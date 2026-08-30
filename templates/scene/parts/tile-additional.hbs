@@ -1,0 +1,62 @@
+<div class="tab scrollable{{#if tab.active}} active{{/if}}" data-group="{{tab.group}}" data-tab="{{tab.id}}">
+  <p class="hint">{{localize "FALLOUTMAW.Tile.AdditionalHint"}}</p>
+  <fieldset>
+    <legend>{{localize "FALLOUTMAW.Tile.Hitbox"}}</legend>
+    <p class="fallout-maw-tile-hitbox-status">
+      <i class="fa-solid fa-draw-polygon"></i>
+      <span>{{tileHitboxStatus}}</span>
+    </p>
+    <div class="fallout-maw-tile-hitbox-actions">
+      <button type="button" data-action="editTileHitbox">
+        <i class="fa-solid fa-pen-ruler"></i>
+        {{#if hasTileHitbox}}
+        {{localize "FALLOUTMAW.Tile.RedrawHitbox"}}
+        {{else}}
+        {{localize "FALLOUTMAW.Tile.DrawHitbox"}}
+        {{/if}}
+      </button>
+      {{#if canClearTileHitbox}}
+      <button type="button" data-action="clearTileHitbox">
+        <i class="fa-solid fa-rotate-left"></i>
+        {{localize "FALLOUTMAW.Tile.ClearManualHitbox"}}
+      </button>
+      {{/if}}
+    </div>
+    <p class="hint">{{localize "FALLOUTMAW.Tile.HitboxHint"}}</p>
+  </fieldset>
+  <fieldset>
+    <legend>{{localize "FALLOUTMAW.Tile.SpecialProperties"}}</legend>
+    <div class="fallout-maw-tile-special-property-header">
+      <button type="button" data-action="addTileSpecialProperty" {{#unless canAddTileSpecialProperty}}disabled{{/unless}}>
+        <i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Tile.AddSpecialProperty"}}
+      </button>
+    </div>
+    <div class="fallout-maw-tile-special-property-list">
+      {{#each tileSpecialProperties}}
+      <div class="fallout-maw-tile-special-property-row" data-tile-special-property-index="{{index}}">
+        <select name="flags.fallout-maw.tileSpecialProperties.{{index}}.type" data-tile-special-property-type="{{index}}">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        {{#if isCover}}
+        <label>
+          <span>{{localize "FALLOUTMAW.Tile.CoverType"}}</span>
+          <select name="flags.fallout-maw.tileSpecialProperties.{{index}}.coverKey">
+            {{#each coverChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+        {{/if}}
+        <button type="button" data-action="deleteTileSpecialProperty" title="{{localize 'FALLOUTMAW.Common.Delete'}}">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Tile.NoSpecialProperties"}}</p>
+      {{/each}}
+    </div>
+    <p class="hint">{{localize "FALLOUTMAW.Tile.CoverHint"}}</p>
+  </fieldset>
+</div>
