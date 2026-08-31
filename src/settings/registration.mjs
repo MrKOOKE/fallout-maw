@@ -21,6 +21,7 @@ import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
 import { DiseaseSettingsConfig } from "../apps/disease-settings-config.mjs";
 import { FactionSettingsConfig } from "../apps/faction-settings-config.mjs";
+import { HackingSettingsConfig } from "../apps/hacking-settings-config.mjs";
 import { ItemCategorySettingsConfig } from "../apps/item-category-settings-config.mjs";
 import { LevelSettingsConfig } from "../apps/level-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
@@ -67,6 +68,7 @@ import {
   DOCUMENT_MIGRATION_VERSION_SETTING,
   FACTION_MATRIX_SETTING,
   FACTION_SETTINGS_SETTING,
+  HACKING_SETTINGS_SETTING,
   ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
   SETTINGS_PRESET_STATE_SETTING,
@@ -99,6 +101,7 @@ import { createDefaultCampSettings, createEmptyCampState } from "./camp.mjs";
 import { createDefaultCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings } from "./cover.mjs";
 import { createDefaultCraftingSettings } from "./crafting.mjs";
+import { createDefaultHackingSettings } from "./hacking.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultFactionMatrix, createDefaultFactionSettings, registerFactionApi } from "./factions.mjs";
@@ -327,6 +330,15 @@ export function registerSystemSettings() {
     preset: true,
     default: getMainPresetDefault(CRAFTING_SETTINGS_SETTING, createDefaultCraftingSettings()),
     onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.craftingSettingsChanged`)
+  });
+
+  game.settings.register(FALLOUT_MAW.id, HACKING_SETTINGS_SETTING, {
+    name: "Настройка взлома",
+    scope: "world",
+    config: false,
+    type: Object,
+    preset: true,
+    default: getMainPresetDefault(HACKING_SETTINGS_SETTING, createDefaultHackingSettings())
   });
 
   game.settings.register(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING, {
@@ -577,6 +589,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-hammer",
     type: CraftingSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "hackingSettingsMenu", {
+    name: "Настройка взлома",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-lock-open",
+    type: HackingSettingsConfig,
     restricted: true
   });
 

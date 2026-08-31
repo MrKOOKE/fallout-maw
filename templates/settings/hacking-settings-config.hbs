@@ -1,0 +1,22 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Взлом</h2>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>Используемый навык</span>
+        <select name="skillKey">
+          {{#each skillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

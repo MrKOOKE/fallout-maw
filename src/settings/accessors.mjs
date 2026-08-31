@@ -32,6 +32,7 @@ import {
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
+  HACKING_SETTINGS_SETTING,
   ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
@@ -52,6 +53,7 @@ import { createDefaultCampSettings, createEmptyCampState, normalizeCampSettings,
 import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings, normalizeCoverSettings } from "./cover.mjs";
 import { createDefaultCraftingSettings, normalizeCraftingSettings } from "./crafting.mjs";
+import { createDefaultHackingSettings, normalizeHackingSettings } from "./hacking.mjs";
 import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
@@ -650,6 +652,23 @@ export function getCraftingSettings() {
 export async function setCraftingSettings(settings) {
   const normalized = normalizeCraftingSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, CRAFTING_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export function getHackingSettings(skills = getSkillSettings()) {
+  try {
+    return normalizeHackingSettings(
+      game.settings.get(FALLOUT_MAW.id, HACKING_SETTINGS_SETTING),
+      skills
+    );
+  } catch (_error) {
+    return normalizeHackingSettings(createDefaultHackingSettings(), skills);
+  }
+}
+
+export async function setHackingSettings(settings) {
+  const normalized = normalizeHackingSettings(settings, getSkillSettings());
+  await game.settings.set(FALLOUT_MAW.id, HACKING_SETTINGS_SETTING, normalized);
   return normalized;
 }
 

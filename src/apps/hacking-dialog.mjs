@@ -1,6 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getToolSettings } from "../settings/accessors.mjs";
+import { getHackingSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEnabledToolFunctions, getToolResourceState } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
@@ -162,9 +162,14 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this.#attemptInFlight = true;
     try {
+      const skillKey = getHackingSettings().skillKey;
+      if (!this.#hackerActor?.system?.skills?.[skillKey]) {
+        ui.notifications.warn("У актёра нет выбранного для взлома навыка.");
+        return undefined;
+      }
       const outcome = await requestSkillCheck({
         actor: this.#hackerActor,
-        skillKey: "lockpicking",
+        skillKey,
         data: {
           difficulty: selectedMethod.difficulty,
           allowImplicitTarget: false,

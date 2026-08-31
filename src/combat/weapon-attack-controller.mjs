@@ -807,6 +807,8 @@ export const ORDINARY_WEAPON_ATTACK_TESTING = Object.freeze({
 
 export const ATTACK_TARGETING_TESTING = Object.freeze({
   unaimedAttackDisadvantageCount: UNAIMED_ATTACK_DISADVANTAGE_COUNT,
+  getAttackGeometryCandidateBounds,
+  getTokenElevationRange,
   getUnseenAttackEdgeModifiers,
   getTrajectoryTargetEntries,
   getTokenShapeOffset,
@@ -12082,12 +12084,30 @@ function buildClippedCirclePoints(attackerToken, { origin, distance }) {
 }
 
 function getAttackGeometryTokenCandidates(geometry) {
+  return getCanvasTokenCandidates(getAttackGeometryCandidateBounds(geometry));
+}
+
+function getAttackGeometryCandidateBounds(geometry) {
+  if (geometry?.type === VOLLEY_ACTION_KEY) {
+    const x = Number(geometry.end?.x);
+    const y = Number(geometry.end?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const radius = Math.max(0, Number(geometry.radiusPixels) || 0);
+    const extent = radius + 1;
+    return {
+      left: x - extent,
+      top: y - extent,
+      width: Math.max(1, extent * 2),
+      height: Math.max(1, extent * 2)
+    };
+  }
+
   const points = [...getAttackPolygonPoints(geometry)];
   for (const strip of geometry?.ricochetCone?.strips ?? []) {
     if (Array.isArray(strip)) points.push(...strip);
   }
   if (!points.length) points.push(geometry?.origin, geometry?.end);
-  return getCanvasTokenCandidates(getPointCollectionBounds(points));
+  return getPointCollectionBounds(points);
 }
 
 function getTrajectoryTokenCandidates(trajectory) {
@@ -15380,26 +15400,12 @@ function getTokenShapeCenter(token) {
 function getTokenElevationRange(token) {
   const document = token?.document;
   const gridDistance = Math.max(0.0001, Number(token?.scene?.grid?.distance ?? canvas.scene?.grid?.distance ?? canvas.dimensions?.distance) || 1);
-  const bottom = getTokenAbsoluteElevation(token, document?._source?.elevation ?? document?.elevation ?? token?.elevation ?? 0);
+  // Foundry stores Token elevation in absolute Scene units even when the Token belongs to a non-zero Level.
+  const rawBottom = Number(document?._source?.elevation ?? document?.elevation ?? token?.elevation);
+  const bottom = Number.isFinite(rawBottom) ? rawBottom : 0;
   const depth = Math.max(0, Number(document?._source?.depth ?? document?.depth ?? 1) || 0) * gridDistance;
   const top = bottom + (depth > 0 ? depth : gridDistance);
   return { bottom: Math.min(bottom, top), top: Math.max(bottom, top) };
-}
-
-function getTokenAbsoluteElevation(token, elevation = null) {
-  const localElevation = Number.isFinite(Number(elevation))
-    ? Number(elevation)
-    : Number(token?.document?._source?.elevation ?? token?.document?.elevation ?? token?.elevation ?? 0) || 0;
-  return localElevation + getTokenLevelBaseElevation(token);
-}
-
-function getTokenLevelBaseElevation(token) {
-  const document = token?.document;
-  const scene = document?.parent ?? token?.scene ?? canvas.scene;
-  const levelId = document?._source?.level ?? document?.level ?? token?.level?.id ?? "";
-  const level = levelId ? scene?.levels?.get?.(levelId) : null;
-  const base = Number(level?.elevation?.base ?? level?.elevation?.bottom);
-  return Number.isFinite(base) ? base : 0;
 }
 
 function getClosestPointOnTokenVolume(token, point) {

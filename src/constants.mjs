@@ -98,6 +98,7 @@ export const TEMPLATES = Object.freeze({
     tools: `systems/${SYSTEM_ID}/templates/settings/tool-settings-config.hbs`,
     systemActions: `systems/${SYSTEM_ID}/templates/settings/system-action-settings-config.hbs`,
     crafting: `systems/${SYSTEM_ID}/templates/settings/crafting-settings-config.hbs`,
+    hacking: `systems/${SYSTEM_ID}/templates/settings/hacking-settings-config.hbs`,
     stealth: `systems/${SYSTEM_ID}/templates/settings/stealth-settings-config.hbs`,
     combat: `systems/${SYSTEM_ID}/templates/settings/combat-settings-config.hbs`,
     cover: `systems/${SYSTEM_ID}/templates/settings/cover-settings-config.hbs`,

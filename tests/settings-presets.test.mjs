@@ -47,6 +47,7 @@ const BUNDLED_PRESET_SETTING_IDS = Object.freeze([
   "fallout-maw.floatingSize",
   "fallout-maw.globalMapTravelImage",
   "fallout-maw.globalMapTravelSpeedFormula",
+  "fallout-maw.hackingSettings",
   "fallout-maw.hideConflictingUIs",
   "fallout-maw.hideDefeated",
   "fallout-maw.hideEnemyInitiative",
@@ -114,7 +115,7 @@ test("bundled main and migration seed preserve the managed settings contract", (
   ];
   const expectedIds = [...BUNDLED_PRESET_SETTING_IDS].sort();
   const expectedShapeCounts = {
-    object: 19,
+    object: 20,
     array: 9,
     string: 17,
     number: 4,
@@ -127,10 +128,10 @@ test("bundled main and migration seed preserve the managed settings contract", (
   const documentIdSets = [];
 
   for (const document of documents) {
-    assert.equal(document.settings.length, 59);
+    assert.equal(document.settings.length, 60);
 
     const ids = document.settings.map(entry => entry.id);
-    assert.equal(new Set(ids).size, 59);
+    assert.equal(new Set(ids).size, 60);
     assert.deepEqual([...ids].sort(), expectedIds);
     documentIdSets.push([...ids].sort());
 

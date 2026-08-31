@@ -17,7 +17,7 @@ export function createCorrespondingToolApproachResolver(actor) {
   return context => {
     if (!isToolWorkflowClassExact(context.toolContext)) return null;
     if (
-      (context.requester === "hacking" && context.skillKey === "lockpicking")
+      context.requester === "hacking"
       || (context.requester === "trapDisarm" && context.skillKey === "traps")
     ) {
       return sources.map(source => ({

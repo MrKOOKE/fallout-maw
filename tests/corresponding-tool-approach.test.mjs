@@ -36,7 +36,7 @@ test("corresponding tool approach applies only to matching workflows with the ex
     label: "Всему свой подход",
     skillBonus: 20
   }]);
-  assert.equal(resolve(toolContext({ requester: "hacking", skillKey: "repair" })), null);
+  assert.equal(resolve(toolContext({ requester: "hacking", skillKey: "repair" }))[0].skillBonus, 20);
   assert.equal(resolve(toolContext({ requester: "hacking", skillKey: "lockpicking", toolClass: "D" })), null);
   assert.equal(resolve(toolContext({ requester: "hacking", skillKey: "lockpicking", toolClass: "A" })), null);
 
@@ -83,7 +83,7 @@ test("fixed ability is wired through selection, skill contexts, repair authority
   assert.match(fixed, /key:\s*ABILITY_FIXED_FUNCTION_KEYS\.correspondingToolApproach/);
   assert.match(fixed, /registerToolWorkflowModifierProvider\(/);
   assert.match(skill, /resolveToolWorkflowModifiers\(actor, context\)/);
-  assert.match(hacking, /skillKey:\s*"lockpicking"[\s\S]*?toolContext:/);
+  assert.match(hacking, /const skillKey = getHackingSettings\(\)\.skillKey[\s\S]*?skillKey,[\s\S]*?toolContext:/);
   assert.match(traps, /requester:\s*"trapDisarm"[\s\S]*?toolContext:|toolContext:[\s\S]*?requester:\s*"trapDisarm"/);
   assert.match(repair, /efficiencyPercentBonus:\s*toolWorkflowModifiers\.efficiencyPercentBonus/);
   assert.match(repair, /toolWorkflowModifiers:\s*\{[\s\S]*?efficiencyPercentBonus/);

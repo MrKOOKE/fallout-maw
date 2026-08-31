@@ -14,6 +14,7 @@ export const TRAUMA_SETTINGS_SETTING = "traumaSettings";
 export const TOOL_SETTINGS_SETTING = "toolSettings";
 export const SYSTEM_ACTION_SETTINGS_SETTING = "systemActionSettings";
 export const CRAFTING_SETTINGS_SETTING = "craftingSettings";
+export const HACKING_SETTINGS_SETTING = "hackingSettings";
 export const STEALTH_SETTINGS_SETTING = "stealthSettings";
 export const COMBAT_SETTINGS_SETTING = "combatSettings";
 export const COVER_SETTINGS_SETTING = "coverSettings";

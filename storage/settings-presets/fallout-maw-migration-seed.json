@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw-migration-seed",
   "name": "Fallout-MaW Migration Seed",
-  "revision": "87f94f455454bee3e31b2af3796d320709cb2a389affd03e4c18a811e26f6188",
-  "updatedAt": "2026-08-09T09:03:08.935Z",
+  "revision": "de075475b84671807e490ccc40eb0d90a204ffeb42a324c882de0042521a216d",
+  "updatedAt": "2026-08-31T16:21:21.711Z",
   "systemVersion": "0.2.0",
   "seedPending": false,
   "deleted": false,
@@ -51393,6 +51393,13 @@
       "id": "fallout-maw.globalMapTravelSpeedFormula",
       "scope": "world",
       "value": "mov / 2"
+    },
+    {
+      "id": "fallout-maw.hackingSettings",
+      "scope": "world",
+      "value": {
+        "skillKey": "repair"
+      }
     },
     {
       "id": "fallout-maw.hideConflictingUIs",

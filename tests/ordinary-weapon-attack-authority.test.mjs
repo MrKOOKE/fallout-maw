@@ -595,6 +595,49 @@ test("unaimed melee randomizes only among explicitly enabled directions", () => 
   }), []);
 });
 
+test("volley quadtree bounds cover the complete damage circle", () => {
+  const bounds = ATTACK_TARGETING_TESTING.getAttackGeometryCandidateBounds({
+    type: "volley",
+    origin: { x: 100, y: 100, elevation: 0 },
+    end: { x: 500, y: 350, elevation: 0 },
+    halfAngle: 0,
+    radiusPixels: 120,
+    shapePoints: []
+  });
+
+  assert.deepEqual(bounds, {
+    left: 379,
+    top: 229,
+    width: 242,
+    height: 242
+  });
+});
+
+test("token elevation is not offset by its Foundry level a second time", () => {
+  const scene = {
+    grid: { distance: 2 },
+    levels: {
+      get: () => ({ elevation: { base: 10, bottom: 10 } })
+    }
+  };
+  const token = {
+    scene,
+    document: {
+      parent: scene,
+      _source: {
+        elevation: 12,
+        depth: 1,
+        level: "upper"
+      }
+    }
+  };
+
+  assert.deepEqual(ATTACK_TARGETING_TESTING.getTokenElevationRange(token), {
+    bottom: 12,
+    top: 14
+  });
+});
+
 test("a 100-projectile HUD attack uses one authenticated ticket and one authority operation", async () => {
   ORDINARY_WEAPON_ATTACK_TESTING.reset();
   emitted.length = 0;
