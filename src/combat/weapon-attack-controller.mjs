@@ -808,6 +808,7 @@ export const ORDINARY_WEAPON_ATTACK_TESTING = Object.freeze({
 export const ATTACK_TARGETING_TESTING = Object.freeze({
   unaimedAttackDisadvantageCount: UNAIMED_ATTACK_DISADVANTAGE_COUNT,
   getAttackGeometryCandidateBounds,
+  getCanvasTokenCandidates,
   getTokenElevationRange,
   getUnseenAttackEdgeModifiers,
   getTrajectoryTargetEntries,
@@ -10546,7 +10547,8 @@ function tokenLifecycleMatches(candidate = null, tokenOrDocument = null, { match
 
 function isTokenPlaceableAvailable(token = null) {
   if (!token || typeof token !== "object") return false;
-  if (token.destroyed === true || token.document?._destroyed === true) return false;
+  // Foundry can redraw a live Token on a CanvasDocument whose private _destroyed marker survived layer teardown.
+  if (token.destroyed === true) return false;
   return token.transform !== null;
 }
 
@@ -12137,12 +12139,9 @@ function getPointCollectionBounds(points = [], padding = 1) {
 }
 
 function getCanvasTokenCandidates(bounds = null) {
-  const placeables = canvas.tokens?.placeables ?? [];
-  const quadtree = canvas.tokens?.quadtree;
+  if (!bounds) return [];
   const Rectangle = globalThis.PIXI?.Rectangle;
-  if (!bounds || typeof quadtree?.getObjects !== "function" || typeof Rectangle !== "function") {
-    return placeables;
-  }
+  const quadtree = canvas.tokens?.quadtree;
   const rectangle = new Rectangle(bounds.left, bounds.top, bounds.width, bounds.height);
   return Array.from(quadtree.getObjects(rectangle));
 }

@@ -242,6 +242,45 @@ test("destroyed PIXI tokens are rejected before their position getter is read", 
   assert.equal(positionRead, false);
 });
 
+test("a token redrawn from a Foundry document with a stale destroyed marker remains targetable", () => {
+  const document = {
+    _destroyed: false,
+    _object: null,
+    hidden: false,
+    disposition: 0,
+    uuid: "Scene.scene.Token.redrawn"
+  };
+  const retiredToken = {
+    actor: {},
+    document,
+    destroyed: true,
+    transform: null
+  };
+
+  // Foundry PlaceableObject#destroy marks the shared CanvasDocument destroyed.
+  document._destroyed = true;
+  document._object = null;
+
+  // PlaceablesLayer#_draw then creates a new live Token on that same document
+  // without clearing CanvasDocument#_destroyed.
+  const redrawnToken = {
+    actor: {},
+    document,
+    destroyed: false,
+    transform: {},
+    position: { x: 320, y: 480 },
+    visible: true
+  };
+  document._object = redrawnToken;
+
+  assert.equal(document._destroyed, true);
+  assert.equal(ATTACK_TARGETING_TESTING.isTokenPlaceableAvailable(retiredToken), false);
+  assert.equal(ATTACK_TARGETING_TESTING.isTokenPlaceableAvailable(redrawnToken), true);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackImpactTarget(redrawnToken), true);
+  assert.equal(ATTACK_TARGETING_TESTING.isAttackTargetVisible(redrawnToken), true);
+  assert.deepEqual(ATTACK_TARGETING_TESTING.getTokenShapeOffset(redrawnToken), { x: 320, y: 480 });
+});
+
 test("deleted aimed targets are removed from every live preview reference", () => {
   const targetDocument = { uuid: "Scene.scene.Token.phantom" };
   const target = { actor: {}, document: targetDocument, transform: {} };
@@ -514,21 +553,29 @@ test("attacker-specific perception overrides global token visibility without rem
   };
   const target = {
     actor: {},
+    destroyed: false,
     document: {
       _source: { depth: 1, elevation: 0 },
+      _destroyed: true,
       getVisibilityTestPoints: () => [{ x: 50, y: 5, elevation: 0 }],
       hidden: false,
       uuid: "Scene.scene.Token.unseen"
     },
     position: { x: 50, y: 0 },
     shape: new Rectangle(0, 0, 10, 10),
+    transform: {},
     // Another controlled source can make Foundry's aggregate Token.visible true.
     visible: true
   };
+  // Foundry redraws a live Token on the same document without clearing this private marker.
+  target.document._object = target;
   globalThis.canvas = {
     dimensions: { distance: 1 },
     scene: { grid: { distance: 1 } },
-    tokens: { placeables: [attacker, target] },
+    tokens: {
+      placeables: [attacker, target],
+      quadtree: { getObjects: () => new Set([attacker, target]) }
+    },
     visibility: {
       tokenVision: true,
       _createVisibilityTestConfig: (points, options) => ({ points, object: options.object })
@@ -636,6 +683,85 @@ test("token elevation is not offset by its Foundry level a second time", () => {
     bottom: 12,
     top: 14
   });
+});
+
+test("bounded targeting uses only Foundry's current native token quadtree", () => {
+  const previousCanvas = globalThis.canvas;
+  const previousPIXI = globalThis.PIXI;
+  class Rectangle {
+    constructor(x, y, width, height) {
+      Object.assign(this, { x, y, width, height });
+    }
+  }
+  const indexed = { id: "indexed" };
+  const nextIndexed = { id: "next-indexed" };
+  let firstCalls = 0;
+  let secondCalls = 0;
+  let requestedBounds = null;
+  const tokens = {
+    quadtree: {
+      getObjects: rectangle => {
+        firstCalls += 1;
+        requestedBounds = rectangle;
+        return new Set([indexed]);
+      }
+    }
+  };
+  Object.defineProperty(tokens, "placeables", {
+    get: () => {
+      throw new Error("linear token scan is forbidden");
+    }
+  });
+  Object.defineProperty(tokens.quadtree, "all", {
+    get: () => {
+      throw new Error("quadtree validation scan is forbidden");
+    }
+  });
+  globalThis.PIXI = { ...(previousPIXI ?? {}), Rectangle };
+  globalThis.canvas = {
+    ready: true,
+    tokens
+  };
+
+  try {
+    assert.deepEqual(ATTACK_TARGETING_TESTING.getCanvasTokenCandidates({
+      left: 4,
+      top: 5,
+      width: 30,
+      height: 40
+    }), [indexed]);
+    assert.equal(firstCalls, 1);
+    assert.deepEqual(requestedBounds, new Rectangle(4, 5, 30, 40));
+
+    canvas.tokens.quadtree = {
+      getObjects: () => {
+        secondCalls += 1;
+        return new Set([nextIndexed]);
+      }
+    };
+    assert.deepEqual(ATTACK_TARGETING_TESTING.getCanvasTokenCandidates({
+      left: 0,
+      top: 0,
+      width: 30,
+      height: 30
+    }), [nextIndexed]);
+    assert.equal(firstCalls, 1);
+    assert.equal(secondCalls, 1);
+
+    canvas.tokens.quadtree.getObjects = () => {
+      throw new Error("native quadtree failure");
+    };
+    assert.throws(() => ATTACK_TARGETING_TESTING.getCanvasTokenCandidates({
+      left: 0,
+      top: 0,
+      width: 1,
+      height: 1
+    }), /native quadtree failure/u);
+  } finally {
+    globalThis.canvas = previousCanvas;
+    if (previousPIXI === undefined) delete globalThis.PIXI;
+    else globalThis.PIXI = previousPIXI;
+  }
 });
 
 test("a 100-projectile HUD attack uses one authenticated ticket and one authority operation", async () => {
@@ -1228,6 +1354,10 @@ test("authority target policy overrides the GM viewport and keeps one headless c
 
 test("unaimed attacks keep preview private while authority resolves physical impacts", async () => {
   const source = await readFile(new URL("../src/combat/weapon-attack-controller.mjs", import.meta.url), "utf8");
+  const candidateLookup = source.slice(
+    source.indexOf("function getCanvasTokenCandidates("),
+    source.indexOf("\nfunction getPotentialTargets(", source.indexOf("function getCanvasTokenCandidates("))
+  );
   const resolutionTargets = source.slice(
     source.indexOf("getAttackResolutionTargets("),
     source.indexOf("async executeOrdinaryAttackViaGm", source.indexOf("getAttackResolutionTargets("))
@@ -1266,6 +1396,10 @@ test("unaimed attacks keep preview private while authority resolves physical imp
   assert.match(source, /mode:\s*UNAIMED_ATTACK_MODE/u);
   assert.match(source, /selectRandomMeleeDirection\(/u);
   assert.match(source, /canvas\.tokens\?\.quadtree/u);
+  assert.match(candidateLookup, /quadtree\.getObjects\(rectangle\)/u);
+  assert.doesNotMatch(candidateLookup, /placeables|\.all\b|\.filter\(|\.map\(|\.every\(|catch\s*\(/u);
+  assert.doesNotMatch(source, /canvasTokenCandidateIndexState|getLinearCanvasTokenCandidates|isCanvasTokenQuadtreeComplete/u);
+  assert.match(source, /Hooks\.on\("canvasTearDown", clearWeaponAttackCanvasState\)/u);
   assert.match(source, /disadvantageCount:\s*UNAIMED_ATTACK_DISADVANTAGE_COUNT/u);
 });
 
