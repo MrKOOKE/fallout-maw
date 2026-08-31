@@ -478,6 +478,14 @@
             <span>Урон, %</span>
             <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonus" value="{{fixedVirtuosoSettings.damagePercentBonus}}" step="1">
           </label>
+          <label>
+            <span>Максимум Каскада (0 = выключен)</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.cascadeMaxStacks" value="{{fixedVirtuosoSettings.cascadeMaxStacks}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Интервал Каскада (сек.)</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.cascadeIntervalSeconds" value="{{fixedVirtuosoSettings.cascadeIntervalSeconds}}" min="1" step="1">
+          </label>
         </div>
       </div>
     </div>

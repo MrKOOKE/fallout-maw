@@ -100,6 +100,7 @@ test("evolution panel is a non-modal pointer-transparent overlay with an interac
   assert.doesNotMatch(evolutionTemplate, /role=["']dialog|dialog-form|backdrop/);
   assert.match(stylesheet, /\.fallout-maw-advancement-evolution-layer\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(stylesheet, /\.fallout-maw-advancement-evolution-panel\s*\{[^}]*pointer-events:\s*auto;/s);
+  assert.match(stylesheet, /\.fallout-maw-advancement-evolution-layer\s*\{[^}]*width:\s*clamp\(37\.5rem, 51vw, 51rem\);/s);
 });
 
 test("nested evolution actions reuse the main source-id based acquisition controls", () => {
@@ -181,7 +182,10 @@ test("evolution panel remains a stable child of the advancement window across re
   assert.match(overlay, /layer\.ownerDocument\?\.defaultView/);
   assert.match(overlay, /instanceof view\.HTMLElement/);
   assert.match(overlay, /new view\.AbortController\(\)/);
-  assert.match(overlay, /#abilityEvolutionAnimatedFamilySourceId/);
+  assert.match(overlay, /const animateOpening = !this\.#abilityEvolutionPanelOpen/);
+  assert.match(overlay, /if \(animateOpening\) nextLayer\.classList\.add\("opening"\)/);
+  assert.match(overlay, /this\.#abilityEvolutionPanelOpen = true/);
+  assert.doesNotMatch(overlay, /nextFamilySourceId !==/);
   assert.doesNotMatch(overlay, /#abilityEvolutionFrame|requestAnimationFrame/);
   assert.doesNotMatch(overlay, /ownerDocument\.body|#moveAbilityEvolutionLayerToDocument|reserveOverlayZIndex/);
   assert.match(stylesheet, /\.application\.fallout-maw-advancement-app:not\([^)]*minimized[^)]*\)\s*\{[^}]*overflow:\s*visible;/s);
@@ -197,17 +201,22 @@ test("evolution panel remains a stable child of the advancement window across re
   assert.doesNotMatch(openingAnimation, /translateX\(100%\)/);
 });
 
-test("evolution nodes reuse the standard lazy ability tooltip with their short summary", () => {
+test("evolution nodes lazily show changes together with the full ability description", () => {
   const panel = sourceBetween("  #prepareAbilityEvolutionPanel()", "  #prepareAbilityEvolutionFamilyEntries(");
   const tooltip = sourceBetween("  async #showAbilityDescriptionTooltip(", "  #clearAbilityDescriptionTooltip()");
+  const renderer = sourceBetween("async function renderAbilityDescriptionTooltipHTML(", "function renderSkillCostTooltipHTML(");
   assert.match(panel, /hasDescriptionTooltip/);
   assert.match(panel, /tooltipMode/);
   assert.doesNotMatch(panel, /TextEditor\.enrichHTML/);
   assert.match(evolutionTemplate, /data-ability-description-source-id/);
   assert.match(evolutionTemplate, /data-ability-description-mode="\{\{tooltipMode\}\}"/);
   assert.doesNotMatch(evolutionTemplate, /fallout-maw-advancement-evolution-node-summary/);
-  assert.match(tooltip, /descriptionMode === "evolution-summary"/);
+  assert.match(tooltip, /includeEvolutionChanges: descriptionMode === "evolution"/);
   assert.match(tooltip, /fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip/);
+  assert.match(renderer, /Promise\.all/);
+  assert.match(renderer, /<h4>Изменения<\/h4>/);
+  assert.match(renderer, /<h4>Описание<\/h4>/);
+  assert.match(renderer, /\$\{changesSection\}\$\{descriptionSection\}/);
   assert.match(applicationSource, /#bindAbilityDescriptionTooltipEvents\(root\)/);
   assert.match(applicationSource, /this\.element\.append\(nextLayer\)/);
 });

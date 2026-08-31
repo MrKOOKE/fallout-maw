@@ -2670,7 +2670,9 @@ function readFixedFunctionSettings(row) {
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
     return {
       accuracyBonus: row.querySelector("[data-field='fixed.virtuoso.accuracyBonus']")?.value,
-      damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value
+      damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value,
+      cascadeMaxStacks: row.querySelector("[data-field='fixed.virtuoso.cascadeMaxStacks']")?.value,
+      cascadeIntervalSeconds: row.querySelector("[data-field='fixed.virtuoso.cascadeIntervalSeconds']")?.value
     };
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment) {

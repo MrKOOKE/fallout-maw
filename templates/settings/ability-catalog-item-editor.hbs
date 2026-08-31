@@ -167,8 +167,8 @@
 
   {{#if showEvolutionSummary}}
   <section class="fallout-maw-panel fallout-maw-description-panel">
-    <h2>Краткое описание эволюции</h2>
-    <p class="fallout-maw-form-hint">Эта сводка показывается до приобретения узла. Полный текст ниже попадёт в купленную способность.</p>
+    <h2>Изменения</h2>
+    <p class="fallout-maw-form-hint">Указывайте только разницу относительно предыдущего узла: что изменилось и насколько.</p>
     <prose-mirror data-field="evolutionSummary" value="{{ability.evolutionSummary}}" class="sized" compact>
       {{{evolutionSummaryHTML}}}
     </prose-mirror>
@@ -449,6 +449,14 @@
           <label>
             <span>Урон, %</span>
             <input type="number" data-field="fixed.virtuoso.damagePercentBonus" value="{{fixedVirtuosoSettings.damagePercentBonus}}" step="1">
+          </label>
+          <label>
+            <span>Максимум Каскада (0 = выключен)</span>
+            <input type="number" data-field="fixed.virtuoso.cascadeMaxStacks" value="{{fixedVirtuosoSettings.cascadeMaxStacks}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Интервал Каскада (сек.)</span>
+            <input type="number" data-field="fixed.virtuoso.cascadeIntervalSeconds" value="{{fixedVirtuosoSettings.cascadeIntervalSeconds}}" min="1" step="1">
           </label>
         </div>
       </div>

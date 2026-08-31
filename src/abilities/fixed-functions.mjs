@@ -114,6 +114,12 @@ import {
   getWeaponActionBlockState
 } from "./runtime-state.mjs";
 import {
+  advanceVirtuosoCascadePeriodicState,
+  createVirtuosoCascadeState,
+  resolveVirtuosoAttackTransition
+} from "./virtuoso.mjs";
+import { registerVirtuosoCascadeRuntime } from "./virtuoso-runtime.mjs";
+import {
   applyDestroyedLimbConsequences,
   isCriticalLimb,
   isLimbDestroyed,
@@ -1092,6 +1098,7 @@ function registerFixedAbilityRuntimeHooks() {
   registerReactiveRuntime();
   registerHuntingGroundsRuntime();
   registerTempoRuntime();
+  registerVirtuosoCascadeRuntime();
   registerFalseBreachRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
     applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
@@ -1171,7 +1178,6 @@ function registerFixedAbilityRuntimeHooks() {
     priority: 150,
     observe: observeShadowResourceSpent
   });
-
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
   registerWeaponAttackResolvedHandler(
@@ -1358,6 +1364,27 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
         const stateKey = getFixedFunctionStateKey(entry);
+        const settings = normalizeVirtuosoSettings(entry.fixedSettings);
+        if (settings.cascadeMaxStacks > 0) {
+          const combatUuid = String(getActorActiveCombat(abilityItem.parent)?.uuid ?? "");
+          const functionState = state[stateKey] ?? {};
+          const cascadeState = combatUuid && String(functionState.combatUuid ?? "") === combatUuid
+            ? advanceVirtuosoCascadePeriodicState(functionState, game.time?.worldTime, settings)
+            : combatUuid
+              ? createVirtuosoCascadeState({
+                combatUuid,
+                worldTime: game.time?.worldTime,
+                cascadeMaxStacks: settings.cascadeMaxStacks,
+                cascadeIntervalSeconds: settings.cascadeIntervalSeconds
+              })
+              : { stacks: 0 };
+          return {
+            key: stateKey,
+            label: "Каскад",
+            current: cascadeState.stacks,
+            required: settings.cascadeMaxStacks
+          };
+        }
         return {
           key: stateKey,
           label: "Последнее оружие",
@@ -1462,11 +1489,20 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
       const stateKey = getFixedFunctionStateKey(abilityFunction);
       if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
-        const previousWeaponName = String(state[stateKey]?.weaponName ?? "").trim();
-        if (previousWeaponName && previousWeaponName === weaponName) continue;
         const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
-        combatValues.accuracy += settings.accuracyBonus;
-        combatValues.damagePercent += settings.damagePercentBonus;
+        const transition = getVirtuosoAttackTransition(
+          actor,
+          abilityFunction,
+          state[stateKey],
+          weaponName,
+          "",
+          weapon?.uuid ?? weapon?.id
+        );
+        if (transition.bonusMultiplier <= 0) continue;
+        const accuracyBonus = settings.accuracyBonus * transition.bonusMultiplier;
+        const damagePercentBonus = settings.damagePercentBonus * transition.bonusMultiplier;
+        combatValues.accuracy += accuracyBonus;
+        combatValues.damagePercent += damagePercentBonus;
         sources.push({
           kind: "fixedAbility",
           itemId: String(abilityItem.id ?? ""),
@@ -1475,8 +1511,8 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
           img: String(abilityItem.img ?? ""),
           functionId: String(abilityFunction.id ?? ""),
           combatValues: {
-            accuracy: settings.accuracyBonus,
-            damagePercent: settings.damagePercentBonus
+            accuracy: accuracyBonus,
+            damagePercent: damagePercentBonus
           },
           resourceCostMultipliers: {}
         });
@@ -10254,11 +10290,18 @@ function requestVirtuosoWeaponActionModifiers(context = {}) {
     const state = getFixedAbilityState(abilityItem);
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
       if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.virtuoso) continue;
-      const previousWeaponName = String(state[getFixedFunctionStateKey(abilityFunction)]?.weaponName ?? "").trim();
-      if (previousWeaponName && previousWeaponName === weaponName) continue;
       const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
-      context.modifierState.addCombatValue("accuracy", settings.accuracyBonus);
-      context.modifierState.addCombatValue("damagePercent", settings.damagePercentBonus);
+      const transition = getVirtuosoAttackTransition(
+        actor,
+        abilityFunction,
+        state[getFixedFunctionStateKey(abilityFunction)],
+        weaponName,
+        context?.weaponAttackId ?? context?.attackId,
+        context?.weapon?.uuid ?? context?.weapon?.id
+      );
+      if (transition.bonusMultiplier <= 0) continue;
+      context.modifierState.addCombatValue("accuracy", settings.accuracyBonus * transition.bonusMultiplier);
+      context.modifierState.addCombatValue("damagePercent", settings.damagePercentBonus * transition.bonusMultiplier);
     }
   }
 }
@@ -10283,13 +10326,15 @@ async function updateVirtuosoLastWeapon(context = {}) {
     let changed = false;
     for (const abilityFunction of functions) {
       const stateKey = getFixedFunctionStateKey(abilityFunction);
-      if (String(state[stateKey]?.weaponName ?? "").trim() === weaponName) continue;
-      state[stateKey] = {
-        ...state[stateKey],
-        fixedKey: abilityFunction.fixedKey,
-        weaponName
-      };
-      changed = true;
+      const transition = getVirtuosoAttackTransition(
+        actor,
+        abilityFunction,
+        state[stateKey],
+        weaponName,
+        context?.weaponAttackId ?? context?.attackId,
+        weaponUuid || weapon?.id
+      );
+      changed = applyVirtuosoAttackTransition(state, stateKey, abilityFunction, transition) || changed;
     }
     if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
   }
@@ -10308,16 +10353,29 @@ async function consumeVirtuosoAttackBonus(context = {}) {
     let changed = false;
     for (const abilityFunction of functions) {
       const stateKey = getFixedFunctionStateKey(abilityFunction);
-      if (String(state[stateKey]?.weaponName ?? "").trim() === weaponName) continue;
+      const consumptionKey = `virtuosoConsumed:${abilityItem.id}:${stateKey}`;
+      if (context.modifierState?.getOption?.(consumptionKey)) continue;
+      context.modifierState?.setOption?.(consumptionKey, true);
       const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
-      context.modifierState?.addCombatValue?.("accuracy", -settings.accuracyBonus);
-      context.modifierState?.addCombatValue?.("damagePercent", -settings.damagePercentBonus);
-      state[stateKey] = {
-        ...state[stateKey],
-        fixedKey: abilityFunction.fixedKey,
-        weaponName
-      };
-      changed = true;
+      const transition = getVirtuosoAttackTransition(
+        actor,
+        abilityFunction,
+        state[stateKey],
+        weaponName,
+        context?.weaponAttackId ?? context?.attackId,
+        context?.weapon?.uuid ?? context?.weapon?.id
+      );
+      if (transition.bonusMultiplier > 0) {
+        context.modifierState?.addCombatValue?.(
+          "accuracy",
+          -(settings.accuracyBonus * transition.bonusMultiplier)
+        );
+        context.modifierState?.addCombatValue?.(
+          "damagePercent",
+          -(settings.damagePercentBonus * transition.bonusMultiplier)
+        );
+      }
+      changed = applyVirtuosoAttackTransition(state, stateKey, abilityFunction, transition) || changed;
     }
     if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
   }
@@ -10492,6 +10550,53 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.applied));
   }
+}
+
+function getVirtuosoAttackTransition(
+  actor,
+  abilityFunction,
+  state,
+  weaponName,
+  weaponAttackId = "",
+  weaponIdentity = ""
+) {
+  const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
+  const combatUuid = settings.cascadeMaxStacks > 0
+    ? String(getActorActiveCombat(actor)?.uuid ?? "")
+    : "";
+  return resolveVirtuosoAttackTransition({
+    state,
+    weaponName,
+    weaponIdentity,
+    weaponAttackId,
+    combatUuid,
+    worldTime: game.time?.worldTime,
+    cascadeMaxStacks: settings.cascadeMaxStacks,
+    cascadeIntervalSeconds: settings.cascadeIntervalSeconds
+  });
+}
+
+function applyVirtuosoAttackTransition(state, stateKey, abilityFunction, transition) {
+  if (transition.reset) {
+    if (!state[stateKey]) return false;
+    delete state[stateKey];
+    return true;
+  }
+  if (!transition.nextState) return false;
+  const nextState = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    ...transition.nextState
+  };
+  if (!transition.cascade) {
+    delete nextState.combatUuid;
+    delete nextState.stacks;
+    delete nextState.nextGainAt;
+    delete nextState.weaponIdentity;
+    delete nextState.weaponAttackId;
+  }
+  state[stateKey] = nextState;
+  return true;
 }
 
 async function requestPhantomOperation(payload = {}) {

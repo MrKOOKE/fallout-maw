@@ -2979,7 +2979,9 @@ export function normalizeRageSettings(value = {}) {
 export function normalizeVirtuosoSettings(value = {}) {
   return {
     accuracyBonus: toInteger(value?.accuracyBonus ?? 20),
-    damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20)
+    damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20),
+    cascadeMaxStacks: Math.max(0, toInteger(value?.cascadeMaxStacks ?? 0)),
+    cascadeIntervalSeconds: Math.max(1, toInteger(value?.cascadeIntervalSeconds ?? 6))
   };
 }
 

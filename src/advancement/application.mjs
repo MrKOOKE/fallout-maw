@@ -86,7 +86,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
   #abilityById = new Map();
   #abilityEntriesById = new Map();
-  #abilityEvolutionAnimatedFamilySourceId = "";
+  #abilityEvolutionPanelOpen = false;
   #abilityEvolutionAbortController = null;
   #abilityEvolutionCompletedIds = new Set();
   #abilityEvolutionGraph = { links: [], nodes: [] };
@@ -883,13 +883,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const cacheKey = `${descriptionMode}\u0000${sourceId}`;
     let html = this.#abilityTooltipHTMLCache.get(cacheKey);
     if (html === undefined) {
-      const summary = String(source.ability?.evolutionSummary ?? "").trim();
-      const tooltipAbility = descriptionMode === "evolution-summary" && summary
-        ? { ...source.ability, description: summary }
-        : source.ability;
-      html = await renderAbilityDescriptionTooltipHTML(tooltipAbility, {
+      html = await renderAbilityDescriptionTooltipHTML(source.ability, {
         actor: this.actor,
-        requirementRows: this.#abilityRequirementRowsById.get(sourceId) ?? []
+        requirementRows: this.#abilityRequirementRowsById.get(sourceId) ?? [],
+        includeEvolutionChanges: descriptionMode === "evolution"
       });
       this.#abilityTooltipHTMLCache.set(cacheKey, html);
     }
@@ -1202,7 +1199,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   static async #onCloseAbilityEvolution(event) {
     event.preventDefault();
     this.#abilityEvolutionViewports.delete(this.#selectedAbilityFamilySourceId);
-    this.#abilityEvolutionAnimatedFamilySourceId = "";
+    this.#abilityEvolutionPanelOpen = false;
     this.#selectedAbilityFamilySourceId = "";
     this.#removeAbilityEvolutionLayer();
   }
@@ -1272,7 +1269,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     template.innerHTML = String(html ?? "").trim();
     const layer = template.content.firstElementChild;
     if (!(layer instanceof view.HTMLElement) || layer.dataset.abilityEvolutionOpen !== "true") {
-      this.#abilityEvolutionAnimatedFamilySourceId = "";
+      this.#abilityEvolutionPanelOpen = false;
       this.#removeAbilityEvolutionLayer();
       return;
     }
@@ -1285,7 +1282,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const view = ownerDocument?.defaultView ?? globalThis.window;
     if (!(nextLayer instanceof view.HTMLElement) || nextLayer.dataset.abilityEvolutionOpen !== "true") {
       nextLayer?.remove?.();
-      this.#abilityEvolutionAnimatedFamilySourceId = "";
+      this.#abilityEvolutionPanelOpen = false;
       this.#removeAbilityEvolutionLayer();
       return;
     }
@@ -1301,12 +1298,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       return;
     }
 
+    const animateOpening = !this.#abilityEvolutionPanelOpen;
     this.#removeAbilityEvolutionLayer();
-    const nextFamilySourceId = String(nextLayer.dataset.abilityFamilySourceId ?? "");
-    if (nextFamilySourceId !== this.#abilityEvolutionAnimatedFamilySourceId) {
-      nextLayer.classList.add("opening");
-      this.#abilityEvolutionAnimatedFamilySourceId = nextFamilySourceId;
-    }
+    if (animateOpening) nextLayer.classList.add("opening");
+    this.#abilityEvolutionPanelOpen = true;
     this.element.append(nextLayer);
     this.#activateAbilityEvolutionLayer(nextLayer);
   }
@@ -2305,7 +2300,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
               : entry?.researchActive
                 ? "research-active"
                 : "available",
-        tooltipMode: entry?.isEvolution ? "evolution-summary" : "full",
+        tooltipMode: entry?.isEvolution ? "evolution" : "full",
         style: `left:${node.x}px;top:${node.y}px`
       };
     });
@@ -3269,15 +3264,24 @@ function evaluateProgressionFormula(formula, characteristics, characteristicSett
   }
 }
 
-async function renderAbilityDescriptionTooltipHTML(ability = {}, { actor = null, requirementRows = [] } = {}) {
-  const descriptionSource = String(ability?.description ?? "").trim();
-  const descriptionHTML = descriptionSource
-    ? await TextEditor.enrichHTML(descriptionSource, {
-      secrets: actor?.isOwner ?? true,
-      relativeTo: actor,
-      rollData: actor?.getRollData?.() ?? {}
-    })
+async function renderAbilityDescriptionTooltipHTML(ability = {}, {
+  actor = null,
+  requirementRows = [],
+  includeEvolutionChanges = false
+} = {}) {
+  const changesSource = includeEvolutionChanges
+    ? String(ability?.evolutionSummary ?? "").trim()
     : "";
+  const descriptionSource = String(ability?.description ?? "").trim();
+  const enrichOptions = {
+    secrets: actor?.isOwner ?? true,
+    relativeTo: actor,
+    rollData: actor?.getRollData?.() ?? {}
+  };
+  const [changesHTML, descriptionHTML] = await Promise.all([
+    changesSource ? TextEditor.enrichHTML(changesSource, enrichOptions) : "",
+    descriptionSource ? TextEditor.enrichHTML(descriptionSource, enrichOptions) : ""
+  ]);
   const titleSection = `
     <section class="function-section single-value fallout-maw-ability-tooltip-title">
       <h4>Название</h4>
@@ -3294,6 +3298,14 @@ async function renderAbilityDescriptionTooltipHTML(ability = {}, { actor = null,
       </section>
     `
     : "";
+  const changesSection = changesHTML
+    ? `
+      <section class="function-section fallout-maw-ability-tooltip-changes">
+        <h4>Изменения</h4>
+        <div class="description">${changesHTML}</div>
+      </section>
+    `
+    : "";
   const descriptionSection = descriptionHTML
     ? `
       <section class="function-section fallout-maw-ability-tooltip-description">
@@ -3302,7 +3314,7 @@ async function renderAbilityDescriptionTooltipHTML(ability = {}, { actor = null,
       </section>
     `
     : "";
-  return `${titleSection}${requirementSection}${descriptionSection}`;
+  return `${titleSection}${requirementSection}${changesSection}${descriptionSection}`;
 }
 
 function renderSkillCostTooltipHTML({

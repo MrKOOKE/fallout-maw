@@ -12980,7 +12980,7 @@ html.fallout-maw-token-action-hud-open #hotbar {
   pointer-events: none;
   position: absolute;
   top: -1px;
-  width: clamp(25rem, 34vw, 34rem);
+  width: clamp(37.5rem, 51vw, 51rem);
   z-index: 1;
 }
 
