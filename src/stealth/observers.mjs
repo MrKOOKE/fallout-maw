@@ -9,7 +9,6 @@ import {
   getRelationTo
 } from "../settings/factions.mjs";
 
-const STEALTH_RELATION_CACHE_LIMIT = 3000;
 const SIGHT_DETECTION_MODE_IDS = new Set([
   "basicSight",
   "lightPerception",
@@ -19,7 +18,7 @@ const SIGHT_DETECTION_MODE_IDS = new Set([
 const SIGHT_DETECTION_TYPE = 0;
 const observerExclusionProviders = new Map();
 
-const allyCache = new Map();
+let allyCache = new WeakMap();
 let factionMatrix = null;
 
 export function isValidStealthObserver(hiddenToken, observerToken) {
@@ -79,17 +78,22 @@ export function hasOperationalStealthSight(observerToken) {
 }
 
 export function areActorsStealthAlliesCached(hiddenActor, observerActor) {
-  const key = `${hiddenActor?.uuid ?? ""}|${observerActor?.uuid ?? ""}`;
-  if (allyCache.has(key)) {
-    const result = allyCache.get(key);
-    allyCache.delete(key);
-    allyCache.set(key, result);
-    return result;
+  if (!isWeakMapKey(hiddenActor) || !isWeakMapKey(observerActor)) {
+    return areActorsStealthAllies(hiddenActor, observerActor);
   }
+  let observerCache = allyCache.get(hiddenActor);
+  if (observerCache?.has(observerActor)) return observerCache.get(observerActor);
   const result = areActorsStealthAllies(hiddenActor, observerActor);
-  allyCache.set(key, result);
-  trimCacheMap(allyCache, STEALTH_RELATION_CACHE_LIMIT);
+  if (!observerCache) {
+    observerCache = new WeakMap();
+    allyCache.set(hiddenActor, observerCache);
+  }
+  observerCache.set(observerActor, result);
   return result;
+}
+
+function isWeakMapKey(value) {
+  return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
 export function areActorsStealthAllies(hiddenActor, observerActor) {
@@ -110,28 +114,14 @@ export function areActorsStealthAllies(hiddenActor, observerActor) {
 }
 
 export function invalidateStealthRelationCache(actor = null) {
-  const actorUuid = String(actor?.uuid ?? actor ?? "").trim();
   factionMatrix = null;
-  if (!actorUuid) {
-    allyCache.clear();
-    return;
-  }
-  for (const key of allyCache.keys()) {
-    const [hiddenUuid, observerUuid] = key.split("|");
-    if (hiddenUuid === actorUuid || observerUuid === actorUuid) allyCache.delete(key);
-  }
+  // Faction edits are rare; replacing the WeakMap is cheaper than maintaining
+  // string UUID keys and LRU mutations in Foundry's render-frame visibility path.
+  allyCache = new WeakMap();
 }
 
 export function getEffectiveActorFactions(actor) {
   return getActorFactionBelongs(actor).filter(faction => faction && faction !== DEFAULT_FACTION_NAME);
-}
-
-function trimCacheMap(map, limit) {
-  while (map.size > limit) {
-    const firstKey = map.keys().next().value;
-    if (firstKey === undefined) break;
-    map.delete(firstKey);
-  }
 }
 
 function isStealthObserverBlind(observerToken) {

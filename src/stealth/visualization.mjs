@@ -74,7 +74,10 @@ export function canRenderDetectionVisualizationForLocalUser(token) {
   const controlled = activeCanvas.tokens?.controlled ?? [];
   if (controlled.length !== 1 || controlled[0]?.id !== token.id) return false;
   if (!canControlStealth(token.actor)) return false;
-  if (token.visible === false || token.isVisible === false || token.renderable === false) return false;
+  if (token.visible === false || token.renderable === false) return false;
+  // Foundry's rendered Token always exposes `visible`. Only fall back to the
+  // expensive isVisible getter for document-like test doubles/compatibility.
+  if (token.visible === undefined && token.isVisible === false) return false;
   return true;
 }
 
@@ -163,6 +166,7 @@ function removeAllDetectionVisualizationSources(tokenId, {
   movementKeys.delete(tokenId);
   stopDetectionVisualizationMovementTracking(tokenId);
   if (refreshHover) refreshDetectionHoverFill();
+  destroyUnusedDetectionLayers();
 }
 
 function destroyRenderedDetectionVisualization(tokenId) {
@@ -196,6 +200,7 @@ export function refreshDetectionVisualizations({ invalidate = false } = {}) {
     rebuildDetectionVisualization(token, request, settings);
   }
   refreshDetectionHoverFill();
+  destroyUnusedDetectionLayers();
 }
 
 /**
@@ -205,13 +210,33 @@ export function refreshDetectionVisualizations({ invalidate = false } = {}) {
  */
 export function refreshDetectionVisualizationMaskState() {
   const activeCanvas = globalThis.canvas;
-  const renderable = canRenderLocalStealthOverlay();
+  const renderable = visualizationSources.size > 0 && canRenderLocalStealthOverlay();
   const layer = activeCanvas?.controls?.[STEALTH_DETECTION_LAYER];
   if (layer) layer.renderable = renderable;
   const highlightLayer = activeCanvas?.interface?.grid
     ?.getHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
   if (highlightLayer) highlightLayer.renderable = renderable;
   return renderable;
+}
+
+function destroyUnusedDetectionLayers() {
+  if (detectionVisualizations.size) return;
+  const activeCanvas = globalThis.canvas;
+  const gridLayer = activeCanvas?.interface?.grid;
+  const highlightLayer = gridLayer?.getHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
+  destroyNativeVisionMask(highlightLayer);
+  gridLayer?.destroyHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
+
+  const layer = activeCanvas?.controls?.[STEALTH_DETECTION_LAYER];
+  if (!layer) return;
+  destroyNativeVisionMask(layer);
+  layer.parent?.removeChild?.(layer);
+  layer.destroy?.({ children: true });
+  delete activeCanvas.controls[STEALTH_DETECTION_LAYER];
+}
+
+export function hasDetectionVisualizationSources() {
+  return visualizationSources.size > 0;
 }
 
 export function queueDetectionVisualizationRefresh({ invalidate = false } = {}) {
@@ -345,11 +370,11 @@ function rebuildDetectionVisualization(token, request, settings) {
     drawWeaponNoiseZone(graphics, noiseZone);
     container.addChild(graphics);
   }
-  for (const zone of zones) {
+  if (zones.length) {
     const graphics = new PIXI.Graphics();
     graphics.eventMode = "none";
     graphics.interactiveChildren = false;
-    drawBaseGridZone(graphics, zone);
+    for (const zone of zones) drawBaseGridZone(graphics, zone);
     container.addChild(graphics);
   }
   layer.addChild(container);

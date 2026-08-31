@@ -8,8 +8,12 @@ import {
 import {
   calculateSmokePathCost,
   getSmokeLightBandAtPoint,
+  getSmokeRegionIndex,
+  getSmokeRegionRevision,
   invalidateSmokeRegionIndex,
   measureSmokePath,
+  notifySmokeRegionAnimation,
+  peekSmokeRegionRevision,
   registerSmokeVisionHooks,
   syncSmokeDarknessMeshes
 } from "../src/canvas/smoke-vision.mjs";
@@ -25,6 +29,7 @@ import {
   invalidateActorSmokePerception,
   SMOKE_PERCEPTION_PERCENT_EFFECT_KEY
 } from "../src/canvas/smoke-perception.mjs";
+import { createObserverOrdinaryVisionMask } from "../src/canvas/physical-los.mjs";
 
 test("automatic blast Regions use radius-sized vertical elevation bounds", () => {
   const scene = { grid: { distance: 1, size: 100 } };
@@ -70,6 +75,770 @@ test("smoke runtime values clamp thickness and density", () => {
     type: "smoke",
     smoke: { thickness: 1, density: 1, densityPercent: 100 }
   }]);
+});
+
+test("attached smoke animation invalidates once per native transform and follows animated elevation", async () => {
+  const previous = {
+    Hooks: globalThis.Hooks,
+    canvas: globalThis.canvas,
+    game: globalThis.game,
+    PIXI: globalThis.PIXI
+  };
+  const region = createSmokeRegion("animated", 100);
+  const scene = createScene([region]);
+  const attachedToken = { x: 0, y: 0, elevation: 10, rotation: 0 };
+  region.parent = scene;
+  region.attachment = { token: attachedToken };
+  region.object.document = region;
+  region.object.isAnimating = true;
+  region.object.animationState = {
+    elevation: { bottom: 10, top: 20 },
+    polygonTree: {
+      polygons: region.polygons,
+      testPoint: ({ x, y }) => Math.hypot(x - 5, y) <= 20
+    }
+  };
+  let notifications = 0;
+  let nativeRefreshHooks = 0;
+  let lightingRefreshHooks = 0;
+  const tickerCallbacks = [];
+  globalThis.Hooks = {
+    callAll(name, document, context) {
+      if (name === "fallout-maw.smokeNativePerceptionRefresh") {
+        nativeRefreshHooks += 1;
+        return;
+      }
+      if (name === "lightingRefresh") {
+        assert.equal(context.source, "fallout-maw");
+        assert.equal(context.smokeSelective, true);
+        lightingRefreshHooks += 1;
+        return;
+      }
+      assert.equal(name, "fallout-maw.smokeRegionAnimation");
+      assert.equal(document, region);
+      notifications += 1;
+    }
+  };
+  globalThis.game = { time: { worldTime: 0 } };
+  globalThis.PIXI = {
+    Circle: { approximateVertexDensity: () => 32 },
+    UPDATE_PRIORITY: { OBJECTS: 50, PERCEPTION: 2 }
+  };
+  globalThis.canvas = {
+    ready: true,
+    scene,
+    app: {
+      ticker: {
+        add(callback, context, priority) {
+          tickerCallbacks.push({ callback, context, priority });
+        },
+        remove() {}
+      }
+    },
+    effects: {
+      lightSources: new Set(),
+      darknessSources: new Set(),
+      visionSources: new Set(),
+      illumination: { invalidateDarknessLevelContainer() {} }
+    },
+    fog: { sharedExploration: false },
+    perception: { update() {} },
+    dimensions: { maxR: 10_000 }
+  };
+
+  try {
+    const baselineRevision = getSmokeRegionRevision(scene);
+    assert.equal(notifySmokeRegionAnimation(region.object), true);
+    assert.equal(notifySmokeRegionAnimation(region.object), false);
+    assert.equal(getSmokeRegionRevision(scene), baselineRevision);
+    assert.deepEqual(tickerCallbacks.map(({ priority }) => priority), [50.5, 2.5]);
+    tickerCallbacks[0].callback.call(tickerCallbacks[0].context);
+    const firstRevision = getSmokeRegionRevision(scene);
+    assert.ok(firstRevision > baselineRevision);
+    tickerCallbacks[1].callback.call(tickerCallbacks[1].context);
+    assert.equal(nativeRefreshHooks, 1);
+    assert.equal(lightingRefreshHooks, 1);
+
+    // Native animation frames are separate tasks. Allow the scene-level
+    // coalescer to close this frame before simulating the next one.
+    await Promise.resolve();
+    attachedToken.x = 25;
+    assert.equal(notifySmokeRegionAnimation(region.object), true);
+    tickerCallbacks[0].callback.call(tickerCallbacks[0].context);
+    assert.ok(getSmokeRegionRevision(scene) > firstRevision);
+    assert.equal(notifications, 2);
+    tickerCallbacks[1].callback.call(tickerCallbacks[1].context);
+    assert.equal(nativeRefreshHooks, 2);
+    assert.equal(lightingRefreshHooks, 2);
+
+    assert.equal(calculateSmokePathCost(
+      { x: 0, y: 0, elevation: 0 },
+      { x: 10, y: 0, elevation: 0 },
+      { scene, elevation: 0 }
+    ), 10);
+    assert.equal(calculateSmokePathCost(
+      { x: 0, y: 0, elevation: 15 },
+      { x: 10, y: 0, elevation: 15 },
+      { scene, elevation: 15 }
+    ), Infinity);
+  } finally {
+    invalidateSmokeRegionIndex(scene);
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
+});
+
+test("smoke index reuses PolygonTree geometry and prepares each active Region once", () => {
+  const createCountingPolygonTree = (points, onPoints) => {
+    const polygon = {};
+    Object.defineProperty(polygon, "points", {
+      configurable: true,
+      get() {
+        onPoints();
+        return points;
+      }
+    });
+    return { polygons: [polygon], testPoint: () => true };
+  };
+  const squareAt = x => [x, 0, x + 10, 0, x + 10, 10, x, 10];
+  const staticRegion = createSmokeRegion("geometry-static", 50);
+  const animatedRegion = createSmokeRegion("geometry-animated", 50);
+  const firstBehavior = staticRegion.behaviors.contents[0];
+  staticRegion.behaviors.contents.push({
+    ...firstBehavior,
+    uuid: "Behavior.geometry-static-second"
+  });
+
+  let staticBoundsReads = 0;
+  let staticPointReads = 0;
+  let firstAnimatedPointReads = 0;
+  let secondAnimatedPointReads = 0;
+  let replacementStaticPointReads = 0;
+  Object.defineProperty(staticRegion.object, "bounds", {
+    configurable: true,
+    get() {
+      staticBoundsReads += 1;
+      return { x: 0, y: 0, width: 10, height: 10 };
+    }
+  });
+  staticRegion.polygonTree = createCountingPolygonTree(squareAt(0), () => { staticPointReads += 1; });
+  animatedRegion.object.animationState = {
+    polygonTree: createCountingPolygonTree(squareAt(20), () => { firstAnimatedPointReads += 1; })
+  };
+  const scene = createScene([staticRegion, animatedRegion]);
+
+  try {
+    const firstIndex = getSmokeRegionIndex(scene);
+    const firstStaticEntries = firstIndex.entries.filter(entry => entry.region === staticRegion);
+    assert.equal(firstStaticEntries.length, 2);
+    assert.equal(firstStaticEntries[0].bounds, firstStaticEntries[1].bounds);
+    assert.equal(firstStaticEntries[0].geometry, firstStaticEntries[1].geometry);
+    assert.equal(staticBoundsReads, 1, "one Region bounds read serves all active smoke behaviors");
+    assert.equal(staticPointReads, 1);
+    assert.equal(firstAnimatedPointReads, 1);
+
+    animatedRegion.object.animationState = {
+      polygonTree: createCountingPolygonTree(squareAt(30), () => { secondAnimatedPointReads += 1; })
+    };
+    invalidateSmokeRegionIndex(scene);
+    getSmokeRegionIndex(scene);
+    assert.equal(staticBoundsReads, 2, "a full index rebuild still reads static bounds only once per Region");
+    assert.equal(staticPointReads, 1, "unchanged static PolygonTree segments are reused");
+    assert.equal(firstAnimatedPointReads, 1);
+    assert.equal(secondAnimatedPointReads, 1, "a new animated PolygonTree rebuilds its geometry");
+
+    staticRegion.polygonTree = createCountingPolygonTree(squareAt(5), () => { replacementStaticPointReads += 1; });
+    invalidateSmokeRegionIndex(scene);
+    getSmokeRegionIndex(scene);
+    assert.equal(staticPointReads, 1);
+    assert.equal(replacementStaticPointReads, 1, "a replaced static PolygonTree cannot reuse stale geometry");
+    assert.equal(secondAnimatedPointReads, 1, "the unchanged animated PolygonTree is reused too");
+  } finally {
+    invalidateSmokeRegionIndex(scene);
+  }
+});
+
+test("native attached smoke frames coalesce on the required Canvas ticker", () => {
+  const previous = {
+    canvas: globalThis.canvas,
+    game: globalThis.game,
+    foundry: globalThis.foundry,
+    CONST: globalThis.CONST,
+    CONFIG: globalThis.CONFIG,
+    Hooks: globalThis.Hooks,
+    PIXI: globalThis.PIXI
+  };
+  const firstRegion = createSmokeRegion("animated-native-a", 100);
+  const secondRegion = createSmokeRegion("animated-native-b", 50);
+  const scene = createScene([firstRegion, secondRegion]);
+  const attachedToken = { x: 25, y: 10, elevation: 5, rotation: 0 };
+  let nativeFrames = 0;
+  let hookCalls = 0;
+  let nativeRefreshHooks = 0;
+  let lightingRefreshHooks = 0;
+  let darknessInvalidations = 0;
+  let visibilityRefreshes = 0;
+  const perceptionUpdates = [];
+  const tickerCallbacks = [];
+  const meshes = { addChild() {} };
+
+  class NativeRegion {
+    constructor(document) {
+      this.document = document;
+      this.bounds = document.object.bounds;
+      this.isAnimating = true;
+      document.object = this;
+    }
+
+    _onTokenAnimationFrame() {
+      nativeFrames += 1;
+      return "native-result";
+    }
+  }
+
+  class RegionMesh {
+    constructor() { this.shader = {}; }
+    destroy() {}
+  }
+
+  for (const region of scene.regions.contents) {
+    region.parent = scene;
+    region.attachment = { token: attachedToken };
+    new NativeRegion(region);
+  }
+
+  try {
+    globalThis.game = { time: { worldTime: 0 } };
+    globalThis.CONST = { CANVAS_PERFORMANCE_MODES: { LOW: 1 } };
+    globalThis.CONFIG = { Canvas: { detectionModes: {} } };
+    globalThis.PIXI = {
+      Circle: { approximateVertexDensity: () => 32 },
+      UPDATE_PRIORITY: { OBJECTS: 50, PERCEPTION: 2 }
+    };
+    globalThis.foundry = {
+      canvas: {
+        placeables: { Region: NativeRegion, regions: { RegionMesh } },
+        rendering: {
+          shaders: {
+            AdjustDarknessLevelRegionShader: class {},
+            IlluminationDarknessLevelRegionShader: class {}
+          }
+        }
+      }
+    };
+    globalThis.Hooks = {
+      on() {},
+      callAll(name) {
+        if (name === "fallout-maw.smokeNativePerceptionRefresh") {
+          nativeRefreshHooks += 1;
+          return;
+        }
+        if (name === "lightingRefresh") {
+          lightingRefreshHooks += 1;
+          return;
+        }
+        assert.equal(name, "fallout-maw.smokeRegionAnimation");
+        hookCalls += 1;
+      }
+    };
+    globalThis.canvas = {
+      ready: true,
+      scene,
+      app: {
+        ticker: {
+          add(callback, context, priority) {
+            tickerCallbacks.push({ callback, context, priority });
+          },
+          remove(callback) {
+            const index = tickerCallbacks.findIndex(entry => entry.callback === callback);
+            if (index >= 0) tickerCallbacks.splice(index, 1);
+          }
+        }
+      },
+      effects: {
+        lightSources: new Set(),
+        darknessSources: new Set(),
+        visionSources: new Set(),
+        illumination: {
+          darknessLevelMeshes: meshes,
+          invalidateDarknessLevelContainer(force) {
+            assert.equal(force, true);
+            darknessInvalidations += 1;
+          }
+        }
+      },
+      visibility: {
+        vision: { light: { global: { meshes } } },
+        refresh() { visibilityRefreshes += 1; }
+      },
+      performance: { mode: 0 },
+      fog: { sharedExploration: false },
+      environment: { globalLightSource: { active: true } },
+      perception: { update: flags => perceptionUpdates.push(flags) }
+    };
+
+    registerSmokeVisionHooks();
+    const baselineRevision = peekSmokeRegionRevision(scene);
+    assert.equal(firstRegion.object._onTokenAnimationFrame(), "native-result");
+    assert.equal(secondRegion.object._onTokenAnimationFrame(), "native-result");
+    assert.equal(nativeFrames, 2);
+    assert.equal(peekSmokeRegionRevision(scene), baselineRevision + 1);
+    assert.equal(hookCalls, 0);
+    assert.deepEqual(tickerCallbacks.map(({ priority }) => priority), [50.5, 2.5]);
+
+    tickerCallbacks[0].callback.call(tickerCallbacks[0].context);
+    tickerCallbacks[1].callback.call(tickerCallbacks[1].context);
+    assert.equal(hookCalls, 2);
+    assert.equal(darknessInvalidations, 1);
+    assert.equal(nativeRefreshHooks, 1);
+    assert.equal(lightingRefreshHooks, 1);
+    assert.equal(visibilityRefreshes, 0, "thickness-only movement uses the native darkness texture invalidation");
+    assert.deepEqual(perceptionUpdates, []);
+  } finally {
+    if (globalThis.canvas?.scene === scene) {
+      globalThis.canvas.scene = createScene([]);
+      syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
+    }
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
+});
+
+test("same-frame attached smoke refresh initializes endpoint and scene-wide sources only", () => {
+  const previous = {
+    canvas: globalThis.canvas,
+    game: globalThis.game,
+    foundry: globalThis.foundry,
+    CONFIG: globalThis.CONFIG,
+    Hooks: globalThis.Hooks,
+    PIXI: globalThis.PIXI
+  };
+  const region = createSmokeRegion("animated-selective", 50);
+  const scene = createScene([region]);
+  const attachedToken = { x: 1_000, y: 1_000, elevation: 0, rotation: 0 };
+  const tickerCallbacks = [];
+  const hookCallbacks = new Map();
+  const perceptionUpdates = [];
+  let darknessInvalidations = 0;
+  let nativeRefreshHooks = 0;
+  let lightingRefreshHooks = 0;
+  let refreshLightingCalls = 0;
+  let initializeLightSourcesCalls = 0;
+
+  class SmokeVisionSource {
+    static __falloutMawSmokeVisionSource = true;
+    static effectsCollection = "visionSources";
+
+    constructor(x, y = 0, { radius = 100, lightRadius = radius } = {}) {
+      this.active = true;
+      this.attached = true;
+      this.data = { x, y, elevation: 0, externalRadius: radius };
+      this.radius = radius;
+      this.lightRadius = lightRadius;
+      this.los = { config: { radius } };
+      this.shape = { config: { radius } };
+      this.sourceId = `Vision.${x}.${y}.${lightRadius}`;
+      this.updateId = 0;
+      this.suppressed = false;
+      this.preferred = false;
+      this.visionMode = null;
+      this.initializeCalls = 0;
+      this.refreshCalls = 0;
+      installNativeSourceRenderMock(this, ["background", "illumination", "coloration"]);
+    }
+
+    initialize() {
+      this.initializeCalls += 1;
+      this.updateId += 1;
+      this.shape = { config: { radius: this.radius } };
+    }
+
+    refresh() { this.refreshCalls += 1; }
+  }
+
+  class SmokeLightSource {
+    static __falloutMawSmokeLightSource = true;
+    static effectsCollection = "lightSources";
+
+    constructor(x, y = 0, radius = 100) {
+      this.active = true;
+      this.attached = true;
+      this.data = { x, y, elevation: 0, bright: radius, dim: radius, priority: 0 };
+      this.radius = radius;
+      this.shape = { config: { radius } };
+      this.sourceId = `Light.${x}.${y}`;
+      this.updateId = 0;
+      this.suppressed = false;
+      this.initializeCalls = 0;
+      this.refreshCalls = 0;
+      installNativeSourceRenderMock(this, ["background", "illumination", "coloration"]);
+    }
+
+    initialize() {
+      this.initializeCalls += 1;
+      this.updateId += 1;
+      this.shape = { config: { radius: this.radius } };
+    }
+
+    refresh() { this.refreshCalls += 1; }
+  }
+
+  const oldVision = new SmokeVisionSource(0, 0);
+  const newVision = new SmokeVisionSource(1_000, 1_000);
+  const midVision = new SmokeVisionSource(500, 500);
+  const farVision = new SmokeVisionSource(2_000, 2_000);
+  const sceneWideVision = new SmokeVisionSource(2_000, 0, { lightRadius: Infinity });
+  const oldLight = new SmokeLightSource(0, 0);
+  const newLight = new SmokeLightSource(1_000, 1_000);
+  const midLight = new SmokeLightSource(500, 500);
+  const farLight = new SmokeLightSource(2_000, 2_000);
+  region.parent = scene;
+  region.attachment = { token: attachedToken };
+  region.object.isAnimating = true;
+  region.object.bounds = { x: 980, y: 980, width: 40, height: 40 };
+
+  try {
+    globalThis.game = { time: { worldTime: 0 } };
+    globalThis.CONFIG = {
+      Canvas: {
+        detectionModes: {},
+        visionSourceClass: SmokeVisionSource,
+        lightSourceClass: SmokeLightSource
+      }
+    };
+    globalThis.foundry = {};
+    globalThis.PIXI = {
+      Circle: { approximateVertexDensity: () => 32 },
+      UPDATE_PRIORITY: { OBJECTS: 50, PERCEPTION: 2 }
+    };
+    globalThis.Hooks = {
+      on(name, callback) {
+        const callbacks = hookCallbacks.get(name) ?? [];
+        callbacks.push(callback);
+        hookCallbacks.set(name, callbacks);
+      },
+      callAll(name) {
+        if (name === "fallout-maw.smokeNativePerceptionRefresh") nativeRefreshHooks += 1;
+        if (name === "lightingRefresh") lightingRefreshHooks += 1;
+      }
+    };
+    globalThis.canvas = {
+      ready: true,
+      scene,
+      app: {
+        ticker: {
+          add(callback, context, priority) {
+            tickerCallbacks.push({ callback, context, priority });
+          },
+          remove(callback) {
+            const index = tickerCallbacks.findIndex(entry => entry.callback === callback);
+            if (index >= 0) tickerCallbacks.splice(index, 1);
+          }
+        }
+      },
+      effects: {
+        lightSources: createSourceCollection([oldLight, newLight, midLight, farLight]),
+        darknessSources: createSourceCollection([]),
+        visionSources: createSourceCollection([oldVision, newVision, midVision, farVision, sceneWideVision]),
+        background: {
+          vision: createNativeEffectsContainer(),
+          visionPreferred: createNativeEffectsContainer(),
+          lighting: createNativeEffectsContainer()
+        },
+        illumination: Object.assign(createNativeEffectsContainer(), {
+          lights: createNativeEffectsContainer(),
+          invalidateDarknessLevelContainer(force) {
+            assert.equal(force, true);
+            darknessInvalidations += 1;
+          }
+        }),
+        coloration: createNativeEffectsContainer(),
+        darkness: createNativeEffectsContainer(),
+        refreshLighting() { refreshLightingCalls += 1; },
+        initializeLightSources() { initializeLightSourcesCalls += 1; }
+      },
+      visibility: {
+        visionModeData: { activeLightingOptions: {} },
+        refresh() {}
+      },
+      masks: { occlusion: { _updateOcclusionMask() {} } },
+      fog: { sharedExploration: false },
+      perception: {
+        renderFlags: new Set(),
+        update: flags => perceptionUpdates.push(flags)
+      },
+      dimensions: { maxR: 10_000 }
+    };
+    oldLight.active = false;
+    const staleInactiveMesh = oldLight.layers.background.mesh;
+    globalThis.canvas.effects.background.lighting.addChild(staleInactiveMesh);
+
+    registerSmokeVisionHooks();
+    getSmokeRegionRevision(scene);
+    assert.equal(notifySmokeRegionAnimation(region, {
+      previousState: {
+        known: true,
+        bounds: { x: -20, y: -20, width: 40, height: 40 }
+      }
+    }), true);
+    assert.deepEqual(tickerCallbacks.map(({ priority }) => priority), [50.5, 2.5]);
+
+    tickerCallbacks[0].callback.call(tickerCallbacks[0].context);
+
+    assert.equal(oldLight.initializeCalls, 0);
+    assert.equal(newLight.initializeCalls, 0);
+    assert.equal(oldVision.initializeCalls, 0);
+    assert.equal(newVision.initializeCalls, 0);
+    // Foundry's Token OBJECTS phase runs between the two system ticker phases.
+    // A carrier source completed there must not be initialized a second time.
+    newLight.initialize();
+    newVision.initialize();
+    tickerCallbacks[1].callback.call(tickerCallbacks[1].context);
+
+    assert.equal(oldLight.initializeCalls, 1);
+    assert.equal(newLight.initializeCalls, 1);
+    assert.equal(midLight.initializeCalls, 0, "the empty swept area is not a dependency");
+    assert.equal(farLight.initializeCalls, 0);
+    assert.equal(oldVision.initializeCalls, 1);
+    assert.equal(newVision.initializeCalls, 1);
+    assert.equal(midVision.initializeCalls, 0, "the empty swept area is not a dependency");
+    assert.equal(farVision.initializeCalls, 0);
+    assert.equal(sceneWideVision.initializeCalls, 1, "unlimited light perception remains scene-wide");
+    assert.equal(darknessInvalidations, 1);
+    assert.equal(nativeRefreshHooks, 1);
+    assert.deepEqual(perceptionUpdates, []);
+    assert.equal(refreshLightingCalls, 0);
+    assert.equal(initializeLightSourcesCalls, 0);
+    assert.equal(staleInactiveMesh.parent, null, "inactive native sources cannot re-enter effects containers");
+  } finally {
+    for (const callback of hookCallbacks.get("canvasTearDown") ?? []) callback();
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
+});
+
+test("shared fog advances only affected native Token source versions", () => {
+  const previous = {
+    canvas: globalThis.canvas,
+    game: globalThis.game,
+    foundry: globalThis.foundry,
+    CONFIG: globalThis.CONFIG,
+    Hooks: globalThis.Hooks,
+    PIXI: globalThis.PIXI
+  };
+  const region = createSmokeRegion("animated-shared-fog", 50);
+  const scene = createScene([region]);
+  const tickerCallbacks = [];
+  const hookCallbacks = new Map();
+  const perceptionUpdates = [];
+  let refreshLightingCalls = 0;
+  let initializeLightSourcesCalls = 0;
+  let visibilityRefreshes = 0;
+  let occlusionRefreshes = 0;
+  const createFogToken = (id, x) => ({
+    id,
+    sourceId: `Token.${id}`,
+    _visionSourceVersion: 4,
+    _isFogExplorationSource: () => true,
+    _getVisionSourceData: () => ({
+      x,
+      y: 0,
+      radius: 100,
+      lightRadius: 100,
+      externalRadius: 100
+    })
+  });
+  const nearToken = createFogToken("near", 0);
+  const farToken = createFogToken("far", 2_000);
+  region.parent = scene;
+  region.attachment = { token: { x: 100, y: 0, elevation: 0, rotation: 0 } };
+  region.object.isAnimating = true;
+  region.object.bounds = { x: 80, y: -20, width: 40, height: 40 };
+
+  try {
+    globalThis.game = { time: { worldTime: 0 } };
+    globalThis.CONFIG = { Canvas: { detectionModes: {} } };
+    globalThis.foundry = {};
+    globalThis.PIXI = {
+      Circle: { approximateVertexDensity: () => 32 },
+      UPDATE_PRIORITY: { OBJECTS: 50, PERCEPTION: 2 }
+    };
+    globalThis.Hooks = {
+      on(name, callback) {
+        const callbacks = hookCallbacks.get(name) ?? [];
+        callbacks.push(callback);
+        hookCallbacks.set(name, callbacks);
+      },
+      callAll() {}
+    };
+    globalThis.canvas = {
+      ready: true,
+      scene,
+      app: {
+        ticker: {
+          add(callback, context, priority) {
+            tickerCallbacks.push({ callback, context, priority });
+          },
+          remove() {}
+        }
+      },
+      tokens: { placeables: [nearToken, farToken] },
+      effects: {
+        lightSources: new Set(),
+        darknessSources: new Set(),
+        visionSources: new Set(),
+        illumination: { invalidateDarknessLevelContainer() {} },
+        refreshLighting() { refreshLightingCalls += 1; },
+        initializeLightSources() { initializeLightSourcesCalls += 1; }
+      },
+      visibility: { refresh() { visibilityRefreshes += 1; } },
+      masks: { occlusion: { _updateOcclusionMask() { occlusionRefreshes += 1; } } },
+      fog: { sharedExploration: true },
+      perception: {
+        renderFlags: new Set(),
+        update: flags => perceptionUpdates.push(flags)
+      },
+      dimensions: { maxR: 10_000 }
+    };
+
+    registerSmokeVisionHooks();
+    assert.equal(notifySmokeRegionAnimation(region, {
+      previousState: {
+        known: true,
+        bounds: { x: -20, y: -20, width: 40, height: 40 }
+      }
+    }), true);
+    tickerCallbacks[0].callback.call(tickerCallbacks[0].context);
+    tickerCallbacks[1].callback.call(tickerCallbacks[1].context);
+
+    assert.equal(nearToken._visionSourceVersion, 5);
+    assert.equal(farToken._visionSourceVersion, 4);
+    assert.equal(visibilityRefreshes, 1);
+    assert.equal(occlusionRefreshes, 1);
+    assert.deepEqual(perceptionUpdates, []);
+    assert.equal(refreshLightingCalls, 0);
+    assert.equal(initializeLightSourcesCalls, 0);
+  } finally {
+    for (const callback of hookCallbacks.get("canvasTearDown") ?? []) callback();
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
+});
+
+test("same-frame smoke ticker reports malformed geometry and retries only the exact path", () => {
+  const previous = {
+    canvas: globalThis.canvas,
+    game: globalThis.game,
+    foundry: globalThis.foundry,
+    CONFIG: globalThis.CONFIG,
+    Hooks: globalThis.Hooks,
+    PIXI: globalThis.PIXI
+  };
+  const region = createSmokeRegion("animated-invalid-geometry", 50);
+  const scene = createScene([region]);
+  const tickerCallbacks = [];
+  const hookCallbacks = new Map();
+  const perceptionUpdates = [];
+  let darknessInvalidations = 0;
+  let nativeRefreshHooks = 0;
+  let lightingRefreshHooks = 0;
+  let reportedErrors = 0;
+  region.parent = scene;
+  region.attachment = { token: { x: 10, y: 0, elevation: 0, rotation: 0 } };
+  region.object.isAnimating = true;
+
+  try {
+    globalThis.game = { time: { worldTime: 0 } };
+    globalThis.CONFIG = { Canvas: { detectionModes: {} } };
+    globalThis.foundry = {};
+    globalThis.PIXI = {
+      Circle: { approximateVertexDensity: () => 32 },
+      UPDATE_PRIORITY: { OBJECTS: 50, PERCEPTION: 2 }
+    };
+    globalThis.Hooks = {
+      on(name, callback) {
+        const callbacks = hookCallbacks.get(name) ?? [];
+        callbacks.push(callback);
+        hookCallbacks.set(name, callbacks);
+      },
+      callAll(name) {
+        if (name === "fallout-maw.smokeNativePerceptionRefresh") nativeRefreshHooks += 1;
+        if (name === "lightingRefresh") lightingRefreshHooks += 1;
+      },
+      onError(location, error) {
+        assert.equal(location, "fallout-maw.attachedSmokeAnimation");
+        assert.match(error.message, /transient PolygonTree failure/);
+        reportedErrors += 1;
+      }
+    };
+    globalThis.canvas = {
+      ready: true,
+      scene,
+      app: {
+        ticker: {
+          add(callback, context, priority) {
+            tickerCallbacks.push({ callback, context, priority });
+          },
+          remove() {}
+        }
+      },
+      effects: {
+        lightSources: new Set(),
+        darknessSources: new Set(),
+        visionSources: new Set(),
+        illumination: {
+          invalidateDarknessLevelContainer() { darknessInvalidations += 1; }
+        }
+      },
+      fog: { sharedExploration: false },
+      perception: { update: flags => perceptionUpdates.push(flags) },
+      dimensions: { maxR: 10_000 }
+    };
+    registerSmokeVisionHooks();
+    assert.equal(notifySmokeRegionAnimation(region, {
+      previousState: {
+        known: true,
+        bounds: { x: -20, y: -20, width: 40, height: 40 }
+      }
+    }), true);
+    Object.defineProperty(region.object, "bounds", {
+      configurable: true,
+      get() { throw new Error("transient PolygonTree failure"); }
+    });
+
+    assert.deepEqual(tickerCallbacks.map(({ priority }) => priority), [50.5, 2.5]);
+    assert.doesNotThrow(() => tickerCallbacks[0].callback.call(tickerCallbacks[0].context));
+    assert.equal(reportedErrors, 1);
+    assert.equal(darknessInvalidations, 0);
+    assert.equal(nativeRefreshHooks, 0);
+    assert.equal(lightingRefreshHooks, 0);
+    assert.deepEqual(perceptionUpdates, []);
+
+    Object.defineProperty(region.object, "bounds", {
+      configurable: true,
+      value: { x: 0, y: 0, width: 10, height: 10 }
+    });
+    assert.doesNotThrow(() => tickerCallbacks[0].callback.call(tickerCallbacks[0].context));
+    assert.doesNotThrow(() => tickerCallbacks[1].callback.call(tickerCallbacks[1].context));
+    assert.equal(darknessInvalidations, 1);
+    assert.equal(nativeRefreshHooks, 1);
+    assert.equal(lightingRefreshHooks, 1);
+    assert.deepEqual(perceptionUpdates, []);
+  } finally {
+    for (const callback of hookCallbacks.get("canvasTearDown") ?? []) callback();
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
 });
 
 test("smoke path cost attenuates intersecting and overlapping regions", () => {
@@ -118,7 +887,7 @@ test("smoke path intervals use the native Region segmentizer", () => {
   };
   const scene = createScene([region]);
   assert.equal(
-    calculateSmokePathCost({ x: 0, y: 0, elevation: 0 }, { x: 10, y: 0, elevation: 0 }, { scene, elevation: 0 }),
+    calculateSmokePathCost({ x: 0, y: 0, elevation: 0 }, { x: 10, y: 0, elevation: 1 }, { scene, elevation: null }),
     14
   );
   assert.equal(segmentizerCalls, 1);
@@ -299,7 +1068,7 @@ test("actor smoke perception changes retained vision without changing smoke data
   assert.ok(Math.abs(opaqueBehind.cost - (100 + (100 / 1.7))) < 1e-6);
 });
 
-test("partial smoke constrains global light while restoring observer smoke blocking", () => {
+test("partial smoke keeps a point-only stealth mask on Basic Sight without a radial constraint", () => {
   const previous = {
     CONFIG: globalThis.CONFIG,
     Hooks: globalThis.Hooks,
@@ -317,8 +1086,22 @@ test("partial smoke constrains global light while restoring observer smoke block
   let emittedShapeShift = 0;
   let emittedSurfaceExposureShift = 0;
   class MockVisionSource {
+    constructor({ object = null } = {}) {
+      this.object = object;
+      this.blinded = {};
+      this.sourceId = "Vision.temporary";
+      this.updateId = 0;
+    }
+
     get lightRadius() { return 200; }
     get radius() { return 200; }
+    initialize(data) {
+      this.data = data;
+      this.isBlinded = false;
+      this._createShapes();
+      this.updateId += 1;
+    }
+    destroy() {}
     _createShapes() {
       const origin = { x: this.data?.x ?? 0, y: this.data?.y ?? 0 };
       this.los = createMask("los", 200, origin);
@@ -441,6 +1224,7 @@ test("partial smoke constrains global light while restoring observer smoke block
       }
     };
     globalThis.PIXI = {
+      Circle: { approximateVertexDensity: () => 32 },
       Polygon: class {
         constructor(points) { this.points = points; }
         contains(x, y) { return pointInPolygon(this.points, x, y); }
@@ -457,6 +1241,47 @@ test("partial smoke constrains global light while restoring observer smoke block
     };
 
     registerSmokeVisionHooks();
+
+    globalThis.canvas.ready = true;
+    globalThis.canvas.visibility = { tokenVision: true };
+    globalThis.canvas.effects = {
+      lightSources: new Set(),
+      testInsideLight: () => false
+    };
+    const temporaryObserver = {
+      hasSight: true,
+      sourceId: "Token.temporary-smoke-observer",
+      actor: {},
+      document: {
+        id: "temporary-smoke-observer",
+        actor: {},
+        detectionModes: {
+          basicSight: { id: "basicSight", enabled: true, range: 1 },
+          lightPerception: { id: "lightPerception", enabled: false, range: 0 }
+        }
+      },
+      getLightRadius: range => range * 100,
+      _getVisionBlindedStates: () => ({}),
+      _getVisionSourceData: () => ({ x: 0, y: 0, elevation: 0, externalRadius: 200 })
+    };
+    const constraintsBeforeTemporaryMask = constrainedMasks.length;
+    const temporaryMask = createObserverOrdinaryVisionMask(temporaryObserver, {
+      origin: { x: 0, y: 0, elevation: 0 },
+      pointOnlySmoke: true
+    });
+    assert.ok(temporaryMask);
+    assert.equal(
+      constrainedMasks.length,
+      constraintsBeforeTemporaryMask,
+      "the temporary stealth source must skip the full radial smoke constraint"
+    );
+    assert.equal(temporaryMask.contains({ x: 40, y: 0, elevation: 0 }), true);
+    assert.equal(
+      temporaryMask.contains({ x: 75, y: 0, elevation: 0 }),
+      false,
+      "the point-only gate must still apply the Basic Sight smoke budget"
+    );
+    temporaryMask.destroy();
 
     const lightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(lightSource, {
@@ -508,7 +1333,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     // invalidate either the observer constraint or the cached Region-minus-light geometry.
     lightSource._createShapes();
     visionSource._createShapes();
-    assert.equal(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, initialVisionConstraint);
+    assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, initialVisionConstraint);
     assert.equal(differenceCalls, 1);
 
     // Foundry represents surface exposure as a PolygonTree. Recreating an equal tree is a native no-op, while an
@@ -517,7 +1342,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     lightSource._createShapes();
     visionSource._createShapes();
     const surfaceExposureConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
-    assert.notEqual(surfaceExposureConstraint, initialVisionConstraint);
+    assert.deepEqual(surfaceExposureConstraint, initialVisionConstraint);
     assert.equal(differenceCalls, 2);
 
     // A semantically changed light outside this observer's bounds receives its own version without invalidating the
@@ -530,7 +1355,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     distantLightSource._createShapes();
     globalThis.canvas.effects.lightSources.add(distantLightSource);
     visionSource._createShapes();
-    assert.equal(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
     assert.equal(differenceCalls, 2);
     globalThis.canvas.effects.lightSources.delete(distantLightSource);
     distantLightSource._destroy();
@@ -544,7 +1369,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     elevatedLightSource._createShapes();
     globalThis.canvas.effects.lightSources.add(elevatedLightSource);
     visionSource._createShapes();
-    assert.equal(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
     assert.equal(differenceCalls, 2);
     globalThis.canvas.effects.lightSources.delete(elevatedLightSource);
     elevatedLightSource._destroy();
@@ -554,7 +1379,7 @@ test("partial smoke constrains global light while restoring observer smoke block
     emittedShapeShift = 0.5;
     lightSource._createShapes();
     visionSource._createShapes();
-    assert.notEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
     assert.equal(differenceCalls, 3);
 
     lightSource._configure({});
@@ -694,9 +1519,13 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
     configurable: true,
     value: [{ points: [0, 0, 100, 0, 100, 100, 0, 100] }]
   });
+  let smokePointTests = 0;
   region.polygonTree = {
     polygons: region.polygons,
-    testPoint: ({ x, y }) => x >= 0 && x <= 100 && y >= 0 && y <= 100
+    testPoint: ({ x, y }) => {
+      smokePointTests += 1;
+      return x >= 0 && x <= 100 && y >= 0 && y <= 100;
+    }
   };
   const scene = createScene([region]);
   const edges = new Map();
@@ -830,7 +1659,10 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
       }
     };
     globalThis.Hooks = { on() {} };
-    globalThis.PIXI = { Polygon: class Polygon { constructor(points) { this.points = points; } } };
+    globalThis.PIXI = {
+      Circle: { approximateVertexDensity: () => 32 },
+      Polygon: class Polygon { constructor(points) { this.points = points; } }
+    };
     globalThis.canvas = {
       ready: true,
       scene,
@@ -868,26 +1700,56 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
     assert.equal(includedSmokeEdges[0], false);
     assert.equal(appliedConstraints.length, 1);
     assert.equal(appliedConstraints[0].points.every(value => value === 50), true);
+    assert.ok(smokePointTests > 0, "the first native smoke constraint traces its PolygonTree");
+
+    Object.defineProperty(region, "polygons", {
+      configurable: true,
+      value: [{ points: [10, 0, 110, 0, 110, 100, 10, 100] }]
+    });
+    region.object.bounds = { x: 10, y: 0, width: 100, height: 100 };
+    region.polygonTree = {
+      polygons: region.polygons,
+      testPoint: ({ x, y }) => {
+        smokePointTests += 1;
+        return x >= 10 && x <= 110 && y >= 0 && y <= 100;
+      }
+    };
+    source.data.x = 60;
+    smokePointTests = 0;
+    invalidateSmokeRegionIndex(scene);
+    source._createShapes();
+    assert.equal(smokePointTests, 0, "coherent source/Region translation reuses exact source-local attenuation");
+    assert.equal(appliedConstraints.at(-1).points.every((value, index) => value === (index % 2 ? 50 : 60)), true);
+    Object.defineProperty(region, "polygons", {
+      configurable: true,
+      value: [{ points: [0, 0, 100, 0, 100, 100, 0, 100] }]
+    });
+    region.object.bounds = { x: 0, y: 0, width: 100, height: 100 };
+    region.polygonTree = {
+      polygons: region.polygons,
+      testPoint: ({ x, y }) => x >= 0 && x <= 100 && y >= 0 && y <= 100
+    };
+    invalidateSmokeRegionIndex(scene);
 
     const lightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(lightSource, {
       data: { x: 50, y: 50, elevation: 0, bright: 100, dim: 100 }
     });
     lightSource._createShapes();
-    assert.equal(sweepCalls, 2);
-    assert.deepEqual(sweepTypes, ["sight", "light"]);
-    assert.equal(includedSmokeEdges[1], false);
-    assert.equal(appliedConstraints.length, 2);
-    assert.equal(appliedConstraints[1].points.every(value => value === 50), true);
+    assert.equal(sweepCalls, 3);
+    assert.deepEqual(sweepTypes, ["sight", "sight", "light"]);
+    assert.equal(includedSmokeEdges[2], false);
+    assert.equal(appliedConstraints.length, 3);
+    assert.equal(appliedConstraints[2].points.every(value => value === 50), true);
 
     const outsideLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(outsideLightSource, {
       data: { x: 150, y: 50, elevation: 0, bright: 100, dim: 100 }
     });
     outsideLightSource._createShapes();
-    assert.equal(sweepCalls, 3);
-    assert.equal(includedSmokeEdges[2], false);
-    assert.equal(appliedConstraints.length, 3);
+    assert.equal(sweepCalls, 4);
+    assert.equal(includedSmokeEdges[3], false);
+    assert.equal(appliedConstraints.length, 4);
     assert.ok(countRadialTransitions(
       appliedConstraints.at(-1).points,
       outsideLightSource.data.x,
@@ -919,9 +1781,9 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
       }
     });
     modifiedVisionSource._createShapes();
-    assert.equal(sweepCalls, 4);
-    assert.equal(includedSmokeEdges[3], false);
-    assert.equal(appliedConstraints.length, 4);
+    assert.equal(sweepCalls, 5);
+    assert.equal(includedSmokeEdges[4], false);
+    assert.equal(appliedConstraints.length, 5);
     const boundaryAnchoredConstraint = appliedConstraints.at(-1).points;
     assert.equal(boundaryAnchoredConstraint.some((value, index) => (
       index % 2 === 0
@@ -1151,6 +2013,35 @@ function createScene(regions) {
   return { regions: { contents: regions } };
 }
 
+function createNativeEffectsContainer() {
+  return {
+    children: [],
+    filter: { enabled: false },
+    visible: true,
+    addChild(mesh) {
+      if (mesh.parent && mesh.parent !== this) mesh.parent.removeChild(mesh);
+      if (!this.children.includes(mesh)) this.children.push(mesh);
+      mesh.parent = this;
+      return mesh;
+    },
+    removeChild(mesh) {
+      const index = this.children.indexOf(mesh);
+      if (index >= 0) this.children.splice(index, 1);
+      if (mesh.parent === this) mesh.parent = null;
+      return mesh;
+    }
+  };
+}
+
+function createSourceCollection(sources) {
+  return new Map(sources.map(source => [source.sourceId, source]));
+}
+
+function installNativeSourceRenderMock(source, layerIds) {
+  source.layers = Object.fromEntries(layerIds.map(layerId => [layerId, { mesh: { parent: null } }]));
+  source.drawMeshes = () => Object.fromEntries(layerIds.map(layerId => [layerId, true]));
+}
+
 function createFactionActor(uuid, faction) {
   return {
     uuid,
@@ -1187,6 +2078,18 @@ function createSmokeRegion(id, densityPercent) {
     configurable: true,
     get: () => [{ points: createTestCirclePoints(region.shapes[0]) }]
   });
+  const nativePolygon = {};
+  Object.defineProperty(nativePolygon, "points", {
+    configurable: true,
+    get: () => createTestCirclePoints(region.shapes[0])
+  });
+  region.polygonTree = {
+    polygons: [nativePolygon],
+    testPoint: ({ x, y }) => {
+      const circle = region.shapes[0];
+      return Math.hypot(x - Number(circle.x), y - Number(circle.y)) <= Number(circle.radius);
+    }
+  };
   return region;
 }
 

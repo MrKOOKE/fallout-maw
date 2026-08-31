@@ -37,6 +37,7 @@ const DETECTION_DISTANCE_EPSILON = 1e-6;
 const detectionZoneCache = new Map();
 const detectionPointCache = new Map();
 const settingsSignatures = new WeakMap();
+let observerDetectionRevisions = new WeakMap();
 let detectionZoneCachedCells = 0;
 let detectionCacheRevision = 0;
 
@@ -165,67 +166,141 @@ export function buildObserverDetectionZone(observerToken, {
   return zone;
 }
 
+/**
+ * Prepare an exact point tester for one observer origin. Movement analysis can
+ * query hundreds of route points from that same origin; keeping one native
+ * VisionSource for the batch avoids constructing and destroying it per point.
+ */
+export function createStealthDetectionPointTester(observerToken, observerOrigin, {
+  settings = getRuntimeStealthSettings(),
+  preparedBaseRange,
+  skipObserverValidation = false,
+  pointOnlySmokeVision = false
+} = {}) {
+  const activeCanvas = globalThis.canvas;
+  if (
+    !observerToken?.actor
+    || (!skipObserverValidation && isStealthObserverIncapacitated(observerToken))
+    || !activeCanvas?.ready
+  ) return { setOrigin: () => undefined, test: () => false, destroy: () => undefined };
+  let origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+  const baseRange = preparedBaseRange === undefined
+    ? evaluateStealthDetectionRange(observerToken.actor, settings)
+    : Math.max(0, Number(preparedBaseRange) || 0);
+  const margin = pixelsToSceneDistance(Number(activeCanvas.grid?.size) || 0);
+  let lastPoint = null;
+  let lastRangeBonus = 0;
+  let lastResult = false;
+  let ordinaryVision = null;
+  let ordinaryVisionCreated = false;
+  let ordinaryVisionOriginDirty = false;
+
+  return {
+    setOrigin(nextOrigin) {
+      const normalized = normalizePoint(nextOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+      if (
+        normalized.x === origin.x
+        && normalized.y === origin.y
+        && normalized.elevation === origin.elevation
+      ) return;
+      origin = normalized;
+      lastPoint = null;
+      lastRangeBonus = 0;
+      lastResult = false;
+      ordinaryVisionOriginDirty = Boolean(ordinaryVision);
+    },
+    test(targetPoint, { rangeBonus = 0, snapTargetToGrid = true } = {}) {
+      if (!targetPoint) return false;
+      let point = normalizePoint(targetPoint, origin.elevation);
+      if (
+        snapTargetToGrid
+        && !activeCanvas.grid?.isGridless
+        && activeCanvas.grid?.getOffset
+        && activeCanvas.grid?.getCenterPoint
+      ) {
+        point = normalizePoint(activeCanvas.grid.getCenterPoint(activeCanvas.grid.getOffset(point)), origin.elevation);
+      }
+      const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
+      const maxRange = baseRange + normalizedRangeBonus;
+      if (maxRange <= 0) return false;
+      if (
+        lastPoint
+        && lastPoint.x === point.x
+        && lastPoint.y === point.y
+        && lastPoint.elevation === point.elevation
+        && lastRangeBonus === normalizedRangeBonus
+      ) return lastResult;
+      const cacheKey = getDetectionPointCacheKey(
+        observerToken,
+        origin,
+        point,
+        settings,
+        baseRange,
+        normalizedRangeBonus
+      );
+      const cached = readCache(detectionPointCache, cacheKey, { allowFalse: true });
+      if (cached.hit) {
+        lastPoint = point;
+        lastRangeBonus = normalizedRangeBonus;
+        lastResult = cached.value;
+        return cached.value;
+      }
+
+      const directDistance = measurePointSceneDistance(origin, point);
+      let result = true;
+      if (directDistance > maxRange + margin) result = false;
+      else if (observerToken.checkCollision?.(point, { origin, type: "sight", mode: "any" })) result = false;
+      else {
+        if (ordinaryVision && ordinaryVisionOriginDirty) {
+          ordinaryVision.setOrigin(origin);
+          ordinaryVisionOriginDirty = false;
+        }
+        if (!ordinaryVisionCreated) {
+          ordinaryVision = createObserverOrdinaryVisionMask(observerToken, {
+            origin,
+            pointOnlySmoke: pointOnlySmokeVision
+          });
+          ordinaryVisionCreated = true;
+        }
+        if (ordinaryVision && !ordinaryVision.contains(point)) result = false;
+        else {
+          const path = computeDetectionPathReach(observerToken, origin, point, settings, { baseRange });
+          result = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON
+            || Math.max(0, path.directDistance - path.baseReachDistance)
+              <= normalizedRangeBonus + DETECTION_DISTANCE_EPSILON;
+        }
+      }
+
+      writeCache(detectionPointCache, cacheKey, result, STEALTH_DETECTION_POINT_CACHE_LIMIT);
+      lastPoint = point;
+      lastRangeBonus = normalizedRangeBonus;
+      lastResult = result;
+      return result;
+    },
+    destroy() {
+      ordinaryVision?.destroy();
+      ordinaryVision = null;
+      ordinaryVisionCreated = false;
+      ordinaryVisionOriginDirty = false;
+      lastPoint = null;
+    }
+  };
+}
+
 export function testStealthDetectionPoint(observerToken, observerOrigin, targetPoint, {
   rangeBonus = 0,
   snapTargetToGrid = true,
   settings = getRuntimeStealthSettings()
 } = {}) {
-  const activeCanvas = globalThis.canvas;
-  if (
-    !observerToken?.actor
-    || isStealthObserverIncapacitated(observerToken)
-    || !targetPoint
-    || !activeCanvas?.ready
-  ) return false;
-  const origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
-  let point = normalizePoint(targetPoint, origin.elevation);
-  if (
-    snapTargetToGrid
-    && !activeCanvas.grid?.isGridless
-    && activeCanvas.grid?.getOffset
-    && activeCanvas.grid?.getCenterPoint
-  ) {
-    point = normalizePoint(activeCanvas.grid.getCenterPoint(activeCanvas.grid.getOffset(point)), origin.elevation);
-  }
-  const baseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
-  const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
-  const maxRange = baseRange + normalizedRangeBonus;
-  if (maxRange <= 0) return false;
-  const cacheKey = getDetectionPointCacheKey(
-    observerToken,
-    origin,
-    point,
+  const tester = createStealthDetectionPointTester(observerToken, observerOrigin, {
     settings,
-    baseRange,
-    normalizedRangeBonus
-  );
-  const cached = readCache(detectionPointCache, cacheKey, { allowFalse: true });
-  if (cached.hit) return cached.value;
-
-  const margin = pixelsToSceneDistance(Number(activeCanvas.grid?.size) || 0);
-  const directDistance = measurePointSceneDistance(origin, point);
-  let result = true;
-  if (directDistance > maxRange + margin) result = false;
-  else if (observerToken.checkCollision?.(point, { origin, type: "sight", mode: "any" })) result = false;
-  else {
-    const ordinaryVision = createObserverOrdinaryVisionMask(observerToken, { origin });
-    let ordinarilyVisible = true;
-    try {
-      ordinarilyVisible = !ordinaryVision || ordinaryVision.contains(point);
-    } finally {
-      ordinaryVision?.destroy();
-    }
-    if (!ordinarilyVisible) result = false;
-    else {
-      const path = computeDetectionPathReach(observerToken, origin, point, settings, { baseRange });
-      result = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON
-        || Math.max(0, path.directDistance - path.baseReachDistance)
-          <= normalizedRangeBonus + DETECTION_DISTANCE_EPSILON;
-    }
+    pointOnlySmokeVision: true
+  });
+  try {
+    return tester.test(targetPoint, { rangeBonus, snapTargetToGrid });
+  } finally {
+    tester.destroy();
   }
-
-  writeCache(detectionPointCache, cacheKey, result, STEALTH_DETECTION_POINT_CACHE_LIMIT);
-  return result;
 }
 
 /**
@@ -690,6 +765,13 @@ export function invalidateStealthDetectionCache() {
   detectionPointCache.clear();
   detectionZoneCachedCells = 0;
   detectionCacheRevision += 1;
+  observerDetectionRevisions = new WeakMap();
+}
+
+export function invalidateStealthDetectionObserver(observerToken) {
+  if (!observerToken || (typeof observerToken !== "object" && typeof observerToken !== "function")) return;
+  const revision = Math.max(0, Number(observerDetectionRevisions.get(observerToken)) || 0);
+  observerDetectionRevisions.set(observerToken, revision + 1);
 }
 
 export function getStealthDetectionCacheStats() {
@@ -745,6 +827,7 @@ function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
     normalizeExactCacheNumber(origin.x),
     normalizeExactCacheNumber(origin.y),
     normalizeExactCacheNumber(origin.elevation),
+    getObserverSightCacheSignature(observerToken),
     Math.round(maxRange * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
     normalizeExactCacheNumber(getActorSmokePerceptionPercent(observerToken?.actor)),
@@ -768,6 +851,7 @@ function getDetectionPointCacheKey(observerToken, origin, point, settings, baseR
     normalizeExactCacheNumber(point.y),
     normalizeExactCacheNumber(origin.elevation),
     normalizeExactCacheNumber(point.elevation),
+    getObserverSightCacheSignature(observerToken),
     Math.round(baseRange * 100),
     Math.round(rangeBonus * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
@@ -803,6 +887,21 @@ function normalizeRangeBonus(value) {
 
 function normalizeWeaponNoiseLevel(value) {
   return Math.max(0, Math.trunc(Number(value) || 0));
+}
+
+function getObserverSightCacheSignature(observerToken) {
+  const document = observerToken?.document ?? observerToken ?? {};
+  const sight = document.sight ?? {};
+  return [
+    Math.max(0, Number(observerDetectionRevisions.get(observerToken)) || 0),
+    normalizeExactCacheNumber(document.rotation),
+    normalizeExactCacheNumber(document.width),
+    normalizeExactCacheNumber(document.height),
+    normalizeExactCacheNumber(sight.angle),
+    normalizeExactCacheNumber(sight.rotation),
+    sight.visionMode ?? "",
+    sight.enabled === false ? 0 : 1
+  ].join(",");
 }
 
 function normalizeWeaponNoiseRadius(value) {

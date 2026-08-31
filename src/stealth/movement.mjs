@@ -16,9 +16,17 @@ import {
   INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
   withMovementResumeContext
 } from "../canvas/movement-resume-context.mjs";
-import { isPointInsideObserverZone } from "./detection.mjs";
+import {
+  getSmokeRegionIndex,
+  getSmokeRegionsInBounds
+} from "../canvas/smoke-vision.mjs";
+import {
+  createStealthDetectionPointTester,
+  isPointInsideObserverZone
+} from "./detection.mjs";
 import { isValidStealthObserver } from "./observers.mjs";
 import {
+  evaluateStealthDetectionRange,
   getRuntimeStealthSettings,
   getTokenCenter,
   isActorStealthed,
@@ -45,12 +53,21 @@ const movementThresholdFormulaData = {
 let rollStealthCheckCallback = async () => undefined;
 let rollStealthChecksCallback = null;
 let pauseGameCallback = () => undefined;
+let hasStealthedCanvasTokensCallback = null;
 let providerRegistered = false;
 
-export function registerStealthMovementProvider({ rollStealthCheck, rollStealthChecks, pauseGame } = {}) {
+export function registerStealthMovementProvider({
+  rollStealthCheck,
+  rollStealthChecks,
+  pauseGame,
+  hasStealthedCanvasTokens
+} = {}) {
   if (typeof rollStealthCheck === "function") rollStealthCheckCallback = rollStealthCheck;
   if (typeof rollStealthChecks === "function") rollStealthChecksCallback = rollStealthChecks;
   if (typeof pauseGame === "function") pauseGameCallback = pauseGame;
+  if (typeof hasStealthedCanvasTokens === "function") {
+    hasStealthedCanvasTokensCallback = hasStealthedCanvasTokens;
+  }
   if (providerRegistered) return;
   registerMovementInterruptionProvider({
     id: STEALTH_DETECTION_PROVIDER_ID,
@@ -70,109 +87,310 @@ export function registerStealthMovementProvider({ rollStealthCheck, rollStealthC
  * selected interruption) is actually accepted.
  */
 export function collectStealthMovementInterruptions({ tokenDocument, movement, options } = {}) {
-  const settings = getRuntimeStealthSettings();
-  if (!settings.autoDetection?.enabled || !tokenDocument?.actor || !movement || !globalThis.canvas?.ready) {
+  if (!tokenDocument?.actor || !movement || !globalThis.canvas?.ready) {
     return createEmptyMovementCollection();
   }
+  // The overwhelmingly common move has no hidden participant. The controller
+  // maintains this scene-local bit so preMoveToken avoids scanning every token.
+  if (
+    !isActorStealthed(tokenDocument.actor)
+    && hasStealthedCanvasTokensCallback?.() === false
+  ) return createEmptyMovementCollection();
+
+  const settings = getRuntimeStealthSettings();
+  if (!settings.autoDetection?.enabled) return createEmptyMovementCollection();
 
   const samples = getMovementRouteSamples(tokenDocument, movement);
   if (samples.length < 2) return createEmptyMovementCollection();
   const pairDescriptors = getMovementStealthPairDescriptors(tokenDocument);
   if (!pairDescriptors.length) return createEmptyMovementCollection();
-  const movementThreshold = evaluateAutoDetectionMovementThreshold(tokenDocument.actor, settings);
-  const movementCostProfile = getCombatMovementCostProfile(tokenDocument.actor);
-
-  let routeOrder = 0;
-  const routeInsideState = new Map();
-  const stateUpdates = new Map();
-  const stateBaselines = new Map();
-  const stateTransitions = [];
-  let rawMovementCost = 0;
-  let adjustedMovementCost = 0;
-  const getBaseline = (key, pair) => {
-    if (!stateBaselines.has(key)) stateBaselines.set(key, readPersistentPairState(pair, key));
-    return stateBaselines.get(key);
-  };
-  const readState = (key, pair) => stateUpdates.has(key) ? stateUpdates.get(key) : getBaseline(key, pair).value;
-  const hasState = (key, pair) => stateUpdates.has(key)
-    ? stateUpdates.get(key) !== null
-    : getBaseline(key, pair).value !== null;
-  const writeState = (key, value, waypoint) => {
-    stateUpdates.set(key, value);
-    stateTransitions.push({
-      routeOrder,
-      waypointKey: getMovementWaypointKey(waypoint),
-      key,
-      value
-    });
-  };
-
-  for (let index = 1; index < samples.length; index += 1) {
-    const segmentSamples = getMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
-    for (let segmentIndex = 1; segmentIndex < segmentSamples.length; segmentIndex += 1) {
-      routeOrder += 1;
-      const previous = segmentSamples[segmentIndex - 1];
-      const current = segmentSamples[segmentIndex];
-      const pairs = getMovementStealthPairs(tokenDocument, previous, current, pairDescriptors);
-      const rawSegmentCost = getStealthMovementSegmentDistance(previous, current);
-      const movementCost = calculateCombatMovementCostTrancheDelta(
-        movementCostProfile,
-        rawMovementCost,
-        adjustedMovementCost,
-        rawSegmentCost
-      );
-      rawMovementCost += rawSegmentCost;
-      adjustedMovementCost += movementCost;
-      const triggeredChecks = [];
-
-      for (const pair of pairs) {
-        const stateKey = getDetectionMovementStateKey(pair);
-        const wasInside = routeInsideState.has(stateKey)
-          ? routeInsideState.get(stateKey)
-          : isPointInsideObserverZone(pair.previous.hiddenPoint, pair.observerToken, pair.previous.observerOrigin, settings);
-        const isInside = isPointInsideObserverZone(pair.current.hiddenPoint, pair.observerToken, pair.current.observerOrigin, settings);
-        routeInsideState.set(stateKey, isInside);
-        const hadState = hasState(stateKey, pair);
-
-        if (!isInside) {
-          if (hadState) writeState(stateKey, null, current.waypoint);
-          continue;
-        }
-
-        if (!wasInside && !hadState) {
-          writeState(stateKey, 0, current.waypoint);
-          triggeredChecks.push({ pair, type: "enter" });
-          continue;
-        }
-
-        const accumulated = Math.max(0, Number(readState(stateKey, pair)) || 0) + movementCost;
-        if (accumulated >= movementThreshold) {
-          writeState(stateKey, accumulated % movementThreshold, current.waypoint);
-          triggeredChecks.push({ pair, type: "inside" });
-          continue;
-        }
-        writeState(stateKey, accumulated, current.waypoint);
-      }
-      if (triggeredChecks.length) {
-        return {
-          events: [createStealthMovementEvent(
-            triggeredChecks,
-            current,
-            segmentSamples,
-            segmentIndex,
-            samples,
-            index,
-            routeOrder,
-            movement
-          )],
-          stateUpdates,
-          stateBaselines,
-          stateTransitions
-        };
-      }
+  const pointTesters = [];
+  const hiddenMovingDescriptors = pairDescriptors.filter(descriptor => descriptor.mode === "hiddenMoving");
+  const hasVisionSmoke = getSmokeRegionIndex(globalThis.canvas?.scene)?.hasVisionSmoke === true;
+  const hiddenObserverBaseRanges = new Map();
+  const hiddenSmokeConstraints = new Map();
+  for (const descriptor of hiddenMovingDescriptors) {
+    const baseRange = evaluateStealthDetectionRange(descriptor.observerToken.actor, settings);
+    hiddenObserverBaseRanges.set(descriptor, baseRange);
+    if (!hasVisionSmoke || !(baseRange > 0)) continue;
+    const constraint = getNativeObserverSmokeConstraint(descriptor.observerToken);
+    if (hasObserverSmokeConstraintCandidates(descriptor.observerToken, constraint)) {
+      hiddenSmokeConstraints.set(descriptor, constraint);
     }
   }
-  return { events: [], stateUpdates, stateBaselines, stateTransitions };
+  const hiddenMovementPoints = hiddenSmokeConstraints.size
+    ? collectUniqueStealthMovementPoints(tokenDocument, samples)
+    : [];
+  const hasObserverMovingDescriptors = pairDescriptors.some(descriptor => descriptor.mode === "observerMoving");
+  const movingObserverBaseRange = hasObserverMovingDescriptors
+    ? evaluateStealthDetectionRange(tokenDocument.actor, settings)
+    : 0;
+  for (const descriptor of pairDescriptors) {
+    if (descriptor.mode !== "hiddenMoving") continue;
+    const observerBaseRange = hiddenObserverBaseRanges.get(descriptor) ?? 0;
+    const smokeConstraint = hiddenSmokeConstraints.get(descriptor);
+    const expectedHiddenPointTests = smokeConstraint
+      ? countPotentialObserverVisionPointTests(
+        descriptor.observerOrigin,
+        hiddenMovementPoints,
+        observerBaseRange
+      )
+      : 0;
+    descriptor.pointTester = createStealthDetectionPointTester(
+      descriptor.observerToken,
+      descriptor.observerOrigin,
+      {
+        settings,
+        preparedBaseRange: observerBaseRange,
+        skipObserverValidation: true,
+        pointOnlySmokeVision: Boolean(smokeConstraint) && shouldUsePointOnlySmokeVisionForMovement(
+          descriptor.observerToken,
+          expectedHiddenPointTests,
+          smokeConstraint
+        )
+      }
+    );
+    pointTesters.push(descriptor.pointTester);
+  }
+  const movingObserverTester = hasObserverMovingDescriptors
+    ? createStealthDetectionPointTester(tokenDocument.object, samples[0]?.point, {
+      settings,
+      preparedBaseRange: movingObserverBaseRange,
+      skipObserverValidation: true,
+      pointOnlySmokeVision: hasVisionSmoke
+    })
+    : null;
+  if (movingObserverTester) pointTesters.push(movingObserverTester);
+  const movementStateFlagCache = new Map();
+  try {
+    const movementThreshold = evaluateAutoDetectionMovementThreshold(tokenDocument.actor, settings);
+    const movementCostProfile = getCombatMovementCostProfile(tokenDocument.actor);
+
+    let routeOrder = 0;
+    const routeInsideState = new Map();
+    const stateUpdates = new Map();
+    const stateBaselines = new Map();
+    const stateTransitions = [];
+    let rawMovementCost = 0;
+    let adjustedMovementCost = 0;
+    const getBaseline = (key, pair) => {
+      if (!stateBaselines.has(key)) {
+        stateBaselines.set(key, readPersistentPairState(pair, key, movementStateFlagCache));
+      }
+      return stateBaselines.get(key);
+    };
+    const readState = (key, pair) => stateUpdates.has(key) ? stateUpdates.get(key) : getBaseline(key, pair).value;
+    const hasState = (key, pair) => stateUpdates.has(key)
+      ? stateUpdates.get(key) !== null
+      : getBaseline(key, pair).value !== null;
+    const writeState = (key, value, waypoint) => {
+      stateUpdates.set(key, value);
+      stateTransitions.push({
+        routeOrder,
+        waypointKey: getMovementWaypointKey(waypoint),
+        key,
+        value
+      });
+    };
+
+    if (movingObserverTester) {
+      for (const descriptor of pairDescriptors) {
+        if (descriptor.mode !== "observerMoving") continue;
+        routeInsideState.set(
+          descriptor.stateKey,
+          testMovementDescriptorPoint(descriptor, samples[0].point, settings, movingObserverTester)
+        );
+      }
+    }
+
+    for (let index = 1; index < samples.length; index += 1) {
+      const segmentSamples = getMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
+      for (let segmentIndex = 1; segmentIndex < segmentSamples.length; segmentIndex += 1) {
+        routeOrder += 1;
+        const previous = segmentSamples[segmentIndex - 1];
+        const current = segmentSamples[segmentIndex];
+        const previousPoint = normalizePoint(previous?.point, tokenDocument.elevation);
+        const currentPoint = normalizePoint(current?.point, tokenDocument.elevation);
+        const rawSegmentCost = getStealthMovementSegmentDistance(previous, current);
+        const movementCost = calculateCombatMovementCostTrancheDelta(
+          movementCostProfile,
+          rawMovementCost,
+          adjustedMovementCost,
+          rawSegmentCost
+        );
+        rawMovementCost += rawSegmentCost;
+        adjustedMovementCost += movementCost;
+        const triggeredChecks = [];
+        movingObserverTester?.setOrigin(currentPoint);
+        for (const descriptor of pairDescriptors) {
+          const stateKey = descriptor.stateKey;
+          const wasInside = routeInsideState.has(stateKey)
+            ? routeInsideState.get(stateKey)
+            : testMovementDescriptorPoint(descriptor, previousPoint, settings);
+          const isInside = testMovementDescriptorPoint(descriptor, currentPoint, settings, movingObserverTester);
+          routeInsideState.set(stateKey, isInside);
+          const hadState = hasState(stateKey, descriptor);
+
+          if (!isInside) {
+            if (hadState) writeState(stateKey, null, current.waypoint);
+            continue;
+          }
+
+          if (!wasInside && !hadState) {
+            writeState(stateKey, 0, current.waypoint);
+            triggeredChecks.push({ pair: descriptor, type: "enter" });
+            continue;
+          }
+
+          const accumulated = Math.max(0, Number(readState(stateKey, descriptor)) || 0) + movementCost;
+          if (accumulated >= movementThreshold) {
+            writeState(stateKey, accumulated % movementThreshold, current.waypoint);
+            triggeredChecks.push({ pair: descriptor, type: "inside" });
+            continue;
+          }
+          writeState(stateKey, accumulated, current.waypoint);
+        }
+        if (triggeredChecks.length) {
+          return {
+            events: [createStealthMovementEvent(
+              triggeredChecks,
+              current,
+              segmentSamples,
+              segmentIndex,
+              samples,
+              index,
+              routeOrder,
+              movement
+            )],
+            stateUpdates,
+            stateBaselines,
+            stateTransitions
+          };
+        }
+      }
+    }
+    return { events: [], stateUpdates, stateBaselines, stateTransitions };
+  } finally {
+    for (const tester of pointTesters) tester.destroy();
+  }
+}
+
+/**
+ * Choose the cheaper native smoke mask for a fixed observer along one route.
+ * A point-only source pays one directed smoke trace per unique target point;
+ * a radial source pays at least Foundry's regular-circle vertex density once.
+ * Region and light topology only add radial traces, so switching strictly
+ * above this native lower bound conservatively favors short, common moves.
+ */
+export function shouldUsePointOnlySmokeVisionForMovement(
+  observerToken,
+  expectedPointTests,
+  preparedConstraint = null
+) {
+  const pointTests = Math.max(0, Math.floor(Number(expectedPointTests) || 0));
+  if (!pointTests) return true;
+  const constraint = preparedConstraint ?? getNativeObserverSmokeConstraint(observerToken);
+  return pointTests <= getNativeSmokeConstraintDensity(constraint);
+}
+
+function collectUniqueStealthMovementPoints(tokenDocument, routeSamples) {
+  const points = new Map();
+  for (let index = 1; index < routeSamples.length; index += 1) {
+    const segmentSamples = getMovementSegmentSamples(
+      tokenDocument,
+      routeSamples[index - 1],
+      routeSamples[index]
+    );
+    for (const sample of segmentSamples) {
+      if (!sample?.point) continue;
+      const point = normalizeStealthDetectionTargetPoint(sample.point, tokenDocument?.elevation);
+      points.set(`${point.x}:${point.y}:${point.elevation}`, point);
+    }
+  }
+  return [...points.values()];
+}
+
+function countPotentialObserverVisionPointTests(origin, points, baseRange) {
+  const normalizedOrigin = normalizePoint(origin);
+  const normalizedBaseRange = Math.max(0, Number(baseRange) || 0);
+  if (!(normalizedBaseRange > 0)) return 0;
+  const maximumRange = normalizedBaseRange
+    + pixelsToSceneDistance(Number(globalThis.canvas?.grid?.size) || 0);
+  let count = 0;
+  for (const point of points) {
+    const horizontal = pixelsToSceneDistance(Math.hypot(
+      point.x - normalizedOrigin.x,
+      point.y - normalizedOrigin.y
+    ));
+    const vertical = Math.abs(point.elevation - normalizedOrigin.elevation);
+    if (Math.hypot(horizontal, vertical) <= maximumRange + 1e-6) count += 1;
+  }
+  return count;
+}
+
+function normalizeStealthDetectionTargetPoint(point, elevation) {
+  let normalized = normalizePoint(point, elevation);
+  const grid = globalThis.canvas?.grid;
+  if (
+    !grid?.isGridless
+    && typeof grid?.getOffset === "function"
+    && typeof grid?.getCenterPoint === "function"
+  ) {
+    normalized = normalizePoint(grid.getCenterPoint(grid.getOffset(normalized)), normalized.elevation);
+  }
+  return normalized;
+}
+
+function getNativeObserverSmokeConstraint(observerToken) {
+  const sourceData = observerToken?._getVisionSourceData?.();
+  if (!sourceData || typeof sourceData !== "object") {
+    throw new Error("A native Token vision source data contract is required for smoke movement analysis");
+  }
+  const maximumRadius = Number(globalThis.canvas?.dimensions?.maxR);
+  const rawLightRadius = sourceData?.lightRadius ?? maximumRadius;
+  const numericSightRadius = Number(sourceData?.radius);
+  const rawSightRadius = numericSightRadius > 0
+    ? numericSightRadius
+    : sourceData?.externalRadius;
+  let radius = Math.max(
+    0,
+    Number(rawLightRadius) || 0,
+    Number(rawSightRadius) || 0
+  );
+  if (!Number.isFinite(radius)) radius = maximumRadius;
+  return {
+    sourceData,
+    radius: Number.isFinite(radius) && radius > 0 ? radius : 0,
+    density: null
+  };
+}
+
+function getNativeSmokeConstraintDensity(constraint) {
+  if (constraint.density !== null) return constraint.density;
+  if (!(constraint.radius > 0)) return constraint.density = 0;
+  const nativeDensity = globalThis.PIXI?.Circle?.approximateVertexDensity;
+  if (typeof nativeDensity !== "function") {
+    throw new Error("PIXI.Circle.approximateVertexDensity is required for smoke movement analysis");
+  }
+  const density = Number(nativeDensity.call(globalThis.PIXI.Circle, constraint.radius));
+  if (!(Number.isFinite(density) && density > 0)) {
+    throw new Error("PIXI.Circle.approximateVertexDensity returned an invalid smoke trace density");
+  }
+  return constraint.density = Math.max(3, Math.ceil(density));
+}
+
+function hasObserverSmokeConstraintCandidates(observerToken, constraint) {
+  const { sourceData, radius } = constraint;
+  if (!(radius > 0)) return false;
+  return getSmokeRegionsInBounds({
+    x: Number(sourceData.x) - radius,
+    y: Number(sourceData.y) - radius,
+    width: radius * 2,
+    height: radius * 2
+  }, {
+    elevation: sourceData.elevation,
+    targetActor: observerToken?.actor ?? null
+  }).length > 0;
 }
 
 export function buildStealthMovementAtomicUpdate({ tokenDocument, collection, selectedEvent } = {}) {
@@ -199,7 +417,7 @@ export function buildStealthMovementAtomicUpdate({ tokenDocument, collection, se
       hiddenTokenUuid: getTokenUuid(baseline.pair.hiddenToken),
       observerTokenUuid: getTokenUuid(baseline.pair.observerToken),
       hiddenActorUuid: String(baseline.pair.hiddenToken?.actor?.uuid ?? ""),
-      sessionId: getStealthSessionId(baseline.pair.hiddenToken?.actor),
+      sessionId: baseline.pair.sessionId ?? getStealthSessionId(baseline.pair.hiddenToken?.actor),
       updatedAt
     };
     byKey.set(key, entry);
@@ -266,16 +484,12 @@ export async function synchronizeStealthMovementStateAfterRelocation(
 
   const stateUpdates = new Map();
   const stateBaselines = new Map();
+  const movementStateFlagCache = new Map();
   for (const descriptor of descriptors) {
     const hiddenPoint = getTokenCenter(descriptor.hiddenToken);
     const observerOrigin = getTokenCenter(descriptor.observerToken);
-    const pair = {
-      ...descriptor,
-      previous: { hiddenPoint, observerOrigin },
-      current: { hiddenPoint, observerOrigin }
-    };
-    const key = getDetectionMovementStateKey(pair);
-    const baseline = readPersistentPairState(pair, key);
+    const key = descriptor.stateKey;
+    const baseline = readPersistentPairState(descriptor, key, movementStateFlagCache);
     stateBaselines.set(key, baseline);
     const isInside = isPointInsideObserverZone(hiddenPoint, descriptor.observerToken, observerOrigin, settings);
     stateUpdates.set(
@@ -369,14 +583,10 @@ function createEmptyMovementCollection() {
   };
 }
 
-function readPersistentPairState(pair, key) {
+function readPersistentPairState(pair, key, flagCache = null) {
   const candidates = [pair.hiddenToken?.document, pair.observerToken?.document]
     .filter(Boolean)
-    .flatMap((document, sourceIndex) => normalizeMovementStateFlag(readMovementStateFlag(document)).entries
-      .map(entry => ({
-        ...entry,
-        _sourceKey: String(document.uuid ?? sourceIndex)
-      })))
+    .flatMap((document, sourceIndex) => getCachedMovementStateEntries(document, sourceIndex, flagCache))
     .filter(entry => entry.key === key);
   const latest = candidates.sort(compareMovementStateEntries).at(0) ?? null;
   const revision = Math.max(0, Number(latest?.revision) || 0);
@@ -399,6 +609,17 @@ function readPersistentPairState(pair, key) {
     revision,
     value
   };
+}
+
+function getCachedMovementStateEntries(document, sourceIndex, flagCache) {
+  const cached = flagCache?.get(document);
+  if (cached) return cached;
+  const entries = normalizeMovementStateFlag(readMovementStateFlag(document)).entries.map(entry => ({
+    ...entry,
+    _sourceKey: String(document.uuid ?? sourceIndex)
+  }));
+  flagCache?.set(document, entries);
+  return entries;
 }
 
 function canCausallyMergeMovementStateSiblings(siblings = []) {
@@ -575,41 +796,50 @@ function getMovementStealthPairDescriptors(tokenDocument) {
   if (isActorStealthed(movingToken.actor)) {
     for (const observerToken of globalThis.canvas?.tokens?.placeables ?? []) {
       if (!isValidStealthObserver(movingToken, observerToken)) continue;
-      descriptors.push({ mode: "hiddenMoving", hiddenToken: movingToken, observerToken });
+      descriptors.push(createMovementPairDescriptor("hiddenMoving", movingToken, observerToken));
     }
   }
 
   for (const hiddenToken of globalThis.canvas?.tokens?.placeables ?? []) {
     if (hiddenToken.id === movingToken.id || !isActorStealthed(hiddenToken.actor)) continue;
     if (!isValidStealthObserver(hiddenToken, movingToken)) continue;
-    descriptors.push({ mode: "observerMoving", hiddenToken, observerToken: movingToken });
+    descriptors.push(createMovementPairDescriptor("observerMoving", hiddenToken, movingToken));
   }
   return descriptors;
 }
 
-function getMovementStealthPairs(tokenDocument, previous, current, descriptors = []) {
-  const pairs = [];
-  const previousPoint = normalizePoint(previous?.point, tokenDocument.elevation);
-  const currentPoint = normalizePoint(current?.point, tokenDocument.elevation);
+function createMovementPairDescriptor(mode, hiddenToken, observerToken) {
+  const sessionId = getStealthSessionId(hiddenToken?.actor);
+  return {
+    mode,
+    hiddenToken,
+    observerToken,
+    sessionId,
+    stateKey: [
+      globalThis.canvas?.scene?.id ?? "",
+      hiddenToken?.id ?? "",
+      observerToken?.id ?? "",
+      sessionId
+    ].join(":"),
+    hiddenPoint: mode === "observerMoving" ? getTokenCenter(hiddenToken) : null,
+    observerOrigin: mode === "hiddenMoving" ? getTokenCenter(observerToken) : null,
+    pointTester: null
+  };
+}
 
-  for (const descriptor of descriptors) {
-    if (descriptor.mode === "hiddenMoving") {
-      const observerOrigin = getTokenCenter(descriptor.observerToken);
-      pairs.push({
-        ...descriptor,
-        previous: { hiddenPoint: previousPoint, observerOrigin },
-        current: { hiddenPoint: currentPoint, observerOrigin }
-      });
-    } else if (descriptor.mode === "observerMoving") {
-      const hiddenPoint = getTokenCenter(descriptor.hiddenToken);
-      pairs.push({
-        ...descriptor,
-        previous: { hiddenPoint, observerOrigin: previousPoint },
-        current: { hiddenPoint, observerOrigin: currentPoint }
-      });
-    }
+function testMovementDescriptorPoint(descriptor, movingPoint, settings, observerMovingTester = null) {
+  if (descriptor.mode === "hiddenMoving" && descriptor.pointTester) {
+    return descriptor.pointTester.test(movingPoint);
   }
-  return pairs;
+  if (descriptor.mode === "observerMoving" && observerMovingTester) {
+    return observerMovingTester.test(descriptor.hiddenPoint);
+  }
+  return isPointInsideObserverZone(
+    descriptor.mode === "hiddenMoving" ? movingPoint : descriptor.hiddenPoint,
+    descriptor.observerToken,
+    descriptor.mode === "hiddenMoving" ? descriptor.observerOrigin : movingPoint,
+    settings
+  );
 }
 
 function createStealthMovementEvent(
@@ -743,15 +973,6 @@ export function evaluateAutoDetectionMovementThreshold(actor, settings = getRunt
     console.warn(`${SYSTEM_ID} | Stealth auto-detection movement threshold formula failed: ${error.message}`);
     return 1;
   }
-}
-
-function getDetectionMovementStateKey(pair) {
-  return [
-    globalThis.canvas?.scene?.id ?? "",
-    pair.hiddenToken?.id ?? "",
-    pair.observerToken?.id ?? "",
-    getStealthSessionId(pair.hiddenToken?.actor)
-  ].join(":");
 }
 
 function isTokenAtWaypoint(tokenDocument, waypoint = {}) {

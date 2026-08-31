@@ -11,6 +11,8 @@ const pendingAcceptedCollections = new Map();
 const controlledMovementContexts = new Map();
 const movementEpochs = new Map();
 const ATOMIC_MOVEMENT_UPDATES = Symbol("falloutMawAtomicMovementUpdates");
+const movementRouteSampleCache = new WeakMap();
+const movementSegmentSampleCache = new WeakMap();
 let hooksRegistered = false;
 
 export function registerMovementInterruptionHooks() {
@@ -51,6 +53,10 @@ export function registerMovementInterruptionProvider(provider = {}) {
 }
 
 export function getMovementRouteSamples(tokenDocument, movement = {}) {
+  const cached = readNestedWeakCache(movementRouteSampleCache, tokenDocument, movement);
+  const immutableRoute = isImmutableMovementRoute(movement);
+  const inputSignature = immutableRoute ? "" : getMovementRouteInputSignature(movement);
+  if (cached && (immutableRoute || cached.inputSignature === inputSignature)) return cached.samples;
   const waypoints = [
     movement.origin ?? {},
     ...(movement.passed?.waypoints ?? [])
@@ -70,13 +76,46 @@ export function getMovementRouteSamples(tokenDocument, movement = {}) {
     previousKey = key;
     unique.push(sample);
   }
+  writeNestedWeakCache(movementRouteSampleCache, tokenDocument, movement, {
+    inputSignature,
+    samples: unique
+  });
   return unique;
 }
 
+/**
+ * V14 seals the preMoveToken operation and deep-freezes every route-bearing
+ * property before hooks run; only autoRotate/showRuler remain writable. Check
+ * both layers so synthetic shallow-frozen fixtures still receive signatures.
+ */
+function isImmutableMovementRoute(movement) {
+  if (!movement || !Object.isSealed(movement)) return false;
+  const passed = movement.passed;
+  return Object.isFrozen(movement.origin)
+    && Object.isFrozen(movement.destination)
+    && Object.isFrozen(passed)
+    && Object.isFrozen(passed?.waypoints);
+}
+
 export function getMovementSegmentSamples(tokenDocument, previous, current) {
+  const cached = readTripleWeakCache(
+    movementSegmentSampleCache,
+    tokenDocument,
+    previous,
+    current
+  );
+  const inputSignature = `${getMovementSegmentInputSignature(previous)}>${getMovementSegmentInputSignature(current)}`;
+  if (cached?.inputSignature === inputSignature) return cached.samples;
   const start = previous?.point;
   const end = current?.point;
-  if (!start || !end) return [previous, current].filter(Boolean);
+  if (!start || !end) {
+    const samples = [previous, current].filter(Boolean);
+    writeTripleWeakCache(movementSegmentSampleCache, tokenDocument, previous, current, {
+      inputSignature,
+      samples
+    });
+    return samples;
+  }
 
   const gridSize = getSceneGridSize(tokenDocument?.parent ?? globalThis.canvas?.scene);
   const startElevation = Number(start.elevation ?? previous?.waypoint?.elevation ?? tokenDocument?.elevation) || 0;
@@ -111,7 +150,84 @@ export function getMovementSegmentSamples(tokenDocument, previous, current) {
   if (!seen.has(currentKey)) {
     samples.push({ waypoint: currentWaypoint, point: getTokenCenterAt(tokenDocument, currentWaypoint) });
   }
-  return samples.filter(sample => sample?.point);
+  const result = samples.filter(sample => sample?.point);
+  writeTripleWeakCache(movementSegmentSampleCache, tokenDocument, previous, current, {
+    inputSignature,
+    samples: result
+  });
+  return result;
+}
+
+function getMovementRouteInputSignature(movement = {}) {
+  const waypoints = [movement.origin, ...(movement.passed?.waypoints ?? []), movement.destination]
+    .filter(Boolean);
+  return waypoints.map(waypoint => [
+    getExactNumberKey(waypoint.x),
+    getExactNumberKey(waypoint.y),
+    getExactNumberKey(waypoint.elevation),
+    getExactNumberKey(waypoint.width),
+    getExactNumberKey(waypoint.height),
+    getExactNumberKey(waypoint.depth),
+    String(waypoint.shape ?? ""),
+    String(waypoint.level ?? ""),
+    String(waypoint.action ?? ""),
+    Boolean(waypoint.intermediate),
+    Boolean(waypoint.checkpoint),
+    Boolean(waypoint.explicit)
+  ].join(":"))
+    .join("|");
+}
+
+function getMovementSegmentInputSignature(sample = {}) {
+  const point = sample?.point ?? {};
+  return [
+    getExactNumberKey(point.x),
+    getExactNumberKey(point.y),
+    getExactNumberKey(point.elevation),
+    getPositionKey(sample?.waypoint),
+    Boolean(sample?.waypoint?.intermediate),
+    Boolean(sample?.waypoint?.checkpoint),
+    Boolean(sample?.waypoint?.explicit)
+  ].join(":");
+}
+
+function readNestedWeakCache(cache, first, second) {
+  if (!isWeakCacheKey(first) || !isWeakCacheKey(second)) return null;
+  return cache.get(first)?.get(second) ?? null;
+}
+
+function writeNestedWeakCache(cache, first, second, value) {
+  if (!isWeakCacheKey(first) || !isWeakCacheKey(second)) return;
+  let nested = cache.get(first);
+  if (!nested) {
+    nested = new WeakMap();
+    cache.set(first, nested);
+  }
+  nested.set(second, value);
+}
+
+function readTripleWeakCache(cache, first, second, third) {
+  if (!isWeakCacheKey(first) || !isWeakCacheKey(second) || !isWeakCacheKey(third)) return null;
+  return cache.get(first)?.get(second)?.get(third) ?? null;
+}
+
+function writeTripleWeakCache(cache, first, second, third, value) {
+  if (!isWeakCacheKey(first) || !isWeakCacheKey(second) || !isWeakCacheKey(third)) return;
+  let bySecond = cache.get(first);
+  if (!bySecond) {
+    bySecond = new WeakMap();
+    cache.set(first, bySecond);
+  }
+  let byThird = bySecond.get(second);
+  if (!byThird) {
+    byThird = new WeakMap();
+    bySecond.set(second, byThird);
+  }
+  byThird.set(third, value);
+}
+
+function isWeakCacheKey(value) {
+  return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
 export function getMovementRouteWaypointProgress(tokenDocument, movement = {}) {

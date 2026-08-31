@@ -42,6 +42,36 @@ test("coordinator commits only the selected collection and skips cancelled selec
     interruptions.getMovementRouteSamples(pathToken, loopMovement).map(sample => sample.waypoint.x),
     [0, 100, 0, 200]
   );
+  const mutableMovement = {
+    origin,
+    destination: turn,
+    passed: { waypoints: [turn] }
+  };
+  assert.deepEqual(
+    interruptions.getMovementRouteSamples(pathToken, mutableMovement).map(sample => sample.waypoint.x),
+    [0, 100]
+  );
+  mutableMovement.destination = finish;
+  mutableMovement.passed.waypoints = [finish];
+  assert.deepEqual(
+    interruptions.getMovementRouteSamples(pathToken, mutableMovement).map(sample => sample.waypoint.x),
+    [0, 200]
+  );
+  const shallowFrozenDestination = movementWaypoint({ x: 100, elevation: 7.5 });
+  const shallowFrozenMovement = Object.freeze({
+    origin: movementWaypoint({ x: 0, elevation: 7.5 }),
+    destination: shallowFrozenDestination,
+    passed: { waypoints: [shallowFrozenDestination] }
+  });
+  assert.deepEqual(
+    interruptions.getMovementRouteSamples(pathToken, shallowFrozenMovement).map(sample => sample.waypoint.x),
+    [0, 100]
+  );
+  shallowFrozenDestination.x = 200;
+  assert.deepEqual(
+    interruptions.getMovementRouteSamples(pathToken, shallowFrozenMovement).map(sample => sample.waypoint.x),
+    [0, 200]
+  );
   assert.deepEqual(
     interruptions.getMovementPrefixWaypoints(pathToken, loopMovement, { waypoint: loop, routeOrder: 6 })
       .map(waypoint => waypoint.x),

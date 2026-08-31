@@ -117,6 +117,8 @@ let trapTilePatchRegistered = false;
 let trapGmFreeDoubleClickListenerRegistered = false;
 let trapVisibilityRefreshQueued = false;
 let trapDetectionRefreshTimeout = 0;
+let trapDetectionRefreshAll = false;
+let pendingTrapDetectionZones = [];
 const pendingTrapActivationKeys = new Set();
 const pendingTrapSocketRequests = new Map();
 const activeTrapSocketRequests = new Map();
@@ -147,7 +149,11 @@ export function registerTrapHooks() {
     queueTrapDetectionRefresh();
   });
   Hooks.on("visibilityRefresh", refreshTrapTileVisibility);
-  Hooks.on("lightingRefresh", queueTrapDetectionRefresh);
+  Hooks.on("lightingRefresh", (_effects, context = {}) => {
+    if (context?.source === SYSTEM_ID && context.smokeSelective === true) {
+      queueTrapDetectionRefresh(context.smokeZones);
+    } else queueTrapDetectionRefresh();
+  });
   Hooks.on("updateWorldTime", () => void processDueTrapRecharges());
   Hooks.on("updateToken", queueTrapTileVisibilityRefresh);
   Hooks.on("updateActor", (actor, changes = {}) => {
@@ -175,6 +181,8 @@ export function registerTrapHooks() {
   Hooks.on("canvasTearDown", () => {
     if (trapDetectionRefreshTimeout) window.clearTimeout(trapDetectionRefreshTimeout);
     trapDetectionRefreshTimeout = 0;
+    trapDetectionRefreshAll = false;
+    pendingTrapDetectionZones = [];
     cancelActiveTrapPlacement();
     cancelTrapInteractionMode();
     cancelTrapLinkedActorSelection();
@@ -408,13 +416,38 @@ async function processTrapInitialDetection(tile) {
   }
 }
 
-function queueTrapDetectionRefresh() {
-  if (!game.user?.isActiveGM || !canvas?.ready || trapDetectionRefreshTimeout) return;
+function queueTrapDetectionRefresh(zones = null) {
+  if (!game.user?.isActiveGM || !canvas?.ready) return;
+  if (zones === null) {
+    trapDetectionRefreshAll = true;
+    pendingTrapDetectionZones = [];
+  } else {
+    if (!Array.isArray(zones)) throw new Error("Selective smoke trap refresh requires exact influence zones");
+    if (!trapDetectionRefreshAll) pendingTrapDetectionZones.push(...zones);
+  }
+  if (trapDetectionRefreshTimeout) return;
   trapDetectionRefreshTimeout = window.setTimeout(async () => {
     trapDetectionRefreshTimeout = 0;
-    const trapTiles = (canvas.scene?.tiles?.contents ?? []).filter(isTrapTileDocument);
+    const refreshAll = trapDetectionRefreshAll;
+    const selectiveZones = pendingTrapDetectionZones;
+    trapDetectionRefreshAll = false;
+    pendingTrapDetectionZones = [];
+    const trapTiles = (canvas.scene?.tiles?.contents ?? []).filter(tile => (
+      isTrapTileDocument(tile)
+      && (refreshAll || smokeLightingZonesIntersectTrap(selectiveZones, tile))
+    ));
     for (const tile of trapTiles) await processTrapInitialDetection(tile);
   }, 100);
+}
+
+function smokeLightingZonesIntersectTrap(zones, tile) {
+  const bounds = getTrapTileRectangle(tile);
+  return zones.some(zone => (
+    bounds.x <= Number(zone?.x) + Number(zone?.width)
+    && Number(zone?.x) <= bounds.x + bounds.width
+    && bounds.y <= Number(zone?.y) + Number(zone?.height)
+    && Number(zone?.y) <= bounds.y + bounds.height
+  ));
 }
 
 async function handleTrapDetectionForToken(tile, token) {

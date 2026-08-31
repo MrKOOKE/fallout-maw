@@ -2,6 +2,8 @@ import { SYSTEM_ID } from "../constants.mjs";
 
 const DEFAULT_COALESCE_MS = 50;
 const YIELD_EVERY_PAIRS = 64;
+const POINT_ONLY_SMOKE_VISION = Symbol.for(`${SYSTEM_ID}.pointOnlySmokeVision`);
+const TEST_SMOKE_VISION_POINT = Symbol.for(`${SYSTEM_ID}.testSmokeVisionPoint`);
 
 /**
  * A gameplay LOS predicate shared by fixed abilities and semantic vision events.
@@ -113,20 +115,26 @@ export function testObserverVisibilityBatch(observerToken, targetTokens = []) {
 
 /**
  * Build one temporary native VisionSource and expose its already-computed
- * ordinary sight masks. This is intentionally polygon-only: callers may test
- * thousands of preview points without rerunning Foundry collision and smoke
- * ray construction for every point.
+ * ordinary sight masks. Point-query callers may switch the system smoke
+ * wrapper to point-only mode: walls, angles, native ranges, and third-party
+ * VisionSource extensions still initialize normally, while smoke is tested by
+ * one exact ray only after the native polygon accepts a point. Bulk grid
+ * previews retain the radial polygon because thousands of cheap `contains`
+ * calls are faster than thousands of directed smoke rays.
  *
- * A null result means that token vision is disabled or the native source API
- * is unavailable, so callers should retain their ordinary fallback rules.
+ * A null result means that token vision or ordinary Token sight is disabled.
  */
-export function createObserverOrdinaryVisionMask(observerToken, { origin = null } = {}) {
+export function createObserverOrdinaryVisionMask(observerToken, {
+  origin = null,
+  pointOnlySmoke = false
+} = {}) {
   if (!globalThis.canvas?.ready || !observerToken) return null;
   if (!canvas.visibility?.tokenVision) return null;
   const tokenDocument = observerToken.document ?? observerToken;
   const VisionSource = globalThis.CONFIG?.Canvas?.visionSourceClass;
-  if (!observerToken.hasSight || !VisionSource || typeof observerToken._getVisionSourceData !== "function") {
-    return null;
+  if (!observerToken.hasSight) return null;
+  if (!VisionSource || typeof observerToken._getVisionSourceData !== "function") {
+    throw new Error("Foundry Token VisionSource contracts are required for an ordinary vision mask");
   }
 
   const source = new VisionSource({
@@ -134,17 +142,21 @@ export function createObserverOrdinaryVisionMask(observerToken, { origin = null 
     object: observerToken
   });
   try {
+    if (pointOnlySmoke) source[POINT_ONLY_SMOKE_VISION] = true;
     Object.assign(source.blinded, observerToken._getVisionBlindedStates?.() ?? {});
     const sourceData = observerToken._getVisionSourceData();
-    const sourceOrigin = origin ?? getTokenAimPoint(observerToken, sourceData);
-    source.initialize({
-      ...sourceData,
-      x: Number(sourceOrigin?.x ?? sourceData.x) || 0,
-      y: Number(sourceOrigin?.y ?? sourceData.y) || 0,
-      elevation: Number(sourceOrigin?.elevation ?? sourceData.elevation) || 0,
-      disabled: false,
-      preview: false
-    });
+    const initializeAt = nextOrigin => {
+      const sourceOrigin = nextOrigin ?? getTokenAimPoint(observerToken, sourceData);
+      source.initialize({
+        ...sourceData,
+        x: Number(sourceOrigin?.x ?? sourceData.x) || 0,
+        y: Number(sourceOrigin?.y ?? sourceData.y) || 0,
+        elevation: Number(sourceOrigin?.elevation ?? sourceData.elevation) || 0,
+        disabled: false,
+        preview: false
+      });
+    };
+    initializeAt(origin);
 
     const basicMode = getTokenDetectionMode(tokenDocument, "basicSight");
     const lightMode = getTokenDetectionMode(tokenDocument, "lightPerception");
@@ -154,28 +166,36 @@ export function createObserverOrdinaryVisionMask(observerToken, { origin = null 
       if (source.isBlinded) return false;
       const x = Number(point?.x) || 0;
       const y = Number(point?.y) || 0;
-      if (
+      const nativeVisible = (
         basicEnabled
         && isPointWithinDetectionRange(observerToken, source, basicMode, point)
         && source.shape?.contains?.(x, y)
-      ) return true;
-      return Boolean(
-        lightEnabled
-        && isPointWithinDetectionRange(observerToken, source, lightMode, point)
-        && source.light?.contains?.(x, y)
-        && canvas.effects?.testInsideLight?.(point)
-      );
+      ) || Boolean(
+          lightEnabled
+          && isPointWithinDetectionRange(observerToken, source, lightMode, point)
+          && source.light?.contains?.(x, y)
+          && canvas.effects?.testInsideLight?.(point)
+        );
+      if (!nativeVisible) return false;
+      if (!pointOnlySmoke) return true;
+      const testSmokePoint = source[TEST_SMOKE_VISION_POINT];
+      if (typeof testSmokePoint !== "function") {
+        throw new Error("The configured smoke VisionSource has no directed point-test contract");
+      }
+      return testSmokePoint.call(source, point);
     };
     return {
       contains,
+      setOrigin(nextOrigin) {
+        initializeAt(nextOrigin);
+      },
       destroy() {
         source.destroy();
       }
     };
   } catch (error) {
     source.destroy();
-    console.warn(`${SYSTEM_ID} | Native observer vision mask failed`, error);
-    return null;
+    throw error;
   }
 }
 

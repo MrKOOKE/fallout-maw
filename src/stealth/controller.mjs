@@ -8,7 +8,8 @@ import {
 } from "../utils/bulk-operation.mjs";
 import {
   isPointInsideObserverZone,
-  invalidateStealthDetectionCache
+  invalidateStealthDetectionCache,
+  invalidateStealthDetectionObserver
 } from "./detection.mjs";
 import { invalidateLightingAnalysisCache } from "./lighting.mjs";
 import { registerStealthMovementProvider } from "./movement.mjs";
@@ -40,7 +41,7 @@ import {
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { SMOKE_PERCEPTION_PERCENT_EFFECT_KEY } from "../canvas/smoke-perception.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
-import { getSmokeRegionRevision } from "../canvas/smoke-vision.mjs";
+import { peekSmokeRegionRevision } from "../canvas/smoke-vision.mjs";
 import { getDetectionModeIdFromRangeEffectKey } from "../canvas/vision-effect-keys.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import {
@@ -48,6 +49,7 @@ import {
   cleanupAllStealthVisualizations,
   cleanupTokenStealthVisualization,
   configureStealthVisualization,
+  hasDetectionVisualizationSources,
   onTokenHoverForDetectionZone,
   queueDetectionVisualizationRefresh,
   refreshDetectionVisualizationMaskState,
@@ -72,13 +74,19 @@ const windowRenderStates = new WeakMap();
 const pendingActorRefreshes = new Map();
 const tokenAnimationTasks = new Map();
 const runtimeSignatureObjectIds = new WeakMap();
+const runtimeRegionSurfaceSignatures = new WeakMap();
+const persistentVisualizationRenderStates = new Map();
+const stealthedCanvasTokenIds = new Set();
 
 let targetMode = null;
 let hooksRegistered = false;
 let stealthSocketRegistered = false;
 let refreshTimeout = null;
 let runtimePerceptionUiTimeout = null;
+let runtimePerceptionUiDeadline = 0;
+let runtimeLightingSignature = null;
 let runtimeSightSignature = null;
+let smokeNativePerceptionGuard = null;
 let nextRuntimeSignatureObjectId = 1;
 let refreshAllWindowsPending = false;
 let visibilityRefreshPending = false;
@@ -92,7 +100,8 @@ export function registerStealthHooks() {
   registerStealthMovementProvider({
     rollStealthCheck,
     rollStealthChecks,
-    pauseGame: pauseGameForStealthDetection
+    pauseGame: pauseGameForStealthDetection,
+    hasStealthedCanvasTokens: () => stealthedCanvasTokenIds.size > 0
   });
   configureWeaponNoiseDetection({
     rollStealthCheck,
@@ -109,7 +118,7 @@ export function registerStealthHooks() {
   Hooks.on("createToken", onTokenCreated);
   Hooks.on("updateToken", onTokenUpdated);
   Hooks.on("deleteToken", onTokenDeleted);
-  Hooks.on("drawToken", synchronizePersistentDetectionVisualization);
+  Hooks.on("drawToken", onTokenDrawn);
   Hooks.on("refreshToken", onTokenRefreshed);
   Hooks.on("controlToken", onControlledTokenChanged);
   Hooks.on("canvasReady", onCanvasReady);
@@ -137,6 +146,8 @@ export function registerStealthHooks() {
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, onStealthSettingsChanged);
   Hooks.on(`${SYSTEM_ID}.factionSettingsChanged`, onFactionSettingsChanged);
   Hooks.on(`${SYSTEM_ID}.smokePerceptionChanged`, onSmokePerceptionChanged);
+  Hooks.on(`${SYSTEM_ID}.smokeRegionAnimation`, onSmokeRegionAnimation);
+  Hooks.on(`${SYSTEM_ID}.smokeNativePerceptionRefresh`, onSmokeNativePerceptionRefresh);
   hooksRegistered = true;
 }
 
@@ -563,6 +574,7 @@ async function onTargetPointerDown(event) {
 }
 
 function onActorUpdated(actor, changes = {}) {
+  resetSmokeNativePerceptionGuard();
   if (isPhantomEntity(actor)) return;
   const settings = getRuntimeStealthSettings();
   const factionRoots = [`flags.${SYSTEM_ID}.factionBelongs`, `flags.${SYSTEM_ID}.factionRelations`];
@@ -589,6 +601,7 @@ function onActorUpdated(actor, changes = {}) {
 }
 
 function onActiveEffectChanged(effect, changes = null, operation = "update") {
+  resetSmokeNativePerceptionGuard();
   const actor = effect?.parent;
   if (!actor || isPhantomEntity(actor) || !effectAffectsStealth(effect, changes, operation)) return;
   synchronizeActorStealthState(actor);
@@ -598,7 +611,9 @@ function onActiveEffectChanged(effect, changes = null, operation = "update") {
 }
 
 function onTokenCreated(tokenDocument) {
+  resetSmokeNativePerceptionGuard();
   if (!isDocumentInActiveScene(tokenDocument) || isPhantomEntity(tokenDocument)) return;
+  updateStealthedCanvasTokenIndex(tokenDocument?.object);
   if (tokenDocument?.actor && isActorStealthed(tokenDocument.actor)) queueStealthedTokenVisibilityRefresh();
   synchronizePersistentDetectionVisualization(tokenDocument?.object);
   const emitsLight = tokenEmitsLight(tokenDocument);
@@ -611,9 +626,22 @@ function onTokenCreated(tokenDocument) {
   queueStealthRefresh({ allWindows: emitsLight, visualization: true });
 }
 
+function onTokenDrawn(token) {
+  invalidateStealthDetectionObserver(token);
+  updateStealthedCanvasTokenIndex(token);
+  synchronizePersistentDetectionVisualization(token);
+}
+
 function onTokenRefreshed(token, flags = {}) {
   if (isPhantomEntity(token)) return;
-  synchronizePersistentDetectionVisualization(token);
+  const controlled = globalThis.canvas?.tokens?.controlled ?? [];
+  if (
+    controlled.length === 1
+    && controlled[0]?.id === token?.id
+    && persistentVisualizationRenderStates.get(token.id) !== getPersistentVisualizationRenderState(token)
+  ) {
+    synchronizePersistentDetectionVisualization(token);
+  }
   if (
     flags.refreshPosition
     || flags.refreshSize
@@ -625,8 +653,8 @@ function onTokenRefreshed(token, flags = {}) {
 }
 
 function onTokenUpdated(tokenDocument, changes = {}) {
+  resetSmokeNativePerceptionGuard();
   if (!isDocumentInActiveScene(tokenDocument) || isPhantomEntity(tokenDocument)) return;
-  synchronizePersistentDetectionVisualization(tokenDocument?.object);
   const localVisibilityChanged = hasChangedPath(changes, ["hidden"]);
   const geometryChanged = hasChangedPath(changes, [
     "sight",
@@ -639,18 +667,28 @@ function onTokenUpdated(tokenDocument, changes = {}) {
     "shape",
     "level",
     "actorId",
-    "actorLink"
+    "actorLink",
+    "elevation"
   ]);
   if (!geometryChanged && !localVisibilityChanged) return;
+  if (localVisibilityChanged || hasChangedPath(changes, ["actorId", "actorLink"])) {
+    updateStealthedCanvasTokenIndex(tokenDocument?.object);
+    synchronizePersistentDetectionVisualization(tokenDocument?.object);
+  }
   if (localVisibilityChanged) queueStealthRefresh({ visualization: true });
   if (!geometryChanged) return;
-  invalidateLightingAnalysisCache();
+  const lightingChanged = hasChangedPath(changes, ["light"])
+    || (tokenEmitsLight(tokenDocument) && hasChangedPath(changes, [
+      "rotation", "width", "height", "depth", "shape", "level", "elevation"
+    ]));
+  if (lightingChanged) invalidateLightingAnalysisCache();
   invalidateStealthDetectionCache();
   captureRuntimePerceptionSignature();
   queueStealthRefresh({ allWindows: true, visualization: true });
 }
 
 function onTokenMoved(tokenDocument, movement = {}) {
+  resetSmokeNativePerceptionGuard();
   if (!isDocumentInActiveScene(tokenDocument) || isPhantomEntity(tokenDocument)) return;
   const token = tokenDocument?.object;
   const emitsLight = tokenEmitsLight(tokenDocument);
@@ -661,18 +699,19 @@ function onTokenMoved(tokenDocument, movement = {}) {
   if (emitsLight) {
     invalidateLightingAnalysisCache();
     invalidateStealthDetectionCache();
-    invalidateTargetDifficultyPreview();
   }
   trackDetectionVisualizationMovement(token, movement?.animation?.ended);
   runAfterTokenAnimation(token, () => {
-    // Position is part of the point/zone keys, but animated rotation and
-    // collision geometry can repopulate the same key at an intermediate frame.
-    invalidateStealthDetectionCache();
+    // The document already contains the destination during animation while
+    // its native VisionSource can still carry an intermediate rotation/shape.
+    // Advance only this observer's key instead of evicting every scene zone.
+    invalidateStealthDetectionObserver(token);
     if (!emitsLight) return;
     // moveToken is emitted before V14's animation promise settles. A final
     // invalidation prevents an intermediate light-source position from being
     // retained if a consumer repopulated the cache during the animation.
     invalidateLightingAnalysisCache();
+    invalidateStealthDetectionCache();
     invalidateTargetDifficultyPreview();
     captureRuntimePerceptionSignature();
     queueStealthRefresh({ allWindows: true, visualization: true });
@@ -686,7 +725,9 @@ function onControlledTokenChanged() {
 }
 
 function onTokenDeleted(tokenDocument) {
+  resetSmokeNativePerceptionGuard();
   const tokenId = tokenDocument?.id;
+  stealthedCanvasTokenIds.delete(tokenId);
   if (isPhantomEntity(tokenDocument)) {
     cleanupTokenStealth(tokenId);
     return;
@@ -694,28 +735,37 @@ function onTokenDeleted(tokenDocument) {
   const emittedLight = tokenEmitsLight(tokenDocument);
   cleanupTokenStealth(tokenId);
   if (isDocumentInActiveScene(tokenDocument)) {
-    invalidateLightingAnalysisCache();
-    invalidateStealthDetectionCache();
+    if (emittedLight) {
+      invalidateLightingAnalysisCache();
+      invalidateStealthDetectionCache();
+    }
     captureRuntimePerceptionSignature();
     queueStealthRefresh({ allWindows: emittedLight, visualization: true });
   }
 }
 
 function onCanvasReady() {
+  resetSmokeNativePerceptionGuard();
   invalidateLightingAnalysisCache();
   invalidateStealthDetectionCache();
   invalidateStealthRelationCache();
+  rebuildStealthedCanvasTokenIndex();
   captureRuntimePerceptionSignature();
   synchronizePersistentStealthVisualizations();
   queueStealthRefresh({ allWindows: true, visibility: true, visualization: true });
 }
 
-/**
- * Foundry has already decided that lighting needs a refresh. Keep this hot
- * hook O(1): invalidate exact-query caches immediately, but batch every
- * window and geometry redraw until the animation reaches a quiet tail.
- */
+/** Foundry also emits lightingRefresh for an ordinary moving VisionSource. */
 function onRuntimePerceptionRefresh() {
+  if (consumeSmokeNativePerceptionGuard("lighting")) return;
+  const nextSignature = getRuntimeLightingSignature();
+  if (nextSignature === null) return;
+  if (runtimeLightingSignature === null) {
+    runtimeLightingSignature = nextSignature;
+  } else {
+    if (nextSignature === runtimeLightingSignature) return;
+    runtimeLightingSignature = nextSignature;
+  }
   invalidateLightingAnalysisCache();
   invalidateStealthDetectionCache();
   queueRuntimePerceptionUiRefresh();
@@ -727,7 +777,8 @@ function onRuntimePerceptionRefresh() {
  * two semantic inputs which can change without a Document update.
  */
 function onRuntimeSightRefresh() {
-  refreshDetectionVisualizationMaskState();
+  if (hasDetectionVisualizationSources()) refreshDetectionVisualizationMaskState();
+  if (consumeSmokeNativePerceptionGuard("sight")) return;
   const nextSignature = getRuntimeSightSignature();
   if (nextSignature === null) return;
   if (runtimeSightSignature === null) {
@@ -743,16 +794,44 @@ function onRuntimeSightRefresh() {
 
 function queueRuntimePerceptionUiRefresh() {
   const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
-  const clear = globalThis.window?.clearTimeout ?? globalThis.clearTimeout;
-  if (runtimePerceptionUiTimeout) clear(runtimePerceptionUiTimeout);
-  runtimePerceptionUiTimeout = schedule(() => {
-    runtimePerceptionUiTimeout = null;
-    queueStealthRefresh({ allWindows: true, visualization: true });
-  }, RUNTIME_PERCEPTION_UI_SETTLE_MS);
+  runtimePerceptionUiDeadline = Date.now() + RUNTIME_PERCEPTION_UI_SETTLE_MS;
+  if (runtimePerceptionUiTimeout) return;
+  runtimePerceptionUiTimeout = schedule(flushRuntimePerceptionUiRefresh, RUNTIME_PERCEPTION_UI_SETTLE_MS);
+}
+
+function flushRuntimePerceptionUiRefresh() {
+  runtimePerceptionUiTimeout = null;
+  const remaining = runtimePerceptionUiDeadline - Date.now();
+  if (remaining > 0) {
+    const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
+    runtimePerceptionUiTimeout = schedule(flushRuntimePerceptionUiRefresh, remaining);
+    return;
+  }
+  runtimePerceptionUiDeadline = 0;
+  queueStealthRefresh({ allWindows: true, visualization: true });
 }
 
 function captureRuntimePerceptionSignature() {
+  runtimeLightingSignature = getRuntimeLightingSignature();
   runtimeSightSignature = getRuntimeSightSignature();
+}
+
+function getRuntimeLightingSignature({ stable = false } = {}) {
+  const activeCanvas = globalThis.canvas;
+  if (!activeCanvas?.ready) return null;
+  const scene = activeCanvas.scene;
+  const environment = activeCanvas.environment;
+  const effects = activeCanvas.effects;
+  return JSON.stringify([
+    scene?.id ?? "",
+    activeCanvas.level?.id ?? "",
+    normalizeRuntimeSignatureNumber(environment?.darknessLevel),
+    getEffectSourceRuntimeSignature(environment?.globalLightSource, { stable }),
+    getEffectCollectionRuntimeSignature(effects?.lightSources, { stable }),
+    getEffectCollectionRuntimeSignature(effects?.darknessSources, { stable }),
+    getDarknessMeshRuntimeSignature(effects?.illumination?.darknessLevelMeshes?.children, { stable }),
+    getRegionSurfaceRuntimeSignature(scene, "light")
+  ]);
 }
 
 function getRuntimeSightSignature() {
@@ -762,19 +841,125 @@ function getRuntimeSightSignature() {
   return JSON.stringify([
     scene?.id ?? "",
     activeCanvas.level?.id ?? "",
-    getSmokeRegionRevision(scene),
+    peekSmokeRegionRevision(scene),
     getRegionSurfaceRuntimeSignature(scene, "sight")
   ]);
 }
 
+function getEffectCollectionRuntimeSignature(collection, { stable = false } = {}) {
+  if (!collection || typeof collection.values !== "function") {
+    throw new Error("Foundry effect-source Collection is required for the stealth runtime signature");
+  }
+  return Array.from(collection.values(), source => getEffectSourceRuntimeSignature(source, { stable }));
+}
+
+function getEffectSourceRuntimeSignature(source, { stable = false } = {}) {
+  if (!source) return null;
+  const identity = source.sourceId ?? source.name ?? getRuntimeSignatureObjectId(source);
+  if (!stable && source.updateId !== undefined && source.updateId !== null) {
+    // Foundry itself keys effect-source caches by (sourceId, updateId). Every
+    // native initialize, including shape/origin/data changes, advances it.
+    return [
+      identity,
+      getRuntimeSignatureObjectId(source),
+      normalizeRuntimeSignatureNumber(source.updateId),
+      Boolean(source.active),
+      Boolean(source.suppressed)
+    ];
+  }
+  const data = source.data ?? {};
+  const origin = source.origin ?? source;
+  return [
+    identity,
+    getRuntimeSignatureObjectId(source),
+    stable ? "" : normalizeRuntimeSignatureNumber(source.updateId),
+    Boolean(source.active),
+    Boolean(source.suppressed),
+    stable ? "" : getRuntimeSignatureObjectId(source.shape),
+    normalizeRuntimeSignatureNumber(origin.x),
+    normalizeRuntimeSignatureNumber(origin.y),
+    normalizeRuntimeSignatureNumber(origin.elevation),
+    normalizeRuntimeSignatureNumber(data.bright),
+    normalizeRuntimeSignatureNumber(data.dim),
+    normalizeRuntimeSignatureNumber(data.radius),
+    normalizeRuntimeSignatureNumber(data.priority ?? source.priority),
+    normalizeRuntimeSignatureNumber(data.darkness?.min),
+    normalizeRuntimeSignatureNumber(data.darkness?.max),
+    data.level ?? "",
+    Boolean(data.disabled)
+  ];
+}
+
+function getDarknessMeshRuntimeSignature(children, { stable = false } = {}) {
+  if (!Array.isArray(children)) {
+    throw new Error("Foundry darkness-level mesh children are required for the stealth runtime signature");
+  }
+  return children.map(mesh => {
+    const shader = mesh?.shader ?? {};
+    const region = mesh?.region;
+    const elevation = region?.animationState?.elevation ?? region?.document?.elevation ?? {};
+    return [
+      mesh?.name ?? "",
+      getRuntimeSignatureObjectId(mesh),
+      stable ? "" : getRuntimeSignatureObjectId(mesh?.geometry),
+      stable ? "" : getRuntimeSignatureObjectId(region?.animationState?.shapes),
+      getAnimatedRegionRuntimeSignature(region),
+      normalizeRuntimeSignatureNumber(elevation.bottom),
+      normalizeRuntimeSignatureNumber(elevation.top),
+      normalizeRuntimeSignatureNumber(shader.mode),
+      normalizeRuntimeSignatureNumber(shader.modifier),
+      normalizeRuntimeSignatureNumber(shader.darknessLevel),
+      normalizeRuntimeSignatureNumber(shader.uniforms?.darknessLevel)
+    ];
+  });
+}
+
 
 function getRegionSurfaceRuntimeSignature(scene, type) {
-  if (typeof scene?.getSurfaces !== "function") return "";
-  try {
-    return getRuntimeSignatureObjectId(scene.getSurfaces({ type }));
-  } catch (_error) {
-    return "";
+  if (typeof scene?.getSurfaces !== "function") {
+    throw new Error("Foundry Scene.getSurfaces is required for the stealth runtime signature");
   }
+  const surfaces = scene.getSurfaces({ type });
+  if (!surfaces || typeof surfaces[Symbol.iterator] !== "function") {
+    throw new Error(`Foundry Scene.getSurfaces returned invalid ${type} surfaces`);
+  }
+  let state = runtimeRegionSurfaceSignatures.get(surfaces);
+  if (!state) {
+    const attachedRegions = [];
+    const visited = new Set();
+    for (const surface of surfaces) {
+      const regionDocument = surface?.region?.document ?? surface?.region;
+      if (!regionDocument?.attachment?.token || visited.has(regionDocument)) continue;
+      visited.add(regionDocument);
+      attachedRegions.push(regionDocument);
+    }
+    state = {
+      identity: getRuntimeSignatureObjectId(surfaces),
+      attachedRegions
+    };
+    runtimeRegionSurfaceSignatures.set(surfaces, state);
+  }
+  if (!state.attachedRegions.length) return state.identity;
+  const animated = [];
+  for (const regionDocument of state.attachedRegions) {
+    const signature = getAnimatedRegionRuntimeSignature(regionDocument);
+    if (signature) animated.push(signature);
+  }
+  return animated.length ? [state.identity, animated] : state.identity;
+}
+
+function getAnimatedRegionRuntimeSignature(region) {
+  const object = region?.object ?? region;
+  if (!object?.isAnimating) return "";
+  const document = object.document ?? region?.document ?? region;
+  const token = document?.attachment?.token;
+  return [
+    getRuntimeSignatureObjectId(object),
+    normalizeRuntimeSignatureNumber(token?.x),
+    normalizeRuntimeSignatureNumber(token?.y),
+    normalizeRuntimeSignatureNumber(token?.elevation),
+    normalizeRuntimeSignatureNumber(token?.rotation)
+  ];
 }
 
 function getRuntimeSignatureObjectId(value) {
@@ -789,7 +974,16 @@ function getRuntimeSignatureObjectId(value) {
   return id;
 }
 
+function normalizeRuntimeSignatureNumber(value) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return "NaN";
+  if (number === Infinity) return "+Infinity";
+  if (number === -Infinity) return "-Infinity";
+  return number;
+}
+
 function onSceneUpdated(scene, changes = {}) {
+  resetSmokeNativePerceptionGuard();
   if (scene?.id !== globalThis.canvas?.scene?.id) return;
   if (!hasChangedPath(changes, ["darkness", "environment", "globalLight", "tokenVision", "grid", "dimensions"])) return;
   invalidateLightingAnalysisCache();
@@ -799,6 +993,7 @@ function onSceneUpdated(scene, changes = {}) {
 }
 
 function onSceneGeometryChanged(document) {
+  resetSmokeNativePerceptionGuard();
   if (!isDocumentInActiveScene(document)) return;
   invalidateLightingAnalysisCache();
   invalidateStealthDetectionCache();
@@ -824,6 +1019,119 @@ function onSmokePerceptionChanged() {
   queueStealthRefresh({ visualization: true });
 }
 
+function onSmokeRegionAnimation(regionDocument) {
+  if (!isDocumentInActiveScene(regionDocument)) return;
+  // The smoke index revision changes synchronously in smoke-vision. Keep
+  // lighting queries correct now, while detection cache keys naturally move to
+  // the new revision. Preserve the prior generic signature so that a later
+  // unknown native refresh remains conservative after the exact frame guard.
+  invalidateLightingAnalysisCache();
+  queueRuntimePerceptionUiRefresh();
+}
+
+function onSmokeNativePerceptionRefresh({
+  scene,
+  revision,
+  sources: sourceEntries = [],
+  expectLighting = false,
+  expectSight = false
+} = {}) {
+  resetSmokeNativePerceptionGuard();
+  const activeCanvas = globalThis.canvas;
+  if (!activeCanvas?.ready || scene !== activeCanvas.scene) return;
+  if (!Number.isSafeInteger(revision) || revision < 0 || peekSmokeRegionRevision(scene) !== revision) return;
+  if (typeof expectLighting !== "boolean" || typeof expectSight !== "boolean") return;
+  if (!expectLighting && !expectSight) return;
+  if (!Array.isArray(sourceEntries)) return;
+
+  const sources = [];
+  const visited = new Set();
+  for (const entry of sourceEntries) {
+    const source = entry?.source;
+    const collectionName = entry?.collectionName;
+    if (!source || visited.has(source)
+      || !["lightSources", "darknessSources", "visionSources"].includes(collectionName)) return;
+    const collection = activeCanvas.effects?.[collectionName];
+    if (!collection || typeof collection.get !== "function") return;
+    if (!Number.isSafeInteger(entry.updateId) || entry.updateId < 0) return;
+    if (typeof entry.active !== "boolean" || typeof entry.suppressed !== "boolean") return;
+    if (entry.sourceId !== source.sourceId || collection.get(entry.sourceId) !== source) return;
+    if (entry.updateId !== source.updateId) return;
+    if (Boolean(entry.active) !== Boolean(source.active)) return;
+    if (Boolean(entry.suppressed) !== Boolean(source.suppressed)) return;
+    visited.add(source);
+    sources.push({
+      source,
+      collection,
+      collectionName,
+      sourceId: entry.sourceId,
+      updateId: entry.updateId,
+      active: Boolean(entry.active),
+      suppressed: Boolean(entry.suppressed),
+      stableState: getEffectSourceRuntimeSignature(source, { stable: true })
+    });
+  }
+
+  const token = {};
+  smokeNativePerceptionGuard = {
+    token,
+    scene,
+    levelId: activeCanvas.level?.id ?? "",
+    revision,
+    sources,
+    lightingPending: Boolean(expectLighting),
+    sightPending: Boolean(expectSight)
+  };
+  globalThis.queueMicrotask(() => {
+    if (smokeNativePerceptionGuard?.token === token) smokeNativePerceptionGuard = null;
+  });
+}
+
+function consumeSmokeNativePerceptionGuard(phase) {
+  const guard = smokeNativePerceptionGuard;
+  if (!guard) return false;
+  const pendingKey = phase === "lighting" ? "lightingPending" : "sightPending";
+  if (!guard[pendingKey] || !matchesSmokeNativePerceptionGuard(guard)) {
+    smokeNativePerceptionGuard = null;
+    return false;
+  }
+  guard[pendingKey] = false;
+  if (!guard.lightingPending && !guard.sightPending) smokeNativePerceptionGuard = null;
+  return true;
+}
+
+function matchesSmokeNativePerceptionGuard(guard) {
+  const activeCanvas = globalThis.canvas;
+  if (!activeCanvas?.ready || activeCanvas.scene !== guard.scene) return false;
+  if ((activeCanvas.level?.id ?? "") !== guard.levelId) return false;
+  if (peekSmokeRegionRevision(guard.scene) !== guard.revision) return false;
+  for (const entry of guard.sources) {
+    const source = entry.source;
+    if (activeCanvas.effects?.[entry.collectionName] !== entry.collection) return false;
+    if (entry.collection.get(entry.sourceId) !== source) return false;
+    if (source.sourceId !== entry.sourceId || source.updateId !== entry.updateId) return false;
+    if (Boolean(source.active) !== entry.active || Boolean(source.suppressed) !== entry.suppressed) return false;
+    if (!areRuntimeSignatureArraysEqual(
+      getEffectSourceRuntimeSignature(source, { stable: true }),
+      entry.stableState
+    )) return false;
+  }
+  return true;
+}
+
+function areRuntimeSignatureArraysEqual(left, right) {
+  if (left === right) return true;
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (!Object.is(left[index], right[index])) return false;
+  }
+  return true;
+}
+
+function resetSmokeNativePerceptionGuard() {
+  smokeNativePerceptionGuard = null;
+}
+
 function synchronizeActorStealthState(actor) {
   if (!actor) return;
   const stealthed = isActorStealthed(actor);
@@ -833,8 +1141,26 @@ function synchronizeActorStealthState(actor) {
   }
   for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
     if (token.actor?.uuid !== actor.uuid) continue;
+    updateStealthedCanvasTokenIndex(token);
     if (stealthed) synchronizePersistentDetectionVisualization(token);
     else cleanupTokenStealthVisualization(token.id);
+  }
+}
+
+function rebuildStealthedCanvasTokenIndex() {
+  stealthedCanvasTokenIds.clear();
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    updateStealthedCanvasTokenIndex(token);
+  }
+}
+
+function updateStealthedCanvasTokenIndex(token) {
+  const tokenId = token?.id;
+  if (!tokenId) return;
+  if (token?.actor && isActorStealthed(token.actor) && !isPhantomEntity(token)) {
+    stealthedCanvasTokenIds.add(tokenId);
+  } else {
+    stealthedCanvasTokenIds.delete(tokenId);
   }
 }
 
@@ -846,12 +1172,21 @@ function synchronizePersistentStealthVisualizations() {
 
 function synchronizePersistentDetectionVisualization(token) {
   if (!token?.id || isPhantomEntity(token)) return false;
+  persistentVisualizationRenderStates.set(token.id, getPersistentVisualizationRenderState(token));
   const controlled = globalThis.canvas?.tokens?.controlled ?? [];
   const active = controlled.length === 1
     && controlled[0]?.id === token.id
     && canRenderDetectionVisualizationForLocalUser(token);
   setPersistentDetectionVisualization(token, active);
   return active;
+}
+
+function getPersistentVisualizationRenderState(token) {
+  let state = 0;
+  if (token?.visible !== false) state |= 1;
+  if (token?.renderable !== false) state |= 2;
+  if (token?.hidden === true || token?.document?.hidden === true) state |= 4;
+  return state;
 }
 
 function queueStealthRefresh({
@@ -946,21 +1281,26 @@ function cleanupTokenStealth(tokenId) {
   if (app) void app.close();
   cleanupTokenStealthVisualization(tokenId);
   tokenAnimationTasks.delete(tokenId);
+  persistentVisualizationRenderStates.delete(tokenId);
   if (targetMode?.sourceTokenId === tokenId) stopTargetingMode();
 }
 
 function cleanupAllStealthUi() {
+  resetSmokeNativePerceptionGuard();
   clearRuntimeTimers();
   stopTargetingMode();
   for (const app of [...stealthWindows.values()]) void app.close();
   stealthWindows.clear();
   cleanupAllStealthVisualizations();
   tokenAnimationTasks.clear();
+  persistentVisualizationRenderStates.clear();
   clearWeaponNoiseDetectionQueues();
   pendingActorRefreshes.clear();
   refreshAllWindowsPending = false;
   visibilityRefreshPending = false;
   visualizationRefreshPending = false;
+  stealthedCanvasTokenIds.clear();
+  runtimeLightingSignature = null;
   runtimeSightSignature = null;
   invalidateStealthDetectionCache();
   invalidateLightingAnalysisCache();
@@ -972,6 +1312,7 @@ function clearRuntimeTimers() {
   if (runtimePerceptionUiTimeout) clear(runtimePerceptionUiTimeout);
   refreshTimeout = null;
   runtimePerceptionUiTimeout = null;
+  runtimePerceptionUiDeadline = 0;
 }
 
 function registerStealthSocket() {
@@ -1015,8 +1356,9 @@ function getResponsibleGM() {
 }
 
 function effectAffectsStealth(effect, changes, operation) {
-  const statuses = new Set(effect?.statuses ?? []);
-  if (statuses.size) return true;
+  for (const statusId of effect?.statuses ?? []) {
+    if (isStealthRelevantStatus(statusId)) return true;
+  }
   const effectChanges = effect?.system?.changes ?? effect?.changes ?? [];
   for (const change of effectChanges) {
     const key = String(change?.key ?? "").trim();
@@ -1028,6 +1370,20 @@ function effectAffectsStealth(effect, changes, operation) {
   }
   if (operation !== "update") return false;
   return hasChangedPath(changes, ["statuses", "changes", "system.changes", "disabled", "transfer"]);
+}
+
+function isStealthRelevantStatus(statusId) {
+  const id = String(statusId ?? "").trim();
+  if (!id) return false;
+  const special = globalThis.CONFIG?.specialStatusEffects ?? {};
+  return id === getStealthStatusId()
+    || id === special.BLIND
+    || id === special.DEFEATED
+    || id === special.BURROW
+    || id === "blind"
+    || id === "blinded"
+    || id === "dead"
+    || id === "unconscious";
 }
 
 function hasChangedPath(changes, roots = []) {

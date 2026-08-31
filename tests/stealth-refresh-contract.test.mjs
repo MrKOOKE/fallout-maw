@@ -8,7 +8,7 @@ const facadeSource = await readFile(new URL("../src/stealth/index.mjs", import.m
 test("render-frame perception hooks separate the lightweight sight path from lighting analysis", () => {
   assert.match(controllerSource, /Hooks\.on\(["']sightRefresh["'],\s*onRuntimeSightRefresh\)/);
   assert.match(controllerSource, /Hooks\.on\(["']lightingRefresh["'],\s*onRuntimePerceptionRefresh\)/);
-  assert.match(controllerSource, /function getRuntimeSightSignature\(\)[\s\S]*?getSmokeRegionRevision\(scene\)[\s\S]*?getRegionSurfaceRuntimeSignature\(scene, ["']sight["']\)/);
+  assert.match(controllerSource, /function getRuntimeSightSignature\(\)[\s\S]*?peekSmokeRegionRevision\(scene\)[\s\S]*?getRegionSurfaceRuntimeSignature\(scene, ["']sight["']\)/);
   assert.match(controllerSource, /source\.updateId/);
   assert.match(controllerSource, /scene\.getSurfaces\(\{ type \}\)/);
   assert.match(controllerSource, /darknessLevelMeshes/);

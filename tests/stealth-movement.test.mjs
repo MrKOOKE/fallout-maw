@@ -26,6 +26,7 @@ const {
   getMovementWaypointKey,
   getOriginalMovementWaypoints,
   normalizeMovementStateFlag,
+  shouldUsePointOnlySmokeVisionForMovement,
   STEALTH_MOVEMENT_STATE_FLAG
 } = await import("../src/stealth/movement.mjs");
 const {
@@ -52,6 +53,133 @@ test("movement accumulation threshold applies the actor percent after the config
   assert.equal(evaluateAutoDetectionMovementThreshold(actor, {
     autoDetection: { movementThresholdFormula: "4" }
   }), 6);
+});
+
+test("hidden movement selects point-only smoke below the native radial trace cost", () => {
+  globalThis.canvas = { dimensions: { maxR: 4_000 } };
+  const observer = {
+    _getVisionSourceData: () => ({ radius: 1_000, lightRadius: 0, externalRadius: 0 })
+  };
+  const previousPIXI = globalThis.PIXI;
+  const nativeRadii = [];
+  globalThis.PIXI = {
+    Circle: {
+      approximateVertexDensity(radius) {
+        nativeRadii.push(radius);
+        return Math.ceil(Math.PI / Math.sqrt(2 / radius));
+      }
+    }
+  };
+  try {
+    // Foundry's epsilon=1 circle implementation produces 71 vertices at radius 1000.
+    assert.equal(shouldUsePointOnlySmokeVisionForMovement(observer, 71), true);
+    assert.equal(shouldUsePointOnlySmokeVisionForMovement(observer, 72), false);
+    globalThis.PIXI.Circle.approximateVertexDensity = radius => {
+      nativeRadii.push(radius);
+      return 9;
+    };
+    assert.equal(shouldUsePointOnlySmokeVisionForMovement(observer, 9), true);
+    assert.equal(shouldUsePointOnlySmokeVisionForMovement(observer, 10), false);
+    assert.deepEqual(nativeRadii, [1_000, 1_000, 1_000, 1_000]);
+  } finally {
+    if (previousPIXI === undefined) delete globalThis.PIXI;
+    else globalThis.PIXI = previousPIXI;
+  }
+});
+
+test("remote smoke keeps the zero-trace radial path for an unaffected observer", () => {
+  configureStealthRuleSettingsProvider(() => SETTINGS);
+  const hidden = createToken("hidden-remote-smoke", createActor("Actor.hidden-remote-smoke", { hidden: true }), {
+    x: 0,
+    y: 0
+  });
+  const observer = createToken("observer-remote-smoke", createActor("Actor.observer-remote-smoke"), {
+    x: 100,
+    y: 0
+  });
+  let visionDataCalls = 0;
+  observer._getVisionSourceData = () => {
+    visionDataCalls += 1;
+    return { x: 150, y: 50, elevation: 0, radius: 100, lightRadius: 0, externalRadius: 0 };
+  };
+  const remoteRegion = {
+    id: "remote-smoke",
+    hidden: false,
+    elevation: { bottom: null, top: null },
+    object: { bounds: { x: 10_000, y: 10_000, width: 100, height: 100 } },
+    polygons: [{ points: [10_000, 10_000, 10_100, 10_000, 10_100, 10_100, 10_000, 10_100] }],
+    behaviors: {
+      contents: [{
+        uuid: "Behavior.remote-smoke",
+        type: "fallout-maw.periodicDamage",
+        disabled: false,
+        system: {
+          regionSpecialProperties: [{
+            type: "smoke",
+            smoke: { thickness: "1", densityPercent: "50" }
+          }],
+          durationSeconds: 0,
+          delaySeconds: 0
+        },
+        getFlag: () => ({ activateAt: 0, expiresAt: null })
+      }]
+    }
+  };
+  remoteRegion.polygonTree = {
+    polygons: remoteRegion.polygons,
+    testPoint: ({ x, y }) => x >= 10_000 && x <= 10_100 && y >= 10_000 && y <= 10_100
+  };
+  const scene = {
+    id: "scene",
+    uuid: "Scene.scene",
+    grid: { size: 100, distance: 5 },
+    regions: { contents: [remoteRegion] }
+  };
+  remoteRegion.parent = scene;
+  hidden.document.parent = scene;
+  observer.document.parent = scene;
+  let densityCalls = 0;
+  const previousPIXI = globalThis.PIXI;
+  globalThis.PIXI = {
+    Circle: {
+      approximateVertexDensity() {
+        densityCalls += 1;
+        return 32;
+      }
+    }
+  };
+  globalThis.canvas = {
+    ready: true,
+    scene,
+    dimensions: { maxR: 4_000 },
+    grid: { isGridless: true, size: 100, distance: 5 },
+    tokens: { placeables: [hidden, observer] },
+    environment: { darknessLevel: 0, globalLightSource: { active: false } },
+    effects: {
+      lightSources: new Map(),
+      getDarknessLevel: () => 0,
+      testInsideDarkness: () => false
+    }
+  };
+
+  try {
+    const destination = movementWaypoint({ x: 100 });
+    collectStealthMovementInterruptions({
+      tokenDocument: hidden.document,
+      movement: {
+        id: "remote-smoke-movement",
+        origin: movementWaypoint({ x: 0 }),
+        destination,
+        passed: { waypoints: [destination] },
+        pending: { waypoints: [] }
+      }
+    });
+    assert.equal(visionDataCalls, 1);
+    assert.equal(densityCalls, 0);
+  } finally {
+    if (previousPIXI === undefined) delete globalThis.PIXI;
+    else globalThis.PIXI = previousPIXI;
+  }
 });
 
 test("one route sample aggregates simultaneous observer checks without mutating persistent state", () => {

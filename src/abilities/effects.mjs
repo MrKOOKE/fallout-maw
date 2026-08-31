@@ -358,9 +358,11 @@ export function registerAbilityEffectHooks() {
     if (!game.ready) return;
     void syncActiveSceneActorAbilityEffects();
   });
-  Hooks.on("lightingRefresh", () => {
+  Hooks.on("lightingRefresh", (_effects, context = {}) => {
     invalidateAbilityConditionLightingCache();
-    queueIlluminationConditionEffectSync();
+    if (context?.source === SYSTEM_ID && context.smokeSelective === true) {
+      queueSmokeIlluminationConditionEffectSync(context.smokeZones);
+    } else queueIlluminationConditionEffectSync();
   });
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, () => {
     invalidateAbilityConditionLightingCache();
@@ -490,6 +492,32 @@ function queueIlluminationConditionEffectSync(tokenDocument = null) {
     pendingIlluminationActors.clear();
     syncIlluminationConditionEffects(all ? null : pendingActors);
   }, ILLUMINATION_CONDITION_SYNC_DELAY_MS);
+}
+
+function queueSmokeIlluminationConditionEffectSync(zones) {
+  if (!Array.isArray(zones)) throw new Error("Selective smoke lighting refresh requires exact influence zones");
+  const tokens = globalThis.canvas?.tokens?.placeables;
+  if (!Array.isArray(tokens)) throw new Error("Foundry TokenLayer.placeables is required for selective smoke lighting");
+  for (const token of tokens) {
+    if (!smokeLightingZonesIntersectBounds(zones, token?.bounds)) continue;
+    queueIlluminationConditionEffectSync(token.document ?? token);
+  }
+}
+
+function smokeLightingZonesIntersectBounds(zones, bounds) {
+  const x = Number(bounds?.x);
+  const y = Number(bounds?.y);
+  const width = Number(bounds?.width);
+  const height = Number(bounds?.height);
+  if (![x, y, width, height].every(Number.isFinite)) {
+    throw new Error("Foundry Canvas placeable returned invalid bounds for selective smoke lighting");
+  }
+  return zones.some(zone => (
+    x <= Number(zone?.x) + Number(zone?.width)
+    && Number(zone?.x) <= x + width
+    && y <= Number(zone?.y) + Number(zone?.height)
+    && Number(zone?.y) <= y + height
+  ));
 }
 
 function syncIlluminationConditionEffects(targetActors = null) {

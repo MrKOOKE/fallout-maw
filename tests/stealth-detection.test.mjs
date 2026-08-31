@@ -5,10 +5,12 @@ import {
   buildObserverDetectionZone,
   buildWeaponNoiseZone,
   computeDetectionPathCost,
+  createStealthDetectionPointTester,
   doGridZonesOverlap,
   getStealthObserverZones,
   getStealthDetectionCacheStats,
   invalidateStealthDetectionCache,
+  invalidateStealthDetectionObserver,
   testStealthDetectionPoint,
   testWeaponNoiseZoneContact,
   weaponNoiseToRangeBonus
@@ -365,20 +367,34 @@ test("positive Light Perception keeps a zero-range Basic Sight observer operatio
 
 test("stealth zones and authoritative points are intersected with the native observer vision mask", () => {
   installRectangleMock();
+  let constructedSources = 0;
+  let initializedSources = 0;
+  let destroyedSources = 0;
+  let directedSmokePointTests = 0;
+  const testSmokeVisionPoint = Symbol.for("fallout-maw.testSmokeVisionPoint");
   class VisionSource {
     constructor({ object }) {
+      constructedSources += 1;
       this.object = object;
       this.blinded = {};
     }
 
     initialize(data) {
+      initializedSources += 1;
       this.data = data;
       this.isBlinded = false;
       this.shape = { contains: x => x <= 100 };
       this.light = { contains: () => false };
     }
 
-    destroy() {}
+    destroy() {
+      destroyedSources += 1;
+    }
+
+    [testSmokeVisionPoint]() {
+      directedSmokePointTests += 1;
+      return true;
+    }
   }
   globalThis.CONFIG = {
     specialStatusEffects: { BLIND: "blind" },
@@ -398,8 +414,48 @@ test("stealth zones and authoritative points are intersected with the native obs
 
   const zone = buildObserverDetectionZone(observer, { origin, settings });
   assert.deepEqual(zone.offsets.map(({ j }) => j), [0, 1]);
+  assert.equal(directedSmokePointTests, 0, "the radial preview mask must not run directed smoke tests");
   assert.equal(testStealthDetectionPoint(observer, origin, { x: 100, y: 0, elevation: 0 }, { settings }), true);
   assert.equal(testStealthDetectionPoint(observer, origin, { x: 200, y: 0, elevation: 0 }, { settings }), false);
+  assert.equal(directedSmokePointTests, 1, "a one-off point mask must run its directed smoke gate");
+
+  invalidateStealthDetectionCache();
+  constructedSources = 0;
+  initializedSources = 0;
+  destroyedSources = 0;
+  const tester = createStealthDetectionPointTester(observer, origin, { settings });
+  assert.equal(tester.test({ x: 0, y: 0, elevation: 0 }), true);
+  assert.equal(tester.test({ x: 100, y: 0, elevation: 0 }), true);
+  assert.equal(tester.test({ x: 200, y: 0, elevation: 0 }), false);
+  assert.equal(constructedSources, 1);
+  assert.equal(initializedSources, 1);
+  assert.equal(destroyedSources, 0);
+  tester.setOrigin({ x: 1000, y: 0, elevation: 0 });
+  assert.equal(tester.test({ x: 0, y: 0, elevation: 0 }), false);
+  assert.equal(initializedSources, 1);
+  tester.setOrigin({ x: 50, y: 0, elevation: 0 });
+  assert.equal(tester.test({ x: 100, y: 0, elevation: 0 }), true);
+  assert.equal(constructedSources, 1);
+  assert.equal(initializedSources, 2);
+  assert.equal(directedSmokePointTests, 1, "pointOnlySmoke=false must retain the radial-only contains path");
+  tester.destroy();
+  assert.equal(destroyedSources, 1);
+});
+
+test("one observer revision invalidates its exact point results without clearing the scene cache", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 4, cellSize: 100 });
+  const observer = createObserverWithUnlimitedSight("observer-revision");
+  const settings = createSettings("3");
+  const origin = { x: 0, y: 0, elevation: 0 };
+  const point = { x: 100, y: 0, elevation: 0 };
+
+  observer.checkCollision = () => false;
+  assert.equal(testStealthDetectionPoint(observer, origin, point, { settings }), true);
+  observer.checkCollision = () => true;
+  assert.equal(testStealthDetectionPoint(observer, origin, point, { settings }), true);
+  invalidateStealthDetectionObserver(observer);
+  assert.equal(testStealthDetectionPoint(observer, origin, point, { settings }), false);
 });
 
 test("smoke density shapes stealth detection reciprocally from inside and outside", () => {
@@ -738,11 +794,16 @@ function createSmokeRegion(id, densityPercent, { x, y, radius, bounds }) {
       }]
     }
   };
+  region.polygonTree = {
+    polygons: [{ points: createTestCirclePoints({ x, y, radius }) }],
+    testPoint: point => Math.hypot(point.x - x, point.y - y) <= radius
+  };
   return region;
 }
 
 function installRectangleMock() {
   globalThis.PIXI = {
+    Circle: { approximateVertexDensity: () => 32 },
     Rectangle: class Rectangle {
       constructor(x, y, width, height) {
         Object.assign(this, { x, y, width, height });
@@ -753,6 +814,13 @@ function installRectangleMock() {
       }
     }
   };
+}
+
+function createTestCirclePoints({ x, y, radius }, density = 32) {
+  return Array.from({ length: density }, (_, index) => {
+    const angle = (index / density) * Math.PI * 2;
+    return [x + (Math.cos(angle) * radius), y + (Math.sin(angle) * radius)];
+  }).flat();
 }
 
 function pickCacheUsage(stats) {

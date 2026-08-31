@@ -179,6 +179,9 @@ test("weapon preview renders one source-owned grid outline and never substitutes
     assert.equal(graphics.calls.filter(([method]) => method === "moveTo").length, 20);
     assert.equal(graphics.calls.filter(([method]) => method === "lineTo").length, 20);
     assert.equal(graphics.calls.some(([method]) => method === "drawCircle"), false);
+
+    clearWeaponNoisePreview(token.id, "attack");
+    assert.equal(globalThis.canvas.controls.falloutMawStealthDetectionZones, undefined);
   } finally {
     cleanupAllStealthVisualizations();
     restore();
@@ -441,7 +444,8 @@ function installVisualizationFixture({ gridless, observerCell = null }) {
     },
     tokens: {
       get: id => placeables.find(candidate => candidate.id === id) ?? null,
-      placeables
+      placeables,
+      controlled: [token]
     },
     controls,
     interface: {

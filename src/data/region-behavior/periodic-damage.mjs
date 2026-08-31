@@ -1,4 +1,7 @@
-import { queueSmokeRegionRefresh } from "../../canvas/smoke-vision.mjs";
+import {
+  notifySmokeRegionAnimation,
+  queueSmokeRegionRefresh
+} from "../../canvas/smoke-vision.mjs";
 import { REGION_TARGET_RELATIONS } from "../../canvas/region-targeting.mjs";
 const { ArrayField, BooleanField, NumberField, SchemaField, StringField } = foundry.data.fields;
 const DEFAULT_INTERVAL_SECONDS = 6;
@@ -52,6 +55,6 @@ export default class PeriodicDamageRegionBehaviorType extends foundry.data.regio
     [REGION_EVENTS.BEHAVIOR_VIEWED ?? "behaviorViewed"]: () => queueSmokeRegionRefresh(),
     [REGION_EVENTS.BEHAVIOR_UNVIEWED ?? "behaviorUnviewed"]: () => queueSmokeRegionRefresh(),
     [REGION_EVENTS.REGION_BOUNDARY ?? "regionBoundary"]: () => queueSmokeRegionRefresh(),
-    [REGION_EVENTS.REGION_ANIMATION ?? "regionAnimation"]: () => queueSmokeRegionRefresh({ forceVision: false })
+    [REGION_EVENTS.REGION_ANIMATION ?? "regionAnimation"]: event => notifySmokeRegionAnimation(event?.region)
   };
 }
