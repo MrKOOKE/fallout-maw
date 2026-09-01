@@ -150,6 +150,26 @@ test("limited changes cancel safely when the picker is closed or unavailable", a
   assert.equal(unavailable.cancelled, true);
 });
 
+test("limited-change picker uses two intrinsic columns without internal scrolling", async () => {
+  const source = await readFile(new URL("../src/abilities/purchase.mjs", import.meta.url), "utf8");
+  const pickerStart = source.indexOf("export async function requestLimitedChangeSelection");
+  const pickerEnd = source.indexOf("function activateLimitedChangeSelection", pickerStart);
+  assert.ok(pickerStart >= 0 && pickerEnd > pickerStart);
+
+  const picker = source.slice(pickerStart, pickerEnd);
+  assert.match(picker, /position:\s*\{\s*width:\s*"auto"\s*\}/);
+  assert.match(picker, /class="fallout-maw-ability-change-choice-name"/);
+  assert.doesNotMatch(picker, /fallout-maw-ability-change-choice-name\s+ellipsis/);
+  assert.doesNotMatch(picker, /fallout-maw-ability-change-choice-list\s+scrollable/);
+
+  const stylesheet = await readFile(new URL("../styles/fallout-maw.css", import.meta.url), "utf8");
+  const listRule = stylesheet.match(/\.fallout-maw-ability-change-choice-list\s*\{([^}]*)\}/)?.[1] ?? "";
+  const nameRule = stylesheet.match(/\.fallout-maw-ability-change-choice-name\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(listRule, /grid-template-columns:\s*repeat\(2,\s*max-content\)/);
+  assert.doesNotMatch(listRule, /max-height|overflow/);
+  assert.match(nameRule, /white-space:\s*nowrap/);
+});
+
 test("legacy numeric limits still work and limits above the available set skip the picker", async () => {
   let chooseCalls = 0;
   const result = await resolveLimitedChangeSet({

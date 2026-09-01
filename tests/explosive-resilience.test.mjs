@@ -24,96 +24,66 @@ const {
   ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY
 } = await import("../src/settings/abilities.mjs");
 const {
-  EXPLOSIVE_RESILIENCE_CHOICE_EVENT_KEY,
-  EXPLOSIVE_RESILIENCE_EFFECT_FLAG_KEY,
+  activateExplosiveResilience,
   buildExplosiveResilienceEffectChanges,
-  collectExplosiveResilienceOffers,
-  executeExplosiveResilienceOffer,
   getExplosiveResilienceProgressEntry,
   observeExplosiveResilienceDamage
 } = await import("../src/abilities/explosive-resilience.mjs");
 
-test("explosive resilience counts damage after Defense and before Resistance", async () => {
+test("explosive resilience fills from pre-Resistance damage without opening a reaction", async () => {
   const actor = createActor();
   globalThis.fromUuid = async uuid => uuid === actor.uuid ? actor : null;
-  const requests = [];
-  const requestChoice = async (eventKey, context) => {
-    requests.push({ eventKey, context: structuredClone(context) });
-    return { status: "declined" };
-  };
 
-  await observeExplosiveResilienceDamage({
+  const first = await observeExplosiveResilienceDamage({
     event: damageEvent(actor, {
-      eventId: "damage-1",
-      rootId: "root-1",
       incoming: 500,
       beforeResistance: 199,
       preBarrierAmount: 3,
       healthLoss: 0
     })
-  }, { requestChoice });
-
+  });
+  assert.deepEqual(first, [{ progress: 199, ready: false }]);
   assert.deepEqual(progress(actor), { current: 199, required: 200 });
-  assert.equal(requests.length, 0);
 
-  await observeExplosiveResilienceDamage({
+  const second = await observeExplosiveResilienceDamage({
     event: damageEvent(actor, {
-      eventId: "damage-2",
-      rootId: "root-2",
       incoming: 500,
       beforeResistance: 1,
       preBarrierAmount: 0,
       healthLoss: 0
     })
-  }, { requestChoice });
-
-  assert.deepEqual(progress(actor), { current: 200, required: 200 });
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].eventKey, EXPLOSIVE_RESILIENCE_CHOICE_EVENT_KEY);
-  assert.equal(requests[0].context.falloutMawSemanticReactionAdapted, true);
-  assert.equal(requests[0].context.actorUuid, actor.uuid);
-
-  const offers = await collectExplosiveResilienceOffers({
-    eventKey: requests[0].eventKey,
-    context: requests[0].context
   });
-  assert.equal(offers.length, 2);
-  assert.deepEqual(offers.map(offer => offer.packageKey), ["offense", "defense"]);
-  assert.ok(offers.every(offer => offer.actorUuid === actor.uuid));
+  assert.deepEqual(second, [{ progress: 200, ready: true }]);
+  assert.deepEqual(progress(actor), { current: 200, required: 200 });
 
-  await observeExplosiveResilienceDamage({
-    event: damageEvent(actor, {
-      eventId: "damage-3",
-      rootId: "root-2",
-      incoming: 100,
-      preBarrierAmount: 100,
-      healthLoss: 100
-    })
-  }, { requestChoice });
-  assert.equal(requests.length, 1, "one damage root never opens duplicate choices");
+  const writesAtMaximum = actor.items[0].setFlagCalls;
+  const capped = await observeExplosiveResilienceDamage({
+    event: damageEvent(actor, { incoming: 100 })
+  });
+  assert.deepEqual(capped, [{ progress: 200, ready: true }]);
+  assert.equal(actor.items[0].setFlagCalls, writesAtMaximum, "a full gauge causes no redundant writes");
 });
 
-test("successful package application resets progress and blocks accumulation for exactly 12 seconds", async () => {
+test("manual activation chooses a package, resets progress, and blocks accumulation for 12 seconds", async () => {
   const actor = createActor();
+  const abilityItem = actor.items[0];
+  const abilityFunction = abilityItem.system.functions[0];
   globalThis.fromUuid = async uuid => uuid === actor.uuid ? actor : null;
-  let choiceContext = null;
+  await observeExplosiveResilienceDamage({ event: damageEvent(actor, { incoming: 200 }) });
 
-  await observeExplosiveResilienceDamage({
-    event: damageEvent(actor, { incoming: 200, eventId: "ready", rootId: "ready-root" })
-  }, {
-    requestChoice: async (_eventKey, context) => {
-      choiceContext = structuredClone(context);
-      return { status: "declined" };
+  let selectionCount = 0;
+  const applied = await activateExplosiveResilience({
+    actor,
+    abilityItem,
+    abilityFunction,
+    selectPackage: async () => {
+      selectionCount += 1;
+      return "offense";
     }
   });
-  const [offense] = await collectExplosiveResilienceOffers({
-    eventKey: EXPLOSIVE_RESILIENCE_CHOICE_EVENT_KEY,
-    context: choiceContext
-  });
-  const applied = await executeExplosiveResilienceOffer({ offer: offense });
 
-  assert.equal(applied.handled, true);
-  assert.equal(applied.status, "success");
+  assert.equal(applied, true);
+  assert.equal(selectionCount, 1);
   assert.deepEqual(progress(actor), { current: 0, required: 200 });
   assert.equal(actor.effects.length, 1);
   assert.deepEqual(actor.effects[0].duration, {
@@ -129,37 +99,29 @@ test("successful package application resets progress and blocks accumulation for
   ]);
 
   game.time.worldTime = 111;
-  await observeExplosiveResilienceDamage({
-    event: damageEvent(actor, { incoming: 500, eventId: "active", rootId: "active-root" })
-  }, { requestChoice: async () => assert.fail("active bonus must suppress accumulation") });
+  await observeExplosiveResilienceDamage({ event: damageEvent(actor, { incoming: 500 }) });
   assert.deepEqual(progress(actor), { current: 0, required: 200 });
 
   game.time.worldTime = 112;
-  await observeExplosiveResilienceDamage({
-    event: damageEvent(actor, { incoming: 25, eventId: "expired", rootId: "expired-root" })
-  }, { requestChoice: async () => assert.fail("25 damage is below the threshold") });
+  await observeExplosiveResilienceDamage({ event: damageEvent(actor, { incoming: 25 }) });
   assert.deepEqual(progress(actor), { current: 25, required: 200 });
 });
 
-test("failed application preserves progress and defense package uses the configured formula", async () => {
+test("failed manual application preserves progress and defense uses the configured formula", async () => {
   const actor = createActor({ createEffects: false });
+  const abilityItem = actor.items[0];
+  const abilityFunction = abilityItem.system.functions[0];
   globalThis.fromUuid = async uuid => uuid === actor.uuid ? actor : null;
-  let choiceContext = null;
-  await observeExplosiveResilienceDamage({
-    event: damageEvent(actor, { incoming: 250, eventId: "failed", rootId: "failed-root" })
-  }, {
-    requestChoice: async (_eventKey, context) => {
-      choiceContext = structuredClone(context);
-      return { status: "declined" };
-    }
-  });
-  const offers = await collectExplosiveResilienceOffers({
-    eventKey: EXPLOSIVE_RESILIENCE_CHOICE_EVENT_KEY,
-    context: choiceContext
-  });
-  const failed = await executeExplosiveResilienceOffer({ offer: offers[1] });
+  await observeExplosiveResilienceDamage({ event: damageEvent(actor, { incoming: 250 }) });
 
-  assert.equal(failed.handled, false);
+  const applied = await activateExplosiveResilience({
+    actor,
+    abilityItem,
+    abilityFunction,
+    selectPackage: async () => "defense"
+  });
+
+  assert.equal(applied, false);
   assert.deepEqual(progress(actor), { current: 200, required: 200 });
   assert.deepEqual(buildExplosiveResilienceEffectChanges({}, "defense"), [
     change("system.damageResistanceBonuses.all.all", "10+resilience/10"),
@@ -168,15 +130,33 @@ test("failed application preserves progress and defense package uses the configu
   ]);
 });
 
+test("manual activation below the threshold does not open package selection", async () => {
+  const actor = createActor();
+  const abilityItem = actor.items[0];
+  const abilityFunction = abilityItem.system.functions[0];
+  let selected = false;
+
+  const applied = await activateExplosiveResilience({
+    actor,
+    abilityItem,
+    abilityFunction,
+    selectPackage: async () => {
+      selected = true;
+      return "offense";
+    }
+  });
+
+  assert.equal(applied, false);
+  assert.equal(selected, false);
+});
+
 test("cancelled damage never contributes", async () => {
   const actor = createActor();
   globalThis.fromUuid = async uuid => uuid === actor.uuid ? actor : null;
   const event = damageEvent(actor, { incoming: 999 });
   event.outcome = { success: false, cancelled: true };
 
-  await observeExplosiveResilienceDamage({ event }, {
-    requestChoice: async () => assert.fail("cancelled damage cannot trigger a choice")
-  });
+  await observeExplosiveResilienceDamage({ event });
   assert.deepEqual(progress(actor), { current: 0, required: 200 });
 });
 
@@ -212,6 +192,7 @@ function createActor({ createEffects = true } = {}) {
     img: "ability.webp",
     parent: actor,
     flags: {},
+    setFlagCalls: 0,
     system: {
       functions: [{
         id: "explosive-function",
@@ -224,6 +205,7 @@ function createActor({ createEffects = true } = {}) {
       return this.flags?.[scope]?.[key];
     },
     async setFlag(scope, key, value) {
+      this.setFlagCalls += 1;
       this.flags[scope] ??= {};
       this.flags[scope][key] = structuredClone(value);
       return value;

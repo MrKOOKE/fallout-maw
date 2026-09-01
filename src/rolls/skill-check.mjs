@@ -43,6 +43,11 @@ import {
   SKILL_CHECK_ACTION_EFFECT_FIELDS
 } from "./skill-check-action-effects.mjs";
 import { groupSkillCheckOutcomesByActor } from "./skill-check-presentation.mjs";
+import {
+  mergeSkillCheckResultPolicies,
+  normalizeSkillCheckResultPolicy,
+  resolveSkillCheckResultPolicy
+} from "./skill-check-result-policy.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -797,7 +802,8 @@ function serializeSkillCheckRequest(data = {}) {
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
     damageHubOperationRef: String(data.damageHubOperationRef ?? ""),
-    smartFudgeResult: String(data.smartFudgeResult ?? "")
+    smartFudgeResult: String(data.smartFudgeResult ?? ""),
+    resultPolicy: normalizeSkillCheckResultPolicy(data.resultPolicy)
   };
 }
 
@@ -892,14 +898,49 @@ async function performSkillCheck(actor, skill, data = {}) {
   const check = createMutableCheck(actor, skill, data);
   Hooks.callAll("fallout-maw.modifySkillCheck", check);
 
+  // Threshold abilities compare against the same un-edged, single-roll chance
+  // shown by the attack UI. Edge is applied only to the actual resolution.
+  const displayedDifficulty = toInteger(check.difficulty);
+  const displayedSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier);
+  const displayedCritical = calculateCriticalThresholds(
+    check,
+    displayedSkillValue,
+    displayedDifficulty,
+    check.skillCheckMode
+  );
+  const displayedProfile = buildSkillCheckResultProfile(
+    displayedDifficulty,
+    displayedCritical,
+    displayedSkillValue,
+    {
+      disabledResults: check.disabledResults,
+      mathematicalAutoFailure: isAutomaticFailure(
+        displayedSkillValue,
+        displayedDifficulty,
+        check.skillCheckMode
+      ),
+      markAutomatic: false,
+      skillCheckMode: check.skillCheckMode
+    }
+  );
+  const resultPolicy = resolveSkillCheckResultPolicy(
+    check.resultPolicy,
+    calculateResultProfileSuccessChance(displayedProfile)
+  );
+
   const edge = calculateEdge(check.advantageCount, check.disadvantageCount, check.skillCheckMode);
-  check.difficulty = toInteger(check.difficulty) + edge.difficultyModifier;
-  const finalSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier) + edge.skillModifier;
+  check.difficulty = displayedDifficulty + edge.difficultyModifier;
+  const finalSkillValue = displayedSkillValue + edge.skillModifier;
   const critical = calculateCriticalThresholds(check, finalSkillValue, check.difficulty, check.skillCheckMode);
-  const forcedResult = normalizeForcedResult(check.forcedResult);
+  const forcedResult = normalizeForcedResult(check.forcedResult) || resultPolicy.forcedResult;
+  check.forcedResult = forcedResult;
+  const disabledResults = mergeSkillCheckResultPolicies(
+    { disabledResults: check.disabledResults },
+    { disabledResults: resultPolicy.disabledResults }
+  ).disabledResults;
   const smartFudgeResult = forcedResult ? "" : normalizeForcedResult(check.smartFudgeResult);
   const resultProfile = buildSkillCheckResultProfile(check.difficulty, critical, finalSkillValue, {
-    disabledResults: forcedResult ? {} : check.disabledResults,
+    disabledResults: forcedResult ? {} : disabledResults,
     mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, check.difficulty, check.skillCheckMode) && !forcedResult,
     markAutomatic: !forcedResult,
     skillCheckMode: check.skillCheckMode
@@ -1489,7 +1530,8 @@ function normalizeRequestData(data, requester = "") {
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
     damageHubOperationRef: String(data.damageHubOperationRef ?? ""),
-    smartFudgeResult: normalizeForcedResult(data.smartFudgeResult)
+    smartFudgeResult: normalizeForcedResult(data.smartFudgeResult),
+    resultPolicy: normalizeSkillCheckResultPolicy(data.resultPolicy)
   };
 }
 
@@ -1660,6 +1702,7 @@ function createMutableCheck(actor, skill, data) {
       + Math.max(0, toInteger(contextual.combatDisadvantage)),
     disabledResults,
     forcedResult: "",
+    resultPolicy: normalizeSkillCheckResultPolicy(data.resultPolicy),
     smartFudgeResult: String(data.smartFudgeResult ?? "").trim() || contextualSmartFudgeResult,
     requester,
     weaponAttackId: String(data.weaponAttackId ?? ""),
@@ -1905,6 +1948,22 @@ export function calculateSkillCheckSuccessChance(actor, finalSkillValue, difficu
       : total
   ), 0);
   return clamp(Math.round((successfulFaces / profile.maximum) * 100), 0, 100);
+}
+
+function calculateResultProfileSuccessChance(profile = {}, rollMode = "normal") {
+  const maximum = Math.max(1, toInteger(profile?.maximum));
+  const successfulFaces = (profile?.definitions ?? []).reduce((total, definition) => (
+    definition.key === "success" || definition.key === "criticalSuccess"
+      ? total + ((toInteger(definition.maximum) - toInteger(definition.minimum)) + 1)
+      : total
+  ), 0);
+  const singleRollChance = clamp(successfulFaces / maximum, 0, 1);
+  const chance = rollMode === "advantage"
+    ? 1 - ((1 - singleRollChance) ** 2)
+    : rollMode === "disadvantage"
+      ? singleRollChance ** 2
+      : singleRollChance;
+  return clamp(chance * 100, 0, 100);
 }
 
 function normalizeForcedResult(value) {

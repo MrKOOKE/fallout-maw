@@ -2,6 +2,7 @@ import {
   calculateSkillPointMultiplier,
   calculatePureSkillDevelopmentValue,
   calculateRemainingDevelopmentPoints,
+  canInvestCharacteristicPoint,
   cloneActorDevelopment,
   FIXED_SIGNATURE_SKILL_MULTIPLIER,
   getSkillPointMultiplierBreakdown,
@@ -250,7 +251,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const skillDevelopmentCostSettings = getSkillDevelopmentCostSettings();
     const skillDevelopmentLimit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
     const levelSettings = getLevelSettings();
-    const race = getCreatureRaceSummaries()
+    const runtimeSettings = getPreparedRuntimeSettings();
+    const race = runtimeSettings.creatureOptions.races
       .find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
@@ -276,7 +278,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const canLevelUp = (this.#draft.level < maxLevel) && (this.#gmMode || (currentExperience >= nextThreshold));
     const pointDisplays = this.#preparePointDisplays(remaining);
     const pageIndex = this.#getPageIndex();
-    const raceHealthEnabled = usesIndependentHealthModel(this.actor, getPreparedRuntimeSettings());
+    const raceHealthEnabled = usesIndependentHealthModel(this.actor, runtimeSettings);
     const hasProficiencies = getProficiencySettings().length > 0;
 
     return {
@@ -338,7 +340,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         return {
           ...characteristic,
           value: toInteger(liveCharacteristics?.[characteristic.key]),
-          canIncrease: this.#gmMode || remaining.characteristics > 0,
+          canIncrease: this.#gmMode || (
+            remaining.characteristics > 0
+            && this.#canInvestCharacteristicPoint(characteristic.key, race?.levelOneCharacteristicMaximums)
+          ),
           canDecrease: this.#gmMode ? toInteger(liveCharacteristics?.[characteristic.key]) > 0 : currentPoints > floorPoints
         };
       }),
@@ -1053,7 +1058,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     if (delta > 0) {
       const available = Math.max(0, toInteger(this.#draft.development.points.characteristics));
-      if (available < 1) return false;
+      if (available < 1 || !this.#canInvestCharacteristicPoint(key)) return false;
 
       this.#draft.development.characteristics[key] = toInteger(this.#draft.development.characteristics[key]) + 1;
       this.#draft.development.points.characteristics = available - 1;
@@ -1695,6 +1700,21 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     return Math.max(0, toInteger(getSkillAdvancementSettings(characteristicSettings, skillSettings).developmentLimit));
+  }
+
+  #getLevelOneCharacteristicMaximums() {
+    const raceId = this.actor.system?.creature?.raceId;
+    return getPreparedRuntimeSettings().creatureOptions.races
+      .find(race => race.id === raceId)?.levelOneCharacteristicMaximums ?? {};
+  }
+
+  #canInvestCharacteristicPoint(key, maximums = this.#getLevelOneCharacteristicMaximums()) {
+    return canInvestCharacteristicPoint({
+      level: this.#draft?.level,
+      baseValue: this.#draft?.characteristics?.[key],
+      investedPoints: this.#draft?.development?.characteristics?.[key],
+      levelOneMaximum: maximums?.[key]
+    });
   }
 
   #getPreviewCharacteristicValue(key) {
@@ -2664,6 +2684,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #refreshRepeatControlStates(remaining = calculateRemainingDevelopmentPoints(this.#draft?.development)) {
+    const levelOneCharacteristicMaximums = this.#getLevelOneCharacteristicMaximums();
     for (const characteristic of getCharacteristicSettings()) {
       const escapedKey = CSS.escape(characteristic.key);
       const increase = this.element?.querySelector?.(
@@ -2674,7 +2695,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       );
       const currentPoints = toInteger(this.#draft?.development?.characteristics?.[characteristic.key]);
       const floorPoints = toInteger(this.#floor?.development?.characteristics?.[characteristic.key]);
-      increase?.toggleAttribute("disabled", !this.#gmMode && remaining.characteristics <= 0);
+      increase?.toggleAttribute(
+        "disabled",
+        !this.#gmMode && (
+          remaining.characteristics <= 0
+          || !this.#canInvestCharacteristicPoint(characteristic.key, levelOneCharacteristicMaximums)
+        )
+      );
       decrease?.toggleAttribute(
         "disabled",
         this.#gmMode

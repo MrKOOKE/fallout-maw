@@ -86,12 +86,18 @@
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
           <button type="button" data-creature-section-toggle aria-expanded="{{sections.base.ariaExpanded}}"><i class="fa-solid {{sections.base.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.BaseParameters"}}</span></button>
         </header>
-        <div class="fallout-maw-race-characteristic-grid">
+        <div class="fallout-maw-settings-table fallout-maw-race-characteristic-table">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Characteristic"}}</span>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.BaseCharacteristics"}}</span>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.LevelOneCharacteristicMaximum"}}</span>
+          </div>
           {{#each characteristics}}
-          <label class="fallout-maw-stacked-field">
-            <span title="{{abbr}}">{{label}}</span>
-            <input type="number" name="race.characteristics.{{key}}" value="{{value}}">
-          </label>
+          <div class="fallout-maw-settings-row">
+            <span title="{{abbr}} / {{key}}">{{label}}</span>
+            <input type="number" name="race.characteristics.{{key}}" value="{{value}}" step="1">
+            <input type="number" name="race.levelOneCharacteristicMaximums.{{key}}" value="{{levelOneMaximum}}" min="0" step="1">
+          </div>
           {{/each}}
         </div>
         <div class="fallout-maw-race-pool-grid">

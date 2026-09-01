@@ -1,5 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import {
+  DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM,
   DEFAULT_HEALTH_PER_LEVEL_FORMULA,
   DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
@@ -154,7 +155,11 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         .filter(group => group.races.length),
       characteristics: characteristics.map(characteristic => ({
         ...characteristic,
-        value: toInteger(selectedRace?.characteristics?.[characteristic.key])
+        value: toInteger(selectedRace?.characteristics?.[characteristic.key]),
+        levelOneMaximum: Math.max(0, toInteger(
+          selectedRace?.levelOneCharacteristicMaximums?.[characteristic.key]
+          ?? DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM
+        ))
       })),
       baseParameters: selectedRace?.baseParameters ?? createDefaultRaceBaseParameters(),
       raceHealthEnabled,
@@ -708,6 +713,16 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       getCharacteristicSettings().map(characteristic => [
         characteristic.key,
         toInteger(formData.race?.characteristics?.[characteristic.key])
+      ])
+    );
+    race.levelOneCharacteristicMaximums = Object.fromEntries(
+      getCharacteristicSettings().map(characteristic => [
+        characteristic.key,
+        Math.max(0, toInteger(
+          formData.race?.levelOneCharacteristicMaximums?.[characteristic.key]
+          ?? race.levelOneCharacteristicMaximums?.[characteristic.key]
+          ?? DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM
+        ))
       ])
     );
     const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;

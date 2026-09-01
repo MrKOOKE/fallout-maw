@@ -15,7 +15,9 @@ const LEGACY_CONTEXT_FIELDS = Object.freeze({
     "weaponFunctionId",
     "weaponData",
     "attackDistanceMeters",
-    "effectiveRange"
+    "effectiveRange",
+    "suppressGuardianAngelReaction",
+    "deferredImpactResolution"
   ]),
   weaponAttackCommitted: Object.freeze([
     "attackId",

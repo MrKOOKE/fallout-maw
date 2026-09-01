@@ -113,7 +113,10 @@ test("combat rays use one lifecycle-owned interface layer above tokens and below
   assert.doesNotMatch(animationSource, /_rulerPaths/);
   assert.match(animationSource, /Hooks\.on\("canvasTearDown", releaseCombatVisualizationLayer\)/);
   assert.match(source, /Hooks\.on\("canvasTearDown", clearWeaponAttackCanvasState\)/);
-  assert.match(source, /completeProcessingCycle\([^)]*\) \{\s*if \(this\.destroyed\) return true/);
+  assert.match(
+    source,
+    /completeProcessingCycle\([^)]*\) \{\s*if \(this\.destroyed\) \{\s*this\.flushPendingTerminalAttackOutcomes\(\);\s*return true;\s*\}/
+  );
   assert.match(source, /suppressAttackPreviewBroadcast:\s*Boolean\(authorityContext\)/);
   assert.match(source, /headlessExecution:\s*Boolean\(authorityContext\)/);
   assert.match(source, /levelId:\s*canvas\.level\?\.id \?\? ""/);

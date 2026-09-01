@@ -11,6 +11,14 @@ import {
 } from "../abilities/attack-action-settings.mjs";
 import { buildRequirementPercentModifierChanges } from "../items/requirement-modifiers.mjs";
 import { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
+import { normalizeBullseyeSettings } from "../abilities/bullseye.mjs";
+import { normalizeKeepAwayKnockdownSettings } from "../abilities/keep-away-knockdown.mjs";
+import { normalizeRicochetMasterySettings } from "../abilities/ricochet-mastery.mjs";
+import { normalizeCorpseAfterCorpseSettings } from "../abilities/corpse-after-corpse.mjs";
+import { normalizeHawkEyePiercingSettings } from "../abilities/hawk-eye-piercing.mjs";
+import { normalizeHunterRaceSettings } from "../abilities/hunter-race.mjs";
+import { normalizeCascadeSettings } from "../abilities/cascade.mjs";
+import { normalizeTrophyCollectorSettings } from "../abilities/trophy-collector.mjs";
 import {
   normalizeAbilityChangeSelectionMode
 } from "../abilities/limited-changes.mjs";
@@ -20,6 +28,14 @@ import {
 } from "../utils/active-effect-keys.mjs";
 
 export { normalizeQualityServiceSettings } from "../abilities/quality-service.mjs";
+export { normalizeBullseyeSettings } from "../abilities/bullseye.mjs";
+export { normalizeKeepAwayKnockdownSettings } from "../abilities/keep-away-knockdown.mjs";
+export { normalizeRicochetMasterySettings } from "../abilities/ricochet-mastery.mjs";
+export { normalizeCorpseAfterCorpseSettings } from "../abilities/corpse-after-corpse.mjs";
+export { normalizeHawkEyePiercingSettings } from "../abilities/hawk-eye-piercing.mjs";
+export { normalizeHunterRaceSettings } from "../abilities/hunter-race.mjs";
+export { normalizeCascadeSettings } from "../abilities/cascade.mjs";
+export { normalizeTrophyCollectorSettings } from "../abilities/trophy-collector.mjs";
 export {
   ABILITY_CHANGE_SELECTION_MODES,
   normalizeAbilityChangeSelectionMode
@@ -181,13 +197,22 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   allOrNothing: "allOrNothing",
   reaper: "reaper",
   virtuoso: "virtuoso",
+  cascade: "cascade",
   versatileDevelopment: "versatileDevelopment",
   aiming: "aiming",
+  bullseye: "bullseye",
   ricochet: "ricochet",
+  ricochetMastery: "ricochetMastery",
   keepAway: "keepAway",
+  keepAwayKnockdown: "keepAwayKnockdown",
   lethalShot: "lethalShot",
   lethalStrike: "lethalStrike",
+  corpseAfterCorpse: "corpseAfterCorpse",
   hawkEye: "hawkEye",
+  hawkEyePiercing: "hawkEyePiercing",
+  hunterRace: "hunterRace",
+  trophyCollector: "trophyCollector",
+  trueBullet: "trueBullet",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",
@@ -207,6 +232,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   dangerSense: "dangerSense",
   fullControl: "fullControl",
   counterSniper: "counterSniper",
+  counterSniperGuaranteed: "counterSniperGuaranteed",
+  guardianAngel: "guardianAngel",
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce",
   twoHands: "twoHands",
@@ -2471,20 +2498,47 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
     return normalizeVirtuosoSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.cascade) {
+    return normalizeCascadeSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment) {
     return normalizeVersatileDevelopmentSettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     return normalizeAimingSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.bullseye) {
+    return normalizeBullseyeSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
     return normalizeRicochetSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery) {
+    return normalizeRicochetMasterySettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     return normalizeKeepAwaySettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown) {
+    return normalizeKeepAwayKnockdownSettings(value);
+  }
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(normalizedKey)) {
     return normalizeLethalAttackSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse) {
+    return normalizeCorpseAfterCorpseSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing) {
+    return normalizeHawkEyePiercingSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.hunterRace) {
+    return normalizeHunterRaceSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.trophyCollector) {
+    return normalizeTrophyCollectorSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.trueBullet) {
+    return normalizeTrueBulletSettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return normalizeFourLeafCloverSettings(value);
@@ -2542,6 +2596,12 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
     return normalizeCounterSniperSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed) {
+    return normalizeCounterSniperGuaranteedSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.guardianAngel) {
+    return normalizeGuardianAngelSettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
     return normalizeWhereAreYouGoingSettings(value);
@@ -2979,9 +3039,7 @@ export function normalizeRageSettings(value = {}) {
 export function normalizeVirtuosoSettings(value = {}) {
   return {
     accuracyBonus: toInteger(value?.accuracyBonus ?? 20),
-    damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20),
-    cascadeMaxStacks: Math.max(0, toInteger(value?.cascadeMaxStacks ?? 0)),
-    cascadeIntervalSeconds: Math.max(1, toInteger(value?.cascadeIntervalSeconds ?? 6))
+    damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20)
   };
 }
 
@@ -3275,6 +3333,35 @@ export function normalizeCounterSniperSettings(value = {}) {
     reactionEnergyCost: Math.max(0, toInteger(value?.reactionEnergyCost ?? value?.energyCost ?? 20)),
     reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? value?.overloadEnergyCost ?? 40)),
     reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 12))
+  };
+}
+
+export function normalizeCounterSniperGuaranteedSettings(value = {}) {
+  return {
+    ...normalizeCounterSniperSettings(value),
+    guaranteedHitChanceThreshold: Math.max(0, Math.min(100, toNumber(
+      value?.guaranteedHitChanceThreshold ?? 10
+    )))
+  };
+}
+
+export function normalizeGuardianAngelSettings(value = {}) {
+  return {
+    reactionEnergyCost: Math.max(0, toInteger(value?.reactionEnergyCost ?? value?.energyCost ?? 20)),
+    guaranteedHitChanceThreshold: Math.max(0, Math.min(100, toNumber(
+      value?.guaranteedHitChanceThreshold ?? 10
+    )))
+  };
+}
+
+export function normalizeTrueBulletSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 80)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    criticalSuccessChanceThreshold: Math.max(0, Math.min(100, toNumber(
+      value?.criticalSuccessChanceThreshold ?? 90
+    )))
   };
 }
 

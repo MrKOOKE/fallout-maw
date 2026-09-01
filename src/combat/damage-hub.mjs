@@ -4023,6 +4023,12 @@ function buildDamageEffectChangeKey(kind, ...segments) {
   return path.join(".");
 }
 
+function getPeriodicDamageSourceIdentity(source = {}) {
+  return [source?.damagePacketId, source?.conditionWearPacketId]
+    .map(value => String(value ?? "").trim())
+    .find(Boolean) ?? "";
+}
+
 function normalizeDamageEffectKeySegment(value, fallback = "any") {
   const text = String(value ?? "").trim();
   return (text || fallback).replace(/[^A-Za-z0-9_-]/g, "_");
@@ -4092,7 +4098,14 @@ function mergeManagedTimedDamageEffectChanges(existingChanges = [], newChanges =
   const existingDamageChanges = getDamageChangesFromChangeSource(existingChanges).filter(data => kinds.includes(data.kind));
 
   for (const newChange of getDamageChangesFromChangeSource(newChanges).filter(data => kinds.includes(data.kind))) {
-    const existing = existingDamageChanges.find(data => data.key === newChange.key && data.kind === newChange.kind);
+    const existing = existingDamageChanges.find(data => (
+      data.key === newChange.key
+      && data.kind === newChange.kind
+      && (
+        data.kind !== PERIODIC_DAMAGE_EFFECT_KIND
+        || String(data.sourceIdentity ?? "") === String(newChange.sourceIdentity ?? "")
+      )
+    ));
     if (!existing) {
       mergedChanges.push(newChanges[newChange.changeIndex]);
       existingDamageChanges.push({ ...newChange, changeIndex: mergedChanges.length - 1 });
@@ -4131,7 +4144,7 @@ function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
   return {
     ...existing,
     amountPerTick: roundDamageAmount((Number(existing.amountPerTick) || 0) + (Number(incoming.amountPerTick) || 0)),
-    source: combineDamageEffectSources(existing.source, incoming.source)
+    source: existing.source
   };
 }
 
@@ -5008,7 +5021,16 @@ function mergeCostModifiers(...modifiers) {
   }), { add: 0, multiplier: 1, override: null });
 }
 
-async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {}, worldTime = null } = {}) {
+async function createPeriodicDamageEffect(actor, {
+  damageType = {},
+  limbKey = "",
+  scope = SCOPE_HEALTH,
+  amount = 0,
+  settings = {},
+  source = {},
+  sourceIdentity = "",
+  worldTime = null
+} = {}) {
   if (!canCreateLimbTimedDamageEffect(actor, limbKey)) return [];
   const tickCount = Math.max(0, toInteger(settings.tickCount));
   const tickAmount = tickCount > 0 ? roundDamageAmount(amount / tickCount) : 0;
@@ -5018,6 +5040,9 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
   const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
   const endTime = startTime + (intervalSeconds * tickCount);
   const effectName = String(settings.effectName || damageType.label || damageType.key || "Урон").trim();
+  const resolvedSourceIdentity = getPeriodicDamageSourceIdentity(source)
+    || String(sourceIdentity ?? "").trim()
+    || foundry.utils.randomID();
   const changeData = {
     kind: PERIODIC_DAMAGE_EFFECT_KIND,
     damageTypeKey: damageType.key ?? "",
@@ -5030,6 +5055,7 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
     startTime,
     endTime,
     nextTickTime: startTime + intervalSeconds,
+    sourceIdentity: resolvedSourceIdentity,
     source
   };
   const effectData = {
@@ -5051,7 +5077,12 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
     },
     system: {
       changes: [createDamageEffectChange(
-        buildDamageEffectChangeKey("periodic", damageType.key || "damage", limbKey || scope || "health"),
+        buildDamageEffectChangeKey(
+          "periodic",
+          damageType.key || "damage",
+          limbKey || scope || "health",
+          resolvedSourceIdentity
+        ),
         changeData
       )]
     }
@@ -6376,7 +6407,7 @@ function collectPeriodicDamageEffectTicks(effect, data, now) {
       source: {
         ...(data.source ?? {}),
         periodicDamageEffectUuid: effect.uuid,
-        damagePacketId: getTimedDamageTickPacketId(effect, worldTime),
+        damagePacketId: getTimedDamageTickPacketId(effect, worldTime, data.sourceIdentity),
         dueTicks: 1,
         tickIndex,
         worldTime
@@ -6435,8 +6466,10 @@ function buildBleedingDamageTickRequests(effect, data = {}, startIndex = 0, tick
   })).filter(entry => entry.amount > 0);
 }
 
-function getTimedDamageTickPacketId(effect, worldTime) {
-  return `timed:${String(effect?.uuid ?? effect?.id ?? "effect")}:${Number(worldTime) || 0}`;
+function getTimedDamageTickPacketId(effect, worldTime, sourceIdentity = "") {
+  const identity = String(sourceIdentity ?? "").trim();
+  const identitySuffix = identity ? `:${identity}` : "";
+  return `timed:${String(effect?.uuid ?? effect?.id ?? "effect")}${identitySuffix}:${Number(worldTime) || 0}`;
 }
 
 function collectPeriodicHealingEffectTicks(effect, data, now) {
@@ -6934,6 +6967,8 @@ function combinePendingPeriodicDamageEffects(entries = []) {
     const limbKey = String(entry.limbKey ?? "").trim();
     const scope = String(entry.scope ?? SCOPE_HEALTH);
     const settings = entry.settings ?? {};
+    const sourceIdentity = getPeriodicDamageSourceIdentity(entry.source)
+      || foundry.utils.randomID();
     const key = [
       damageTypeKey,
       limbKey,
@@ -6941,12 +6976,12 @@ function combinePendingPeriodicDamageEffects(entries = []) {
       toInteger(settings.tickCount),
       toInteger(settings.intervalSeconds || ROUND_SECONDS),
       String(settings.effectName ?? ""),
-      String(settings.img ?? "")
+      String(settings.img ?? ""),
+      sourceIdentity
     ].join("\u0000");
     const current = combined.get(key);
     if (current) {
       current.amount += Math.max(0, Number(entry.amount) || 0);
-      current.source = combineDamageEffectSources(current.source, entry.source);
       current.worldTime = Math.min(Number(current.worldTime) || 0, Number(entry.worldTime) || Number(current.worldTime) || 0);
     } else {
       combined.set(key, {
@@ -6956,6 +6991,7 @@ function combinePendingPeriodicDamageEffects(entries = []) {
         scope,
         amount: Math.max(0, Number(entry.amount) || 0),
         settings,
+        sourceIdentity,
         source: entry.source && typeof entry.source === "object" ? foundry.utils.deepClone(entry.source) : {},
         worldTime: Number(entry.worldTime) || 0
       });
@@ -9335,13 +9371,17 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
     contextual = getContextualAbilityChangeValues(actor, changes, mitigationContext);
   }
   const contextualDefense = Number(contextual.defense ?? preparedDefense) || 0;
-  const rawDefense = percentageMitigation ? contextualDefense : Math.max(0, contextualDefense);
+  const rawDefense = applySourceMitigationIgnore(
+    percentageMitigation ? contextualDefense : Math.max(0, contextualDefense),
+    source?.targetDefenseIgnorePercent
+  );
   const contextualDefenseWithoutEquipment = Number(
     contextual.defenseWithoutEquipment ?? preparedDefense - defenseEquipmentMitigation
   ) || 0;
-  const rawDefenseWithoutEquipment = percentageMitigation
-    ? contextualDefenseWithoutEquipment
-    : Math.max(0, contextualDefenseWithoutEquipment);
+  const rawDefenseWithoutEquipment = applySourceMitigationIgnore(
+    percentageMitigation ? contextualDefenseWithoutEquipment : Math.max(0, contextualDefenseWithoutEquipment),
+    source?.targetDefenseIgnorePercent
+  );
   const defensePenetration = Math.min(Math.max(0, rawDefense), mitigationPenetration);
   const defense = rawDefense - defensePenetration;
   let remaining = incomingDamage;
@@ -9361,13 +9401,17 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
   remaining = Math.max(0, remaining - defenseBlocked);
   const amountBeforeResistance = remaining;
   const contextualResistance = Number(contextual.resistance ?? preparedResistance) || 0;
-  const rawResistance = percentageMitigation ? contextualResistance : Math.max(0, contextualResistance);
+  const rawResistance = applySourceMitigationIgnore(
+    percentageMitigation ? contextualResistance : Math.max(0, contextualResistance),
+    source?.targetResistanceIgnorePercent
+  );
   const contextualResistanceWithoutEquipment = Number(
     contextual.resistanceWithoutEquipment ?? preparedResistance - resistanceEquipmentMitigation
   ) || 0;
-  const rawResistanceWithoutEquipment = percentageMitigation
-    ? contextualResistanceWithoutEquipment
-    : Math.max(0, contextualResistanceWithoutEquipment);
+  const rawResistanceWithoutEquipment = applySourceMitigationIgnore(
+    percentageMitigation ? contextualResistanceWithoutEquipment : Math.max(0, contextualResistanceWithoutEquipment),
+    source?.targetResistanceIgnorePercent
+  );
   const resistancePenetration = Math.max(0, mitigationPenetration - defensePenetration);
   const resistancePenetrationSpent = Math.min(Math.max(0, rawResistance), resistancePenetration);
   const resistance = rawResistance - resistancePenetrationSpent;
@@ -9449,6 +9493,13 @@ function calculatePercentageDamageReduction(amount, percentage) {
   const normalizedPercentage = Math.min(100, Number(percentage) || 0);
   const magnitude = Math.floor(amount * Math.abs(normalizedPercentage) / 100);
   return normalizedPercentage < 0 ? -magnitude : magnitude;
+}
+
+function applySourceMitigationIgnore(value = 0, percent = 0) {
+  const mitigation = Number(value) || 0;
+  if (mitigation <= 0) return mitigation;
+  const ignoredPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+  return mitigation * (100 - ignoredPercent) / 100;
 }
 
 function calculateDamageMitigationReduction(amount, mitigation, percentageMitigation = false) {

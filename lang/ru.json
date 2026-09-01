@@ -2434,6 +2434,8 @@
       },
       "CreatureOptions": {
         "BaseParameters": "Базовые параметры",
+        "BaseCharacteristics": "Базовые",
+        "Characteristic": "Характеристика",
         "CharacteristicDistributionPoints": "Очков распределения характеристик",
         "AddNaturalSet": "Добавить набор",
         "AddNaturalFeature": "Добавить особенность",
@@ -2464,6 +2466,7 @@
         "InventorySize": "Базовый размер инвентаря",
         "Limbs": "Конечности",
         "LimbStateMax": "Макс. состояние",
+        "LevelOneCharacteristicMaximum": "Максимум 1 уровня (по базе 10)",
         "NaturalFeatures": "Особенности",
         "NaturalSetName": "Название набора",
         "NaturalWeapons": "Природное оружие",

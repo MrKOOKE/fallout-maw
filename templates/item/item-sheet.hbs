@@ -478,16 +478,143 @@
             <span>Урон, %</span>
             <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonus" value="{{fixedVirtuosoSettings.damagePercentBonus}}" step="1">
           </label>
-          <label>
-            <span>Максимум Каскада (0 = выключен)</span>
-            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.cascadeMaxStacks" value="{{fixedVirtuosoSettings.cascadeMaxStacks}}" min="0" step="1">
-          </label>
-          <label>
-            <span>Интервал Каскада (сек.)</span>
-            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.cascadeIntervalSeconds" value="{{fixedVirtuosoSettings.cascadeIntervalSeconds}}" min="1" step="1">
-          </label>
         </div>
       </div>
+    </div>
+    {{/if}}
+    {{#if fixedCascadeSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Каскад</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Точность за заряд</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyPerStack" value="{{fixedCascadeSettings.accuracyPerStack}}" step="1"></label>
+        <label><span>Урон за заряд, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentPerStack" value="{{fixedCascadeSettings.damagePercentPerStack}}" step="1"></label>
+        <label><span>Максимум зарядов</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maxStacks" value="{{fixedCascadeSettings.maxStacks}}" min="1" step="1"></label>
+        <label><span>Заряды в начале боя</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.initialStacks" value="{{fixedCascadeSettings.initialStacks}}" min="0" step="1"></label>
+        <label><span>Зарядов за интервал</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.periodicGain" value="{{fixedCascadeSettings.periodicGain}}" min="0" step="1"></label>
+        <label><span>Интервал, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.periodicIntervalSeconds" value="{{fixedCascadeSettings.periodicIntervalSeconds}}" min="1" step="1"></label>
+        <label><span>Зарядов за смену оружия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.weaponSwitchGain" value="{{fixedCascadeSettings.weaponSwitchGain}}" min="0" step="1"></label>
+        <label><span>Сбрасывать при повторе оружия</span><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resetOnRepeatedWeapon" {{#if fixedCascadeSettings.resetOnRepeatedWeapon}}checked{{/if}}></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedBullseyeSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: В яблочко</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Энергия за атаку</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedBullseyeSettings.energyCost}}" min="0" step="1"></label>
+        <label><span>Игнорирование врождённой сложности, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.innateDifficultyIgnorePercent" value="{{fixedBullseyeSettings.innateDifficultyIgnorePercent}}" min="0" max="100" step="1"></label>
+        <label><span>Формула пробивания</span><input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.penetrationBonusFormula" value="{{fixedBullseyeSettings.penetrationBonusFormula}}" data-formula-autocomplete="all"></label>
+        <label><span>Максимум зарядов</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maxStacks" value="{{fixedBullseyeSettings.maxStacks}}" min="1" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedKeepAwayKnockdownSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Держись подальше II</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedKeepAwayKnockdownSettings.activationEnergyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedKeepAwayKnockdownSettings.overloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedKeepAwayKnockdownSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Базовая сложность</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.baseDifficulty" value="{{fixedKeepAwayKnockdownSettings.baseDifficulty}}" min="0" step="1"></label>
+        <label><span>Сложность за 1% урона ОЗ</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.lostHealthPercentMultiplier" value="{{fixedKeepAwayKnockdownSettings.lostHealthPercentMultiplier}}" min="0" step="0.1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedCounterSniperGuaranteedSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Контр-снайпер II</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость реакции, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionEnergyCost" value="{{fixedCounterSniperGuaranteedSettings.reactionEnergyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionOverloadEnergyCost" value="{{fixedCounterSniperGuaranteedSettings.reactionOverloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionOverloadDurationSeconds" value="{{fixedCounterSniperGuaranteedSettings.reactionOverloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Порог гарантированного попадания, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.guaranteedHitChanceThreshold" value="{{fixedCounterSniperGuaranteedSettings.guaranteedHitChanceThreshold}}" min="0" max="100" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedGuardianAngelSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Ангел-хранитель</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость реакции, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionEnergyCost" value="{{fixedGuardianAngelSettings.reactionEnergyCost}}" min="0" step="1"></label>
+        <label><span>Порог гарантированного попадания, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.guaranteedHitChanceThreshold" value="{{fixedGuardianAngelSettings.guaranteedHitChanceThreshold}}" min="0" max="100" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedHunterRaceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Охотник</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedHunterRaceSettings.energyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedHunterRaceSettings.overloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedHunterRaceSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Длительность эффекта, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.durationSeconds" value="{{fixedHunterRaceSettings.durationSeconds}}" min="0" step="1"></label>
+        <label><span>Точность</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyBonus" value="{{fixedHunterRaceSettings.accuracyBonus}}" step="1"></label>
+        <label><span>Урон, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonus" value="{{fixedHunterRaceSettings.damagePercentBonus}}" step="1"></label>
+        <label><span>Шанс крита</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.criticalChanceBonus" value="{{fixedHunterRaceSettings.criticalChanceBonus}}" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedTrophyCollectorSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Собиратель трофеев</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Длительность метки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.markDurationSeconds" value="{{fixedTrophyCollectorSettings.markDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Максимальная сила метки</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maximumStrength" value="{{fixedTrophyCollectorSettings.maximumStrength}}" min="1" step="1"></label>
+        <label><span>Точность за заряд</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyPerStack" value="{{fixedTrophyCollectorSettings.accuracyPerStack}}" step="1"></label>
+        <label><span>Входящий урон за заряд, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.incomingDamagePercentPerStack" value="{{fixedTrophyCollectorSettings.incomingDamagePercentPerStack}}" step="1"></label>
+        <label><span>Шанс крита за заряд</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.criticalChancePerStack" value="{{fixedTrophyCollectorSettings.criticalChancePerStack}}" step="1"></label>
+        <label><span>Навык проверки Стойкости</span><input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resilienceSkillKey" value="{{fixedTrophyCollectorSettings.resilienceSkillKey}}"></label>
+        <label><span>Формула сложности Стойкости</span><input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resilienceDifficultyFormula" value="{{fixedTrophyCollectorSettings.resilienceDifficultyFormula}}" data-formula-autocomplete="all"></label>
+        <label><span>Оглушение, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.stunPercent" value="{{fixedTrophyCollectorSettings.stunPercent}}" min="0" max="100" step="1"></label>
+        <label><span>Оглушение, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.stunDurationSeconds" value="{{fixedTrophyCollectorSettings.stunDurationSeconds}}" min="0" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedRicochetMasterySettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Рикошет II</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedRicochetMasterySettings.activationEnergyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedRicochetMasterySettings.overloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedRicochetMasterySettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Максимум отражений</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maxReflections" value="{{fixedRicochetMasterySettings.maxReflections}}" min="0" step="1"></label>
+        <label><span>Полный угол конуса, °</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maximumConeDegrees" value="{{fixedRicochetMasterySettings.maximumConeDegrees}}" min="0" max="360" step="0.1"></label>
+        <label><span>Точность за отражение</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyBonusPerReflection" value="{{fixedRicochetMasterySettings.accuracyBonusPerReflection}}" step="1"></label>
+        <label><span>Урон за отражение, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonusPerReflection" value="{{fixedRicochetMasterySettings.damagePercentBonusPerReflection}}" step="1"></label>
+        <label><span>Пробивание за отражение</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.penetrationBonusPerReflection" value="{{fixedRicochetMasterySettings.penetrationBonusPerReflection}}" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedCorpseAfterCorpseSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Труп за трупом</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedCorpseAfterCorpseSettings.activationEnergyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedCorpseAfterCorpseSettings.overloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedCorpseAfterCorpseSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Бонус урона, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonus" value="{{fixedCorpseAfterCorpseSettings.damagePercentBonus}}" step="1"></label>
+        <label><span>Ожидание после атаки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackWaitDurationSeconds" value="{{fixedCorpseAfterCorpseSettings.attackWaitDurationSeconds}}" min="0" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedHawkEyePiercingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Соколиный глаз II</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Игнорирование Защиты, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.defenseIgnorePercent" value="{{fixedHawkEyePiercingSettings.defenseIgnorePercent}}" min="0" max="100" step="1"></label>
+        <label><span>Игнорирование Сопротивления, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resistanceIgnorePercent" value="{{fixedHawkEyePiercingSettings.resistanceIgnorePercent}}" min="0" max="100" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
+    {{#if fixedTrueBulletSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Верная пуля</h3></div>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedTrueBulletSettings.activationEnergyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedTrueBulletSettings.overloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedTrueBulletSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Порог критического успеха, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.criticalSuccessChanceThreshold" value="{{fixedTrueBulletSettings.criticalSuccessChanceThreshold}}" min="0" max="100" step="1"></label>
+      </div></div>
     </div>
     {{/if}}
     {{#if fixedVersatileDevelopmentSettings}}

@@ -30,7 +30,8 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
     label: "Контр-снайпер",
     finishAfterAttack: true,
     preventCancel: true,
-    suppressCounterSniperReaction: true
+    suppressCounterSniperReaction: true,
+    suppressGuardianAngelReaction: true
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.forced]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.forced,
@@ -89,11 +90,18 @@ export function createLungeAttackModifier({
   });
 }
 
-export function createCounterSniperAttackModifier({ onDestroy = null, label = "Контр-снайпер" } = {}) {
+export function createCounterSniperAttackModifier({
+  onDestroy = null,
+  label = "Контр-снайпер",
+  resultPolicy = null,
+  suppressGuardianAngelReaction = true
+} = {}) {
   return normalizeWeaponAttackModifier({
     key: WEAPON_ATTACK_MODIFIER_KEYS.counterSniper,
     label,
-    onDestroy
+    onDestroy,
+    resultPolicy,
+    suppressGuardianAngelReaction
   });
 }
 

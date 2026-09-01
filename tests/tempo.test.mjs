@@ -90,9 +90,12 @@ test("Tempo consumes one aggregate after the complete attack cycle", () => {
   assert.match(RUNTIME, /ATTACK_EVENT_KEY = "fallout-maw\.weapon\.attack\.resolved"/);
   assert.doesNotMatch(RUNTIME, /weapon\.attack\.checkResolved/);
   assert.match(RUNTIME, /attackCycleAggregate !== true/);
+  assert.match(RUNTIME, /deferredImpactPending === true/);
   assert.match(RUNTIME, /attackCheckCount <= 0/);
   assert.match(COMPATIBILITY_EVENTS, /Hooks\.on\("fallout-maw\.weaponAttackResolved"/);
   assert.match(COMPATIBILITY_EVENTS, /attackCycleAggregate: true/);
+  assert.match(COMPATIBILITY_EVENTS, /attackPhase/);
+  assert.match(COMPATIBILITY_EVENTS, /deferredImpactResolution/);
   assert.match(COMPATIBILITY_EVENTS, /suppressGenericEventReactions: true/);
 });
 
@@ -100,14 +103,16 @@ test("weapon attacks aggregate hits independently of damage and by defender", ()
   assert.match(WEAPON_ATTACK_CONTROLLER, /this\.successfulAttackCheckCount = 0/);
   assert.match(WEAPON_ATTACK_CONTROLLER, /this\.recordAttackCheckOutcome\(outcome\)/);
   assert.match(WEAPON_ATTACK_CONTROLLER, /if \(!isSuccessfulAttack\(outcome\)\) return false/);
-  assert.match(WEAPON_ATTACK_CONTROLLER, /successfulAttack: this\.successfulAttackCheckCount > 0/);
+  assert.match(WEAPON_ATTACK_CONTROLLER, /this\.successfulAttackCheckCount > 0\s*\|\| this\.successfulAttackTargetActorUuids\.size > 0/);
   assert.match(WEAPON_ATTACK_CONTROLLER, /successfulAttackTargetActorUuids: Array\.from\(this\.successfulAttackTargetActorUuids\)/);
   assert.match(WEAPON_ATTACK_CONTROLLER, /await emitWeaponAttackResolved\(context\)/);
-  assert.equal(
-    Array.from(WEAPON_ATTACK_CONTROLLER.matchAll(/await this\.emitAttackCheckAggregateResolved\(\)/g)).length,
-    2,
-    "push and delayed-volley cycles must publish their aggregate even without the ordinary finalizer"
+  assert.doesNotMatch(WEAPON_ATTACK_CONTROLLER, /emitAttackCheckAggregateResolved/);
+  assert.match(
+    WEAPON_ATTACK_CONTROLLER,
+    /await this\.notifyAttackResolved\(\{\s*deferredImpactPending: true,\s*deferNoiseDetection: resolveWeaponNoiseAtImpact\s*\}\)/
   );
+  assert.match(WEAPON_ATTACK_CONTROLLER, /attackCheckAggregate: true,[\s\S]*?deferredImpactResolution: true/);
+  assert.match(WEAPON_ATTACK_CONTROLLER, /notifyAttackCheckResolved\(outcome, checkBatch, \{ recordAggregate: false \}\)/);
   assert.match(RUNTIME, /successfulDefenderUuids\.has\(defenderUuid\)/);
 });
 

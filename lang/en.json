@@ -2369,6 +2369,8 @@
       },
       "CreatureOptions": {
         "BaseParameters": "Base Parameters",
+        "BaseCharacteristics": "Base",
+        "Characteristic": "Characteristic",
         "CharacteristicDistributionPoints": "Characteristic distribution points",
         "AddNaturalSet": "Add Set",
         "AddNaturalFeature": "Add Feature",
@@ -2400,6 +2402,7 @@
         "LoadLimitPercent": "Load limit (% of base)",
         "Limbs": "Limbs",
         "LimbStateMax": "Max state",
+        "LevelOneCharacteristicMaximum": "Level 1 maximum (default 10)",
         "NaturalFeatures": "Features",
         "NaturalSetName": "Set Name",
         "NaturalWeapons": "Natural Weapons",

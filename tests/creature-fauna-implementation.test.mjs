@@ -93,6 +93,17 @@ test("creature settings preserve an explicit absence of ordinary weapon slots", 
     [{ key: "empty", label: "Empty", slots: [] }]
   );
   assert.ok(normalizeRace(baseRace).weaponSets.length > 0);
+
+  const characteristics = [{ key: "strength" }, { key: "luck" }];
+  const normalizeMaximums = race => normalizeCreatureOptions({
+    types: [{ id: "animal", name: "Animal" }],
+    races: [race]
+  }, characteristics).races[0].levelOneCharacteristicMaximums;
+  assert.deepEqual(normalizeMaximums(baseRace), { strength: 10, luck: 10 });
+  assert.deepEqual(normalizeMaximums({
+    ...baseRace,
+    levelOneCharacteristicMaximums: { strength: 12, luck: 7 }
+  }), { strength: 12, luck: 7 });
 });
 
 test("expanded creature options preserve anchors and contain the complete practical catalog", () => {

@@ -170,6 +170,17 @@ import {
   normalizeReaperSettings,
   normalizeVersatileDevelopmentSettings,
   normalizeVirtuosoSettings,
+  normalizeCascadeSettings,
+  normalizeBullseyeSettings,
+  normalizeKeepAwayKnockdownSettings,
+  normalizeCounterSniperGuaranteedSettings,
+  normalizeGuardianAngelSettings,
+  normalizeHunterRaceSettings,
+  normalizeTrophyCollectorSettings,
+  normalizeRicochetMasterySettings,
+  normalizeCorpseAfterCorpseSettings,
+  normalizeHawkEyePiercingSettings,
+  normalizeTrueBulletSettings,
   normalizeAbilityFunctions,
   normalizeAbilityConstructs
 } from "../settings/abilities.mjs";
@@ -7292,6 +7303,25 @@ function activateItemEffectKeyAutocompletes(root) {
   });
 }
 
+const RANGED_EVOLUTION_FIXED_SETTINGS_DISPLAYS = Object.freeze({
+  [ABILITY_FIXED_FUNCTION_KEYS.cascade]: ["fixedCascadeSettings", normalizeCascadeSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.bullseye]: ["fixedBullseyeSettings", normalizeBullseyeSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown]: ["fixedKeepAwayKnockdownSettings", normalizeKeepAwayKnockdownSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed]: ["fixedCounterSniperGuaranteedSettings", normalizeCounterSniperGuaranteedSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.guardianAngel]: ["fixedGuardianAngelSettings", normalizeGuardianAngelSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.hunterRace]: ["fixedHunterRaceSettings", normalizeHunterRaceSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.trophyCollector]: ["fixedTrophyCollectorSettings", normalizeTrophyCollectorSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery]: ["fixedRicochetMasterySettings", normalizeRicochetMasterySettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse]: ["fixedCorpseAfterCorpseSettings", normalizeCorpseAfterCorpseSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing]: ["fixedHawkEyePiercingSettings", normalizeHawkEyePiercingSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.trueBullet]: ["fixedTrueBulletSettings", normalizeTrueBulletSettings]
+});
+
+function prepareRangedEvolutionFixedSettings(fixedKey, settings) {
+  const display = RANGED_EVOLUTION_FIXED_SETTINGS_DISPLAYS[fixedKey];
+  return display ? { [display[0]]: display[1](settings) } : {};
+}
+
 function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, functionPath = "system.functions", item = null) {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
   const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
@@ -7303,6 +7333,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     : [];
   const isFixed = type === ABILITY_FUNCTION_TYPES.fixed;
   const fixedKey = String(entry?.fixedKey ?? "");
+  const rangedEvolutionFixedSettings = prepareRangedEvolutionFixedSettings(fixedKey, entry?.fixedSettings);
   const activeApplicationSettings = isActiveApplication
     ? prepareActiveApplicationSettingsForDisplay(entry?.activeSettings)
     : null;
@@ -7521,6 +7552,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     canConfigureActions: isEffectChanges || isActiveApplication,
     showPureValuesToggle: isEffectChanges && hasAdvancementPureValueFunctionChanges(entry),
     fixedKey,
+    ...rangedEvolutionFixedSettings,
     activeApplicationSettings,
     attackActionSettings,
     fixedDeusSettings,

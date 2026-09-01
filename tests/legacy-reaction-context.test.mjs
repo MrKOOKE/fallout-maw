@@ -60,3 +60,23 @@ test("legacy reaction bridge rejects invalid values on allow-listed fields witho
   );
   assert.throws(() => serializeLegacyReactionContext("unknownLegacyEvent", {}), /Unsupported legacy reaction event/i);
 });
+
+test("targeted-attack bridge preserves reaction recursion and delayed-impact guards", () => {
+  const context = serializeLegacyReactionContext("weaponAttackTargeted", {
+    attackId: "attack-guarded",
+    attackerActorUuid: "Actor.attacker",
+    targetActorUuid: "Actor.target",
+    suppressGuardianAngelReaction: true,
+    deferredImpactResolution: true,
+    unrelatedGuard: true
+  });
+
+  assert.deepEqual(context, {
+    attackId: "attack-guarded",
+    attackerActorUuid: "Actor.attacker",
+    targetActorUuid: "Actor.target",
+    suppressGuardianAngelReaction: true,
+    deferredImpactResolution: true
+  });
+  assert.equal(Object.hasOwn(context, "unrelatedGuard"), false);
+});

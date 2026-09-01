@@ -124,15 +124,24 @@ test("ordinary detection resolves after outcome publication and completed damage
 test("push and delayed placement resolve noise only after their final effects", () => {
   const push = sliceBetween("async performPushAttack", "async resolvePushHit");
   assert.ok(
-    push.indexOf("await this.finalizeWeaponNoiseDetection()")
+    push.indexOf("await this.notifyAttackResolved")
       > push.indexOf("await this.playAttackAnimationsIfNeeded")
   );
 
   const volley = sliceBetween("async performVolleyAttack", "async resolveVolleyBlastPoint");
   const delayedPlacement = volley.indexOf("requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest)");
-  const delayedDetection = volley.indexOf("await this.finalizeWeaponNoiseDetection()", delayedPlacement);
   assert.ok(delayedPlacement >= 0);
-  assert.ok(delayedDetection > delayedPlacement);
+  assert.match(volley, /deferNoiseDetection:\s*resolveWeaponNoiseAtImpact/u);
+
+  const impact = sliceBetween(
+    "async function resolveDelayedVolleyExplosionRegion",
+    "function getDelayedVolleyRegionShapeCenter"
+  );
+  assert.ok(
+    impact.indexOf("await resolveWeaponNoiseDetection")
+      > impact.indexOf("await publishWeaponAttackResolved")
+  );
+  assert.match(impact, /preventStealthDetection/u);
 });
 
 test("dual attacks defer child detection and resolve the attempted maximum once", () => {

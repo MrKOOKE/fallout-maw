@@ -97,9 +97,17 @@ export async function emitWeaponAttackResolved(context = {}) {
     ...(Array.isArray(context.targetActorUuids) ? context.targetActorUuids : [])
   ]);
   const successfulAttackTargetActorUuids = uniqueUuids(context.successfulAttackTargetActorUuids);
+  const killedTargetUuids = uniqueUuids(context.killedTargetUuids);
   const successfulAttackCheckCount = Math.max(0, Number(context.successfulAttackCheckCount) || 0);
   const successfulAttack = context.successfulAttack === true || successfulAttackCheckCount > 0;
   const attackId = String(context.attackId ?? "").trim();
+  const deferredImpactPending = context.deferredImpactPending === true;
+  const deferredImpactResolution = context.deferredImpactResolution === true;
+  const attackPhase = deferredImpactResolution
+    ? "deferredImpact"
+    : deferredImpactPending
+      ? "deferredLaunch"
+      : "immediate";
   const source = participant(actor, context.actorToken, null) ?? {
     actorUuid,
     tokenUuid: String(context.tokenUuid ?? ""),
@@ -111,6 +119,7 @@ export async function emitWeaponAttackResolved(context = {}) {
     data: {
       actorUuid,
       weaponUuid: String(context.weaponUuid ?? ""),
+      weaponName: String(context.weaponName ?? context.weapon?.name ?? ""),
       actionKey: String(context.actionKey ?? context.weaponActionKey ?? ""),
       weaponFunctionId: String(context.weaponFunctionId ?? ""),
       attackId,
@@ -119,14 +128,18 @@ export async function emitWeaponAttackResolved(context = {}) {
       successfulAttack,
       attackCheckTargetActorUuids,
       successfulAttackTargetActorUuids,
+      killedTargetUuids,
       targetActorUuids,
       attackCycleAggregate: true,
+      attackPhase,
+      deferredImpactPending,
+      deferredImpactResolution,
       suppressGenericEventReactions: true
     },
     outcome: { success: successfulAttack }
   }, {
     kind: "weaponAttackCycleResolved",
-    operationId: `weapon-attack-cycle:${attackId || foundry.utils.randomID()}`,
+    operationId: `weapon-attack-cycle:${attackId || foundry.utils.randomID()}${attackPhase === "immediate" ? "" : `:${attackPhase}`}`,
     sceneUuid: String(context.actorToken?.document?.parent?.uuid ?? canvas?.scene?.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? ""),
     chainRef: context?.chainRef ?? null,

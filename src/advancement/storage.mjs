@@ -1,4 +1,15 @@
+import { DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM } from "../config/defaults.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+
+export function canInvestCharacteristicPoint({
+  level = 1,
+  baseValue = 0,
+  investedPoints = 0,
+  levelOneMaximum = DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM
+} = {}) {
+  if (Math.max(1, toInteger(level)) > 1) return true;
+  return toInteger(baseValue) + Math.max(0, toInteger(investedPoints)) < Math.max(0, toInteger(levelOneMaximum));
+}
 
 export function createDefaultActorDevelopment(characteristicSettings = [], skillSettings = [], proficiencySettings = []) {
   return {

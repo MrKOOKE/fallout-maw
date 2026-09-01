@@ -1,5 +1,6 @@
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { mergeSkillCheckResultPolicies } from "../rolls/skill-check-result-policy.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import { getFalseBreachDisplayedDodgeDifficulty } from "../abilities/false-breach.mjs";
@@ -197,7 +198,11 @@ import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
-import { getActorAvailableEnergy } from "./energy-resource.mjs";
+import {
+  ENERGY_RESOURCE_KEY,
+  canActorSpendEnergy,
+  getActorAvailableEnergy
+} from "./energy-resource.mjs";
 import { isCombatResourceCostActive } from "./resource-cost-policy.mjs";
 import { getAdjustedWeaponRequirement } from "../items/requirement-modifiers.mjs";
 import { getActorResourceLimitAmount } from "./resource-limits.mjs";
@@ -494,7 +499,12 @@ class WeaponActionModifierState {
 
   addSpendRequirement(requirement = {}) {
     if (!requirement || typeof requirement !== "object") return;
-    if (typeof requirement.canSpend !== "function" && typeof requirement.spend !== "function") return;
+    if (
+      requirement.energyCost === undefined
+      && typeof requirement.getEnergyCost !== "function"
+      && typeof requirement.canSpend !== "function"
+      && typeof requirement.spend !== "function"
+    ) return;
     this.spendRequirements.push(requirement);
   }
 
@@ -509,17 +519,37 @@ class WeaponActionModifierState {
   }
 
   canSpend(context = {}) {
+    const resolvedContext = { ...this.context, ...context };
+    const actor = resolvedContext.actor
+      ?? resolvedContext.actorToken?.actor
+      ?? resolvedContext.token?.actor
+      ?? null;
+    const energyCost = this.getEnergyCost(resolvedContext);
+    if (energyCost > 0 && !canActorSpendEnergy(actor, energyCost)) {
+      if (!resolvedContext.silent) {
+        ui.notifications.warn(
+          `Недостаточно энергии для модификаторов атаки (${getActorAvailableEnergy(actor)} / ${energyCost}).`
+        );
+      }
+      return false;
+    }
     for (const requirement of this.spendRequirements) {
       if (typeof requirement.canSpend !== "function") continue;
-      if (requirement.canSpend({ ...this.context, ...context }) === false) return false;
+      if (requirement.canSpend(resolvedContext) === false) return false;
     }
     return true;
   }
 
   async spend(context = {}) {
+    if (!this.canSpend(context)) return false;
+    return this.commit(context);
+  }
+
+  async commit(context = {}) {
+    const resolvedContext = { ...this.context, ...context };
     for (const requirement of this.spendRequirements) {
       if (typeof requirement.spend !== "function") continue;
-      if ((await requirement.spend({ ...this.context, ...context })) === false) return false;
+      if ((await requirement.spend(resolvedContext)) === false) return false;
     }
     return true;
   }
@@ -571,7 +601,7 @@ function collectWeaponActionModifierState(context = {}) {
   return state;
 }
 
-export function getWeaponActionModifierEnergyCost({
+function prepareWeaponActionResourcePreviewContext({
   attackerToken = null,
   token = null,
   actor = null,
@@ -584,7 +614,7 @@ export function getWeaponActionModifierEnergyCost({
   const resolvedToken = token ?? attackerToken?.object ?? attackerToken ?? null;
   const resolvedActor = actor ?? resolvedToken?.actor ?? weapon?.actor ?? null;
   const normalizedActionKey = String(actionKey ?? "").trim();
-  if (!resolvedActor || !weapon || !normalizedActionKey) return 0;
+  if (!resolvedActor || !weapon || !normalizedActionKey) return null;
   const normalizedAttackCount = attackCount === null || attackCount === undefined
     ? getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId)
     : Math.max(1, toInteger(attackCount));
@@ -601,7 +631,97 @@ export function getWeaponActionModifierEnergyCost({
     controller: null,
     attackCount: normalizedAttackCount
   };
-  return collectWeaponActionModifierState(context).getEnergyCost({ attackCount: normalizedAttackCount });
+  return {
+    actor: resolvedActor,
+    attackCount: normalizedAttackCount,
+    context,
+    modifierState: collectWeaponActionModifierState(context)
+  };
+}
+
+function normalizeAdditionalActorResourceCosts(costs = []) {
+  return (Array.isArray(costs) ? costs : [])
+    .map((cost, index) => ({
+      id: String(cost?.id ?? "").trim() || `weapon-additional-actor-cost-${index + 1}`,
+      type: "actorResource",
+      resourceKey: String(cost?.resourceKey ?? "").trim(),
+      amount: Math.max(0, toInteger(cost?.amount))
+    }))
+    .filter(cost => cost.resourceKey && cost.amount > 0);
+}
+
+export function getWeaponActionModifierEnergyCost({
+  attackerToken = null,
+  token = null,
+  actor = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = "",
+  attackModifier = null,
+  attackCount = null
+} = {}) {
+  const prepared = prepareWeaponActionResourcePreviewContext({
+    attackerToken,
+    token,
+    actor,
+    weapon,
+    actionKey,
+    weaponFunctionId,
+    attackModifier,
+    attackCount
+  });
+  return prepared?.modifierState?.getEnergyCost({ attackCount: prepared.attackCount }) ?? 0;
+}
+
+export function getWeaponActionResourcePreview({
+  attackerToken = null,
+  token = null,
+  actor = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = "",
+  attackModifier = null,
+  attackCount = null,
+  additionalActorResourceCosts = []
+} = {}) {
+  const prepared = prepareWeaponActionResourcePreviewContext({
+    attackerToken,
+    token,
+    actor,
+    weapon,
+    actionKey,
+    weaponFunctionId,
+    attackModifier,
+    attackCount
+  });
+  if (!prepared) {
+    return {
+      attackCount: 0,
+      baseEnergyCost: 0,
+      modifierEnergyCost: 0,
+      energyCost: 0,
+      missing: null
+    };
+  }
+  const modifierEnergyCost = Math.max(
+    0,
+    toInteger(prepared.modifierState.getEnergyCost({ attackCount: prepared.attackCount }))
+  );
+  const baseEnergyCost = Math.max(0, toInteger(getWeaponActorResourceCostTotal(
+    weapon,
+    ENERGY_RESOURCE_KEY,
+    { modifierState: prepared.modifierState, weaponFunctionId }
+  )));
+  return {
+    attackCount: prepared.attackCount,
+    baseEnergyCost,
+    modifierEnergyCost,
+    energyCost: baseEnergyCost + modifierEnergyCost,
+    missing: getMissingWeaponResourceCost(weapon, prepared.attackCount, weaponFunctionId, {
+      modifierState: prepared.modifierState,
+      additionalActorResourceCosts
+    })
+  };
 }
 
 export function registerWeaponAttackSocket() {
@@ -827,6 +947,8 @@ export const WEAPON_CONDITION_WEAR_TESTING = Object.freeze({
 });
 
 export const WEAPON_ATTACK_LIFECYCLE_TESTING = Object.freeze({
+  collectResourceSpendTotals: collectWeaponResourceSpendTotals,
+  createModifierState: context => new WeaponActionModifierState(context),
   publishResolved: publishWeaponAttackResolved,
   runTerminal: runWeaponAttackTerminalHandlers
 });
@@ -3857,6 +3979,8 @@ export async function executeWeaponAttackAgainstToken({
   selectedLimbKey = "",
   skipActionPointCost = false,
   skipBaseWeaponResourceCosts = false,
+  additionalActorResourceCosts = [],
+  requireResourceCommit = false,
   strictTargetResolution = false,
   ignoreReactionLock = false,
   suspendActiveAttack = false,
@@ -3883,6 +4007,7 @@ export async function executeWeaponAttackAgainstToken({
     chanceOperationId,
     skipActionPointCost,
     skipBaseWeaponResourceCosts,
+    additionalActorResourceCosts,
     ignoreReactionLock,
     finishAfterAttack: true,
     suppressGenericEventReactions
@@ -3893,11 +4018,14 @@ export async function executeWeaponAttackAgainstToken({
   }
   try {
     activeAttack = controller;
+    let executed = false;
     if (strictTargetResolution) {
-      return await controller.executeStrictlyAgainstToken(targetToken, { selectedLimbKey });
+      executed = await controller.executeStrictlyAgainstToken(targetToken, { selectedLimbKey });
+    } else {
+      controller.attachPreview();
+      executed = await controller.executeAgainstToken(targetToken);
     }
-    controller.attachPreview();
-    return await controller.executeAgainstToken(targetToken);
+    return Boolean(executed && (!requireResourceCommit || controller.attackCostsCommitted));
   } finally {
     if (activeAttack === controller) activeAttack = null;
     controller.destroy();
@@ -4007,6 +4135,8 @@ export async function startConstrainedAimedAttackSelection({
   damageHubOperationRef = "",
   onBeforeExecute = null,
   onProcessingStarted = null,
+  additionalActorResourceCosts = [],
+  requireResourceCommit = false,
   timeoutMs = 120000,
   suppressGenericEventReactions = false
 } = {}) {
@@ -4042,11 +4172,15 @@ export async function startConstrainedAimedAttackSelection({
         onProcessingStarted?.(payload);
       },
       onDestroy: ({ controller: destroyed }) => finish(
-        Boolean(destroyed?.lastResolvedAttackOutcome) || destroyed?.attackCheckCount > 0
+        (
+          Boolean(destroyed?.lastResolvedAttackOutcome)
+          || destroyed?.attackCheckCount > 0
+        ) && (!requireResourceCommit || destroyed?.attackCostsCommitted)
       ),
       finishAfterAttack: true,
       constrainedTarget: true,
       skipActionPointCost: true,
+      additionalActorResourceCosts,
       ignoreReactionLock: true,
       suppressGenericEventReactions
     });
@@ -4087,10 +4221,19 @@ export async function startConstrainedAimedAttackSelection({
   });
 }
 
-export function startForcedAimedAttackSelection({ label = "Контр-снайпер", ...options } = {}) {
+export function startForcedAimedAttackSelection({
+  label = "Контр-снайпер",
+  resultPolicy = null,
+  suppressGuardianAngelReaction = true,
+  ...options
+} = {}) {
   return startConstrainedAimedAttackSelection({
     ...options,
-    attackModifier: createCounterSniperAttackModifier({ label })
+    attackModifier: createCounterSniperAttackModifier({
+      label,
+      resultPolicy,
+      suppressGuardianAngelReaction
+    })
   });
 }
 
@@ -4324,6 +4467,9 @@ export class WeaponAttackController {
     this.weaponFunctionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
     this.stealthAttack = isActorStealthed(this.token?.actor);
     this.attackId = String(options.attackId ?? "").trim() || foundry.utils.randomID();
+    // One controller can execute several attacks while its preview stays open.
+    // Keep the preview/session identity stable and rotate attackId per cycle.
+    this.previewAttackId = this.attackId;
     this.chanceOperationId = String(options.chanceOperationId ?? "").trim() || this.attackId;
     this.rangeProfile = getWeaponRangeProfile(weapon, actionKey, token, this.weaponFunctionId, {
       weaponAttackId: this.attackId,
@@ -4340,6 +4486,7 @@ export class WeaponAttackController {
     this.abilityTrialSession = options.abilityTrialSession ?? null;
     this.skipActionPointCost = Boolean(options.skipActionPointCost);
     this.skipBaseWeaponResourceCosts = Boolean(options.skipBaseWeaponResourceCosts);
+    this.additionalActorResourceCosts = normalizeAdditionalActorResourceCosts(options.additionalActorResourceCosts);
     this.reportedActionPointCost = options.reportedActionPointCost === null
       || options.reportedActionPointCost === undefined
       ? null
@@ -4364,7 +4511,7 @@ export class WeaponAttackController {
     this.headlessExecution = Boolean(options.headlessExecution);
     this.reuseValidatedGeometryOnce = false;
     this.chatMessageAuthorId = String(options.chatMessageAuthorId ?? "").trim();
-    this.autoCoverAttackId = String(options.autoCoverAttackId ?? "").trim() || this.attackId;
+    this.autoCoverAttackId = String(options.autoCoverAttackId ?? "").trim() || this.previewAttackId;
     this.ownsAttackAutoCoverLifecycle = options.ownsAttackAutoCoverLifecycle !== false;
     this.reactionCoordinator = options.reactionCoordinator?.run ? options.reactionCoordinator : null;
     this.deferWeaponNoiseDetection = Boolean(options.deferWeaponNoiseDetection);
@@ -4397,7 +4544,10 @@ export class WeaponAttackController {
     this.meleeAction = MELEE_ACTION_KEYS.has(actionKey);
     this.aimedShot = isAimedShotAction(weapon, actionKey, this.weaponFunctionId);
     this.ignoreAimedObstructions = this.aimedShot
-      && hasActorFixedAbilityFunction(this.token?.actor, ABILITY_FIXED_FUNCTION_KEYS.hawkEye);
+      && (
+        hasActorFixedAbilityFunction(this.token?.actor, ABILITY_FIXED_FUNCTION_KEYS.hawkEye)
+        || hasActorFixedAbilityFunction(this.token?.actor, ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing)
+      );
     this.targetedAction = this.attackModifier?.targetedAction ?? (this.aimedShot || this.meleeAction);
     this.requiresLimbSelection = this.attackModifier?.requiresLimbSelection ?? (this.aimedShot || actionKey === "aimedMeleeAttack");
     this.requiresDirectionSelection = this.attackModifier?.requiresDirectionSelection ?? this.meleeAction;
@@ -4427,6 +4577,7 @@ export class WeaponAttackController {
     this.lastTargetMarkerRenderState = null;
     this.attackCanceledByReaction = false;
     this.attackCommitted = false;
+    this.attackCostsCommitted = false;
     this.criticalDamageUsed = false;
     this.lastResolvedAttackOutcome = null;
     this.attackCheckCount = 0;
@@ -4435,7 +4586,7 @@ export class WeaponAttackController {
     this.successfulAttackTargetActorUuids = new Set();
     this.attackCheckEventSequence = 0;
     this.pendingTerminalAttackOutcomes = [];
-    this.weaponNoisePreviewSourceId = `weapon-attack:${this.attackId}`;
+    this.weaponNoisePreviewSourceId = `weapon-attack:${this.previewAttackId}`;
     this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
     this.weaponNoiseAttempted = false;
     this.weaponNoiseDetectionResolved = false;
@@ -4635,7 +4786,13 @@ export class WeaponAttackController {
     getCombatVisualizationLayer().addChild(this.container);
   }
 
-  async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
+  async notifyAttackResolved({
+    attempted = true,
+    killedTargetUuids = [],
+    damageResults = [],
+    deferredImpactPending = false,
+    deferNoiseDetection = false
+  } = {}) {
     if (!attempted) return;
     const resolvedDamageResults = Array.isArray(damageResults) ? damageResults : [];
     const mechanicalSelectedTarget = isPhantomEntity(this.selectedTarget) ? null : this.selectedTarget;
@@ -4669,6 +4826,7 @@ export class WeaponAttackController {
       actorUuid: this.token?.actor?.uuid ?? "",
       tokenUuid: this.token?.document?.uuid ?? "",
       weaponUuid: this.weapon?.uuid ?? "",
+      weaponName: String(this.weapon?.name ?? ""),
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
       stealthAttack: Boolean(this.stealthAttack),
@@ -4689,6 +4847,7 @@ export class WeaponAttackController {
       damageResults: resolvedDamageResults,
       impactConditionWear,
       modifierState: this.getWeaponActionModifierState(),
+      deferredImpactPending: Boolean(deferredImpactPending),
       reactionCoordinator: this.reactionCoordinator,
       chainRef: this.chainRef,
       damageHubOperationRef: this.damageHubOperationRef,
@@ -4696,7 +4855,7 @@ export class WeaponAttackController {
     };
     this.lastResolvedAttackOutcome = outcome;
     await publishWeaponAttackResolved(outcome);
-    await this.finalizeWeaponNoiseDetection();
+    if (!deferNoiseDetection) await this.finalizeWeaponNoiseDetection();
     (this.pendingTerminalAttackOutcomes ??= []).push(outcome);
     return outcome;
   }
@@ -4727,9 +4886,9 @@ export class WeaponAttackController {
     return true;
   }
 
-  async notifyAttackCheckResolved(outcome = null, completionCollector = null) {
+  async notifyAttackCheckResolved(outcome = null, completionCollector = null, { recordAggregate = true } = {}) {
     const notify = async () => {
-      this.recordAttackCheckOutcome(outcome);
+      if (recordAggregate) this.recordAttackCheckOutcome(outcome);
       const checkOccurrenceId = `${this.attackId}:${++this.attackCheckEventSequence}`;
       const context = {
         actor: this.token?.actor ?? null,
@@ -4869,6 +5028,7 @@ export class WeaponAttackController {
 
   createWeaponAttackSkillCheckContext(targetToken = null, extra = {}) {
     const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
+    const modifierState = this.getWeaponActionModifierState();
     const postureEdge = getPostureAttackEdgeModifiers({
       attackerToken: this.token,
       targetToken,
@@ -4894,7 +5054,12 @@ export class WeaponAttackController {
       stealthAttack: this.stealthAttack,
       weaponData,
       attackModifier: this.attackModifier,
-      weaponActionModifierState: this.getWeaponActionModifierState(),
+      weaponActionModifierState: modifierState,
+      resultPolicy: mergeSkillCheckResultPolicies(
+        this.attackModifier?.resultPolicy,
+        modifierState?.getOption("attackResultPolicy")
+      ),
+      suppressGuardianAngelReaction: Boolean(this.attackModifier?.suppressGuardianAngelReaction),
       suppressGenericEventReactions: this.suppressGenericEventReactions,
       ...mergeAttackEdgeModifiers(postureEdge, perceptionEdge),
       attackTargetVisible: targetToken ? !perceptionEdge.disadvantage : true,
@@ -5194,7 +5359,17 @@ export class WeaponAttackController {
       ].join(":");
       if (shared.notifiedOutcomeKeys.has(notificationKey)) continue;
       shared.notifiedOutcomeKeys.add(notificationKey);
-      await this.notifyAttackCheckResolved(entry.check);
+      await this.notifyAttackCheckResolved(entry.check, null, { recordAggregate: false });
+    }
+
+    const resolvedTargetLane = resolution.targetOutcomes.find(entry => entry.laneKey === laneKey);
+    const targetWasAffected = [
+      ...(resolvedTargetLane?.outcomes ?? []),
+      ...(resolvedTargetLane?.sourceOutcomes ?? [])
+    ].some(entry => Array.isArray(entry?.links) && entry.links.length > 0);
+    if (targetWasAffected && target.actor?.uuid) {
+      this.attackCheckTargetActorUuids.add(String(target.actor.uuid));
+      this.successfulAttackTargetActorUuids.add(String(target.actor.uuid));
     }
 
     const allTargetTokens = await this.getAbilityTrialTargets(target);
@@ -5265,6 +5440,7 @@ export class WeaponAttackController {
           return buildWeaponDamageRequests(this.weapon, {
             attackerActor: this.token.actor,
             attackerToken: this.token,
+            modifierState: this.getWeaponActionModifierState(),
             actor: recipient.actor,
             targetToken: recipientToken,
             limbKey,
@@ -5296,15 +5472,16 @@ export class WeaponAttackController {
   hasRequiredWeaponResources(multiplier = 1) {
     const attackCount = Math.max(1, toInteger(multiplier));
     const modifierState = this.getWeaponActionModifierState();
-    if (
-      !this.skipBaseWeaponResourceCosts
-      && !hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId, { modifierState })
-    ) return false;
+    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId, {
+      modifierState,
+      additionalActorResourceCosts: this.additionalActorResourceCosts,
+      skipBaseCosts: this.skipBaseWeaponResourceCosts
+    })) return false;
     return modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount }));
   }
 
-  async spendWeaponActionModifierCosts(attackCount = 1) {
-    return this.getWeaponActionModifierState().spend(this.createWeaponActionModifierContext({
+  async commitWeaponActionModifierCosts(attackCount = 1) {
+    return this.getWeaponActionModifierState().commit(this.createWeaponActionModifierContext({
       attackCount: Math.max(1, toInteger(attackCount))
     }));
   }
@@ -5333,6 +5510,7 @@ export class WeaponAttackController {
       weaponUuid: this.weapon.uuid,
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
+      suppressGuardianAngelReaction: Boolean(this.attackModifier?.suppressGuardianAngelReaction),
       ...attackDistanceContext,
       title: "Реакция на атаку",
       message: `${this.token.actor.name} атакует ${target.actor.name}: ${this.weapon.name}.`
@@ -5374,7 +5552,7 @@ export class WeaponAttackController {
     if (!this.suppressAttackPreviewBroadcast) {
       broadcastAttackPreview({
         action: "clearPreview",
-        attackId: this.attackId
+        attackId: this.previewAttackId
       });
     }
   }
@@ -5398,13 +5576,19 @@ export class WeaponAttackController {
     if (isWeaponPlacementDisabled(actor, weapon)) return false;
 
     this.weapon = weapon;
+    this.rangeProfile = getWeaponRangeProfile(weapon, this.actionKey, this.token, this.weaponFunctionId, {
+      weaponAttackId: this.attackId,
+      chanceOperationId: this.chanceOperationId
+    });
+    this.rangeProfilesByTarget?.clear?.();
     this.weaponActionModifierState = null;
     const attackCount = getActionAttackCount(weapon, this.actionKey, this.weaponFunctionId);
     const modifierState = this.getWeaponActionModifierState();
-    if (
-      !this.skipBaseWeaponResourceCosts
-      && getMissingWeaponResourceCost(weapon, attackCount, this.weaponFunctionId, { modifierState })
-    ) return false;
+    if (getMissingWeaponResourceCost(weapon, attackCount, this.weaponFunctionId, {
+      modifierState,
+      additionalActorResourceCosts: this.additionalActorResourceCosts,
+      skipBaseCosts: this.skipBaseWeaponResourceCosts
+    })) return false;
     if (!modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount, silent: true }))) return false;
     if (!this.skipActionPointCost && !canSpendRequiredWeaponActionPoints(
       actor,
@@ -5428,30 +5612,15 @@ export class WeaponAttackController {
   }
 
   getAttackCheckAggregateData() {
+    const successfulAttack = this.successfulAttackCheckCount > 0
+      || this.successfulAttackTargetActorUuids.size > 0;
     return {
       successfulAttackCheckCount: Math.max(0, toInteger(this.successfulAttackCheckCount)),
-      successfulAttack: this.successfulAttackCheckCount > 0,
+      successfulAttack,
       attackCheckTargetActorUuids: Array.from(this.attackCheckTargetActorUuids),
       successfulAttackTargetActorUuids: Array.from(this.successfulAttackTargetActorUuids),
       attackCheckAggregate: true
     };
-  }
-
-  emitAttackCheckAggregateResolved() {
-    return emitWeaponAttackResolved({
-      actor: this.token?.actor ?? null,
-      actorToken: this.token,
-      attackerUuid: this.token?.actor?.uuid ?? "",
-      actorUuid: this.token?.actor?.uuid ?? "",
-      tokenUuid: this.token?.document?.uuid ?? "",
-      weaponUuid: this.weapon?.uuid ?? "",
-      actionKey: this.actionKey,
-      weaponFunctionId: this.weaponFunctionId,
-      attackId: this.attackId,
-      attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
-      ...this.getAttackCheckAggregateData(),
-      chainRef: this.chainRef
-    });
   }
 
   flushPendingTerminalAttackOutcomes() {
@@ -5467,6 +5636,7 @@ export class WeaponAttackController {
     this.processing = false;
     void this.abortSkillCheckCollectors();
     if (this.attackModifier?.finishAfterAttack || this.finishAfterAttack) this.finishRequested = true;
+    if (!this.finishRequested && !this.attackCanceledByReaction) this.prepareNextAttackCycle();
     if (!this.finishRequested && !this.attackCanceledByReaction && !this.canContinueAfterProcessing()) {
       this.finishRequested = true;
     }
@@ -5486,6 +5656,33 @@ export class WeaponAttackController {
     }
     this.flushPendingTerminalAttackOutcomes();
     return false;
+  }
+
+  prepareNextAttackCycle() {
+    this.attackId = foundry.utils.randomID();
+    this.chanceOperationId = this.attackId;
+    this.stealthAttack = isActorStealthed(this.token?.actor);
+    this.rangeProfilesByTarget?.clear?.();
+    this.weaponActionModifierState = null;
+    this.attackCommitted = false;
+    this.attackCostsCommitted = false;
+    this.criticalDamageUsed = false;
+    this.lastResolvedAttackOutcome = null;
+    this.attackCheckCount = 0;
+    this.successfulAttackCheckCount = 0;
+    this.attackCheckTargetActorUuids?.clear?.();
+    this.successfulAttackTargetActorUuids?.clear?.();
+    this.attackCheckEventSequence = 0;
+    this.pendingCriticalFailureResourceCosts = [];
+    this.reactionTargetKeys?.clear?.();
+    this.attackedTargetActorUuids?.clear?.();
+    this.attackedTargetTokenUuids?.clear?.();
+    this.preExistingUnconsciousTargetActorUuids?.clear?.();
+    this.reportedActionPointCost = null;
+    this.reportedActionPointCostApplied = null;
+    this.actionPointSpendReceipt = null;
+    this.authorityExecutionSucceeded = false;
+    this.authorityShouldFinish = false;
   }
 
   beginProcessingCycle() {
@@ -5666,16 +5863,14 @@ export class WeaponAttackController {
       }
 
       try {
-        if (!(await this.spendWeaponActionModifierCosts(attackCount))) {
-          await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
-          this.attackCanceledByReaction = true;
-          return false;
-        }
         const resourcesSpent = await spendWeaponResources(
           this.weapon,
           attackCount,
           this.weaponFunctionId,
-          this.pendingCriticalFailureResourceCosts,
+          [
+            ...this.pendingCriticalFailureResourceCosts,
+            ...this.additionalActorResourceCosts
+          ],
           {
             modifierState,
             chainRef: this.chainRef,
@@ -5688,6 +5883,9 @@ export class WeaponAttackController {
           await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
           this.attackCanceledByReaction = true;
           return false;
+        }
+        if (!(await this.commitWeaponActionModifierCosts(attackCount))) {
+          throw new Error("Weapon action modifier state could not be committed after resource spending.");
         }
         committedActorResourceCosts = resourcesSpent.actorCosts ?? [];
       } catch (error) {
@@ -5726,6 +5924,7 @@ export class WeaponAttackController {
     );
     this.actionPointSpendReceipt = committedActionPointSpend?.receipt ?? null;
     this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
+    this.attackCostsCommitted = weaponAttempted;
     this.weaponNoiseAttempted = weaponAttempted;
     this.interruptForIncapacitation();
     return true;
@@ -5882,7 +6081,7 @@ export class WeaponAttackController {
     if (!this.suppressAttackPreviewBroadcast) {
       broadcastAttackPreview({
         action: "clearPreview",
-        attackId: this.attackId
+        attackId: this.previewAttackId
       });
     }
     this.container.destroy({ children: true });
@@ -6226,7 +6425,7 @@ export class WeaponAttackController {
       targetUuid: this.selectedTarget?.document?.uuid ?? this.selectedTarget?.uuid ?? "",
       selectedLimbKey: this.selectedLimbKey,
       operationId: foundry.utils.randomID(),
-      previewAttackId: this.attackId,
+      previewAttackId: this.previewAttackId || this.attackId,
       ...data
     });
 
@@ -6668,8 +6867,7 @@ export class WeaponAttackController {
       });
     }
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
-    await this.finalizeWeaponNoiseDetection();
-    await this.emitAttackCheckAggregateResolved();
+    await this.notifyAttackResolved();
     this.completeProcessingCycle();
   }
 
@@ -7480,6 +7678,7 @@ export class WeaponAttackController {
       requests.push(...buildWeaponDamageRequests(this.weapon, {
         attackerActor: this.token.actor,
         attackerToken: this.token,
+        modifierState: this.getWeaponActionModifierState(),
         actor: target.actor,
         targetToken: target,
         limbKey: resolvedLimbKey,
@@ -7517,7 +7716,10 @@ export class WeaponAttackController {
     const damageRequests = [];
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     const selectedPenetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
-      ...this.createWeaponDamageContext({ targetToken: selectedTarget }),
+      ...this.createWeaponDamageContext({
+        targetToken: selectedTarget,
+        limbKey: targetSelection?.limbKey ?? ""
+      }),
       actor: this.token.actor,
       actorToken: this.token,
       actionKey: this.actionKey,
@@ -7844,6 +8046,7 @@ export class WeaponAttackController {
       requests.push(...buildWeaponDamageRequests(this.weapon, {
         attackerActor: this.token.actor,
         attackerToken: this.token,
+        modifierState: this.getWeaponActionModifierState(),
         actor: target.actor,
         targetToken: target,
         limbKey,
@@ -7944,8 +8147,10 @@ export class WeaponAttackController {
         for (const target of blastTargets) {
           const result = await this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
           damageRequests.push(...(result ?? []));
+          if (this.attackCanceledByReaction) break;
         }
       }
+      if (this.attackCanceledByReaction) break;
     }
     if (!delayedExplosion) await this.dodgeExposure.flush();
 
@@ -7963,6 +8168,24 @@ export class WeaponAttackController {
     const delayedThrownItemId = delayedExplosion ? (existingDelayedThrownItemId || foundry.utils.randomID()) : "";
     const landingPoint = getAttackLandingPoint(finalGeometries, this.pointer);
     const delayedDamageContext = delayedExplosion ? this.createWeaponDamageContext(actionContext) : null;
+    const delayedActionPointCostApplied = delayedExplosion && (
+      this.reportedActionPointCostApplied ?? (
+        !this.skipActionPointCost && isCombatActionPointSpendingActive(this.token.actor)
+      )
+    );
+    const delayedActionPointCost = delayedExplosion
+      ? (this.reportedActionPointCost ?? (
+        delayedActionPointCostApplied
+          ? getWeaponActionPointCost(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+            ...actionContext,
+            chanceOperationId: this.chanceOperationId
+          })
+          : 0
+      ))
+      : 0;
+    const resolveWeaponNoiseAtImpact = delayedExplosion
+      && !existingDelayedThrownItemId
+      && !this.deferWeaponNoiseDetection;
     const delayedRegionRequest = delayedExplosion
       ? buildDelayedVolleyExplosionRegionRequest({
         sceneId: canvas.scene?.id ?? "",
@@ -7977,6 +8200,18 @@ export class WeaponAttackController {
         finalGeometries,
         blastOutcomes,
         damageContext: delayedDamageContext,
+        stealthAttack: this.stealthAttack,
+        actionPointCost: delayedActionPointCost,
+        actionPointCostApplied: delayedActionPointCostApplied,
+        resolveWeaponNoiseAtImpact,
+        weaponNoiseLevel: this.weaponNoiseLevel,
+        preventStealthDetection: Boolean(
+          this.getWeaponActionModifierState().getOption("preventStealthDetection")
+        ),
+        keepAwayEntries: this.getWeaponActionModifierState().getOption("keepAwayDeferredEntries"),
+        suppressGuardianAngelReaction: Boolean(this.attackModifier?.suppressGuardianAngelReaction),
+        chainRef: this.chainRef,
+        damageHubOperationRef: this.damageHubOperationRef,
         impactConditionWearMultiplier: getWeaponImpactConditionWearMultiplier(
           getWeaponAttackData(this.weapon, this.weaponFunctionId),
           this.getWeaponActionModifierState()
@@ -8022,6 +8257,28 @@ export class WeaponAttackController {
       this.completeProcessingCycle();
       return;
     }
+    if (createsNewDelayedRegion) {
+      Object.assign(delayedRegionRequest.source, {
+        actionPointCost: Math.max(0, toInteger(this.reportedActionPointCost)),
+        actionPointCostApplied: Boolean(this.reportedActionPointCostApplied),
+        actionPointSpendReceipt: this.actionPointSpendReceipt
+          ? foundry.utils.deepClone(this.actionPointSpendReceipt)
+          : null
+      });
+      delayedRegionRequest.persistPendingData = true;
+      let updatedRegion = null;
+      let updateError = null;
+      try {
+        updatedRegion = await requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest);
+      } catch (error) {
+        updateError = error;
+      } finally {
+        delete delayedRegionRequest.persistPendingData;
+      }
+      if (!updatedRegion) {
+        console.error(`${SYSTEM_ID} | Failed to persist delayed volley attack outcome context.`, updateError ?? "");
+      }
+    }
     await checkBatch?.publish({ forceBatch: true });
 
     const playEffects = this.shouldPlayWeaponAnimationForAttempt();
@@ -8034,8 +8291,10 @@ export class WeaponAttackController {
           ui.notifications.warn("GM не подтвердил перемещение области отложенного взрыва.");
         }
       }
-      await this.finalizeWeaponNoiseDetection();
-      await this.emitAttackCheckAggregateResolved();
+      await this.notifyAttackResolved({
+        deferredImpactPending: true,
+        deferNoiseDetection: resolveWeaponNoiseAtImpact
+      });
       this.completeProcessingCycle();
       return;
     }
@@ -8101,7 +8360,9 @@ export class WeaponAttackController {
       radiusPixels: geometry.radiusPixels,
       outcome
     });
-    await this.notifyAttackCheckResolved(outcome, checkBatch);
+    // A successful point check only controls scatter. The attack itself is
+    // successful when the resulting area actually reaches at least one target.
+    await this.notifyAttackCheckResolved(outcome, checkBatch, { recordAggregate: false });
     return {
       outcome,
       center,
@@ -8156,6 +8417,10 @@ export class WeaponAttackController {
   async resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
     if (this.usesAbilityTrialResolution()) {
       return this.resolveAbilityTrialAttackAgainstTarget(target);
+    }
+    if (!isDeadTarget(target) && await this.resolveTargetReactions(target)) return null;
+    if (!isDeadTarget(target) && target?.actor?.uuid) {
+      this.successfulAttackTargetActorUuids.add(String(target.actor.uuid));
     }
     const distanceContext = normalizeAttackDistanceContext(blastOutcome);
     const targetDamageContext = this.createWeaponDamageContext({
@@ -8299,6 +8564,7 @@ export class WeaponAttackController {
       requests.push(...buildWeaponDamageRequests(this.weapon, {
         attackerActor: this.token.actor,
         attackerToken: this.token,
+        modifierState: this.getWeaponActionModifierState(),
         actor: target.actor,
         targetToken: target,
         limbKey,
@@ -8415,6 +8681,7 @@ export class WeaponAttackController {
       buildWeaponConditionDamageRequests(this.weapon, {
         attackerActor: this.token.actor,
         attackerToken: this.token,
+        modifierState: this.getWeaponActionModifierState(),
         actor: target.actor,
         targetToken: target,
         targetItem: targetWeapon,
@@ -8451,6 +8718,7 @@ export class WeaponAttackController {
         requests.push(...buildWeaponDamageRequests(this.weapon, {
           attackerActor: this.token.actor,
           attackerToken: this.token,
+          modifierState: this.getWeaponActionModifierState(),
           actor: target.actor,
           targetToken: target,
           penetrationPower: targetPenetrationPower,
@@ -8563,6 +8831,14 @@ export class WeaponAttackController {
       ? this.getWeaponActionModifierState().getOption("ricochet")
       : null;
     if (ricochet?.maxReflections > 0) {
+      const maximumConeDegrees = Number(ricochet.maximumConeDegrees);
+      if (Number.isFinite(maximumConeDegrees) && maximumConeDegrees > 0) {
+        const maximumHalfAngle = Math.min(Math.PI, maximumConeDegrees * Math.PI / 360);
+        if (Number(this.geometry.halfAngle) > maximumHalfAngle) {
+          this.geometry.halfAngle = maximumHalfAngle;
+          this.geometry.shapePoints = buildClippedConePoints(this.token, this.geometry);
+        }
+      }
       this.geometry.ricochet = ricochet;
       this.geometry.ricochetTrajectory = buildTrajectoryByAngle(
         this.token,
@@ -9268,7 +9544,7 @@ export class WeaponAttackController {
     this.lastBroadcastPreviewState = previewState;
     broadcastAttackPreview({
       action: "updatePreview",
-      attackId: this.attackId,
+      attackId: this.previewAttackId,
       sceneId: canvas.scene?.id ?? "",
       ...previewState
     });
@@ -9573,7 +9849,7 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
 function requestActiveWeaponAttackFinish(attackId = "") {
   const normalizedAttackId = String(attackId ?? "").trim();
   if (!normalizedAttackId) return false;
-  if (activeAttack?.attackId === normalizedAttackId) {
+  if (activeAttack?.previewAttackId === normalizedAttackId) {
     activeAttack.requestFinish();
     return true;
   }
@@ -9896,13 +10172,19 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
     String(region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG)?.id ?? "") === delayedThrownItemId
   ));
   if (existing) {
-    const updated = await scene.updateEmbeddedDocuments("Region", [{
+    const updateData = {
       _id: existing.id,
       shapes,
       levels: levelId ? [levelId] : [],
       hidden: false,
       attachment: { token: attachmentTokenId || null }
-    }]);
+    };
+    if (regionData.persistPendingData === true) {
+      updateData[`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_REGION_FLAG}.explodeAtWorldTime`] = explodeAtWorldTime;
+      updateData[`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_REGION_FLAG}.explosions`] = foundry.utils.deepClone(explosions);
+      updateData[`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_REGION_FLAG}.source`] = foundry.utils.deepClone(regionData.source ?? {});
+    }
+    const updated = await scene.updateEmbeddedDocuments("Region", [updateData]);
     const region = updated?.[0] ?? existing;
     if (isDelayedThrownItemWorldOperationCancelled(delayedThrownItemId)) {
       await deleteDelayedVolleyRegionIfMatching(scene, region, delayedThrownItemId);
@@ -10204,6 +10486,36 @@ function getDelayedVolleyTargetCriticalDamageSnapshot({
   };
 }
 
+async function requestDelayedVolleyTargetReaction({ source = {}, target = null, explosion = {} } = {}) {
+  const attackerActorUuid = String(source.attackerUuid ?? "").trim();
+  const attackerTokenUuid = String(source.attackerTokenUuid ?? "").trim();
+  const targetActorUuid = String(target?.actor?.uuid ?? "").trim();
+  const targetTokenUuid = String(target?.document?.uuid ?? "").trim();
+  if (!attackerActorUuid || !attackerTokenUuid || !targetActorUuid || !targetTokenUuid) return null;
+  try {
+    return await requestReactionEvent(REACTION_EVENT_KEYS.weaponAttackTargeted, {
+      attackId: String(source.attackId ?? ""),
+      attackerActorUuid,
+      attackerTokenUuid,
+      targetActorUuid,
+      targetTokenUuid,
+      weaponUuid: String(source.weaponUuid ?? ""),
+      actionKey: String(source.actionKey ?? ""),
+      weaponFunctionId: String(source.weaponFunctionId ?? ""),
+      suppressGuardianAngelReaction: Boolean(source.suppressGuardianAngelReaction),
+      deferredImpactResolution: true,
+      ...normalizeAttackDistanceContext(explosion),
+      chainRef: source.chainRef ?? null,
+      damageHubOperationRef: String(source.damageHubOperationRef ?? ""),
+      title: "Реакция на атаку",
+      message: `${target.actor.name}: попадание в область отложенного взрыва.`
+    });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Delayed volley target reaction failed`, error);
+    return null;
+  }
+}
+
 async function processDelayedVolleyExplosions(worldTime = 0) {
   if (!game.user?.isGM || getResponsibleGM()?.id !== game.user.id) return;
   const scene = canvas.scene;
@@ -10247,6 +10559,9 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
     const regionRequests = [];
     const targetActorUuids = new Set();
     const targetTokenUuids = new Set();
+    const impactedLivingActorUuids = new Set();
+    const preExistingUnconsciousTargetActorUuids = new Set();
+    const reactedTargetTokenUuids = new Set();
     const explosions = Array.isArray(pending.explosions) ? pending.explosions : [];
     const shapes = Array.from(region.shapes ?? []);
     const dodgeExposure = createDodgeAttackExposureTracker();
@@ -10275,6 +10590,18 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
         ));
       for (const target of targets) {
         if (!isDeadTarget(target)) {
+          const targetActorUuid = String(target.actor?.uuid ?? "").trim();
+          if (targetActorUuid) {
+            impactedLivingActorUuids.add(targetActorUuid);
+            if (target.actor?.statuses?.has?.("unconscious")) {
+              preExistingUnconsciousTargetActorUuids.add(targetActorUuid);
+            }
+          }
+          const targetTokenUuid = String(target.document?.uuid ?? "").trim();
+          if (targetTokenUuid && !reactedTargetTokenUuids.has(targetTokenUuid)) {
+            reactedTargetTokenUuids.add(targetTokenUuid);
+            await requestDelayedVolleyTargetReaction({ source, target, explosion });
+          }
           dodgeExposure.record(target.actor, {
             actorToken: contextualAttackerToken,
             attackerActor: contextualAttackerActor,
@@ -10373,6 +10700,19 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
         weaponData: source.weaponData
       })
       : summarizeWeaponImpactDamageResults(damageResults);
+    const impactModifierState = new WeaponActionModifierState({
+      actor: contextualAttackerActor,
+      actorToken: contextualAttackerToken,
+      weapon: delayedWeapon,
+      weaponData: source.weaponData ?? null,
+      actionKey: String(source.actionKey ?? ""),
+      weaponActionKey: String(source.actionKey ?? ""),
+      weaponFunctionId: String(source.weaponFunctionId ?? ""),
+      attackId: String(source.attackId ?? pending.id ?? "")
+    });
+    if (source.preventStealthDetection === true) {
+      impactModifierState.setOption("preventStealthDetection", true);
+    }
     const resolvedContext = {
       actor: contextualAttackerActor,
       actorToken: contextualAttackerToken,
@@ -10383,23 +10723,45 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
       actorUuid: String(source.attackerUuid ?? ""),
       tokenUuid: String(source.attackerTokenUuid ?? ""),
       weaponUuid: String(source.weaponUuid ?? ""),
+      weaponName: String(source.weaponName ?? ""),
       actionKey: String(source.actionKey ?? ""),
       weaponFunctionId: String(source.weaponFunctionId ?? ""),
+      stealthAttack: source.stealthAttack === true,
       attackId: String(source.attackId ?? pending.id ?? ""),
-      actionPointCost: 0,
+      preExistingUnconsciousTargetActorUuids: Array.from(preExistingUnconsciousTargetActorUuids),
+      actionPointSpendReceipt: source.actionPointSpendReceipt ?? null,
+      actionPointCost: Math.max(0, toInteger(source.actionPointCost)),
+      actionPointCostApplied: Boolean(source.actionPointCostApplied),
       targetActorUuids: Array.from(targetActorUuids).filter(Boolean),
       targetTokenUuids: Array.from(targetTokenUuids).filter(Boolean),
+      attackCheckTargetActorUuids: Array.from(targetActorUuids).filter(Boolean),
+      successfulAttackTargetActorUuids: Array.from(impactedLivingActorUuids),
+      successfulAttackCheckCount: impactedLivingActorUuids.size > 0 ? 1 : 0,
+      successfulAttack: impactedLivingActorUuids.size > 0,
       killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults),
       canceledByReaction: false,
       criticalDamageUsed: damageRequests.some(request => request?.source?.criticalSuccess === true),
       attackCheckCount: explosions.length,
+      attackCheckAggregate: true,
       damageResults,
       impactConditionWear,
+      modifierState: impactModifierState,
+      deferredImpactResolution: true,
+      keepAwayEntries: Array.isArray(source.keepAwayEntries) ? source.keepAwayEntries : [],
       chainRef: source.chainRef ?? null,
       damageHubOperationRef: String(source.damageHubOperationRef ?? ""),
       senderUserId: game.user?.id ?? ""
     };
     await publishWeaponAttackResolved(resolvedContext);
+    if (
+      source.resolveWeaponNoiseAtImpact === true
+      && contextualAttackerToken
+      && !impactModifierState.getOption("preventStealthDetection")
+    ) {
+      await resolveWeaponNoiseDetection(contextualAttackerToken, {
+        noiseLevel: getWeaponNoiseLevel({ noiseLevel: source.weaponNoiseLevel })
+      });
+    }
     dispatchWeaponAttackTerminalHandlers(resolvedContext);
 
     await scene.deleteEmbeddedDocuments("Region", [region.id]);
@@ -10848,22 +11210,61 @@ function getBurstProjectileCount(attackCount = 1, pelletCount = 1) {
   return Math.max(1, toInteger(attackCount) || 1) * Math.max(1, toInteger(pelletCount) || 1);
 }
 
-export function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
-  const missing = getMissingWeaponResourceCost(weapon, multiplier, weaponFunctionId, { modifierState });
+export function hasRequiredWeaponResources(
+  weapon,
+  multiplier = 1,
+  weaponFunctionId = "",
+  {
+    modifierState = null,
+    additionalActorResourceCosts = [],
+    skipBaseCosts = false
+  } = {}
+) {
+  const missing = getMissingWeaponResourceCost(weapon, multiplier, weaponFunctionId, {
+    modifierState,
+    additionalActorResourceCosts,
+    skipBaseCosts
+  });
   if (!missing) return true;
   ui.notifications.warn(`${weapon?.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
   return false;
 }
 
-export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
+export function getMissingWeaponResourceCost(
+  weapon,
+  multiplier = 1,
+  weaponFunctionId = "",
+  {
+    modifierState = null,
+    additionalActorResourceCosts = [],
+    skipBaseCosts = false
+  } = {}
+) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const costs = getWeaponResourceCosts(weaponData, { modifierState });
+  const costs = skipBaseCosts ? [] : getWeaponResourceCosts(weaponData, { modifierState });
   const defersConditionCost = hasWeaponSpecialPropertyData(
     weaponData,
     WEAPON_SPECIAL_PROPERTIES.impactConditionWear
   );
   const actor = getWeaponOwnerActor(weapon);
   const actorResourceTotals = getWeaponActorResourceCostTotals(weapon, { costs });
+  const modifierEnergyCost = Math.max(
+    0,
+    toInteger(modifierState?.getEnergyCost?.({ attackCount: Math.max(1, toInteger(multiplier)) }))
+  );
+  if (modifierEnergyCost > 0) {
+    actorResourceTotals.set(
+      ENERGY_RESOURCE_KEY,
+      (actorResourceTotals.get(ENERGY_RESOURCE_KEY) ?? 0) + modifierEnergyCost
+    );
+  }
+  for (const cost of normalizeAdditionalActorResourceCosts(additionalActorResourceCosts)) {
+    if (!isCombatResourceCostActive(actor, cost.resourceKey)) continue;
+    actorResourceTotals.set(
+      cost.resourceKey,
+      (actorResourceTotals.get(cost.resourceKey) ?? 0) + cost.amount
+    );
+  }
   for (const [resourceKey, required] of actorResourceTotals) {
     if (required <= 0) continue;
     const current = getActorAttackResourceAvailable(actor, resourceKey);
@@ -10989,7 +11390,13 @@ function getActorAttackResourceAvailable(actor = null, resourceKey = "") {
     const strict = getStrictActionPointState(actor);
     return Math.max(0, toInteger(strict?.value));
   }
-  if (key === "power") return Math.max(0, toInteger(getActorAvailableEnergy(actor)));
+  if (key === ENERGY_RESOURCE_KEY) {
+    return Math.max(
+      0,
+      toInteger(getActorAvailableEnergy(actor))
+        - Math.max(0, toInteger(actor.system?.resources?.[ENERGY_RESOURCE_KEY]?.min))
+    );
+  }
   const resource = actor.system?.resources?.[key];
   if (!resource) return 0;
   return Math.max(
@@ -11463,6 +11870,17 @@ function collectWeaponResourceSpendTotals(
     }
     const amount = Math.max(0, toInteger(cost?.amount) * baseMultiplier);
     if (amount > 0) itemTotals.set(type, (itemTotals.get(type) ?? 0) + amount);
+  }
+  const modifierEnergyCost = Math.max(
+    0,
+    toInteger(modifierState?.getEnergyCost?.({ attackCount: baseMultiplier }))
+  );
+  if (modifierEnergyCost > 0) {
+    actorCostRows.push({
+      id: "weapon-modifier-energy",
+      resourceKey: ENERGY_RESOURCE_KEY,
+      formula: String(modifierEnergyCost)
+    });
   }
   for (const [index, cost] of (extraCosts ?? []).entries()) {
     const type = String(cost?.type ?? "").trim();
@@ -13310,6 +13728,17 @@ function buildDelayedVolleyExplosionRegionRequest({
   blastOutcomes = [],
   baseDamage = 0,
   damageContext = null,
+  stealthAttack = false,
+  actionPointCost = 0,
+  actionPointCostApplied = false,
+  actionPointSpendReceipt = null,
+  resolveWeaponNoiseAtImpact = false,
+  weaponNoiseLevel = 0,
+  preventStealthDetection = false,
+  keepAwayEntries = [],
+  suppressGuardianAngelReaction = false,
+  chainRef = null,
+  damageHubOperationRef = "",
   impactConditionWearMultiplier = 0,
   attachmentTokenId = ""
 } = {}) {
@@ -13436,6 +13865,21 @@ function buildDelayedVolleyExplosionRegionRequest({
       weaponName: weapon?.name ?? "",
       weaponFunctionId,
       actionKey,
+      stealthAttack: Boolean(stealthAttack),
+      actionPointCost: Math.max(0, toInteger(actionPointCost)),
+      actionPointCostApplied: Boolean(actionPointCostApplied),
+      actionPointSpendReceipt: actionPointSpendReceipt
+        ? foundry.utils.deepClone(actionPointSpendReceipt)
+        : null,
+      resolveWeaponNoiseAtImpact: Boolean(resolveWeaponNoiseAtImpact),
+      weaponNoiseLevel: getWeaponNoiseLevel({ noiseLevel: weaponNoiseLevel }),
+      preventStealthDetection: Boolean(preventStealthDetection),
+      keepAwayEntries: Array.isArray(keepAwayEntries)
+        ? foundry.utils.deepClone(keepAwayEntries)
+        : [],
+      suppressGuardianAngelReaction: Boolean(suppressGuardianAngelReaction),
+      chainRef,
+      damageHubOperationRef: String(damageHubOperationRef ?? ""),
       impactConditionWearMultiplier: Math.max(0, toInteger(impactConditionWearMultiplier)),
       weaponData: foundry.utils.deepClone(weaponData)
     }
@@ -13697,6 +14141,7 @@ function buildWeaponDamageRequests(weapon, {
   attackerToken = null,
   actor = null,
   targetToken = null,
+  modifierState = null,
   penetrationPower = null,
   limbKey = "",
   amount = 0,
@@ -13726,12 +14171,15 @@ function buildWeaponDamageRequests(weapon, {
       targetActor: actor,
       targetToken,
       weaponData,
+      weaponActionModifierState: modifierState,
+      reflectionCount: Math.max(0, toInteger(source.reflectionCount)),
       ...distanceContext,
       chanceOperationId: getActiveUseOperationId(source)
     });
   const damagePacketId = String(source.damagePacketId ?? "").trim()
     || String(source.conditionWearPacketId ?? "").trim()
     || foundry.utils.randomID();
+  const mitigationIgnore = modifierState?.getOption?.("targetMitigationIgnore") ?? {};
   const requestSource = {
     ...source,
     damagePacketId,
@@ -13740,7 +14188,9 @@ function buildWeaponDamageRequests(weapon, {
     weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
     targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
     ...distanceContext,
-    penetrationPower: resolvedPenetrationPower
+    penetrationPower: resolvedPenetrationPower,
+    targetDefenseIgnorePercent: Math.max(0, Math.min(100, Number(mitigationIgnore.defenseIgnorePercent) || 0)),
+    targetResistanceIgnorePercent: Math.max(0, Math.min(100, Number(mitigationIgnore.resistanceIgnorePercent) || 0))
   };
   return damageTypes
     .map((entry, index) => ({
@@ -13760,6 +14210,7 @@ function buildWeaponConditionDamageRequests(weapon, {
   actor = null,
   targetToken = null,
   targetItem = null,
+  modifierState = null,
   penetrationPower = null,
   limbKey = "",
   amount = 0,
@@ -13789,6 +14240,8 @@ function buildWeaponConditionDamageRequests(weapon, {
       targetActor: actor,
       targetToken,
       weaponData,
+      weaponActionModifierState: modifierState,
+      reflectionCount: Math.max(0, toInteger(source.reflectionCount)),
       ...distanceContext,
       chanceOperationId: getActiveUseOperationId(source)
     });
@@ -14415,6 +14868,7 @@ function getWeaponPenetrationPower(weapon, weaponFunctionId = "", context = {}) 
     weaponData: weaponData ?? getWeaponAttackData(weapon, weaponFunctionId),
     activeUseStages: { action: false, check: false, damage: true }
   });
+  value += context?.weaponActionModifierState?.getCombatValueBonus?.("penetration", context) ?? 0;
   return Math.max(0, Math.trunc(value));
 }
 

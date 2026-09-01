@@ -122,6 +122,17 @@ import {
   normalizeToTheEndSettings,
   normalizeVersatileDevelopmentSettings,
   normalizeVirtuosoSettings,
+  normalizeCascadeSettings,
+  normalizeBullseyeSettings,
+  normalizeKeepAwayKnockdownSettings,
+  normalizeCounterSniperGuaranteedSettings,
+  normalizeGuardianAngelSettings,
+  normalizeHunterRaceSettings,
+  normalizeTrophyCollectorSettings,
+  normalizeRicochetMasterySettings,
+  normalizeCorpseAfterCorpseSettings,
+  normalizeHawkEyePiercingSettings,
+  normalizeTrueBulletSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
@@ -2620,8 +2631,56 @@ function syncFixedRescueCountVisibility(select) {
   if (countField) countField.hidden = String(select.value ?? "all") !== "count";
 }
 
+const RANGED_EVOLUTION_FIXED_SETTING_FIELDS = Object.freeze({
+  [ABILITY_FIXED_FUNCTION_KEYS.cascade]: [
+    "accuracyPerStack", "damagePercentPerStack", "maxStacks", "initialStacks", "periodicGain",
+    "periodicIntervalSeconds", "weaponSwitchGain", { key: "resetOnRepeatedWeapon", checkbox: true }
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.bullseye]: [
+    "energyCost", "innateDifficultyIgnorePercent", "penetrationBonusFormula", "maxStacks"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown]: [
+    "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "baseDifficulty", "lostHealthPercentMultiplier"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed]: [
+    "reactionEnergyCost", "reactionOverloadEnergyCost", "reactionOverloadDurationSeconds", "guaranteedHitChanceThreshold"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.guardianAngel]: ["reactionEnergyCost", "guaranteedHitChanceThreshold"],
+  [ABILITY_FIXED_FUNCTION_KEYS.hunterRace]: [
+    "energyCost", "overloadEnergyCost", "overloadDurationSeconds", "durationSeconds",
+    "accuracyBonus", "damagePercentBonus", "criticalChanceBonus"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.trophyCollector]: [
+    "markDurationSeconds", "maximumStrength", "accuracyPerStack", "incomingDamagePercentPerStack", "criticalChancePerStack",
+    "resilienceSkillKey", "resilienceDifficultyFormula", "stunPercent", "stunDurationSeconds"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery]: [
+    "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "maxReflections", "maximumConeDegrees",
+    "accuracyBonusPerReflection", "damagePercentBonusPerReflection", "penetrationBonusPerReflection"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse]: [
+    "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "damagePercentBonus", "attackWaitDurationSeconds"
+  ],
+  [ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing]: ["defenseIgnorePercent", "resistanceIgnorePercent"],
+  [ABILITY_FIXED_FUNCTION_KEYS.trueBullet]: [
+    "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "criticalSuccessChanceThreshold"
+  ]
+});
+
+function readRangedEvolutionFixedSettings(row, fixedKey) {
+  const fields = RANGED_EVOLUTION_FIXED_SETTING_FIELDS[fixedKey];
+  if (!fields) return null;
+  return Object.fromEntries(fields.map(field => {
+    const descriptor = typeof field === "string" ? { key: field } : field;
+    const input = row.querySelector(`[data-field='fixed.${fixedKey}.${descriptor.key}']`);
+    return [descriptor.key, descriptor.checkbox ? Boolean(input?.checked) : input?.value];
+  }));
+}
+
 function readFixedFunctionSettings(row) {
   const fixedKey = row.querySelector("[data-field='fixedKey']")?.value ?? "";
+  const rangedEvolutionSettings = readRangedEvolutionFixedSettings(row, fixedKey);
+  if (rangedEvolutionSettings) return rangedEvolutionSettings;
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
     return {
       energyCost: row.querySelector("[data-field='fixed.reactive.energyCost']")?.value,
@@ -2670,9 +2729,7 @@ function readFixedFunctionSettings(row) {
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
     return {
       accuracyBonus: row.querySelector("[data-field='fixed.virtuoso.accuracyBonus']")?.value,
-      damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value,
-      cascadeMaxStacks: row.querySelector("[data-field='fixed.virtuoso.cascadeMaxStacks']")?.value,
-      cascadeIntervalSeconds: row.querySelector("[data-field='fixed.virtuoso.cascadeIntervalSeconds']")?.value
+      damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value
     };
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment) {
@@ -3566,6 +3623,25 @@ function readBooleanField(element, fallback = false) {
   return String(readFieldValue(element, fallback ? "true" : "false")) === "true";
 }
 
+const RANGED_EVOLUTION_FIXED_SETTINGS_DISPLAYS = Object.freeze({
+  [ABILITY_FIXED_FUNCTION_KEYS.cascade]: ["fixedCascadeSettings", normalizeCascadeSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.bullseye]: ["fixedBullseyeSettings", normalizeBullseyeSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown]: ["fixedKeepAwayKnockdownSettings", normalizeKeepAwayKnockdownSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed]: ["fixedCounterSniperGuaranteedSettings", normalizeCounterSniperGuaranteedSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.guardianAngel]: ["fixedGuardianAngelSettings", normalizeGuardianAngelSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.hunterRace]: ["fixedHunterRaceSettings", normalizeHunterRaceSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.trophyCollector]: ["fixedTrophyCollectorSettings", normalizeTrophyCollectorSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery]: ["fixedRicochetMasterySettings", normalizeRicochetMasterySettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse]: ["fixedCorpseAfterCorpseSettings", normalizeCorpseAfterCorpseSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing]: ["fixedHawkEyePiercingSettings", normalizeHawkEyePiercingSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.trueBullet]: ["fixedTrueBulletSettings", normalizeTrueBulletSettings]
+});
+
+function prepareRangedEvolutionFixedSettings(fixedKey, settings) {
+  const display = RANGED_EVOLUTION_FIXED_SETTINGS_DISPLAYS[fixedKey];
+  return display ? { [display[0]]: display[1](settings) } : {};
+}
+
 function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
   const isAcquisitionChanges = normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
@@ -3574,6 +3650,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const isAttackAction = normalized.type === ABILITY_FUNCTION_TYPES.attackAction;
   const isFixed = normalized.type === ABILITY_FUNCTION_TYPES.fixed;
   const fixedKey = String(normalized.fixedKey ?? "");
+  const rangedEvolutionFixedSettings = prepareRangedEvolutionFixedSettings(fixedKey, normalized.fixedSettings);
   const activeApplicationSettings = isActiveApplication
     ? prepareActiveApplicationSettingsForDisplay(normalized.activeSettings)
     : null;
@@ -3776,6 +3853,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     canConfigureActions: isEffectChanges || isActiveApplication,
     showPureValuesToggle: isEffectChanges && hasAdvancementPureValueFunctionChanges(normalized),
     fixedKey,
+    ...rangedEvolutionFixedSettings,
     activeApplicationSettings,
     attackActionSettings,
     fixedWhereAreYouGoingSettings,

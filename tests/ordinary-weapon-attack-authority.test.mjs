@@ -107,6 +107,7 @@ const {
   WEAPON_ATTACK_LIFECYCLE_TESTING,
   WEAPON_CONDITION_WEAR_TESTING,
   WeaponAttackController,
+  getWeaponActionResourcePreview,
   registerWeaponAttackResolvedHandler,
   registerWeaponAttackTerminalHandler
 } = await import("../src/combat/weapon-attack-controller.mjs");
@@ -131,6 +132,143 @@ test("terminal attack handlers are outside the awaited resolved publication", as
   } finally {
     unregisterResolved();
     unregisterTerminal();
+    Hooks.callAll = previousCallAll;
+  }
+});
+
+test("combined modifier energy is preflighted before any individual spend", async () => {
+  let individualChecks = 0;
+  const actor = {
+    documentName: "Actor",
+    system: {
+      resources: {
+        power: { value: 100, min: 0, max: 100 }
+      }
+    },
+    effects: []
+  };
+  const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.createModifierState({ actor });
+  for (const source of ["fullForce", "aiming"]) {
+    modifierState.addSpendRequirement({
+      source,
+      energyCost: 60,
+      canSpend: () => {
+        individualChecks += 1;
+        return true;
+      }
+    });
+  }
+
+  assert.equal(modifierState.canSpend({ silent: true }), false);
+  assert.equal(individualChecks, 0);
+});
+
+test("modifier and base weapon power costs share one actor-resource vector", () => {
+  const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.createModifierState({});
+  modifierState.addSpendRequirement({ energyCost: 10 });
+  const totals = WEAPON_ATTACK_LIFECYCLE_TESTING.collectResourceSpendTotals({
+    resourceCosts: [{
+      id: "base-power",
+      type: "actorResource",
+      resourceKey: "power",
+      formula: "10"
+    }]
+  }, 1, [], { modifierState });
+
+  assert.deepEqual(totals.actorCostRows.map(row => [row.resourceKey, row.formula]), [
+    ["power", "10"],
+    ["power", "10"]
+  ]);
+});
+
+test("reaction, modifier, and base weapon power costs share one preflight and payment vector", () => {
+  const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.createModifierState({});
+  modifierState.addSpendRequirement({ energyCost: 10 });
+  const totals = WEAPON_ATTACK_LIFECYCLE_TESTING.collectResourceSpendTotals({
+    resourceCosts: [{
+      id: "base-power",
+      type: "actorResource",
+      resourceKey: "power",
+      formula: "10"
+    }]
+  }, 1, [{
+    id: "reaction-energy",
+    type: "actorResource",
+    resourceKey: "power",
+    amount: 20
+  }], { modifierState });
+
+  assert.deepEqual(totals.actorCostRows.map(row => [row.resourceKey, row.formula]), [
+    ["power", "10"],
+    ["power", "10"],
+    ["power", "20"]
+  ]);
+});
+
+test("reaction preflight rejects 39 power for a 20+10+10 vector and accepts 40", () => {
+  const previousCallAll = Hooks.callAll;
+  Hooks.callAll = (hook, context) => {
+    if (hook === "fallout-maw.weaponActionModifierRequests") {
+      context.modifierState.addSpendRequirement({ energyCost: 10 });
+    }
+  };
+  const actor = {
+    documentName: "Actor",
+    system: {
+      resources: {
+        power: { value: 39, min: 0, max: 100 }
+      }
+    },
+    effects: []
+  };
+  const weapon = {
+    actor,
+    parent: actor,
+    name: "Reaction Rifle",
+    system: {
+      functions: {
+        weapon: {
+          enabled: true,
+          resourceCosts: [{
+            id: "base-power",
+            type: "actorResource",
+            resourceKey: "power",
+            formula: "10"
+          }]
+        }
+      }
+    }
+  };
+  const options = {
+    actor,
+    weapon,
+    actionKey: "aimedShot",
+    weaponFunctionId: "weapon",
+    attackCount: 1,
+    additionalActorResourceCosts: [{
+      id: "reaction-energy",
+      type: "actorResource",
+      resourceKey: "power",
+      amount: 20
+    }]
+  };
+
+  try {
+    const rejected = getWeaponActionResourcePreview(options);
+    assert.equal(rejected.baseEnergyCost, 10);
+    assert.equal(rejected.modifierEnergyCost, 10);
+    assert.equal(rejected.energyCost, 20);
+    assert.deepEqual(rejected.missing, {
+      type: "actorResource",
+      resourceKey: "power",
+      label: "power",
+      current: 39,
+      required: 40
+    });
+
+    actor.system.resources.power.value = 40;
+    assert.equal(getWeaponActionResourcePreview(options).missing, null);
+  } finally {
     Hooks.callAll = previousCallAll;
   }
 });
@@ -181,6 +319,31 @@ test("a pending phantom deletion cannot keep the controller processing", async (
     unregisterTerminal();
     game.user = previousUser;
   }
+});
+
+test("a reusable controller clears reported action-point metadata between attack cycles", () => {
+  const controller = Object.create(WeaponAttackController.prototype);
+  Object.assign(controller, {
+    token: null,
+    attackId: "attack-first",
+    chanceOperationId: "attack-first",
+    rangeProfilesByTarget: new Map([["target", {}]]),
+    weaponActionModifierState: {},
+    attackCommitted: true,
+    attackCostsCommitted: true,
+    reportedActionPointCost: 7,
+    reportedActionPointCostApplied: true,
+    actionPointSpendReceipt: { amount: 7 },
+    authorityExecutionSucceeded: true,
+    authorityShouldFinish: true
+  });
+
+  controller.prepareNextAttackCycle();
+
+  assert.notEqual(controller.attackId, "attack-first");
+  assert.equal(controller.reportedActionPointCost, null);
+  assert.equal(controller.reportedActionPointCostApplied, null);
+  assert.equal(controller.actionPointSpendReceipt, null);
 });
 
 test("impact condition wear uses one hit base plus total armor-blocked damage", () => {

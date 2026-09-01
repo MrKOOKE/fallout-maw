@@ -85,6 +85,9 @@ export function registerTempoRuntime() {
 async function observeTempoResolvedAttack({ event } = {}) {
   if (!isTempoAuthority()) return;
   if (event?.data?.attackCycleAggregate !== true) return;
+  // A delayed volley is one attack. Its launch check only chooses the impact
+  // point; Tempo resolves once, from the living actors actually reached later.
+  if (event?.data?.deferredImpactPending === true) return;
   const attackCheckCount = Math.max(0, toInteger(event?.data?.attackCheckCount));
   if (attackCheckCount <= 0) return;
   const attackerSuccess = event?.data?.successfulAttack === true || event?.outcome?.success === true;

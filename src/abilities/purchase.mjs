@@ -436,7 +436,7 @@ export async function requestLimitedChangeSelection({
     return `
       <label class="checkbox fallout-maw-ability-change-choice">
         <input type="checkbox" name="limitedChanges" value="${escapeAttribute(id)}" data-limited-change-choice>
-        <span class="fallout-maw-ability-change-choice-name ellipsis">${escapeHtml(display.label)}</span>
+        <span class="fallout-maw-ability-change-choice-name">${escapeHtml(display.label)}</span>
         <output class="fallout-maw-ability-change-choice-value"${tooltip}>${escapeHtml(display.value)}</output>
       </label>
     `;
@@ -448,7 +448,7 @@ export async function requestLimitedChangeSelection({
       icon: "fa-solid fa-list-check",
       title: `Выбор изменений: ${abilityName}`
     },
-    position: { width: 560 },
+    position: { width: "auto" },
     modal: true,
     content: `
       <section class="fallout-maw-ability-change-picker">
@@ -465,7 +465,7 @@ export async function requestLimitedChangeSelection({
         </header>
         <fieldset class="fallout-maw-ability-change-picker-fieldset">
           <legend>Доступные изменения</legend>
-          <div class="fallout-maw-ability-change-choice-list scrollable" role="group" aria-label="Доступные изменения">${rows}</div>
+          <div class="fallout-maw-ability-change-choice-list" role="group" aria-label="Доступные изменения">${rows}</div>
         </fieldset>
       </section>
     `,

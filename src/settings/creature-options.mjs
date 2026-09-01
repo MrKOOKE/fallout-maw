@@ -6,6 +6,7 @@ import {
   DEFAULT_LOAD_FORMULA,
   DEFAULT_LOAD_LIMIT_PERCENT,
   DEFAULT_HEALTH_PER_LEVEL_FORMULA,
+  DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM,
   DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
@@ -30,6 +31,9 @@ export function createEmptyCreatureOptions() {
 export function createRaceDefaults(characteristics = [], damageTypes = []) {
   return {
     characteristics: Object.fromEntries(characteristics.map(entry => [entry.key, 1])),
+    levelOneCharacteristicMaximums: Object.fromEntries(
+      characteristics.map(entry => [entry.key, DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM])
+    ),
     baseParameters: createDefaultRaceBaseParameters(),
     limbs: createDefaultLimbs(),
     limbSilhouette: null,
@@ -115,11 +119,16 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
       const typeId = typeIds.has(race.typeId) ? race.typeId : normalized.types[0]?.id || "";
       const limbs = normalizeLimbs(race.limbs);
       const limbSilhouette = normalizeLimbSilhouette(race.limbSilhouette, limbs);
+      const raceCharacteristics = normalizeRaceCharacteristics(race.characteristics, characteristics);
       return {
         id: String(race.id),
         typeId,
         name: String(race.name || localize("FALLOUTMAW.Common.Untitled")),
-        characteristics: normalizeRaceCharacteristics(race.characteristics, characteristics),
+        characteristics: raceCharacteristics,
+        levelOneCharacteristicMaximums: normalizeLevelOneCharacteristicMaximums(
+          race.levelOneCharacteristicMaximums,
+          characteristics
+        ),
         baseParameters: normalizeRaceBaseParameters(race.baseParameters),
         limbs,
         limbSilhouette,
@@ -172,6 +181,13 @@ function normalizeRegeneration(value = {}, { includeEnergy = true } = {}) {
 
 function normalizeRaceCharacteristics(values = {}, characteristics = []) {
   return Object.fromEntries(characteristics.map(definition => [definition.key, toInteger(values?.[definition.key] ?? 1)]));
+}
+
+function normalizeLevelOneCharacteristicMaximums(values = {}, characteristics = []) {
+  return Object.fromEntries(characteristics.map(definition => [
+    definition.key,
+    Math.max(0, toInteger(values?.[definition.key] ?? DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM))
+  ]));
 }
 
 function normalizeOrganismDevelopmentSettings(value = {}) {

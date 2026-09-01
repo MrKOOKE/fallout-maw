@@ -24,11 +24,15 @@ import {
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
+  normalizeBullseyeSettings,
+  normalizeCascadeSettings,
   normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
   normalizeCounterSniperSettings,
+  normalizeCounterSniperGuaranteedSettings,
+  normalizeGuardianAngelSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
@@ -60,7 +64,11 @@ import {
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
+  normalizeCorpseAfterCorpseSettings,
+  normalizeHawkEyePiercingSettings,
+  normalizeHunterRaceSettings,
   normalizeKeepAwaySettings,
+  normalizeKeepAwayKnockdownSettings,
   normalizeKnockOffBalanceSettings,
   normalizeLookSettings,
   normalizeLuckyCoinSettings,
@@ -71,6 +79,9 @@ import {
   normalizeVersatileDevelopmentSettings,
   normalizeRageSettings,
   normalizeRicochetSettings,
+  normalizeRicochetMasterySettings,
+  normalizeTrophyCollectorSettings,
+  normalizeTrueBulletSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeHuntingGroundsSettings,
@@ -113,12 +124,17 @@ import {
   getActionBlockEffectKey,
   getWeaponActionBlockState
 } from "./runtime-state.mjs";
+import { resolveVirtuosoAttackTransition } from "./virtuoso.mjs";
+import { registerVirtuosoRuntime } from "./virtuoso-runtime.mjs";
 import {
-  advanceVirtuosoCascadePeriodicState,
-  createVirtuosoCascadeState,
-  resolveVirtuosoAttackTransition
-} from "./virtuoso.mjs";
-import { registerVirtuosoCascadeRuntime } from "./virtuoso-runtime.mjs";
+  advanceCascadePeriodicState,
+  createCascadeAttackSnapshot,
+  createCascadeCombatState
+} from "./cascade.mjs";
+import {
+  getOrCreateCascadeAttackSnapshot,
+  registerCascadeRuntime
+} from "./cascade-runtime.mjs";
 import {
   applyDestroyedLimbConsequences,
   isCriticalLimb,
@@ -141,16 +157,14 @@ import {
   canTokenPhysicallySeeTarget,
   executeWeaponAttackAgainstToken,
   getActionAttackCount,
-  getWeaponActionModifierEnergyCost,
+  getWeaponActionResourcePreview,
   startAbilityAttackActionAndWait,
   startCommandedWeaponAttacks,
   startForcedAimedAttackSelection,
   startWeaponAttack,
   WEAPON_ACTION_MODIFIER_REQUEST_HOOK,
-  WEAPON_ATTACK_CHECK_RESOLVED_HOOK,
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
   WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK,
-  WEAPON_ATTACK_RESOLVED_HOOK,
   registerWeaponAttackResolvedHandler,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
@@ -196,6 +210,7 @@ import {
   getPendingOneTimeSkillModifierEffects
 } from "../rolls/one-time-skill-modifiers.mjs";
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
+import { mergeSkillCheckResultPolicies } from "../rolls/skill-check-result-policy.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
 import {
   getShadowEffectData,
@@ -224,6 +239,7 @@ import {
   swapWithDancePhantom
 } from "./dance-of-thousand-shadows.mjs";
 import {
+  activateExplosiveResilience,
   getExplosiveResilienceProgressEntry,
   registerExplosiveResilienceRuntime
 } from "./explosive-resilience.mjs";
@@ -305,6 +321,7 @@ import {
 import { syncActorAbilityEffects } from "./effects.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { areTokensAdjacent, areTokensAdjacentAt, resolveKnockback } from "../combat/active-actions.mjs";
+import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
   createMovementOptions,
   getMovementRouteSamples,
@@ -388,6 +405,31 @@ function normalizeAbilityFunctions(value = []) {
 }
 import { registerReactiveRuntime, useReactiveAbility } from "./reactive.mjs";
 import {
+  getBullseyeApplicableStacks,
+  getBullseyePenetrationFormula,
+  resolveBullseyeAttackCycle
+} from "./bullseye.mjs";
+import {
+  applyKeepAwayKnockdown,
+  getActorLostHealthPercent,
+  getKeepAwayKnockdownDifficulty
+} from "./keep-away-knockdown.mjs";
+import { buildRicochetMasteryModifier } from "./ricochet-mastery.mjs";
+import {
+  clearCorpseAfterCorpseOverload,
+  resolveCorpseAfterCorpseKill
+} from "./corpse-after-corpse.mjs";
+import { buildHawkEyePiercingModifier } from "./hawk-eye-piercing.mjs";
+import {
+  activateHunterRaceEffect,
+  addHunterRaceWeaponModifiers,
+  selectHunterRaceTarget
+} from "./hunter-race.mjs";
+import {
+  registerTrophyCollectorRuntime,
+  showTrophyCollectorLedger
+} from "./trophy-collector.mjs";
+import {
   notifyAbilityTriggerCostFailure,
   payAbilityFunctionResourceCosts,
   quoteAbilityFunctionResourceCosts
@@ -464,6 +506,8 @@ const OVERSIGHT_EFFECT_FLAG_KEY = "oversight";
 const WATCH_OUT_REACTION_PROVIDER_ID = "watchOut";
 const FULL_CONTROL_EFFECT_FLAG_KEY = "fullControl";
 const COUNTER_SNIPER_REACTION_PROVIDER_ID = "counterSniper";
+const COUNTER_SNIPER_GUARANTEED_REACTION_PROVIDER_ID = "counterSniperGuaranteed";
+const GUARDIAN_ANGEL_REACTION_PROVIDER_ID = "guardianAngel";
 const COUNTER_SNIPER_AIM_QUERY_NAME = "falloutMawCounterSniperAim";
 const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
 const WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID = "whereAreYouGoingMovement";
@@ -573,6 +617,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.cascade,
+    label: "Каскад",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cascade,
+      fixedSettings: normalizeCascadeSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment,
     label: "Всестороннее развитие",
     passive: true,
@@ -591,6 +644,16 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.bullseye,
+    label: "В яблочко",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.bullseye,
+      fixedSettings: normalizeBullseyeSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.keepAway,
     label: "Держись подальше",
     active: true,
@@ -599,11 +662,29 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown,
+    label: "Держись подальше II",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown,
+      fixedSettings: normalizeKeepAwayKnockdownSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.ricochet,
     label: "Рикошет",
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.ricochet
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery,
+    label: "Рикошет II",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery,
+      fixedSettings: normalizeRicochetMasterySettings()
     })
   }),
   Object.freeze({
@@ -623,11 +704,57 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
+    label: "Труп за трупом",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
+      fixedSettings: normalizeCorpseAfterCorpseSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.hawkEye,
     label: "Соколиный глаз",
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.hawkEye
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing,
+    label: "Соколиный глаз II",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing,
+      fixedSettings: normalizeHawkEyePiercingSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.hunterRace,
+    label: "Охотник",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.hunterRace,
+      fixedSettings: normalizeHunterRaceSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.trophyCollector,
+    label: "Собиратель трофеев",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.trophyCollector,
+      fixedSettings: normalizeTrophyCollectorSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.trueBullet,
+    label: "Верная пуля",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.trueBullet,
+      fixedSettings: normalizeTrueBulletSettings()
     })
   }),
   Object.freeze({
@@ -767,6 +894,24 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniper
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed,
+    label: "Контр-снайпер II",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed,
+      fixedSettings: normalizeCounterSniperGuaranteedSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.guardianAngel,
+    label: "Ангел хранитель",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.guardianAngel,
+      fixedSettings: normalizeGuardianAngelSettings()
     })
   }),
   Object.freeze({
@@ -1098,7 +1243,9 @@ function registerFixedAbilityRuntimeHooks() {
   registerReactiveRuntime();
   registerHuntingGroundsRuntime();
   registerTempoRuntime();
-  registerVirtuosoCascadeRuntime();
+  registerVirtuosoRuntime();
+  registerCascadeRuntime();
+  registerTrophyCollectorRuntime();
   registerFalseBreachRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
     applies: runFixedAbilityRuntimeHandler(actorHasLivingSteel),
@@ -1216,18 +1363,31 @@ function registerFixedAbilityRuntimeHooks() {
   Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
     void requestCurseAndBlessingAttackResolution(context);
   }));
-  Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
-    void consumeAllOrNothingResultEffects(context);
-    void consumeLethalAttackPreparationEffects(context);
-    void processReaperAttackResolution(context);
-    void processSandmanAttackResolution(context);
-    void processNightmareAttackResolution(context);
-    void updateVirtuosoLastWeapon(context);
-    void processKeepAwayAttackResolution(context);
-  }));
-  Hooks.on(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
-    void consumeVirtuosoAttackBonus(context);
-  }));
+  registerWeaponAttackResolvedHandler(
+    "fallout-maw.fixed.attackCycleState",
+    runFixedAbilityRuntimeHandler(async context => {
+      if (context?.deferredImpactResolution === true) {
+        await processReaperAttackResolution(context);
+        await processSandmanAttackResolution(context);
+        await processNightmareAttackResolution(context);
+        await processKeepAwayAttackResolution(context);
+        return;
+      }
+      // These transitions must finish before the controller exposes the next
+      // attack. Several of them persist state read while building its preview.
+      await consumeAllOrNothingResultEffects(context);
+      await processCorpseAfterCorpseResolution(context);
+      await consumeLethalAttackPreparationEffects(context);
+      if (context?.deferredImpactPending !== true) {
+        await processReaperAttackResolution(context);
+        await processSandmanAttackResolution(context);
+        await processNightmareAttackResolution(context);
+      }
+      await updateVirtuosoLastWeapon(context);
+      await processBullseyeAttackResolution(context);
+      if (context?.deferredImpactPending !== true) await processKeepAwayAttackResolution(context);
+    })
+  );
   Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestDoubleAttackDuplicate(context);
   }));
@@ -1235,10 +1395,15 @@ function registerFixedAbilityRuntimeHooks() {
     requestAnatomyStudyWeaponActionModifiers(context);
     requestFullForceWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
+    requestCascadeWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
+    requestBullseyeWeaponActionModifiers(context);
     requestRicochetWeaponActionModifiers(context);
     requestKeepAwayWeaponActionModifiers(context);
     requestLethalAttackWeaponActionModifiers(context);
+    requestHawkEyePiercingWeaponActionModifiers(context);
+    requestHunterRaceWeaponActionModifiers(context);
+    requestTrueBulletWeaponActionModifiers(context);
     requestSandmanWeaponActionModifiers(context);
   }));
   Hooks.on("fallout-maw.weaponActionResolved", runFixedAbilityRuntimeHandler(context => {
@@ -1364,34 +1529,37 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
         const stateKey = getFixedFunctionStateKey(entry);
-        const settings = normalizeVirtuosoSettings(entry.fixedSettings);
-        if (settings.cascadeMaxStacks > 0) {
-          const combatUuid = String(getActorActiveCombat(abilityItem.parent)?.uuid ?? "");
-          const functionState = state[stateKey] ?? {};
-          const cascadeState = combatUuid && String(functionState.combatUuid ?? "") === combatUuid
-            ? advanceVirtuosoCascadePeriodicState(functionState, game.time?.worldTime, settings)
-            : combatUuid
-              ? createVirtuosoCascadeState({
-                combatUuid,
-                worldTime: game.time?.worldTime,
-                cascadeMaxStacks: settings.cascadeMaxStacks,
-                cascadeIntervalSeconds: settings.cascadeIntervalSeconds
-              })
-              : { stacks: 0 };
-          return {
-            key: stateKey,
-            label: "Каскад",
-            current: cascadeState.stacks,
-            required: settings.cascadeMaxStacks
-          };
-        }
         return {
           key: stateKey,
           label: "Последнее оружие",
           value: String(state[stateKey]?.weaponName ?? "").trim() || "Нету"
         };
       }
-      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cascade) {
+        const stateKey = getFixedFunctionStateKey(entry);
+        const settings = normalizeCascadeSettings(entry.fixedSettings);
+        const combatUuid = String(getActorActiveCombat(abilityItem.parent)?.uuid ?? "");
+        const functionState = state[stateKey] ?? {};
+        const cascadeState = combatUuid && String(functionState.combatUuid ?? "") === combatUuid
+          ? advanceCascadePeriodicState(functionState, game.time?.worldTime, settings)
+          : combatUuid
+            ? createCascadeCombatState({
+              combatUuid,
+              worldTime: game.time?.worldTime,
+              ...settings
+            })
+            : { stacks: 0 };
+        return {
+          key: stateKey,
+          label: "Каскад",
+          current: cascadeState.stacks,
+          required: settings.maxStacks
+        };
+      }
+      if ([
+        ABILITY_FIXED_FUNCTION_KEYS.keepAway,
+        ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown
+      ].includes(entry.fixedKey)) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
@@ -1399,7 +1567,10 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
         };
       }
-      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
+      if ([
+        ABILITY_FIXED_FUNCTION_KEYS.ricochet,
+        ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery
+      ].includes(entry.fixedKey)) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
@@ -1407,7 +1578,11 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
         };
       }
-      if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(entry.fixedKey)) {
+      if ([
+        ABILITY_FIXED_FUNCTION_KEYS.lethalShot,
+        ABILITY_FIXED_FUNCTION_KEYS.lethalStrike,
+        ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse
+      ].includes(entry.fixedKey)) {
         return {
           key: getFixedFunctionStateKey(entry),
           label: "Следующая атака",
@@ -1420,6 +1595,14 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: getFixedFunctionStateKey(entry),
           label: "Память",
           value: `${getAnatomyStudyMemoryUsage(knowledge)} / ${getAnatomyStudyMemoryCapacity(abilityItem.parent, entry.fixedSettings)}`
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.trueBullet) {
+        const stateKey = getFixedFunctionStateKey(entry);
+        return {
+          key: stateKey,
+          label: "Следующая атака",
+          value: state[stateKey]?.pending ? "Готова" : "Не подготовлена"
         };
       }
       const maintainedTargetDefinition = MAINTAINED_TARGET_DEFINITIONS_BY_KEY.get(entry.fixedKey);
@@ -1514,6 +1697,34 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
             accuracy: accuracyBonus,
             damagePercent: damagePercentBonus
           },
+          resourceCostMultipliers: {}
+        });
+        continue;
+      }
+      if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cascade) {
+        const combat = getActorActiveCombat(actor);
+        if (!combat?.started) continue;
+        const settings = normalizeCascadeSettings(abilityFunction.fixedSettings);
+        const snapshot = createCascadeAttackSnapshot({
+          state: state[stateKey],
+          weaponIdentity: weaponName,
+          combatUuid: combat.uuid,
+          worldTime: game.time?.worldTime,
+          settings
+        });
+        if (snapshot.bonusMultiplier <= 0) continue;
+        const accuracyBonus = settings.accuracyPerStack * snapshot.bonusMultiplier;
+        const damagePercentBonus = settings.damagePercentPerStack * snapshot.bonusMultiplier;
+        combatValues.accuracy += accuracyBonus;
+        combatValues.damagePercent += damagePercentBonus;
+        sources.push({
+          kind: "fixedAbility",
+          itemId: String(abilityItem.id ?? ""),
+          itemUuid: String(abilityItem.uuid ?? ""),
+          name: String(abilityItem.name ?? ""),
+          img: String(abilityItem.img ?? ""),
+          functionId: String(abilityFunction.id ?? ""),
+          combatValues: { accuracy: accuracyBonus, damagePercent: damagePercentBonus },
           resourceCostMultipliers: {}
         });
         continue;
@@ -1693,7 +1904,16 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.bullseye) {
+    await toggleBullseye(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.keepAway,
+    ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown
+  ].includes(abilityFunction.fixedKey)) {
     const used = await useKeepAway(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
@@ -1717,7 +1937,10 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.ricochet,
+    ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery
+  ].includes(abilityFunction.fixedKey)) {
     const used = await useRicochet(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
@@ -1819,7 +2042,34 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(abilityFunction.fixedKey)) {
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.hunterRace) {
+    const used = await useHunterRace(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience) {
+    const used = await activateExplosiveResilience({ actor, abilityItem: item, abilityFunction });
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.trophyCollector) {
+    await showTrophyCollectorLedger({ actor, abilityItem: item, abilityFunction });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.trueBullet) {
+    const used = await useTrueBullet(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.lethalShot,
+    ABILITY_FIXED_FUNCTION_KEYS.lethalStrike,
+    ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse
+  ].includes(abilityFunction.fixedKey)) {
     const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
@@ -6740,11 +6990,16 @@ async function executeWatchOutReaction({ context = {}, offer = {} } = {}) {
   if (!hasEnergy(reactor, energyCost)) return { handled: false };
 
   await spendEnergy(reactor, energyCost);
-  await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
-    name: getAbilityOverloadName(entry.abilityItem),
-    energyCost: entry.settings.reactionOverloadEnergyCost,
-    durationSeconds: entry.settings.reactionOverloadDurationSeconds
-  });
+  if (
+    Math.max(0, toInteger(entry.settings.reactionOverloadEnergyCost)) > 0
+    || Math.max(0, toInteger(entry.settings.reactionOverloadDurationSeconds)) > 0
+  ) {
+    await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
+      name: getAbilityOverloadName(entry.abilityItem),
+      energyCost: entry.settings.reactionOverloadEnergyCost,
+      durationSeconds: entry.settings.reactionOverloadDurationSeconds
+    });
+  }
   const difficultyBonus = entry.settings.difficultyBase
     + Math.floor(getActorSkillValue(reactor, entry.settings.sourceSkillKey) / entry.settings.skillDivisor);
   await createAbilityChatMessage(reactor, entry.abilityItem, `Сложность текущей атаки увеличена на ${difficultyBonus}.`);
@@ -8463,26 +8718,17 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
     });
   if (!selectedCandidate) return { handled: true, status: REACTION_RESULT.declined };
   const { weapon, weaponFunctionId } = selectedCandidate;
-  const attackEnergyCost = getReactionWeaponActionEnergyCost({
+  const resourcePreview = getReactionWeaponActionResourcePreview({
     actor: reactor,
     token: reactorToken,
     weapon,
     actionKey: "meleeAttack",
-    weaponFunctionId
+    weaponFunctionId,
+    reactionEnergyCost
   });
-  if (!hasEnergy(reactor, getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost))) {
-    return { handled: false };
-  }
-  if (!hasRequiredWeaponResources(weapon, 1, weaponFunctionId)) {
+  if (resourcePreview.missing) {
     return { handled: true, status: REACTION_RESULT.failed };
   }
-
-  await spendEnergy(reactor, reactionEnergyCost);
-  await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
-    name: getAbilityOverloadName(entry.abilityItem),
-    energyCost: entry.settings.reactionOverloadEnergyCost,
-    durationSeconds: entry.settings.reactionOverloadDurationSeconds
-  });
 
   const used = await executeWeaponAttackAgainstToken({
     attackerToken: reactorToken.object ?? reactorToken,
@@ -8491,8 +8737,17 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
     actionKey: "meleeAttack",
     weaponFunctionId,
     skipActionPointCost: true,
+    additionalActorResourceCosts: resourcePreview.additionalActorResourceCosts,
+    requireResourceCommit: true,
     ignoreReactionLock: true
   });
+  if (used && Math.max(0, toInteger(entry.settings.reactionOverloadEnergyCost)) > 0) {
+    await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
+      name: getAbilityOverloadName(entry.abilityItem),
+      energyCost: entry.settings.reactionOverloadEnergyCost,
+      durationSeconds: entry.settings.reactionOverloadDurationSeconds
+    });
+  }
   if (used) await createWhereAreYouGoingChatMessage(reactor, entry.abilityItem);
   return {
     handled: true,
@@ -8716,16 +8971,17 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
     if (!entry) continue;
     const settings = entry.settings;
     const reactionEnergyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
-    const attackEnergyCost = getReactionWeaponActionEnergyCost({
+    const resourcePreview = getReactionWeaponActionResourcePreview({
       actor: defender,
       token: defenderToken,
       weapon: entry.weapon,
       actionKey: "meleeAttack",
-      weaponFunctionId: entry.weaponFunctionId
+      weaponFunctionId: entry.weaponFunctionId,
+      reactionEnergyCost
     });
+    const attackEnergyCost = resourcePreview.energyCost;
     const energyCost = getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost);
-    if (!hasEnergy(defender, energyCost)) continue;
-    if (getMissingWeaponResourceCost(entry.weapon, 1, entry.weaponFunctionId)) continue;
+    if (resourcePreview.missing) continue;
     offers.push({
       actorUuid: defender.uuid,
       reactionId: COUNTER_ATTACK_REACTION_PROVIDER_ID,
@@ -8756,23 +9012,16 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
   if (!defender || !defenderTokenDocument || !attackerTokenDocument || !entry) return { handled: false };
   const settings = entry.settings;
   const reactionEnergyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
-  const attackEnergyCost = getReactionWeaponActionEnergyCost({
+  const resourcePreview = getReactionWeaponActionResourcePreview({
     actor: defender,
     token: defenderTokenDocument,
     weapon: entry.weapon,
     actionKey: "meleeAttack",
-    weaponFunctionId: entry.weaponFunctionId
+    weaponFunctionId: entry.weaponFunctionId,
+    reactionEnergyCost
   });
   if (!areTokensAdjacent(defenderTokenDocument, attackerTokenDocument)) return { handled: false };
-  if (!hasEnergy(defender, getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost))) return { handled: false };
-  if (!hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
-
-  await spendEnergy(defender, reactionEnergyCost);
-  await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
-    name: getAbilityOverloadName(entry.abilityItem),
-    energyCost: settings.reactionOverloadEnergyCost,
-    durationSeconds: settings.reactionOverloadDurationSeconds
-  });
+  if (resourcePreview.missing) return { handled: false };
 
   const used = await executeWeaponAttackAgainstToken({
     attackerToken: defenderTokenDocument.object ?? defenderTokenDocument,
@@ -8783,6 +9032,8 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
     chainRef: context?.chainRef ?? null,
     damageHubOperationRef: context?.damageHubOperationRef ?? "",
     skipActionPointCost: true,
+    additionalActorResourceCosts: resourcePreview.additionalActorResourceCosts,
+    requireResourceCommit: true,
     ignoreReactionLock: true,
     suspendActiveAttack: true
   });
@@ -8790,12 +9041,20 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
     await createAbilityChatMessage(defender, entry.abilityItem, "Не удалось выполнить удар.");
     return { handled: true, status: REACTION_RESULT.failed };
   }
+  await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
+    name: getAbilityOverloadName(entry.abilityItem),
+    energyCost: settings.reactionOverloadEnergyCost,
+    durationSeconds: settings.reactionOverloadDurationSeconds
+  });
   await createAbilityChatMessage(defender, entry.abilityItem, "Ответная атака выполнена.");
   return { handled: true, status: REACTION_RESULT.success };
 }
 
 async function collectDisarmReactionOffers({ eventKey = "", context = {} } = {}) {
-  if (eventKey !== REACTION_EVENT_KEYS.weaponAttackTargeted) return [];
+  if (
+    eventKey !== REACTION_EVENT_KEYS.weaponAttackTargeted
+    || context?.deferredImpactResolution === true
+  ) return [];
   const defender = await fromUuid(String(context.targetActorUuid ?? ""));
   const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
   const defenderToken = await fromUuid(String(context.targetTokenUuid ?? ""));
@@ -9259,18 +9518,22 @@ function getWhereAreYouGoingWeaponCandidates(actor) {
 
 function getAvailableWhereAreYouGoingWeaponCandidates(actor, { token = null, reactionEnergyCost = 0 } = {}) {
   return getWhereAreYouGoingWeaponCandidates(actor)
-    .map(candidate => ({
-      ...candidate,
-      attackEnergyCost: getReactionWeaponActionEnergyCost({
+    .map(candidate => {
+      const resourcePreview = getReactionWeaponActionResourcePreview({
         actor,
         token,
         weapon: candidate.weapon,
         actionKey: "meleeAttack",
-        weaponFunctionId: candidate.weaponFunctionId
-      })
-    }))
-    .filter(candidate => !getMissingWeaponResourceCost(candidate.weapon, 1, candidate.weaponFunctionId))
-    .filter(candidate => hasEnergy(actor, getCombinedReactionEnergyCost(reactionEnergyCost, candidate.attackEnergyCost)));
+        weaponFunctionId: candidate.weaponFunctionId,
+        reactionEnergyCost
+      });
+      return {
+        ...candidate,
+        attackEnergyCost: resourcePreview.energyCost,
+        missingResourceCost: resourcePreview.missing
+      };
+    })
+    .filter(candidate => !candidate.missingResourceCost);
 }
 
 function getWhereAreYouGoingWeaponCandidateId(candidate = {}) {
@@ -9661,17 +9924,28 @@ function getActorCounterSniperEntry(actor, offer = null) {
   const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
   const weaponId = String(offer?.weaponId ?? "");
   const weaponFunctionId = String(offer?.weaponFunctionId ?? "");
+  const fixedKey = [
+    ABILITY_FIXED_FUNCTION_KEYS.counterSniper,
+    ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed,
+    ABILITY_FIXED_FUNCTION_KEYS.guardianAngel
+  ].includes(String(offer?.fixedKey ?? ""))
+    ? String(offer.fixedKey)
+    : ABILITY_FIXED_FUNCTION_KEYS.counterSniper;
   for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
     if (abilityItemId && abilityItem.id !== abilityItemId) continue;
     const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
-      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper && (!abilityFunctionId || entry.id === abilityFunctionId));
+      .find(entry => entry.fixedKey === fixedKey && (!abilityFunctionId || entry.id === abilityFunctionId));
     if (!abilityFunction) continue;
     const candidate = getCounterSniperWeaponCandidate(actor, { weaponId, weaponFunctionId });
     if (!candidate) continue;
     return {
       abilityItem,
       abilityFunction,
-      settings: normalizeCounterSniperSettings(abilityFunction.fixedSettings),
+      settings: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed
+        ? normalizeCounterSniperGuaranteedSettings(abilityFunction.fixedSettings)
+        : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.guardianAngel
+          ? normalizeGuardianAngelSettings(abilityFunction.fixedSettings)
+          : normalizeCounterSniperSettings(abilityFunction.fixedSettings),
       ...candidate
     };
   }
@@ -9729,10 +10003,57 @@ function registerCounterSniperReactionProvider() {
     collect: runFixedAbilityRuntimeHandler(collectCounterSniperReactionOffers),
     execute: runFixedAbilityRuntimeHandler(executeCounterSniperReaction)
   });
+  registerReactionProvider({
+    id: COUNTER_SNIPER_GUARANTEED_REACTION_PROVIDER_ID,
+    collect: runFixedAbilityRuntimeHandler(collectCounterSniperGuaranteedReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeCounterSniperReaction)
+  });
+  registerReactionProvider({
+    id: GUARDIAN_ANGEL_REACTION_PROVIDER_ID,
+    collect: runFixedAbilityRuntimeHandler(collectGuardianAngelReactionOffers),
+    execute: runFixedAbilityRuntimeHandler(executeCounterSniperReaction)
+  });
 }
 
 async function collectCounterSniperReactionOffers({ eventKey = "", context = {} } = {}) {
-  if (eventKey !== REACTION_EVENT_KEYS.aimedAttackLimbSelected) return [];
+  return collectProtectiveAimedShotOffers({
+    eventKey,
+    context,
+    fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniper,
+    providerId: COUNTER_SNIPER_REACTION_PROVIDER_ID,
+    triggerEventKey: REACTION_EVENT_KEYS.aimedAttackLimbSelected
+  });
+}
+
+async function collectCounterSniperGuaranteedReactionOffers({ eventKey = "", context = {} } = {}) {
+  return collectProtectiveAimedShotOffers({
+    eventKey,
+    context,
+    fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed,
+    providerId: COUNTER_SNIPER_GUARANTEED_REACTION_PROVIDER_ID,
+    triggerEventKey: REACTION_EVENT_KEYS.aimedAttackLimbSelected
+  });
+}
+
+async function collectGuardianAngelReactionOffers({ eventKey = "", context = {} } = {}) {
+  if (context?.suppressGuardianAngelReaction) return [];
+  return collectProtectiveAimedShotOffers({
+    eventKey,
+    context,
+    fixedKey: ABILITY_FIXED_FUNCTION_KEYS.guardianAngel,
+    providerId: GUARDIAN_ANGEL_REACTION_PROVIDER_ID,
+    triggerEventKey: REACTION_EVENT_KEYS.weaponAttackTargeted
+  });
+}
+
+async function collectProtectiveAimedShotOffers({
+  eventKey = "",
+  context = {},
+  fixedKey = "",
+  providerId = "",
+  triggerEventKey = ""
+} = {}) {
+  if (eventKey !== triggerEventKey) return [];
   const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
   const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
   const defendedActor = await fromUuid(String(context.targetActorUuid ?? ""));
@@ -9745,18 +10066,20 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
     if (!reactor || reactor.uuid === attacker.uuid || seenActors.has(reactor.uuid)) continue;
     if (reactor.uuid === defendedActor.uuid) continue;
     if (!isCounterSniperAlly(reactor, defendedActor) || !isCounterSniperEnemy(reactor, attacker)) continue;
-    const entry = getActorCounterSniperEntry(reactor);
+    const entry = getActorCounterSniperEntry(reactor, { fixedKey });
     if (!entry) continue;
     const reactionEnergyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
-    const attackEnergyCost = getReactionWeaponActionEnergyCost({
+    const resourcePreview = getReactionWeaponActionResourcePreview({
       actor: reactor,
       token: reactorToken,
       weapon: entry.weapon,
       actionKey: "aimedShot",
-      weaponFunctionId: entry.weaponFunctionId
+      weaponFunctionId: entry.weaponFunctionId,
+      reactionEnergyCost
     });
+    const attackEnergyCost = resourcePreview.energyCost;
     const energyCost = getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost);
-    if (!hasEnergy(reactor, energyCost)) continue;
+    if (resourcePreview.missing) continue;
     if (!canPerformAimedAttackAgainstToken({
       attackerToken: reactorToken,
       targetToken: attackerToken,
@@ -9766,13 +10089,14 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
     seenActors.add(reactor.uuid);
     offers.push({
       actorUuid: reactor.uuid,
-      offerId: `${COUNTER_SNIPER_REACTION_PROVIDER_ID}:${reactor.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
+      offerId: `${providerId}:${reactor.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
       label: getAbilityDisplayName(entry.abilityItem),
       description: `Прицельный выстрел по ${attacker.name}: ${entry.weapon.name}.`,
       img: entry.abilityItem.img || entry.weapon.img || "icons/svg/target.svg",
       costLines: buildReactionEnergyCostLines(entry.settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
+      fixedKey,
       weaponId: entry.weapon.id,
       weaponFunctionId: entry.weaponFunctionId,
       reactorTokenUuid: reactorToken.uuid,
@@ -9793,31 +10117,36 @@ async function executeCounterSniperReaction({ context = {}, offer = {} } = {}) {
   if (!reactor || !reactorToken || !attackerToken || !entry) return { handled: false };
   if (reactor.uuid === String(context.targetActorUuid ?? "")) return { handled: false };
   const reactionEnergyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
-  const attackEnergyCost = getReactionWeaponActionEnergyCost({
+  const resourcePreview = getReactionWeaponActionResourcePreview({
     actor: reactor,
     token: reactorToken,
     weapon: entry.weapon,
     actionKey: "aimedShot",
-    weaponFunctionId: entry.weaponFunctionId
+    weaponFunctionId: entry.weaponFunctionId,
+    reactionEnergyCost
   });
-  if (!hasEnergy(reactor, getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost)) || !hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
-
-  await spendEnergy(reactor, reactionEnergyCost);
-  await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
-    name: getAbilityOverloadName(entry.abilityItem),
-    energyCost: entry.settings.reactionOverloadEnergyCost,
-    durationSeconds: entry.settings.reactionOverloadDurationSeconds
-  });
+  if (resourcePreview.missing) return { handled: false };
 
   const owner = getResponsibleActorOwner(reactor) ?? getResponsibleGM();
   if (!owner) return { handled: true, status: REACTION_RESULT.failed };
   const query = {
+    label: getAbilityDisplayName(entry.abilityItem),
     reactorTokenUuid: reactorToken.uuid,
     attackerTokenUuid: attackerToken.uuid,
     weaponUuid: entry.weapon.uuid,
     weaponFunctionId: entry.weaponFunctionId,
+    reactionEnergyCost,
     chainRef: context?.chainRef ?? null,
-    damageHubOperationRef: context?.damageHubOperationRef ?? ""
+    damageHubOperationRef: context?.damageHubOperationRef ?? "",
+    resultPolicy: Number.isFinite(Number(entry.settings.guaranteedHitChanceThreshold))
+      ? {
+        disabledResultsWhenSuccessChanceAbove: {
+          criticalFailure: true,
+          failure: true
+        },
+        successChanceThreshold: Number(entry.settings.guaranteedHitChanceThreshold)
+      }
+      : null
   };
   let used = false;
   try {
@@ -9826,6 +10155,13 @@ async function executeCounterSniperReaction({ context = {}, offer = {} } = {}) {
       : await owner.query(COUNTER_SNIPER_AIM_QUERY_NAME, query, { timeout: 120000 });
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Counter sniper aim failed`, error);
+  }
+  if (used) {
+    await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
+      name: getAbilityOverloadName(entry.abilityItem),
+      energyCost: entry.settings.reactionOverloadEnergyCost,
+      durationSeconds: entry.settings.reactionOverloadDurationSeconds
+    });
   }
   await createAbilityChatMessage(reactor, entry.abilityItem, used
     ? "Ответный прицельный выстрел выполнен."
@@ -9838,11 +10174,24 @@ async function handleCounterSniperAimQuery(data = {}) {
   const attackerTokenDocument = await fromUuid(String(data.attackerTokenUuid ?? ""));
   const weapon = await fromUuid(String(data.weaponUuid ?? ""));
   if (!reactorTokenDocument?.actor?.isOwner || !attackerTokenDocument?.actor || !weapon) return false;
+  const resourcePreview = getReactionWeaponActionResourcePreview({
+    actor: reactorTokenDocument.actor,
+    token: reactorTokenDocument,
+    weapon,
+    actionKey: "aimedShot",
+    weaponFunctionId: String(data.weaponFunctionId ?? ""),
+    reactionEnergyCost: data.reactionEnergyCost
+  });
+  if (resourcePreview.missing) return false;
   return startForcedAimedAttackSelection({
+    label: String(data.label ?? "Контр-снайпер"),
     attackerToken: reactorTokenDocument.object ?? reactorTokenDocument,
     targetToken: attackerTokenDocument.object ?? attackerTokenDocument,
     weapon,
     weaponFunctionId: String(data.weaponFunctionId ?? ""),
+    additionalActorResourceCosts: resourcePreview.additionalActorResourceCosts,
+    requireResourceCommit: true,
+    resultPolicy: data.resultPolicy ?? null,
     chainRef: data.chainRef ?? null,
     damageHubOperationRef: data.damageHubOperationRef ?? ""
   });
@@ -9869,9 +10218,38 @@ async function toggleAiming(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function toggleBullseye(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeBullseyeSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive,
+    ...(!nextActive ? {
+      targetActorUuid: "",
+      limbKey: "",
+      stacks: 0,
+      lastAttackId: ""
+    } : {})
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
 async function useKeepAway(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = normalizeKeepAwaySettings(abilityFunction.fixedSettings);
+  const settings = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown
+    ? normalizeKeepAwayKnockdownSettings(abilityFunction.fixedSettings)
+    : normalizeKeepAwaySettings(abilityFunction.fixedSettings);
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
@@ -9901,7 +10279,9 @@ async function useKeepAway(actor, abilityItem, abilityFunction) {
 
 async function useRicochet(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = normalizeRicochetSettings(abilityFunction.fixedSettings);
+  const settings = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery
+    ? normalizeRicochetMasterySettings(abilityFunction.fixedSettings)
+    : normalizeRicochetSettings(abilityFunction.fixedSettings);
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
@@ -9931,7 +10311,9 @@ async function useRicochet(actor, abilityItem, abilityFunction) {
 
 async function useLethalAttack(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = normalizeLethalAttackSettings(abilityFunction.fixedSettings);
+  const settings = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse
+    ? normalizeCorpseAfterCorpseSettings(abilityFunction.fixedSettings)
+    : normalizeLethalAttackSettings(abilityFunction.fixedSettings);
   if (findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction)) {
     ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
     return false;
@@ -10023,17 +10405,7 @@ function requestFullForceWeaponActionModifiers(context = {}) {
       context.modifierState.addSpendRequirement({
         source: "fullForce",
         label: getAbilityDisplayName(abilityItem),
-        energyCost: getEnergyCost,
-        canSpend: context => {
-          const cost = getEnergyCost(context);
-          if (hasEnergy(actor, cost)) return true;
-          if (!context?.silent) ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
-          return false;
-        },
-        spend: async context => {
-          const cost = getEnergyCost(context);
-          return spendFullForceEnergy(actor, abilityItem, abilityFunction, cost);
-        }
+        energyCost: getEnergyCost
       });
     }
   }
@@ -10063,38 +10435,132 @@ function requestAimingWeaponActionModifiers(context = {}) {
       context.modifierState.addSpendRequirement({
         source: "aiming",
         label: getAbilityDisplayName(abilityItem),
-        energyCost: getEnergyCost,
-        canSpend: context => {
-          const cost = getEnergyCost(context);
-          if (hasEnergy(actor, cost)) return true;
-          if (!context?.silent) ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
-          return false;
-        },
-        spend: async context => {
-          const cost = getEnergyCost(context);
-          return spendEnergy(actor, cost);
-        }
+        energyCost: getEnergyCost
       });
     }
+  }
+}
+
+function requestBullseyeWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || String(context?.actionKey ?? "") !== "aimedShot" || !context?.modifierState) return;
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.bullseye) continue;
+      const stateKey = getFixedFunctionStateKey(abilityFunction);
+      if (!state[stateKey]?.active) continue;
+      const settings = normalizeBullseyeSettings(abilityFunction.fixedSettings);
+      context.modifierState.setOption(
+        "innateAimedDifficultyIgnorePercent",
+        Math.max(
+          toInteger(context.modifierState.getOption("innateAimedDifficultyIgnorePercent")),
+          settings.innateDifficultyIgnorePercent
+        )
+      );
+      context.modifierState.addCombatValue("penetration", attackContext => {
+        const targetActor = attackContext?.targetActor ?? attackContext?.targetToken?.actor ?? null;
+        const stacks = getBullseyeApplicableStacks({
+          state: state[stateKey],
+          actionKey: context.actionKey,
+          targetActorUuid: targetActor?.uuid,
+          limbKey: attackContext?.limbKey
+        }, settings);
+        if (!stacks) return 0;
+        return evaluateActorFormula(getBullseyePenetrationFormula(stacks, settings), actor, {
+          fallback: 0,
+          minimum: 0,
+          context: "bullseye penetration"
+        });
+      });
+      const entries = Array.isArray(context.modifierState.getOption("bullseyeEntries"))
+        ? context.modifierState.getOption("bullseyeEntries")
+        : [];
+      entries.push({ abilityItem, abilityFunction, settings });
+      context.modifierState.setOption("bullseyeEntries", entries);
+      const getEnergyCost = ({ attackCount = 1 } = {}) => (
+        getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost)
+        * Math.max(1, toInteger(attackCount))
+      );
+      context.modifierState.addSpendRequirement({
+        source: "bullseye",
+        label: getAbilityDisplayName(abilityItem),
+        energyCost: getEnergyCost
+      });
+    }
+  }
+}
+
+async function processBullseyeAttackResolution(context = {}) {
+  if (context?.attackCheckAggregate !== true) return;
+  const entries = context?.modifierState?.getOption?.("bullseyeEntries");
+  if (!Array.isArray(entries) || !entries.length) return;
+  for (const entry of entries) {
+    const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+    const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+    const transition = resolveBullseyeAttackCycle({
+      state: state[stateKey],
+      attackId: context?.attackId,
+      actionKey: context?.actionKey,
+      targetActorUuid: context?.selectedTargetActorUuid,
+      limbKey: context?.selectedLimbKey,
+      attackCheckCount: context?.attackCheckCount,
+      successfulAttack: context?.successfulAttack
+    }, entry.settings);
+    if (!transition.changed) continue;
+    state[stateKey] = {
+      ...state[stateKey],
+      fixedKey: entry.abilityFunction.fixedKey,
+      ...transition.nextState
+    };
+    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
   }
 }
 
 function requestKeepAwayWeaponActionModifiers(context = {}) {
   const actor = context?.actor ?? null;
   const actionKey = String(context?.actionKey ?? "");
-  if (!actor || !["snapshot", "aimedShot"].includes(actionKey) || !context?.modifierState) return;
+  if (
+    !actor
+    || !ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)
+    || String(context?.weaponData?.skillKey ?? "") !== "rangedCombat"
+    || !context?.modifierState
+  ) return;
 
   for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
-      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.keepAway) continue;
+      if (![
+        ABILITY_FIXED_FUNCTION_KEYS.keepAway,
+        ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown
+      ].includes(abilityFunction.fixedKey)) continue;
       const stateKey = getFixedFunctionStateKey(abilityFunction);
       if (!state[stateKey]?.pending) continue;
       const entries = Array.isArray(context.modifierState.getOption("keepAwayEntries"))
         ? context.modifierState.getOption("keepAwayEntries")
         : [];
-      entries.push({ abilityItem, abilityFunction, settings: normalizeKeepAwaySettings(abilityFunction.fixedSettings) });
+      const knockdown = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown;
+      const settings = knockdown
+        ? normalizeKeepAwayKnockdownSettings(abilityFunction.fixedSettings)
+        : normalizeKeepAwaySettings(abilityFunction.fixedSettings);
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        knockdown,
+        settings
+      });
       context.modifierState.setOption("keepAwayEntries", entries);
+      const deferredEntries = Array.isArray(context.modifierState.getOption("keepAwayDeferredEntries"))
+        ? context.modifierState.getOption("keepAwayDeferredEntries")
+        : [];
+      deferredEntries.push({
+        abilityItemUuid: String(abilityItem.uuid ?? ""),
+        abilityFunctionId: String(abilityFunction.id ?? ""),
+        fixedKey: String(abilityFunction.fixedKey ?? ""),
+        knockdown,
+        settings: foundry.utils.deepClone(settings)
+      });
+      context.modifierState.setOption("keepAwayDeferredEntries", deferredEntries);
       context.modifierState.addSpendRequirement({
         source: "keepAway",
         label: getAbilityDisplayName(abilityItem),
@@ -10115,7 +10581,17 @@ function requestLethalAttackWeaponActionModifiers(context = {}) {
       if (!requiredActionKey || actionKey !== requiredActionKey) continue;
       const effect = findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction);
       if (!effect) continue;
-      const settings = normalizeLethalAttackSettings(abilityFunction.fixedSettings);
+      const corpseAfterCorpse = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse;
+      const settings = corpseAfterCorpse
+        ? normalizeCorpseAfterCorpseSettings(abilityFunction.fixedSettings)
+        : normalizeLethalAttackSettings(abilityFunction.fixedSettings);
+      if (corpseAfterCorpse) {
+        const entries = Array.isArray(context.modifierState.getOption("corpseAfterCorpseEntries"))
+          ? context.modifierState.getOption("corpseAfterCorpseEntries")
+          : [];
+        entries.push({ abilityItem, abilityFunction, settings });
+        context.modifierState.setOption("corpseAfterCorpseEntries", entries);
+      }
       context.modifierState.addCombatValue("damagePercent", attackContext => {
         const targetActor = attackContext?.targetActor ?? attackContext?.targetToken?.actor ?? null;
         const limbKey = String(attackContext?.limbKey ?? "").trim();
@@ -10128,6 +10604,78 @@ function requestLethalAttackWeaponActionModifiers(context = {}) {
       });
     }
   }
+}
+
+function requestHawkEyePiercingWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || String(context?.actionKey ?? "") !== "aimedShot" || !context?.modifierState) return;
+  let defenseIgnorePercent = 0;
+  let resistanceIgnorePercent = 0;
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing) continue;
+      const modifier = buildHawkEyePiercingModifier(context.actionKey, abilityFunction.fixedSettings);
+      defenseIgnorePercent = Math.max(defenseIgnorePercent, Number(modifier?.defenseIgnorePercent) || 0);
+      resistanceIgnorePercent = Math.max(resistanceIgnorePercent, Number(modifier?.resistanceIgnorePercent) || 0);
+    }
+  }
+  if (defenseIgnorePercent <= 0 && resistanceIgnorePercent <= 0) return;
+  context.modifierState.setOption("targetMitigationIgnore", {
+    defenseIgnorePercent,
+    resistanceIgnorePercent
+  });
+}
+
+function requestHunterRaceWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || !context?.modifierState) return;
+  addHunterRaceWeaponModifiers(context.modifierState, actor);
+}
+
+function requestTrueBulletWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (
+    !actor
+    || !context?.modifierState
+    || context?.controller?.usesAbilityTrialResolution?.() === true
+    || !ATTACKING_WEAPON_ACTION_KEYS.includes(String(context?.actionKey ?? ""))
+    || String(context?.weaponData?.skillKey ?? "") !== "rangedCombat"
+  ) return;
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.trueBullet) continue;
+      if (!state[getFixedFunctionStateKey(abilityFunction)]?.pending) continue;
+      const settings = normalizeTrueBulletSettings(abilityFunction.fixedSettings);
+      context.modifierState.setOption("attackResultPolicy", mergeSkillCheckResultPolicies(
+        context.modifierState.getOption("attackResultPolicy"),
+        {
+          disabledResults: { criticalFailure: true, failure: true },
+          forcedResultWhenSuccessChanceAbove: "criticalSuccess",
+          successChanceThreshold: settings.criticalSuccessChanceThreshold
+        }
+      ));
+      context.modifierState.addSpendRequirement({
+        source: "trueBullet",
+        label: getAbilityDisplayName(abilityItem),
+        spend: () => consumeTrueBulletPreparation(abilityItem, abilityFunction)
+      });
+      return;
+    }
+  }
+}
+
+async function consumeTrueBulletPreparation(abilityItem, abilityFunction) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (!state[stateKey]?.pending) return true;
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: false
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  return true;
 }
 
 function requestSandmanWeaponActionModifiers(context = {}) {
@@ -10156,12 +10704,19 @@ function requestRicochetWeaponActionModifiers(context = {}) {
   for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
-      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.ricochet) continue;
+      if (![
+        ABILITY_FIXED_FUNCTION_KEYS.ricochet,
+        ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery
+      ].includes(abilityFunction.fixedKey)) continue;
       if (!state[getFixedFunctionStateKey(abilityFunction)]?.pending) continue;
+      const mastery = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery;
       entries.push({
         abilityItem,
         abilityFunction,
-        settings: normalizeRicochetSettings(abilityFunction.fixedSettings)
+        mastery,
+        settings: mastery
+          ? buildRicochetMasteryModifier(abilityFunction.fixedSettings)
+          : normalizeRicochetSettings(abilityFunction.fixedSettings)
       });
     }
   }
@@ -10170,9 +10725,17 @@ function requestRicochetWeaponActionModifiers(context = {}) {
   context.modifierState.setOption("ricochetEntries", entries);
   context.modifierState.setOption("ricochet", {
     maxReflections: Math.max(...entries.map(entry => entry.settings.maxReflections)),
+    maximumConeDegrees: Math.min(...entries
+      .map(entry => Number(entry.settings.maximumConeDegrees))
+      .filter(value => Number.isFinite(value) && value > 0), Infinity),
     accuracyBonusPerReflection: entries.reduce((sum, entry) => sum + entry.settings.accuracyBonusPerReflection, 0),
-    damagePercentBonusPerReflection: entries.reduce((sum, entry) => sum + entry.settings.damagePercentBonusPerReflection, 0)
+    damagePercentBonusPerReflection: entries.reduce((sum, entry) => sum + entry.settings.damagePercentBonusPerReflection, 0),
+    penetrationBonusPerReflection: entries.reduce((sum, entry) => sum + toInteger(entry.settings.penetrationBonusPerReflection), 0)
   });
+  context.modifierState.addCombatValue("penetration", runtimeContext => (
+    Math.max(0, toInteger(runtimeContext?.reflectionCount))
+    * toInteger(context.modifierState.getOption("ricochet")?.penetrationBonusPerReflection)
+  ));
   context.modifierState.addSpendRequirement({
     source: "ricochet",
     label: entries.map(entry => getAbilityDisplayName(entry.abilityItem)).join(", "),
@@ -10199,6 +10762,7 @@ async function consumeRicochetPreparation(abilityItem, abilityFunction) {
 function getLethalAttackActionKey(fixedKey = "") {
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot) return "aimedShot";
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike) return "aimedMeleeAttack";
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse) return "aimedShot";
   return "";
 }
 
@@ -10223,6 +10787,36 @@ async function consumeLethalAttackPreparationEffects(context = {}) {
   if (effectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
 }
 
+async function processCorpseAfterCorpseResolution(context = {}) {
+  if (context?.attackCheckAggregate !== true) return;
+  const entries = context?.modifierState?.getOption?.("corpseAfterCorpseEntries");
+  if (!Array.isArray(entries) || !entries.length) return;
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? context?.actor?.uuid ?? "").trim();
+  const actor = context?.actor ?? (actorUuid ? fromUuidSync(actorUuid) : null);
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  for (const entry of entries) {
+    const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+    const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+    const transition = resolveCorpseAfterCorpseKill(state[stateKey], {
+      attackId: context?.attackId,
+      killedTargetUuids: context?.killedTargetUuids
+    });
+    if (!transition.shouldClear) continue;
+    state[stateKey] = {
+      ...state[stateKey],
+      fixedKey: entry.abilityFunction.fixedKey,
+      ...transition.nextState
+    };
+    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+    await clearCorpseAfterCorpseOverload(actor, {
+      abilityItemId: entry.abilityItem.id,
+      abilitySourceId: getAbilitySourceId(entry.abilityItem),
+      functionId: entry.abilityFunction.id,
+      fixedKey: entry.abilityFunction.fixedKey
+    });
+  }
+}
+
 async function consumeKeepAwayPreparation(abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
@@ -10237,46 +10831,65 @@ async function consumeKeepAwayPreparation(abilityItem, abilityFunction) {
 }
 
 async function processKeepAwayAttackResolution(context = {}) {
-  const entries = context?.modifierState?.getOption?.("keepAwayEntries");
+  const liveEntries = context?.modifierState?.getOption?.("keepAwayEntries");
+  const entries = Array.isArray(liveEntries) && liveEntries.length
+    ? liveEntries
+    : context?.keepAwayEntries;
   if (!Array.isArray(entries) || !entries.length) return;
-  if (!context?.damageResults?.length) return;
   const attackerToken = fromUuidSync(String(context?.tokenUuid ?? ""));
   if (!attackerToken) return;
 
-  const damageByActor = new Map();
-  for (const result of context.damageResults) {
-    if (result?.mode && result.mode !== "damage") continue;
-    const actor = result?.actor ?? null;
-    const actorUuid = String(actor?.uuid ?? result?.actorUuid ?? "").trim();
-    if (!actorUuid) continue;
-    const current = damageByActor.get(actorUuid) ?? { actor, healthDamage: 0 };
-    current.actor ??= actor;
-    current.healthDamage += Math.max(0, Number(result?.resourceHealthDelta) || 0);
-    damageByActor.set(actorUuid, current);
+  const successfulActorUuids = new Set((context?.successfulAttackTargetActorUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean));
+  if (!successfulActorUuids.size && context?.successfulAttack === true) {
+    const selected = String(context?.selectedTargetActorUuid ?? "").trim();
+    if (selected) successfulActorUuids.add(selected);
   }
-  if (!damageByActor.size) return;
+  if (!successfulActorUuids.size) return;
 
   const targetTokens = (context?.targetTokenUuids ?? [])
     .map(uuid => fromUuidSync(String(uuid ?? "")))
     .filter(token => token?.actor);
   for (const entry of entries) {
-    const settings = normalizeKeepAwaySettings(entry.settings);
-    for (const [actorUuid, damage] of damageByActor) {
+    const abilityItem = entry.abilityItem
+      ?? fromUuidSync(String(entry.abilityItemUuid ?? ""));
+    const abilityFunction = entry.abilityFunction
+      ?? normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+        .find(fn => (
+          fn.id === String(entry.abilityFunctionId ?? "")
+          && fn.fixedKey === String(entry.fixedKey ?? "")
+        ));
+    if (!abilityItem || !abilityFunction) continue;
+    const knockdown = entry.knockdown === true
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown;
+    const settings = entry.settings ?? (knockdown
+      ? normalizeKeepAwayKnockdownSettings(abilityFunction.fixedSettings)
+      : normalizeKeepAwaySettings(abilityFunction.fixedSettings));
+    for (const actorUuid of successfulActorUuids) {
       const targetToken = targetTokens.find(token => token.actor?.uuid === actorUuid)
         ?? (canvas.tokens?.placeables ?? []).find(token => token.actor?.uuid === actorUuid)?.document
         ?? null;
-      const actor = damage.actor ?? targetToken?.actor;
+      const actor = targetToken?.actor ?? fromUuidSync(actorUuid);
       if (!targetToken || !actor) continue;
-      const healthMax = Math.max(1, Number(actor.system?.resources?.health?.max) || 1);
-      const lostPercent = Math.max(0, Math.min(100, (damage.healthDamage / healthMax) * 100));
-      const difficulty = Math.floor(settings.baseDifficulty + (lostPercent * settings.lostHealthPercentMultiplier));
-      await resolveKnockback({
+      const lostPercent = getActorLostHealthPercent(actor);
+      const difficulty = knockdown
+        ? getKeepAwayKnockdownDifficulty(lostPercent, settings)
+        : Math.floor(settings.baseDifficulty + (lostPercent * settings.lostHealthPercentMultiplier));
+      const knockbackResult = await resolveKnockback({
         attackerToken,
         targetToken,
         difficulty,
-        reason: getAbilityDisplayName(entry.abilityItem),
+        reason: getAbilityDisplayName(abilityItem),
         requester: "keepAwayResistance"
       });
+      if (knockdown) {
+        await applyKeepAwayKnockdown({
+          targetActor: actor,
+          knockbackResult,
+          setPosture: setActorTokensPosture
+        });
+      }
     }
   }
 }
@@ -10306,6 +10919,51 @@ function requestVirtuosoWeaponActionModifiers(context = {}) {
   }
 }
 
+function requestCascadeWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const actionKey = String(context?.actionKey ?? "");
+  // The rule compares weapons by their displayed name. Snapshot that name so
+  // every check in one attack cycle observes the same Cascade state.
+  const weaponIdentity = String(context?.weapon?.name ?? "").trim();
+  const attackId = String(context?.weaponAttackId ?? context?.attackId ?? "").trim();
+  const combat = getActorActiveCombat(actor);
+  if (
+    !actor
+    || !weaponIdentity
+    || !attackId
+    || !combat?.started
+    || !ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)
+    || !context?.modifierState
+  ) return;
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.cascade) continue;
+      const settings = normalizeCascadeSettings(abilityFunction.fixedSettings);
+      const snapshot = getOrCreateCascadeAttackSnapshot({
+        actor,
+        abilityItem,
+        abilityFunction,
+        state: state[getFixedFunctionStateKey(abilityFunction)],
+        weaponIdentity,
+        attackId,
+        combatUuid: combat.uuid,
+        worldTime: game.time?.worldTime,
+        settings
+      });
+      if (!snapshot.active || snapshot.bonusMultiplier <= 0) continue;
+      context.modifierState.addCombatValue(
+        "accuracy",
+        settings.accuracyPerStack * snapshot.bonusMultiplier
+      );
+      context.modifierState.addCombatValue(
+        "damagePercent",
+        settings.damagePercentPerStack * snapshot.bonusMultiplier
+      );
+    }
+  }
+}
+
 async function updateVirtuosoLastWeapon(context = {}) {
   if (context?.canceledByReaction) return;
   const actionKey = String(context?.actionKey ?? "").trim();
@@ -10315,7 +10973,7 @@ async function updateVirtuosoLastWeapon(context = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
   const weaponUuid = String(context?.weaponUuid ?? "").trim();
   const weapon = weaponUuid ? fromUuidSync(weaponUuid) : null;
-  const weaponName = String(weapon?.name ?? "").trim();
+  const weaponName = String(context?.weaponName ?? weapon?.name ?? "").trim();
   if (!weaponName) return;
 
   for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
@@ -10334,47 +10992,6 @@ async function updateVirtuosoLastWeapon(context = {}) {
         context?.weaponAttackId ?? context?.attackId,
         weaponUuid || weapon?.id
       );
-      changed = applyVirtuosoAttackTransition(state, stateKey, abilityFunction, transition) || changed;
-    }
-    if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  }
-}
-
-async function consumeVirtuosoAttackBonus(context = {}) {
-  const actor = context?.actor ?? null;
-  const weaponName = String(context?.weapon?.name ?? "").trim();
-  if (!actor || !weaponName || (!game.user?.isGM && !actor.isOwner)) return;
-
-  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
-    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
-      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso);
-    if (!functions.length) continue;
-    const state = getFixedAbilityState(abilityItem);
-    let changed = false;
-    for (const abilityFunction of functions) {
-      const stateKey = getFixedFunctionStateKey(abilityFunction);
-      const consumptionKey = `virtuosoConsumed:${abilityItem.id}:${stateKey}`;
-      if (context.modifierState?.getOption?.(consumptionKey)) continue;
-      context.modifierState?.setOption?.(consumptionKey, true);
-      const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
-      const transition = getVirtuosoAttackTransition(
-        actor,
-        abilityFunction,
-        state[stateKey],
-        weaponName,
-        context?.weaponAttackId ?? context?.attackId,
-        context?.weapon?.uuid ?? context?.weapon?.id
-      );
-      if (transition.bonusMultiplier > 0) {
-        context.modifierState?.addCombatValue?.(
-          "accuracy",
-          -(settings.accuracyBonus * transition.bonusMultiplier)
-        );
-        context.modifierState?.addCombatValue?.(
-          "damagePercent",
-          -(settings.damagePercentBonus * transition.bonusMultiplier)
-        );
-      }
       changed = applyVirtuosoAttackTransition(state, stateKey, abilityFunction, transition) || changed;
     }
     if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
@@ -10553,26 +11170,16 @@ function handleFixedAbilitySocketMessage(message = {}) {
 }
 
 function getVirtuosoAttackTransition(
-  actor,
-  abilityFunction,
+  _actor,
+  _abilityFunction,
   state,
   weaponName,
-  weaponAttackId = "",
-  weaponIdentity = ""
+  _weaponAttackId = "",
+  _weaponIdentity = ""
 ) {
-  const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
-  const combatUuid = settings.cascadeMaxStacks > 0
-    ? String(getActorActiveCombat(actor)?.uuid ?? "")
-    : "";
   return resolveVirtuosoAttackTransition({
     state,
-    weaponName,
-    weaponIdentity,
-    weaponAttackId,
-    combatUuid,
-    worldTime: game.time?.worldTime,
-    cascadeMaxStacks: settings.cascadeMaxStacks,
-    cascadeIntervalSeconds: settings.cascadeIntervalSeconds
+    weaponName
   });
 }
 
@@ -10588,14 +11195,72 @@ function applyVirtuosoAttackTransition(state, stateKey, abilityFunction, transit
     fixedKey: abilityFunction.fixedKey,
     ...transition.nextState
   };
-  if (!transition.cascade) {
-    delete nextState.combatUuid;
-    delete nextState.stacks;
-    delete nextState.nextGainAt;
-    delete nextState.weaponIdentity;
-    delete nextState.weaponAttackId;
-  }
   state[stateKey] = nextState;
+  return true;
+}
+
+async function useHunterRace(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeHunterRaceSettings(abilityFunction.fixedSettings);
+  const selection = await selectHunterRaceTarget({
+    actor,
+    sourceToken: getPrimaryActorToken(actor),
+    abilityName
+  });
+  if (!selection?.actor) return false;
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  const result = await activateHunterRaceEffect({
+    actor,
+    targetActor: selection.actor,
+    abilityItem,
+    abilityFunction,
+    settings
+  });
+  if (!result.ok) {
+    ui.notifications.warn(`${abilityName}: ${result.reason || "эффект не создан"}`);
+    return false;
+  }
+  ui.notifications.info(`${abilityName}: выбранная раса отмечена на ${formatDuration(settings.durationSeconds)}.`);
+  return true;
+}
+
+async function useTrueBullet(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeTrueBulletSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (state[stateKey]?.pending) {
+    ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: true
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: следующая атака подготовлена.`);
   return true;
 }
 
@@ -11249,16 +11914,6 @@ async function spendDoubleAttackEnergyNow(actor, abilityItem, abilityFunction, e
   }
   await actor.update(update);
   return true;
-}
-
-async function spendFullForceEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
-  const cost = Math.max(0, toInteger(energyCost));
-  if (!hasEnergy(actor, cost)) {
-    await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
-    await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
-    return false;
-  }
-  return spendEnergy(actor, cost);
 }
 
 async function spendEnergy(actor, energyCost = 0, updateOptions = {}) {
@@ -12473,15 +13128,34 @@ function hasEnergy(actor, cost = 0) {
   return canActorSpendEnergy(actor, cost);
 }
 
-function getReactionWeaponActionEnergyCost({ actor = null, token = null, weapon = null, actionKey = "", weaponFunctionId = "", attackCount = null } = {}) {
-  return getWeaponActionModifierEnergyCost({
+function getReactionWeaponActionResourcePreview({
+  actor = null,
+  token = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = "",
+  attackCount = null,
+  reactionEnergyCost = 0
+} = {}) {
+  const resolvedReactionEnergyCost = Math.max(0, toInteger(reactionEnergyCost));
+  const additionalActorResourceCosts = resolvedReactionEnergyCost > 0
+    ? [{
+      id: "reaction-energy",
+      type: "actorResource",
+      resourceKey: ENERGY_RESOURCE_KEY,
+      amount: resolvedReactionEnergyCost
+    }]
+    : [];
+  const preview = getWeaponActionResourcePreview({
     actor,
     token: token?.object ?? token,
     weapon,
     actionKey,
     weaponFunctionId,
-    attackCount
+    attackCount,
+    additionalActorResourceCosts
   });
+  return { ...preview, additionalActorResourceCosts };
 }
 
 function getCombinedReactionEnergyCost(reactionEnergyCost = 0, attackEnergyCost = 0) {
