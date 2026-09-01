@@ -42,6 +42,26 @@ test("every completed attack cycle uses the awaited aggregate publication path",
   assert.doesNotMatch(fixedFunctions, /Hooks\.on\(WEAPON_ATTACK_RESOLVED_HOOK/u);
 });
 
+test("Bullseye resolves from the completed actor attack instead of transient preview entries", () => {
+  const resolver = fixedFunctions.slice(
+    fixedFunctions.indexOf("async function processBullseyeAttackResolution"),
+    fixedFunctions.indexOf("function requestKeepAwayWeaponActionModifiers")
+  );
+  assert.match(resolver, /getActiveBullseyeEntries\(actor\)/u);
+  assert.match(resolver, /selectedTargetActorUuid/u);
+  assert.match(resolver, /selectedLimbKey/u);
+  assert.match(resolver, /syncBullseyeStateEffect/u);
+  assert.doesNotMatch(resolver, /modifierState/u);
+  assert.doesNotMatch(fixedFunctions, /bullseyeEntries/u);
+});
+
+test("contextual penetration receives the resolved limb in every weapon damage request", () => {
+  const contextualPenetrationCalls = controller.match(
+    /weaponActionModifierState: modifierState,\s*limbKey,\s*reflectionCount:/gu
+  ) ?? [];
+  assert.equal(contextualPenetrationCalls.length, 2);
+});
+
 test("one interactive controller rotates aggregate state without rotating its preview session", () => {
   assert.match(controller, /this\.previewAttackId = this\.attackId/u);
   assert.match(controller, /prepareNextAttackCycle\(\) \{\s*this\.attackId = foundry\.utils\.randomID\(\)/u);

@@ -14172,6 +14172,7 @@ function buildWeaponDamageRequests(weapon, {
       targetToken,
       weaponData,
       weaponActionModifierState: modifierState,
+      limbKey,
       reflectionCount: Math.max(0, toInteger(source.reflectionCount)),
       ...distanceContext,
       chanceOperationId: getActiveUseOperationId(source)
@@ -14241,6 +14242,7 @@ function buildWeaponConditionDamageRequests(weapon, {
       targetToken,
       weaponData,
       weaponActionModifierState: modifierState,
+      limbKey,
       reflectionCount: Math.max(0, toInteger(source.reflectionCount)),
       ...distanceContext,
       chanceOperationId: getActiveUseOperationId(source)

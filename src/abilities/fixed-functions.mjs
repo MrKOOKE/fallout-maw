@@ -405,6 +405,8 @@ function normalizeAbilityFunctions(value = []) {
 }
 import { registerReactiveRuntime, useReactiveAbility } from "./reactive.mjs";
 import {
+  BULLSEYE_STATE_EFFECT_FLAG_KEY,
+  buildBullseyeStatePresentation,
   getBullseyeApplicableStacks,
   getBullseyePenetrationFormula,
   resolveBullseyeAttackCycle
@@ -10241,6 +10243,7 @@ async function toggleBullseye(actor, abilityItem, abilityFunction) {
     } : {})
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  await syncBullseyeStateEffect(actor, abilityItem, abilityFunction, state[stateKey], settings);
   ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
   return true;
 }
@@ -10444,77 +10447,182 @@ function requestAimingWeaponActionModifiers(context = {}) {
 function requestBullseyeWeaponActionModifiers(context = {}) {
   const actor = context?.actor ?? null;
   if (!actor || String(context?.actionKey ?? "") !== "aimedShot" || !context?.modifierState) return;
-  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+  for (const { abilityItem, abilityFunction, stateKey, settings } of getActiveBullseyeEntries(actor)) {
+    context.modifierState.setOption(
+      "innateAimedDifficultyIgnorePercent",
+      Math.max(
+        toInteger(context.modifierState.getOption("innateAimedDifficultyIgnorePercent")),
+        settings.innateDifficultyIgnorePercent
+      )
+    );
+    context.modifierState.addCombatValue("penetration", attackContext => {
+      const targetActor = attackContext?.targetActor ?? attackContext?.targetToken?.actor ?? null;
+      const stacks = getBullseyeApplicableStacks({
+        state: getFixedAbilityState(abilityItem)[stateKey],
+        actionKey: attackContext?.actionKey ?? context.actionKey,
+        targetActorUuid: targetActor?.uuid,
+        limbKey: attackContext?.limbKey
+      }, settings);
+      if (!stacks) return 0;
+      return evaluateActorFormula(getBullseyePenetrationFormula(stacks, settings), actor, {
+        fallback: 0,
+        minimum: 0,
+        context: "bullseye penetration"
+      });
+    });
+    const getEnergyCost = ({ attackCount = 1 } = {}) => (
+      getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost)
+      * Math.max(1, toInteger(attackCount))
+    );
+    context.modifierState.addSpendRequirement({
+      source: "bullseye",
+      label: getAbilityDisplayName(abilityItem),
+      energyCost: getEnergyCost
+    });
+  }
+}
+
+async function processBullseyeAttackResolution(context = {}) {
+  if (context?.attackCheckAggregate !== true || String(context?.actionKey ?? "") !== "aimedShot") return;
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? context?.actor?.uuid ?? "").trim();
+  const actor = context?.actor ?? (actorUuid ? fromUuidSync(actorUuid) : null);
+  if (!actor) return;
+  const targetActorUuid = String(context?.selectedTargetActorUuid ?? context?.targetActor?.uuid ?? "").trim();
+  const limbKey = String(context?.selectedLimbKey ?? "").trim();
+  for (const entry of getActiveBullseyeEntries(actor)) {
+    const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+    const transition = resolveBullseyeAttackCycle({
+      state: state[entry.stateKey],
+      attackId: context?.attackId,
+      actionKey: context?.actionKey,
+      targetActorUuid,
+      limbKey,
+      attackCheckCount: context?.attackCheckCount,
+      successfulAttack: context?.successfulAttack
+    }, entry.settings);
+    if (!transition.changed) continue;
+    state[entry.stateKey] = {
+      ...state[entry.stateKey],
+      fixedKey: entry.abilityFunction.fixedKey,
+      ...transition.nextState
+    };
+    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+    await syncBullseyeStateEffect(
+      actor,
+      entry.abilityItem,
+      entry.abilityFunction,
+      state[entry.stateKey],
+      entry.settings,
+      context?.targetActor
+    );
+  }
+}
+
+function getActiveBullseyeEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
       if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.bullseye) continue;
       const stateKey = getFixedFunctionStateKey(abilityFunction);
       if (!state[stateKey]?.active) continue;
-      const settings = normalizeBullseyeSettings(abilityFunction.fixedSettings);
-      context.modifierState.setOption(
-        "innateAimedDifficultyIgnorePercent",
-        Math.max(
-          toInteger(context.modifierState.getOption("innateAimedDifficultyIgnorePercent")),
-          settings.innateDifficultyIgnorePercent
-        )
-      );
-      context.modifierState.addCombatValue("penetration", attackContext => {
-        const targetActor = attackContext?.targetActor ?? attackContext?.targetToken?.actor ?? null;
-        const stacks = getBullseyeApplicableStacks({
-          state: state[stateKey],
-          actionKey: context.actionKey,
-          targetActorUuid: targetActor?.uuid,
-          limbKey: attackContext?.limbKey
-        }, settings);
-        if (!stacks) return 0;
-        return evaluateActorFormula(getBullseyePenetrationFormula(stacks, settings), actor, {
-          fallback: 0,
-          minimum: 0,
-          context: "bullseye penetration"
-        });
-      });
-      const entries = Array.isArray(context.modifierState.getOption("bullseyeEntries"))
-        ? context.modifierState.getOption("bullseyeEntries")
-        : [];
-      entries.push({ abilityItem, abilityFunction, settings });
-      context.modifierState.setOption("bullseyeEntries", entries);
-      const getEnergyCost = ({ attackCount = 1 } = {}) => (
-        getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost)
-        * Math.max(1, toInteger(attackCount))
-      );
-      context.modifierState.addSpendRequirement({
-        source: "bullseye",
-        label: getAbilityDisplayName(abilityItem),
-        energyCost: getEnergyCost
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        stateKey,
+        settings: normalizeBullseyeSettings(abilityFunction.fixedSettings)
       });
     }
   }
+  return entries;
 }
 
-async function processBullseyeAttackResolution(context = {}) {
-  if (context?.attackCheckAggregate !== true) return;
-  const entries = context?.modifierState?.getOption?.("bullseyeEntries");
-  if (!Array.isArray(entries) || !entries.length) return;
-  for (const entry of entries) {
-    const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
-    const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
-    const transition = resolveBullseyeAttackCycle({
-      state: state[stateKey],
-      attackId: context?.attackId,
-      actionKey: context?.actionKey,
-      targetActorUuid: context?.selectedTargetActorUuid,
-      limbKey: context?.selectedLimbKey,
-      attackCheckCount: context?.attackCheckCount,
-      successfulAttack: context?.successfulAttack
-    }, entry.settings);
-    if (!transition.changed) continue;
-    state[stateKey] = {
-      ...state[stateKey],
-      fixedKey: entry.abilityFunction.fixedKey,
-      ...transition.nextState
-    };
-    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+async function syncBullseyeStateEffect(
+  actor,
+  abilityItem,
+  abilityFunction,
+  abilityState = {},
+  settings = {},
+  knownTargetActor = null
+) {
+  if (!actor || !abilityItem || !abilityFunction) return false;
+  const matching = Array.from(actor.effects ?? []).filter(effect => {
+    const data = effect.getFlag?.(SYSTEM_ID, BULLSEYE_STATE_EFFECT_FLAG_KEY);
+    return String(data?.abilityItemId ?? "") === String(abilityItem.id ?? "")
+      && String(data?.functionId ?? "") === String(abilityFunction.id ?? "");
+  });
+  if (!abilityState?.active) {
+    const effectIds = matching.map(effect => effect.id).filter(Boolean);
+    if (effectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
+    return true;
   }
+
+  const targetActor = knownTargetActor?.uuid === abilityState?.targetActorUuid
+    ? knownTargetActor
+    : (abilityState?.targetActorUuid ? fromUuidSync(abilityState.targetActorUuid) : null);
+  const normalizedSettings = normalizeBullseyeSettings(settings);
+  const penetrationBonus = evaluateActorFormula(
+    getBullseyePenetrationFormula(abilityState?.stacks, normalizedSettings),
+    actor,
+    { fallback: 0, minimum: 0, context: "bullseye indicator penetration" }
+  );
+  const presentation = buildBullseyeStatePresentation({
+    abilityName: getAbilityDisplayName(abilityItem),
+    targetName: escapeHTML(targetActor?.name ?? ""),
+    limbName: escapeHTML(targetActor?.system?.limbs?.[abilityState?.limbKey]?.label ?? abilityState?.limbKey ?? ""),
+    penetrationBonus,
+    state: abilityState,
+    settings: normalizedSettings
+  });
+  const flagData = {
+    abilityItemId: String(abilityItem.id ?? ""),
+    abilitySourceId: getAbilitySourceId(abilityItem),
+    functionId: String(abilityFunction.id ?? ""),
+    fixedKey: ABILITY_FIXED_FUNCTION_KEYS.bullseye,
+    targetActorUuid: String(abilityState?.targetActorUuid ?? ""),
+    limbKey: String(abilityState?.limbKey ?? ""),
+    stacks: Math.max(0, toInteger(abilityState?.stacks)),
+    maxStacks: normalizedSettings.maxStacks,
+    penetrationBonus: Math.max(0, toInteger(penetrationBonus))
+  };
+  const effectData = {
+    type: "base",
+    name: presentation.name,
+    img: abilityItem.img || "icons/svg/target.svg",
+    description: presentation.description,
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    system: { changes: [] },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [BULLSEYE_STATE_EFFECT_FLAG_KEY]: flagData
+      }
+    }
+  };
+  const current = matching[0] ?? null;
+  const currentData = current?.getFlag?.(SYSTEM_ID, BULLSEYE_STATE_EFFECT_FLAG_KEY);
+  const unchanged = current
+    && String(current.name ?? "") === effectData.name
+    && String(current.img ?? "") === effectData.img
+    && String(current.description ?? "") === effectData.description
+    && String(current.origin ?? "") === String(effectData.origin ?? "")
+    && Number(current.showIcon) === ACTIVE_EFFECT_SHOW_ICON_ALWAYS
+    && current.disabled === false
+    && JSON.stringify(currentData ?? {}) === JSON.stringify(flagData);
+  if (!unchanged) {
+    if (current) {
+      const { type: _type, ...updateData } = effectData;
+      await current.update(updateData, { animate: false });
+    } else {
+      await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false });
+    }
+  }
+  const duplicateIds = matching.slice(1).map(effect => effect.id).filter(Boolean);
+  if (duplicateIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", duplicateIds, { animate: false });
+  return true;
 }
 
 function requestKeepAwayWeaponActionModifiers(context = {}) {

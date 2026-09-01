@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const {
+  buildBullseyeStatePresentation,
   getBullseyeApplicableStacks,
   getBullseyePenetrationFormula,
   normalizeBullseyeSettings,
@@ -81,6 +82,24 @@ test("Bullseye advances once for a multi-check attack cycle and deduplicates its
     successfulAttack: true
   });
   assert.equal(second.nextState.stacks, 2);
+});
+
+test("Bullseye shooter indicator explains the current lane and exact next penetration", () => {
+  assert.deepEqual(buildBullseyeStatePresentation({ settings: { maxStacks: 3 } }), {
+    name: "В яблочко: серия 0/3",
+    description: "Серия не начата. Попадание Прицельным выстрелом начнёт накапливать пробивание; промах сбросит серию."
+  });
+  assert.deepEqual(buildBullseyeStatePresentation({
+    abilityName: "В яблочко",
+    targetName: "Супермутант",
+    limbName: "Голова",
+    penetrationBonus: 400,
+    state: { targetActorUuid: "Actor.target", limbKey: "head", stacks: 2 },
+    settings: { maxStacks: 3 }
+  }), {
+    name: "В яблочко: серия 2/3 · пробивание +400",
+    description: "Цель: Супермутант. Часть тела: Голова. Следующий Прицельный выстрел в эту же часть тела получает пробивание +400; промах сбросит серию."
+  });
 });
 
 test("Bullseye caps at three and a miss or lane change starts a new consecutive chain", () => {

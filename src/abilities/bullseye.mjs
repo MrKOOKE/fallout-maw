@@ -7,6 +7,8 @@ export const BULLSEYE_DEFAULT_SETTINGS = Object.freeze({
   maxStacks: 3
 });
 
+export const BULLSEYE_STATE_EFFECT_FLAG_KEY = "bullseyeState";
+
 export function normalizeBullseyeSettings(settings = {}) {
   return {
     energyCost: Math.max(0, toInteger(settings.energyCost ?? BULLSEYE_DEFAULT_SETTINGS.energyCost)),
@@ -26,6 +28,34 @@ export function getBullseyePenetrationFormula(stacks = 0, settings = {}) {
   const normalized = normalizeBullseyeSettings(settings);
   const count = Math.max(0, Math.min(normalized.maxStacks, toInteger(stacks)));
   return count > 0 ? `(${normalized.penetrationBonusFormula})*${count}` : "0";
+}
+
+/** Build the shooter-facing indicator without turning its contextual bonus into a generic effect key. */
+export function buildBullseyeStatePresentation({
+  abilityName = "В яблочко",
+  targetName = "",
+  limbName = "",
+  penetrationBonus = 0,
+  state = {},
+  settings = {}
+} = {}) {
+  const normalized = normalizeBullseyeSettings(settings);
+  const current = normalizeBullseyeState(state, normalized);
+  const name = String(abilityName ?? "").trim() || "В яблочко";
+  if (current.stacks <= 0) {
+    return {
+      name: `${name}: серия 0/${normalized.maxStacks}`,
+      description: "Серия не начата. Попадание Прицельным выстрелом начнёт накапливать пробивание; промах сбросит серию."
+    };
+  }
+
+  const target = String(targetName ?? "").trim() || current.targetActorUuid;
+  const limb = String(limbName ?? "").trim() || current.limbKey;
+  const bonus = Math.max(0, toInteger(penetrationBonus));
+  return {
+    name: `${name}: серия ${current.stacks}/${normalized.maxStacks} · пробивание +${bonus}`,
+    description: `Цель: ${target}. Часть тела: ${limb}. Следующий Прицельный выстрел в эту же часть тела получает пробивание +${bonus}; промах сбросит серию.`
+  };
 }
 
 /**
