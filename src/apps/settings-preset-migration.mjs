@@ -219,13 +219,20 @@ async function compareAbilities(api, targetMap, sourceMap, sourceName) {
   const id = `${SYSTEM_ID}.abilitiesCatalog`;
   const source = sourceMap.get(id) ?? { categories: [] };
   const target = targetMap.get(id) ?? { categories: [] };
-  const body = `<div class="fallout-maw-ability-category-list fallout-maw-migration-ability-list">${(source.categories ?? []).map(category => `<div class="fallout-maw-ability-category-shell" data-migration-ability-category="${escapeAttribute(category.id)}">
+  const body = `<label class="fallout-maw-migration-category-check fallout-maw-migration-ability-select-all">
+    <input type="checkbox" data-ability-select-all>
+    <strong>Выбрать всё</strong>
+  </label>
+  <div class="fallout-maw-ability-category-list fallout-maw-migration-ability-list">${(source.categories ?? []).map(category => `<div class="fallout-maw-ability-category-shell" data-migration-ability-category="${escapeAttribute(category.id)}">
     <article class="fallout-maw-panel fallout-maw-ability-category">
       <header class="fallout-maw-ability-category-header">
+        <button type="button" class="fallout-maw-icon-button" data-migration-ability-category-toggle aria-expanded="false" title="Развернуть категорию">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
         <label class="fallout-maw-migration-category-check"><input type="checkbox" data-ability-category value="${escapeAttribute(category.id)}"><strong>${escapeHTML(category.name || category.id)}</strong></label>
         <span class="fallout-maw-migration-count">${category.abilities?.length ?? 0} способностей</span>
       </header>
-      <div class="fallout-maw-ability-compact-list">${(category.abilities ?? []).map(ability => `<div class="fallout-maw-ability-compact-row fallout-maw-migration-ability-row">
+      <div class="fallout-maw-ability-compact-list" data-migration-ability-category-body hidden>${(category.abilities ?? []).map(ability => `<div class="fallout-maw-ability-compact-row fallout-maw-migration-ability-row">
         <img src="${escapeAttribute(ability.img || "icons/svg/aura.svg")}" alt="">
         <label class="fallout-maw-ability-compact-main"><span>Название</span><input type="text" value="${escapeAttribute(ability.name || ability.id)}" readonly></label>
         <div class="fallout-maw-migration-ability-controls">
@@ -335,16 +342,59 @@ function replaceById(collection, value) {
 }
 
 function activateAbilityGroupSelection(form) {
-  for (const master of form?.querySelectorAll("[data-ability-category]") ?? []) {
+  if (!form) return;
+  const selectAll = form.querySelector("[data-ability-select-all]");
+  const categoryMasters = Array.from(form.querySelectorAll("[data-ability-category]"));
+  const abilityInputs = Array.from(form.querySelectorAll("[data-ability-id]"));
+  const updateSelectAll = () => {
+    if (!selectAll) return;
+    const inputs = [...categoryMasters, ...abilityInputs];
+    const selected = inputs.filter(input => input.checked).length;
+    selectAll.checked = inputs.length > 0 && selected === inputs.length;
+    selectAll.indeterminate = !selectAll.checked
+      && (selected > 0 || categoryMasters.some(input => input.indeterminate));
+  };
+
+  form.addEventListener("change", event => {
+    const input = event.target;
+    if (input?.matches?.("[data-ability-select-all]")) {
+      for (const target of [...categoryMasters, ...abilityInputs]) {
+        target.checked = input.checked;
+        target.indeterminate = false;
+      }
+    } else if (input?.matches?.("[data-ability-category]")) {
+      const category = input.closest("[data-migration-ability-category]");
+      for (const child of category?.querySelectorAll("[data-ability-id]") ?? []) child.checked = input.checked;
+      input.indeterminate = false;
+    } else if (input?.matches?.("[data-ability-id]")) {
+      const category = input.closest("[data-migration-ability-category]");
+      const master = category?.querySelector("[data-ability-category]");
+      const children = Array.from(category?.querySelectorAll("[data-ability-id]") ?? []);
+      if (master) updateGroupMaster(master, children);
+    } else return;
+    updateSelectAll();
+  });
+
+  form.addEventListener("click", event => {
+    const toggle = event.target?.closest?.("[data-migration-ability-category-toggle]");
+    if (!toggle || !form.contains(toggle)) return;
+    const category = toggle.closest("[data-migration-ability-category]");
+    const body = category?.querySelector("[data-migration-ability-category-body]");
+    if (!body) return;
+    const expanded = body.hidden;
+    body.hidden = !expanded;
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.title = expanded ? "Свернуть категорию" : "Развернуть категорию";
+    const icon = toggle.querySelector("i");
+    icon?.classList.toggle("fa-chevron-right", !expanded);
+    icon?.classList.toggle("fa-chevron-down", expanded);
+  });
+
+  for (const master of categoryMasters) {
     const category = master.closest("[data-migration-ability-category]");
-    const children = Array.from(category?.querySelectorAll("[data-ability-id]") ?? []);
-    master.addEventListener("change", () => {
-      for (const child of children) child.checked = master.checked;
-      master.indeterminate = false;
-    });
-    for (const child of children) child.addEventListener("change", () => updateGroupMaster(master, children));
-    updateGroupMaster(master, children);
+    updateGroupMaster(master, Array.from(category?.querySelectorAll("[data-ability-id]") ?? []));
   }
+  updateSelectAll();
 }
 
 function activateCreatureGroupSelection(form) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  removeObsoleteReactiveEvolutionExample,
   removeObsoleteWorldSettings,
   SETTINGS_MIGRATION_TESTING
 } from "../src/migrations/obsolete-world-settings.mjs";
@@ -48,4 +49,40 @@ test("cleanup is a no-op for other clients and after the Setting is gone", async
   game.user.isActiveGM = true;
   assert.deepEqual(await removeObsoleteWorldSettings(), { removed: 0 });
   assert.equal(lookups, 1);
+});
+
+test("the one-time catalog migration removes only the bundled Reactive example", () => {
+  const catalog = {
+    categories: [{
+      abilities: [{
+        id: "440oqDWdqC2Rha9Y",
+        system: {
+          functions: [{
+            enabled: false,
+            fixedKey: "reactive",
+            fixedSettings: { actionPointsPerThreshold: 1 }
+          }],
+          evolution: {
+            nodes: [
+              { id: "ZE3wVZrKgRxUVkcw", ability: { id: "ZE3wVZrKgRxUVkcw" } },
+              { id: "user-copy", ability: { id: "user-copy" } }
+            ],
+            links: [
+              { fromId: "440oqDWdqC2Rha9Y", toId: "ZE3wVZrKgRxUVkcw" },
+              { fromId: "440oqDWdqC2Rha9Y", toId: "user-copy" }
+            ],
+            viewport: { x: 10, y: 20, zoom: 1 }
+          }
+        }
+      }]
+    }]
+  };
+
+  const migrated = removeObsoleteReactiveEvolutionExample(catalog);
+  const reactive = migrated.categories[0].abilities[0];
+  assert.deepEqual(reactive.system.evolution.nodes.map(node => node.id), ["user-copy"]);
+  assert.deepEqual(reactive.system.evolution.links.map(link => link.toId), ["user-copy"]);
+  assert.equal(reactive.system.functions[0].enabled, true);
+  assert.equal(catalog.categories[0].abilities[0].system.evolution.nodes.length, 2);
+  assert.equal(removeObsoleteReactiveEvolutionExample(migrated), null);
 });

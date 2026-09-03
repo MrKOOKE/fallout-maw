@@ -278,6 +278,7 @@ export async function applyTrophyCollectorMark({
     sourceActorUuid: sourceActor.uuid,
     liveOnly: false
   });
+  const hadLiveMark = Boolean(existing && isLiveEffect(existing, getTrophyCollectorMarkData(existing), now));
   const effect = existing
     ? await updateEmbeddedEffect(existing, effectData)
     : await createEmbeddedEffect(targetActor, effectData, { falloutMawTrophyCollectorRuntime: true });
@@ -293,7 +294,7 @@ export async function applyTrophyCollectorMark({
 
   let stunned = false;
   let check = null;
-  if (effect && strength >= normalized.maximumStrength && normalized.stunPercent > 0) {
+  if (effect && !hadLiveMark && strength >= normalized.maximumStrength && normalized.stunPercent > 0) {
     check = await requestCheck({
       sourceActor,
       targetActor,
@@ -576,7 +577,7 @@ export async function applyTrophyCollectorStun({
     type: "base",
     name: `${getAbilityName(abilityItem)}: Оглушение ${normalized.stunPercent}%`,
     img: abilityItem?.img || DEFAULT_ICON,
-    description: `Оглушение ${normalized.stunPercent}% на ${normalized.stunDurationSeconds} секунд.`,
+    description: "",
     origin: String(abilityItem?.uuid ?? ""),
     transfer: false,
     disabled: false,

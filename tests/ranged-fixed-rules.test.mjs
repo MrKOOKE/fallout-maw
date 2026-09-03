@@ -87,7 +87,7 @@ test("Bullseye advances once for a multi-check attack cycle and deduplicates its
 test("Bullseye shooter indicator explains the current lane and exact next penetration", () => {
   assert.deepEqual(buildBullseyeStatePresentation({ settings: { maxStacks: 3 } }), {
     name: "В яблочко: серия 0/3",
-    description: "Серия не начата. Попадание Прицельным выстрелом начнёт накапливать пробивание; промах сбросит серию."
+    description: "<strong>Серия:</strong> не начата.<br><strong>Попадание Прицельным выстрелом:</strong> начнёт накапливать пробивание.<br><strong>Промах:</strong> сбросит серию."
   });
   assert.deepEqual(buildBullseyeStatePresentation({
     abilityName: "В яблочко",
@@ -98,7 +98,7 @@ test("Bullseye shooter indicator explains the current lane and exact next penetr
     settings: { maxStacks: 3 }
   }), {
     name: "В яблочко: серия 2/3 · пробивание +400",
-    description: "Цель: Супермутант. Часть тела: Голова. Следующий Прицельный выстрел в эту же часть тела получает пробивание +400; промах сбросит серию."
+    description: "<strong>Цель:</strong> Супермутант.<br><strong>Часть тела:</strong> Голова.<br><br><strong>Следующий Прицельный выстрел:</strong> пробивание +400 при атаке этой же части тела.<br><strong>Промах:</strong> сбросит серию."
   });
 });
 

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   TROPHY_COLLECTOR_MARK_FLAG_KEY,
   applyTrophyCollectorMark,
+  applyTrophyCollectorStun,
   buildTrophyCollectorMarkChanges,
   buildTrophyCollectorMarkEffectData,
   clearTrophyCollectorRuntimeCaches,
@@ -131,7 +132,7 @@ test("one weapon attack can mark the same wounded target only once", async () =>
   assert.equal(applications, 1, "limb-only or fully blocked packets do not mark");
 });
 
-test("a maximum-strength mark tests Resilience and applies 50% Stun on failure", async () => {
+test("only a newly applied maximum-strength mark tests Resilience and applies Stun", async () => {
   const source = makeActor("Actor.hunter", "human", "A");
   const target = makeActor("Actor.target", "ghoul", "B");
   const item = makeAbility(source);
@@ -170,6 +171,45 @@ test("a maximum-strength mark tests Resilience and applies 50% Stun on failure",
   const mark = target.effects[0];
   assert.equal(mark.flags[SYSTEM_ID][TROPHY_COLLECTOR_MARK_FLAG_KEY].strength, 5);
   assert.deepEqual(mark.system.changes, buildTrophyCollectorMarkChanges({}, 5));
+
+  const refresh = await applyTrophyCollectorMark({
+    sourceActor: source,
+    targetActor: target,
+    abilityItem: item,
+    abilityFunction: item.system.functions[0],
+    attackId: "attack-max-refresh",
+    requestCheck: async () => {
+      checkCount += 1;
+      return { result: { key: "failure" } };
+    },
+    applyStun: async () => {
+      stunCount += 1;
+      return { id: "stun" };
+    }
+  });
+
+  assert.equal(refresh.ok, true);
+  assert.equal(refresh.check, null);
+  assert.equal(refresh.stunned, false);
+  assert.equal(checkCount, 1, "refreshing a live maximum mark does not repeat the check");
+  assert.equal(stunCount, 1);
+});
+
+test("Trophy Collector Stun tooltip relies on its change row without duplicate text", async () => {
+  const source = makeActor("Actor.hunter", "human", "A");
+  const target = makeActor("Actor.target", "ghoul", "B");
+  const item = makeAbility(source);
+
+  const effect = await applyTrophyCollectorStun({
+    sourceActor: source,
+    targetActor: target,
+    abilityItem: item,
+    abilityFunction: item.system.functions[0],
+    startTime: 100
+  });
+
+  assert.equal(effect.description, "");
+  assert.deepEqual(effect.system.changes, [change("system.combat.stun", 50)]);
 });
 
 test("each marked carrier death advances its owner even when another actor gets the kill", async () => {

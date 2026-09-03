@@ -2402,7 +2402,7 @@
         "LoadLimitPercent": "Load limit (% of base)",
         "Limbs": "Limbs",
         "LimbStateMax": "Max state",
-        "LevelOneCharacteristicMaximum": "Level 1 maximum (default 10)",
+        "LevelOneCharacteristicMaximum": "Level 1 maximum",
         "NaturalFeatures": "Features",
         "NaturalSetName": "Set Name",
         "NaturalWeapons": "Natural Weapons",

@@ -1028,18 +1028,13 @@ function captureCurrentSettings({ useStoredOnly = false, fallbackPreset = null }
 }
 
 function isExistingWorldForPresetMigration() {
-  // Foundry and ready-time initialization may materialize world Setting
-  // documents during a world's very first launch. Their registered defaults
-  // are not evidence of a legacy world and must never replace the packaged
-  // Fallout-MaW preset used to seed a new world.
-  if (Number(game.world?.playtime || 0) > 0) return true;
-
-  const previousSystemVersion = String(game.world?.systemVersion ?? game.world?._source?.systemVersion ?? "");
-  const currentSystemVersion = String(game.system?.version ?? "");
-  if (previousSystemVersion && currentSystemVersion && previousSystemVersion !== currentSystemVersion) return true;
-
-  return ["actors", "items", "scenes", "journal", "tables", "playlists", "macros", "cards"]
-    .some(collectionName => Number(game[collectionName]?.size ?? game[collectionName]?.contents?.length ?? 0) > 0);
+  // The world-creation wizard may install folders, journals, messages, and
+  // other bootstrap Documents before the system's ready hook. Those records
+  // still belong to a brand-new world and must not select the legacy seed.
+  // Recorded playtime is the durable boundary: no playtime means first launch,
+  // while any played world must preserve its existing settings.
+  return [game.world?.playtime, game.world?._source?.playtime]
+    .some(value => Number(value) > 0);
 }
 
 function mergeKnownSnapshotWithUnknown(preset, knownEntries) {

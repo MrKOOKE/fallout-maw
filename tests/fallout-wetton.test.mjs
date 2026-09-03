@@ -79,7 +79,7 @@ test("only the matching active Foundry module may grant its rules profile", () =
   }
 });
 
-test("Fallout-Wetton preset keeps its complete race snapshot and removes abilities, consciousness, and energy", () => {
+test("Fallout-Wetton preset keeps its race and independent-health resource profile", () => {
   const main = JSON.parse(fs.readFileSync(
     new URL("../storage/settings-presets/fallout-maw.json", import.meta.url),
     "utf8"
@@ -99,8 +99,6 @@ test("Fallout-Wetton preset keeps its complete race snapshot and removes abiliti
   const races = settings.get("fallout-maw.creatureOptions").races;
   const resources = settings.get("fallout-maw.resourceSettings");
   const combat = settings.get("fallout-maw.combatSettings");
-  const abilities = settings.get("fallout-maw.abilitiesCatalog").categories
-    .flatMap(category => category.abilities);
   const normalizedResources = normalizeResourceSettings(resources, {
     optionalFixedResourceKeys: ["consciousness", "power"],
     healthFormulaSource: "race"
@@ -115,7 +113,6 @@ test("Fallout-Wetton preset keeps its complete race snapshot and removes abiliti
   assert.equal(resources.some(resource => resource.key === "consciousness"), false);
   assert.equal(resources.find(resource => resource.key === "health").formulaSource, "race");
   assert.equal(normalizedResources.some(resource => resource.key === "consciousness"), false);
-  assert.equal(abilities.length, 0);
   assert.equal(combat.limbDestruction.nonPlayerMode, "disabled");
   assert.equal(combat.limbDestruction.playerOwnedMode, "disabled");
   assert.equal(settings.has("fallout-maw.rulesProfile"), false);

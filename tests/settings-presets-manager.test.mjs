@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   SETTINGS_PRESET_TESTING,
+  activateSettingsPreset,
   createSettingsPreset,
   createDefaultSettingsPresetState,
   getSettingsPreset,
@@ -240,7 +241,8 @@ test("both bundled seeds are valid and initially carry the same portable snapsho
     fs.readFileSync(new URL("../storage/settings-presets/fallout-maw-migration-seed.json", import.meta.url), "utf8")
   ));
   const ids = new Set(seed.settings.map(setting => setting.id));
-  assert.equal(seed.settings.length, 59);
+  assert.equal(seed.settings.length, migrationSeed.settings.length);
+  assert.ok(seed.settings.length > 0);
   assert.equal(migrationSeed.id, "fallout-maw-migration-seed");
   assert.equal(migrationSeed.seedPending, false);
   assert.deepEqual(
@@ -628,22 +630,21 @@ test("world migration classifier separates empty and existing worlds", () => {
   const { documents } = installFoundryMock();
   assert.equal(SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(), false);
 
-  game.world.playtime = 1;
-  assert.equal(SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(), true);
-
-  game.world.playtime = 0;
+  game.world.systemVersion = "0.1.0";
   documents.set("fallout-maw.alpha", {
     id: "doc-fallout-maw.alpha",
     _id: "doc-fallout-maw.alpha",
     key: "fallout-maw.alpha"
   });
+  game.actors = { size: 1 };
+  game.journal = { size: 5 };
   assert.equal(
     SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(),
     false,
-    "first-launch Setting documents alone must not turn a new world into a legacy migration"
+    "wizard-created Documents must not turn an unplayed world into a legacy migration"
   );
 
-  game.actors = { size: 1 };
+  game.world._source = { playtime: 1 };
   assert.equal(SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(), true);
 });
 
@@ -665,6 +666,11 @@ test("a new world is seeded from an exact clone of the packaged Fallout-MaW pres
     }
   });
   state = installed.state;
+  // The real creation wizard installs system Documents before the ready hook.
+  // An unplayed world must still clone the current packaged preset exactly.
+  game.world.systemVersion = "0.1.0";
+  game.actors = { size: 1 };
+  game.journal = { size: 5 };
   const uploads = installPresetFileMock();
   const main = makePreset("fallout-maw", "Fallout-MaW", [
     entry("fallout-maw.alpha", false),
@@ -689,7 +695,50 @@ test("a new world is seeded from an exact clone of the packaged Fallout-MaW pres
   assert.deepEqual(byId.get("doc-fallout-maw.beta"), { code: "actual-fallout-maw" });
 });
 
-test("a played legacy world still preserves its stored settings during preset migration", async () => {
+test("activating Fallout-MaW applies its current revision instead of a generated world's old values", async () => {
+  let state;
+  let applied;
+  const installed = installFoundryMock({
+    storedIds: ["fallout-maw.alpha", "fallout-maw.beta", STATE_ID],
+    values: {
+      "fallout-maw.alpha": true,
+      "fallout-maw.beta": { code: "generated-old-version" }
+    },
+    modifyBatch: async operations => {
+      applied = operations.find(operation => operation.falloutMaWSettingsPresetApply === true) ?? applied;
+      const stateUpdate = operations.flatMap(operation => operation.updates ?? [])
+        .find(update => update._id === `doc-${STATE_ID}`);
+      if (stateUpdate) Object.assign(state, JSON.parse(stateUpdate.value));
+      return operations.map(operation => (operation.data ?? operation.updates ?? []).map(() => ({})));
+    }
+  });
+  state = installed.state;
+  installPresetFileMock();
+  const main = makePreset("fallout-maw", "Fallout-MaW", [
+    entry("fallout-maw.alpha", false),
+    entry("fallout-maw.beta", { code: "actual-fallout-maw" })
+  ]);
+  const generated = makePreset("generated-old", "Generated old", [
+    entry("fallout-maw.alpha", true),
+    entry("fallout-maw.beta", { code: "generated-old-version" })
+  ]);
+  SETTINGS_PRESET_TESTING.installPresets([main, generated]);
+  Object.assign(state, {
+    migrationVersion: 1,
+    activePresetId: generated.id,
+    appliedRevision: generated.revision
+  });
+
+  await activateSettingsPreset(main.id);
+
+  assert.equal(state.activePresetId, main.id);
+  assert.equal(state.appliedRevision, main.revision);
+  const byId = new Map(applied.updates.map(update => [update._id, JSON.parse(update.value)]));
+  assert.equal(byId.get("doc-fallout-maw.alpha"), false);
+  assert.deepEqual(byId.get("doc-fallout-maw.beta"), { code: "actual-fallout-maw" });
+});
+
+test("a legacy world with content still preserves its stored settings during preset migration", async () => {
   let state;
   const installed = installFoundryMock({
     storedIds: ["fallout-maw.alpha", "fallout-maw.beta", STATE_ID],

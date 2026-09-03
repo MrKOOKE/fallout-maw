@@ -117,6 +117,25 @@ test("catalog checkbox readers use checked state instead of the string value", (
   assert.match(body, /element\.type[\s\S]*?checkbox[\s\S]*?element\.checked/);
 });
 
+test("ability preset migration starts collapsed and provides synchronized select-all controls", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/apps/settings-preset-migration.mjs"), "utf8");
+  const start = source.indexOf("async function compareAbilities");
+  const end = source.indexOf("async function migrationDialog", start);
+  const comparison = source.slice(start, end);
+  const activationStart = source.indexOf("function activateAbilityGroupSelection");
+  const activationEnd = source.indexOf("function activateCreatureGroupSelection", activationStart);
+  const activation = source.slice(activationStart, activationEnd);
+
+  assert.ok(start >= 0 && end > start && activationStart >= 0 && activationEnd > activationStart);
+  assert.match(comparison, /data-ability-select-all/);
+  assert.match(comparison, /data-migration-ability-category-toggle[^>]*aria-expanded="false"/);
+  assert.match(comparison, /data-migration-ability-category-body hidden/);
+  assert.match(activation, /input\?\.matches\?\.\("\[data-ability-select-all\]"\)/);
+  assert.match(activation, /selectAll\.indeterminate/);
+  assert.match(activation, /body\.hidden = !expanded/);
+  assert.equal(activation.match(/form\.addEventListener/g)?.length, 2);
+});
+
 test("both ability editors preserve target controls hidden by self mode", () => {
   const itemSheetSource = fs.readFileSync(path.join(ROOT, "src/sheets/item-sheet.mjs"), "utf8");
   const catalogSource = fs.readFileSync(path.join(ROOT, "src/apps/ability-catalog-item-editor.mjs"), "utf8");

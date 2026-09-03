@@ -45,7 +45,11 @@ export function buildBullseyeStatePresentation({
   if (current.stacks <= 0) {
     return {
       name: `${name}: серия 0/${normalized.maxStacks}`,
-      description: "Серия не начата. Попадание Прицельным выстрелом начнёт накапливать пробивание; промах сбросит серию."
+      description: [
+        "<strong>Серия:</strong> не начата.",
+        "<strong>Попадание Прицельным выстрелом:</strong> начнёт накапливать пробивание.",
+        "<strong>Промах:</strong> сбросит серию."
+      ].join("<br>")
     };
   }
 
@@ -54,7 +58,13 @@ export function buildBullseyeStatePresentation({
   const bonus = Math.max(0, toInteger(penetrationBonus));
   return {
     name: `${name}: серия ${current.stacks}/${normalized.maxStacks} · пробивание +${bonus}`,
-    description: `Цель: ${target}. Часть тела: ${limb}. Следующий Прицельный выстрел в эту же часть тела получает пробивание +${bonus}; промах сбросит серию.`
+    description: [
+      `<strong>Цель:</strong> ${target}.`,
+      `<strong>Часть тела:</strong> ${limb}.`,
+      "",
+      `<strong>Следующий Прицельный выстрел:</strong> пробивание +${bonus} при атаке этой же части тела.`,
+      "<strong>Промах:</strong> сбросит серию."
+    ].join("<br>")
   };
 }
 

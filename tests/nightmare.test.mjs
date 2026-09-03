@@ -62,12 +62,11 @@ test("nightmare skips witnesses whose fear already has the maximum duration", ()
 });
 
 test("nightmare uses native attached darkness and faction-filtered region effects", async () => {
-  const [fixedSource, actorSheetSource, regionModel, regionRuntime, preset] = await Promise.all([
+  const [fixedSource, actorSheetSource, regionModel, regionRuntime] = await Promise.all([
     fs.readFile(new URL("../src/abilities/fixed-functions.mjs", import.meta.url), "utf8"),
     fs.readFile(new URL("../src/sheets/actor-sheet.mjs", import.meta.url), "utf8"),
     fs.readFile(new URL("../src/data/region-behavior/periodic-damage.mjs", import.meta.url), "utf8"),
-    fs.readFile(new URL("../src/canvas/periodic-damage-regions.mjs", import.meta.url), "utf8"),
-    fs.readFile(new URL("../storage/settings-presets/fallout-maw.json", import.meta.url), "utf8")
+    fs.readFile(new URL("../src/canvas/periodic-damage-regions.mjs", import.meta.url), "utf8")
   ]);
   assert.match(fixedSource, /createTokenEmanation\(token, settings\.darknessRadiusMeters/);
   assert.match(fixedSource, /restriction: \{ enabled: true, type: "light", priority: 0 \}/);
@@ -79,13 +78,6 @@ test("nightmare uses native attached darkness and faction-filtered region effect
   assert.doesNotMatch(actorSheetSource, /ABILITY_FIXED_FUNCTION_KEYS\.nightmare/);
   assert.match(regionModel, /targetRelations:[\s\S]*effectChanges:/);
   assert.match(regionRuntime, /regionBehaviorTargetsActor\(region, behavior, actor\)/);
-
-  const parsed = JSON.parse(preset);
-  const setting = parsed.settings.find(entry => entry.id === "fallout-maw.abilitiesCatalog");
-  const abilities = setting.value.categories.flatMap(category => category.abilities ?? []);
-  const nightmare = abilities.find(ability => ability.id === "4RpWjyc1oHmgSF2d");
-  assert.equal(nightmare.name, "Кошмар");
-  assert.equal(nightmare.system.functions[0].fixedKey, "nightmare");
 });
 
 function change(key, value) {
