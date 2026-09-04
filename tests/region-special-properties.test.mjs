@@ -352,6 +352,26 @@ test("smoke index reuses PolygonTree geometry and prepares each active Region on
   }
 });
 
+test("viewed smoke affects a player even when its behavior document is not permission-visible", () => {
+  const region = createSmokeRegion("player-permission", 50);
+  const behavior = region.behaviors.contents[0];
+  behavior.viewed = true;
+  behavior.visible = false;
+  const scene = createScene([region]);
+
+  try {
+    const index = getSmokeRegionIndex(scene);
+    assert.equal(index.entries.length, 1, "document visibility must not remove a viewed runtime behavior");
+    assert.ok(calculateSmokePathCost(
+      { x: 0, y: 0, elevation: 0 },
+      { x: 10, y: 0, elevation: 0 },
+      { scene, elevation: 0 }
+    ) > 10, "the player path is still attenuated by smoke");
+  } finally {
+    invalidateSmokeRegionIndex(scene);
+  }
+});
+
 test("native attached smoke frames coalesce on the required Canvas ticker", () => {
   const previous = {
     canvas: globalThis.canvas,

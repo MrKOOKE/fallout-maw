@@ -3,9 +3,6 @@ import { getSmokeRuntimeProperties } from "../utils/region-special-properties.mj
 import { toOptionalFiniteNumber } from "../utils/numbers.mjs";
 import { regionBehaviorTargetsActor } from "./region-targeting.mjs";
 import { compileSmokeSegmentBvh, querySmokeSegmentBvh } from "./smoke-segment-bvh.mjs";
-// #region codex-runtime-debug full smoke render path
-import { smokeDebugRecord, smokeDebugStart, smokeDebugWrapMethod } from "./smoke-runtime-debug.mjs";
-// #endregion codex-runtime-debug
 import {
   actorHasSmokePerceptionChange,
   effectHasSmokePerceptionChange,
@@ -158,9 +155,6 @@ export function registerSmokeVisionHooks() {
     registerDarknessSourceClass({ required: true });
     invalidateSmokeRegionIndex(canvas?.scene);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
-    // #region codex-runtime-debug H16-H19
-    installSmokeRuntimeDebugProbes();
-    // #endregion codex-runtime-debug
     if (!attachSmokeAnimationTicker()) throw new Error("Foundry Canvas ticker contract is required for attached smoke");
   });
   Hooks.on("updateWorldTime", (worldTime, delta) => {
@@ -330,178 +324,6 @@ function canRenderSmokeGpuVisionMask() {
   );
 }
 
-// #region codex-runtime-debug H16-H19
-function installSmokeRuntimeDebugProbes() {
-  const renderer = globalThis.canvas?.app?.renderer;
-  smokeDebugWrapMethod(renderer, "render", {
-    hypothesisId: "H16",
-    message: "PIXI renderer top-level render",
-    capture(args) {
-      return {
-        stageRender: Number(args[0] === globalThis.canvas?.stage),
-        smokePairs: smokeMeshes.size,
-        gpuStates: smokeGpuVisionStates.size
-      };
-    }
-  });
-
-  const darkness = globalThis.canvas?.effects?.illumination?.darknessLevelMeshes;
-  smokeDebugWrapMethod(darkness, "render", {
-    hypothesisId: "H16",
-    message: "Foundry darkness cached-container render",
-    capture() {
-      const stats = getSmokeRenderStats();
-      return {
-        autoRender: Number(Boolean(this.autoRender)),
-        renderDirty: Number(Boolean(this.renderDirty)),
-        willRedrawTexture: Number(Boolean(this.autoRender || this.renderDirty)),
-        childCount: this.children?.length ?? 0,
-        smokePairs: stats.liveSmokePairs,
-        smokeRegions: stats.liveSmokeRegions,
-        smokeBlurFilters: stats.smokeBlurFilters
-      };
-    }
-  });
-
-  const nativeVisionMask = globalThis.canvas?.masks?.vision;
-  smokeDebugWrapMethod(nativeVisionMask, "render", {
-    hypothesisId: "H17",
-    message: "Foundry native vision cached-container render",
-    capture() {
-      return {
-        autoRender: Number(Boolean(this.autoRender)),
-        renderDirty: Number(Boolean(this.renderDirty)),
-        willRedrawTexture: Number(Boolean(this.autoRender || this.renderDirty)),
-        childCount: this.children?.length ?? 0
-      };
-    }
-  });
-
-  const visibility = globalThis.canvas?.visibility;
-  smokeDebugWrapMethod(visibility, "refresh", {
-    hypothesisId: "H18",
-    message: "Foundry CanvasVisibility.refresh",
-    capture() {
-      return { smokeRegions: getSmokeRenderStats().liveSmokeRegions };
-    }
-  });
-  smokeDebugWrapMethod(visibility, "refreshVisibility", {
-    hypothesisId: "H17",
-    message: "Foundry CanvasVisibility.refreshVisibility",
-    capture() {
-      return { activeGpuStates: [...smokeGpuVisionStates.values()].filter(state => state.active).length };
-    }
-  });
-
-  const occlusion = globalThis.canvas?.masks?.occlusion;
-  smokeDebugWrapMethod(occlusion, "_updateOcclusionMask", {
-    hypothesisId: "H18",
-    message: "Foundry occlusion-mask refresh",
-    capture() {
-      return { smokeRegions: getSmokeRenderStats().liveSmokeRegions };
-    }
-  });
-
-  const illumination = globalThis.canvas?.effects?.illumination;
-  smokeDebugWrapMethod(illumination, "invalidateDarknessLevelContainer", {
-    hypothesisId: "H16",
-    message: "Foundry darkness cached-container invalidation",
-    capture(args) {
-      return { force: Number(Boolean(args[0])) };
-    }
-  });
-
-  const sourceClasses = [
-    [globalThis.CONFIG?.Canvas?.visionSourceClass, "vision", "H18"],
-    [globalThis.CONFIG?.Canvas?.lightSourceClass, "light", "H19"],
-    [globalThis.CONFIG?.Canvas?.darknessSourceClass, "darkness", "H19"]
-  ];
-  for (const [SourceClass, kind, hypothesisId] of sourceClasses) {
-    const prototype = SourceClass?.prototype;
-    smokeDebugWrapMethod(prototype, "initialize", {
-      hypothesisId,
-      message: `Foundry ${kind} source initialize`,
-      capture() {
-        return {
-          attached: Number(Boolean(this.attached)),
-          primaryVision: Number(kind === "vision" && isPrimarySmokeGpuVisionSource(this)),
-          privateSharedFog: Number(kind === "vision" && isUnattachedSmokeSharedFogSource(this))
-        };
-      }
-    });
-    smokeDebugWrapMethod(prototype, "_createShapes", {
-      hypothesisId,
-      message: `Foundry ${kind} source shape creation`,
-      capture() {
-        return {
-          attached: Number(Boolean(this.attached)),
-          primaryVision: Number(kind === "vision" && isPrimarySmokeGpuVisionSource(this)),
-          privateSharedFog: Number(kind === "vision" && isUnattachedSmokeSharedFogSource(this)),
-          smokeRegions: getSmokeRenderStats().liveSmokeRegions
-        };
-      }
-    });
-  }
-
-  for (const pair of smokeMeshes.values()) {
-    const pairData = () => ({
-      aggregate: Number(Boolean(pair.aggregate)),
-      smokeCount: pair.smokeCount ?? 1,
-      hasBlur: Number(Boolean(pair.darknessMesh?._blurFilter))
-    });
-    smokeDebugWrapMethod(pair.darknessMesh, "render", {
-      hypothesisId: "H16",
-      message: "smoke darkness RegionMesh render",
-      gpuSampleRate: 31,
-      capture: pairData
-    });
-    smokeDebugWrapMethod(pair.darknessMesh?._blurFilter, "apply", {
-      hypothesisId: "H16",
-      message: "smoke darkness blur apply",
-      gpuSampleRate: 37,
-      capture: pairData
-    });
-    smokeDebugWrapMethod(pair.illuminationMesh, "render", {
-      hypothesisId: "H17",
-      message: "smoke global-illumination RegionMesh render",
-      gpuSampleRate: 31,
-      capture: pairData
-    });
-  }
-
-  for (const state of smokeGpuVisionStates.values()) {
-    const stateData = () => ({
-      active: Number(Boolean(state.active)),
-      regionCount: state.regions?.length ?? 0,
-      primaryVision: Number(isPrimarySmokeGpuVisionSource(state.source))
-    });
-    for (const [mask, kind] of [[state.densityMask, "density"], [state.lightMask, "light"]]) {
-      smokeDebugWrapMethod(mask, "render", {
-        hypothesisId: "H17",
-        message: `smoke ${kind} cached-mask render`,
-        gpuSampleRate: 37,
-        capture() {
-          return {
-            ...stateData(),
-            autoRender: Number(Boolean(this.autoRender)),
-            renderDirty: Number(Boolean(this.renderDirty)),
-            willRedrawTexture: Number(Boolean(this.autoRender || this.renderDirty)),
-            childCount: this.children?.length ?? 0
-          };
-        }
-      });
-    }
-    for (const [layer, kind] of [[state.sight, "sight"], [state.light, "light"]]) {
-      smokeDebugWrapMethod(layer?.mesh, "render", {
-        hypothesisId: "H17",
-        message: `smoke radial ${kind} mesh render`,
-        gpuSampleRate: kind === "sight" ? 41 : 43,
-        capture: stateData
-      });
-    }
-  }
-}
-// #endregion codex-runtime-debug
 
 /**
  * Only the VisionSource owned by Token#vision participates in Foundry's normal
@@ -748,9 +570,6 @@ function refreshSmokeGpuVisibilityMasks(visibility) {
       vision
     });
   }
-  // #region codex-runtime-debug H17
-  installSmokeRuntimeDebugProbes();
-  // #endregion codex-runtime-debug
 }
 
 function refreshSmokeGpuVisionLayer(layer, { state, shape, radius, parent, vision }) {
@@ -989,11 +808,13 @@ function hasActiveSmokeBehavior(regionDocument) {
   const behaviors = regionDocument.behaviors?.contents ?? regionDocument.behaviors ?? [];
   let eligible = false;
   for (const behavior of behaviors) {
+    // `visible` is the current user's document permission in Foundry. Runtime
+    // behavior participation is defined by `viewed`, independently of whether
+    // that user may open the Region configuration sheet.
     if (
       behavior?.type !== PERIODIC_DAMAGE_BEHAVIOR_TYPE
       || behavior.disabled
       || behavior.viewed === false
-      || behavior.visible === false
     ) continue;
     const state = getSmokeRegionState(behavior);
     if (!state?.active) continue;
@@ -1127,9 +948,6 @@ export function queueSmokeRegionRefresh({ forceRendering = true, forceVision = t
 
 export function getSmokeRegionIndex(scene = canvas?.scene) {
   if (!scene) return null;
-  // #region codex-runtime-debug H18
-  const debugStartedAt = smokeDebugStart();
-  // #endregion codex-runtime-debug
   const cached = smokeIndexByScene.get(scene);
   if (cached) return cached;
   const entries = [];
@@ -1144,11 +962,13 @@ export function getSmokeRegionIndex(scene = canvas?.scene) {
     let regionGeometry;
     let regionGeometryPrepared = false;
     for (const behavior of region.behaviors?.contents ?? []) {
+      // Do not gate runtime smoke by `behavior.visible`: Foundry derives that
+      // property from document permissions, so it legitimately differs between
+      // the GM and players viewing the same active Region.
       if (
         behavior.type !== PERIODIC_DAMAGE_BEHAVIOR_TYPE
         || behavior.disabled
         || behavior.viewed === false
-        || behavior.visible === false
       ) continue;
       const state = getSmokeRegionState(behavior, now);
       if (!state) continue;
@@ -1220,18 +1040,6 @@ export function getSmokeRegionIndex(scene = canvas?.scene) {
     structureRevision: smokeStructureRevisionByScene.get(scene) ?? 0
   };
   smokeIndexByScene.set(scene, index);
-  // #region codex-runtime-debug H18
-  smokeDebugRecord({
-    hypothesisId: "H18",
-    message: "global smoke spatial-index rebuild",
-    durationMs: smokeDebugStart() - debugStartedAt,
-    data: {
-      sceneRegions: scene.regions?.contents?.length ?? 0,
-      entries: entries.length,
-      buckets: buckets.size
-    }
-  });
-  // #endregion codex-runtime-debug
   return index;
 }
 
@@ -1505,9 +1313,6 @@ function registerVisionSourceClass({ required = false } = {}) {
       const radius = Math.max(lightRadius, sightRadius);
       const budget = getBasicSightRadius(this, sightRadius) ?? sightRadius;
       if (isPrimarySmokeGpuVisionSource(this)) {
-        // #region codex-runtime-debug H17-H18
-        const debugGpuStartedAt = smokeDebugStart();
-        // #endregion codex-runtime-debug
         const prepared = prepareSmokeGpuVisionSource(this, {
           index,
           lightRadius,
@@ -1515,33 +1320,9 @@ function registerVisionSourceClass({ required = false } = {}) {
           radius,
           budget
         });
-        // #region codex-runtime-debug H17-H18
-        smokeDebugRecord({
-          hypothesisId: "H17",
-          message: "primary vision smoke GPU preparation",
-          durationMs: smokeDebugStart() - debugGpuStartedAt,
-          data: { prepared: Number(prepared), smokeRegions: index.entries?.length ?? 0 }
-        });
-        // #endregion codex-runtime-debug
         if (prepared) return;
       }
-      // #region codex-runtime-debug H18
-      const debugConstraintStartedAt = smokeDebugStart();
-      // #endregion codex-runtime-debug
       const constraint = buildSmokeVisionConstraint(this, radius, budget);
-      // #region codex-runtime-debug H18
-      smokeDebugRecord({
-        hypothesisId: "H18",
-        message: "CPU radial smoke vision constraint",
-        durationMs: smokeDebugStart() - debugConstraintStartedAt,
-        data: {
-          constrained: Number(Boolean(constraint)),
-          smokeRegions: index.entries?.length ?? 0,
-          primaryVision: Number(isPrimarySmokeGpuVisionSource(this)),
-          privateSharedFog: Number(isUnattachedSmokeSharedFogSource(this))
-        }
-      });
-      // #endregion codex-runtime-debug
       if (!constraint || radius <= 0) return;
 
       // Foundry builds one unrestricted LOS and derives both the light-perception and restricted-sight polygons
@@ -1691,9 +1472,6 @@ function registerDarknessSourceClass({ required = false } = {}) {
 }
 
 function createSmokeLightShape(source, basePolygon) {
-  // #region codex-runtime-debug H19
-  const debugStartedAt = smokeDebugStart();
-  // #endregion codex-runtime-debug
   const radius = Math.max(0, Number(source.radius) || 0);
   if (!radius) return null;
   if (!basePolygon || typeof basePolygon.applyConstraint !== "function") {
@@ -1715,18 +1493,6 @@ function createSmokeLightShape(source, basePolygon) {
   const brightRadius = Math.min(radius, Math.max(0, Math.abs(Number(source.data.bright) || 0)));
   const dimRadius = Math.min(radius, Math.max(0, Math.abs(Number(source.data.dim) || 0)));
   const constraints = buildSmokeLightConstraints(source, radius, brightRadius, dimRadius, regionCandidates);
-  // #region codex-runtime-debug H19
-  smokeDebugRecord({
-    hypothesisId: "H19",
-    message: "CPU smoke light constraint build",
-    durationMs: smokeDebugStart() - debugStartedAt,
-    data: {
-      candidateRegions: regionCandidates.length,
-      constrained: Number(Boolean(constraints)),
-      sourceRadius: radius
-    }
-  });
-  // #endregion codex-runtime-debug
   if (!constraints) return null;
   const shape = basePolygon.applyConstraint(constraints.combined);
   setSmokeLightRanges(source, {
@@ -3498,16 +3264,6 @@ function patchSmokeDetectionRanges({ required = false } = {}) {
   patchSpecialSenseSmokeLos({ required });
 }
 
-// #region codex-runtime-debug H18
-function recordSmokeDetectionProbe(message, startedAt, data) {
-  smokeDebugRecord({
-    hypothesisId: "H18",
-    message,
-    durationMs: smokeDebugStart() - startedAt,
-    data
-  });
-}
-// #endregion codex-runtime-debug
 
 function patchBasicSightRange(mode, { required = false } = {}) {
   if (mode?._falloutMawSmokeRangePatched) return true;
@@ -3517,18 +3273,7 @@ function patchBasicSightRange(mode, { required = false } = {}) {
     return false;
   }
   mode._testRange = function smokeAwareRange(visionSource, detectionMode, target, test) {
-    // #region codex-runtime-debug H18
-    const debugStartedAt = smokeDebugStart();
-    // #endregion codex-runtime-debug
     if (!original.call(this, visionSource, detectionMode, target, test)) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("basicSight smoke range test", debugStartedAt, {
-        nativePassed: 0,
-        smokeActive: 0,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return false;
     }
     const maximumDistance = detectionMode.range === Infinity
@@ -3536,14 +3281,6 @@ function patchBasicSightRange(mode, { required = false } = {}) {
       : visionSource.object.getLightRadius(detectionMode.range);
     const index = getSmokeRegionIndex(canvas?.scene);
     if (!hasRayAttenuationSmoke(index)) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("basicSight smoke range test", debugStartedAt, {
-        nativePassed: 1,
-        smokeActive: 0,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const targetActor = visionSource.object?.actor ?? visionSource.object?.document?.actor ?? null;
@@ -3554,14 +3291,6 @@ function patchBasicSightRange(mode, { required = false } = {}) {
       targetActor
     }).filter(requiresRayAttenuation);
     if (!regionCandidates.length) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("basicSight smoke range test", debugStartedAt, {
-        nativePassed: 1,
-        smokeActive: 1,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const densityAdjustment = getActorSmokeDensityAdjustment(targetActor);
@@ -3577,15 +3306,6 @@ function patchBasicSightRange(mode, { required = false } = {}) {
           chargeClearDistance: false
         }
       );
-    // #region codex-runtime-debug H18
-    recordSmokeDetectionProbe("basicSight smoke range test", debugStartedAt, {
-      nativePassed: 1,
-      smokeActive: 1,
-      candidateRegions: regionCandidates.length,
-      smokeRayTraced: 1,
-      visible: Number(Boolean(visible))
-    });
-    // #endregion codex-runtime-debug
     return visible;
   };
   Object.defineProperty(mode, "_falloutMawSmokeRangePatched", { value: true });
@@ -3600,45 +3320,15 @@ function patchLightPerceptionPoint(mode, { required = false } = {}) {
     return false;
   }
   mode._testPoint = function smokeAwareLightPerceptionPoint(visionSource, detectionMode, target, test) {
-    // #region codex-runtime-debug H18
-    const debugStartedAt = smokeDebugStart();
-    // #endregion codex-runtime-debug
     if (!original.call(this, visionSource, detectionMode, target, test)) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-        nativePassed: 0,
-        tokenTarget: Number(isTokenVisibilityTarget(target)),
-        smokeActive: 0,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return false;
     }
     const tokenTarget = isTokenVisibilityTarget(target);
     if (!tokenTarget) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-        nativePassed: 1,
-        tokenTarget: 0,
-        smokeActive: 0,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const index = getSmokeRegionIndex(canvas?.scene);
     if (!hasRayAttenuationSmoke(index)) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-        nativePassed: 1,
-        tokenTarget: 1,
-        smokeActive: 0,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const targetActor = visionSource.object?.actor ?? visionSource.object?.document?.actor ?? null;
@@ -3653,15 +3343,6 @@ function patchLightPerceptionPoint(mode, { required = false } = {}) {
       targetActor
     }).filter(requiresRayAttenuation);
     if (!regionCandidates.length) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-        nativePassed: 1,
-        tokenTarget: 1,
-        smokeActive: 1,
-        candidateRegions: 0,
-        smokeRayTraced: 0
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const densityAdjustment = getActorSmokeDensityAdjustment(targetActor);
@@ -3673,48 +3354,16 @@ function patchLightPerceptionPoint(mode, { required = false } = {}) {
       densityAdjustment
     });
     if (!measurement.hasSmoke) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-        nativePassed: 1,
-        tokenTarget: 1,
-        smokeActive: 1,
-        candidateRegions: regionCandidates.length,
-        smokeRayTraced: 1,
-        measurementHasSmoke: 0
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const sourceRadius = visionSource.radius || visionSource.data.externalRadius || canvas.dimensions?.maxR || 0;
     const maximumDistance = getBasicSightRadius(visionSource, sourceRadius);
     if (maximumDistance === null) {
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-        nativePassed: 1,
-        tokenTarget: 1,
-        smokeActive: 1,
-        candidateRegions: regionCandidates.length,
-        smokeRayTraced: 1,
-        measurementHasSmoke: 1,
-        unlimited: 1
-      });
-      // #endregion codex-runtime-debug
       return true;
     }
     const visible = maximumDistance === Infinity
       ? measurement.cost !== Infinity
       : measurement.cost <= maximumDistance + EPSILON;
-    // #region codex-runtime-debug H18
-    recordSmokeDetectionProbe("lightPerception post-native smoke point test", debugStartedAt, {
-      nativePassed: 1,
-      tokenTarget: 1,
-      smokeActive: 1,
-      candidateRegions: regionCandidates.length,
-      smokeRayTraced: 1,
-      measurementHasSmoke: 1,
-      visible: Number(Boolean(visible))
-    });
-    // #endregion codex-runtime-debug
     return visible;
   };
   Object.defineProperty(mode, "_falloutMawSmokePointPatched", { value: true });
@@ -3745,33 +3394,14 @@ function patchSpecialSenseSmokeLos({ required = false } = {}) {
     if (id === "basicSight" || id === "lightPerception" || !mode?.walls) continue;
     if (mode._falloutMawSmokeLosBypassPatched || mode._testLOS !== defaultTestLos) continue;
     mode._testLOS = function smokeBypassingSpecialSenseLos(visionSource, detectionMode, target, test) {
-      // #region codex-runtime-debug H18
-      const debugStartedAt = smokeDebugStart();
-      // #endregion codex-runtime-debug
       const index = getSmokeRegionIndex(canvas?.scene);
       if (!index?.hasVisionSmoke) {
         const result = defaultTestLos.call(this, visionSource, detectionMode, target, test);
-        // #region codex-runtime-debug H18
-        recordSmokeDetectionProbe(`special-sense ${id} smoke LOS`, debugStartedAt, {
-          smokeActive: 0,
-          cacheHit: 0,
-          nativeCollision: 1,
-          hasLos: Number(Boolean(result))
-        });
-        // #endregion codex-runtime-debug
         return result;
       }
       if (!visionSource?.los?.config) throw new Error("VisionSource has no native LOS collision configuration");
       const cached = readClearSmokeLosCache(test, this, visionSource);
       if (cached !== undefined) {
-        // #region codex-runtime-debug H18
-        recordSmokeDetectionProbe(`special-sense ${id} smoke LOS`, debugStartedAt, {
-          smokeActive: 1,
-          cacheHit: 1,
-          nativeCollision: 0,
-          hasLos: Number(Boolean(cached))
-        });
-        // #endregion codex-runtime-debug
         return cached;
       }
       const config = { ...visionSource.los.config };
@@ -3779,14 +3409,6 @@ function patchSpecialSenseSmokeLos({ required = false } = {}) {
       if (!this.angle && visionSource.data.angle < 360) config.angle = 360;
       const hasLos = !DetectionMode._testCollision(visionSource, test, config);
       writeClearSmokeLosCache(test, this, visionSource, hasLos);
-      // #region codex-runtime-debug H18
-      recordSmokeDetectionProbe(`special-sense ${id} smoke LOS`, debugStartedAt, {
-        smokeActive: 1,
-        cacheHit: 0,
-        nativeCollision: 1,
-        hasLos: Number(Boolean(hasLos))
-      });
-      // #endregion codex-runtime-debug
       return hasLos;
     };
     Object.defineProperty(mode, "_falloutMawSmokeLosBypassPatched", { value: true });
@@ -4243,24 +3865,12 @@ function flushAnimatedSmokeFrame() {
   const scene = globalThis.canvas?.scene;
   const changes = scene && pendingSmokeAnimationChangesByScene.get(scene);
   if (!scene || !changes?.size || pendingSmokeAnimationCommitsByScene.has(scene)) return;
-  // #region codex-runtime-debug H19
-  const debugStartedAt = smokeDebugStart();
-  // #endregion codex-runtime-debug
   try {
     const commit = refreshAnimatedSmokeSources(scene, changes);
     pendingSmokeAnimationCommitsByScene.set(scene, commit);
     smokeAnimationFailureKeyByScene.delete(scene);
   } catch (error) {
     reportAnimatedSmokeFailure(scene, changes, error);
-  } finally {
-    // #region codex-runtime-debug H19
-    smokeDebugRecord({
-      hypothesisId: "H19",
-      message: "attached smoke frame source-selection transaction",
-      durationMs: smokeDebugStart() - debugStartedAt,
-      data: { changedRegions: changes.size }
-    });
-    // #endregion codex-runtime-debug
   }
 }
 
@@ -4302,24 +3912,7 @@ function commitAnimatedSmokeFrame() {
         throw new Error("Attached smoke source ownership changed during exact transaction rebuild");
       }
     }
-    // #region codex-runtime-debug H19
-    const debugStartedAt = smokeDebugStart();
-    // #endregion codex-runtime-debug
     const rendered = commitAnimatedSmokeRender(commit);
-    // #region codex-runtime-debug H19
-    smokeDebugRecord({
-      hypothesisId: "H19",
-      message: "attached smoke render commit",
-      durationMs: smokeDebugStart() - debugStartedAt,
-      data: {
-        completed: Number(Boolean(rendered)),
-        lightingSources: commit.affectedLightingSources?.length ?? 0,
-        visionSources: commit.affectedVisionSources?.length ?? 0,
-        sharedFogTokens: commit.sharedFogTokens?.length ?? 0,
-        refreshDarknessTexture: Number(Boolean(commit.refreshDarknessTexture))
-      }
-    });
-    // #endregion codex-runtime-debug
     if (!rendered) return false;
     finalizeAnimatedSmokeCommit(scene, commit);
     return true;
@@ -5374,9 +4967,6 @@ function scheduleSmokeRefresh({ forceRendering = false, forceVision = false } = 
 
 export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = false } = {}) {
   if (!canvas?.ready || !canvas.scene) return;
-  // #region codex-runtime-debug H16-H19
-  const debugStartedAt = smokeDebugStart();
-  // #endregion codex-runtime-debug
   const index = getSmokeRegionIndex(canvas.scene);
   const desired = new Map();
   for (const entry of index?.entries ?? []) desired.set(entry.behavior.uuid, entry);
@@ -5416,9 +5006,6 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
     smokeMeshes.set(uuid, createSmokeMeshPair(renderUnit, shaders, darknessCollection, illuminationMeshes));
     renderingChanged = true;
   }
-  // #region codex-runtime-debug H16-H19
-  installSmokeRuntimeDebugProbes();
-  // #endregion codex-runtime-debug
   if (renderingChanged) {
     canvas.effects.illumination.invalidateDarknessLevelContainer(true);
   }
@@ -5433,21 +5020,6 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
       refreshVision
     });
   }
-  // #region codex-runtime-debug H16-H19
-  const debugStats = getSmokeRenderStats();
-  smokeDebugRecord({
-    hypothesisId: "H16",
-    message: "smoke render-unit synchronization",
-    durationMs: smokeDebugStart() - debugStartedAt,
-    data: {
-      renderingChanged: Number(Boolean(renderingChanged)),
-      sourceGeometryChanged: Number(Boolean(sourceGeometryChanged)),
-      smokePairs: debugStats.liveSmokePairs,
-      smokeRegions: debugStats.liveSmokeRegions,
-      smokeBlurFilters: debugStats.smokeBlurFilters
-    }
-  });
-  // #endregion codex-runtime-debug
 }
 
 function canAggregateSmokeRegionMeshes() {
