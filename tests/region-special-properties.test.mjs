@@ -6,6 +6,7 @@ import {
   resolveRegionSpecialProperties
 } from "../src/utils/region-special-properties.mjs";
 import {
+  canUseSmokeLightShapeOnlyAtElevation,
   calculateSmokePathCost,
   getSmokeLightBandAtPoint,
   getSmokeRegionIndex,
@@ -75,6 +76,76 @@ test("smoke runtime values clamp thickness and density", () => {
     type: "smoke",
     smoke: { thickness: 1, density: 1, densityPercent: 100 }
   }]);
+});
+
+test("non-planar smoke lights bypass native surface tests only when the observer plane is provably clear", () => {
+  class TestLightSource {
+    static sourceType = "light";
+    testPoint() { return true; }
+  }
+  const source = new TestLightSource();
+  source.data = { elevation: 10, priority: 0, walls: true, radius: 1_000 };
+  source.level = { id: "level-a" };
+  source.shape = { contains() { return true; }, toClipperPoints() { return []; } };
+  const candidate = { source, planarDifference: false };
+  const calls = [];
+  const scene = {
+    surfaces: [],
+    getSurfaces(options) {
+      calls.push(options);
+      return this.surfaces;
+    }
+  };
+  const proof = {
+    scene,
+    nativePointTest: TestLightSource.prototype.testPoint,
+    distancePixels: 100
+  };
+
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), true);
+  assert.deepEqual(calls, [{ type: "light", level: "level-a" }]);
+
+  // Foundry's default surface-collision interval is (lower, upper].
+  scene.surfaces = [{ elevation: 0 }];
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), true);
+  scene.surfaces = [{ elevation: 5 }];
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), false);
+  scene.surfaces = [{ elevation: 10 }];
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), false);
+  scene.surfaces = [{ elevation: 11 }];
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), true);
+
+  source.data.elevation = 0;
+  scene.surfaces = [{ elevation: 5 }];
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 10, proof), false);
+  source.data.walls = false;
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 10, { ...proof, scene: null }), true);
+  source.data.walls = true;
+  source.data.elevation = 10;
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 10, { ...proof, scene: null }), true);
+  source.data.priority = 1;
+  source.data.elevation = -100;
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 10, { ...proof, scene: null }), true);
+
+  source.data.priority = 0;
+  source.data.elevation = 10;
+  source.data.walls = false;
+  source.data.radius = 1_000 - 1e-8;
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), true);
+  source.data.radius = 1_000 - 5e-7;
+  assert.equal(
+    canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof),
+    false,
+    "the wider contour epsilon must not override Foundry's exact 1e-8 vertical gate"
+  );
+  source.data.radius = 1_000;
+  source.testPoint = () => true;
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), false);
+  delete source.testPoint;
+  const toClipperPoints = source.shape.toClipperPoints;
+  delete source.shape.toClipperPoints;
+  assert.equal(canUseSmokeLightShapeOnlyAtElevation(candidate, 0, proof), false);
+  source.shape.toClipperPoints = toClipperPoints;
 });
 
 test("attached smoke animation invalidates once per native transform and follows animated elevation", async () => {
@@ -1204,7 +1275,11 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
   const dispersedPolygon = { points: [-100, -100, 0, -100, 0, 100, -100, 100] };
   const dispersedTree = {
     polygons: [dispersedPolygon],
-    testPoint: ({ x, y }) => x >= -100 && x <= 0 && y >= -100 && y <= 100
+    testPoint: ({ x, y }) => x >= -100 && x <= 0 && y >= -100 && y <= 100,
+    intersectPolygon() {
+      differenceCalls += 1;
+      return this;
+    }
   };
   region.polygonTree = {
     polygons: [{ points: createTestCirclePoints(region.shapes[0]) }],
@@ -1234,7 +1309,7 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
         contains(x, y) { return pointInPolygon(this.points, x, y); }
       }
     };
-    globalThis.foundry = {};
+    globalThis.foundry = { canvas: { sources: { PointLightSource: MockLightSource } } };
     globalThis.ClipperLib = { ClipType: { ctDifference: 1 } };
     globalThis.Hooks = { on() {} };
     globalThis.game = { time: { worldTime: 0 } };
@@ -1364,13 +1439,12 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     globalThis.canvas.effects.lightSources.delete(distantLightSource);
     distantLightSource._destroy();
 
-    // A light whose vertical sphere reaches this plane but originates at another elevation cannot use a planar
-    // Clipper difference. Its exact midpoint tests must stay on the indexed scalar path instead of rebuilding one
-    // rich smoke profile for every radial contour sample.
+    // A light whose vertical sphere reaches this plane and has native shape-only semantics can use the same exact
+    // Region-minus-light path at another elevation. No per-ray light classifier is needed in that proven case.
     const elevatedLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(elevatedLightSource, {
       active: true,
-      data: { x: 100, y: 0, elevation: 1, bright: 200, dim: 200 }
+      data: { x: 100, y: 0, elevation: 1, bright: 200, dim: 200, radius: 200, walls: false }
     });
     elevatedLightSource._createShapes();
     globalThis.canvas.effects.lightSources.add(elevatedLightSource);
@@ -1379,8 +1453,8 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     const mixedConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
     assert.equal(
       mixedSmokePointTests,
-      1,
-      "mixed planar/non-planar dispersion seeds native PolygonTree containment once per contour"
+      0,
+      "shape-only elevated dispersion compiles Region-minus-light before tracing the contour"
     );
 
     const radialBoundaryDistance = (points, origin, angle) => {
@@ -1429,7 +1503,7 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
         `mixed dispersion ray ${index}: ${actual} !== ${reference.visibleDistance}`
       );
     }
-    assert.equal(differenceCalls, 2);
+    assert.equal(differenceCalls, 4);
     globalThis.canvas.effects.lightSources.delete(elevatedLightSource);
     elevatedLightSource._destroy();
 
@@ -1439,7 +1513,7 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     lightSource._createShapes();
     visionSource._createShapes();
     assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
-    assert.equal(differenceCalls, 3);
+    assert.equal(differenceCalls, 5);
 
     lightSource._configure({});
     assert.equal(lightSource.nativeConfigured, true);
