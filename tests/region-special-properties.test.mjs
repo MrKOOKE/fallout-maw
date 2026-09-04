@@ -6,6 +6,7 @@ import {
   resolveRegionSpecialProperties
 } from "../src/utils/region-special-properties.mjs";
 import {
+  buildSmokeGpuDensityRenderUnits,
   canUseSmokeLightShapeOnlyAtElevation,
   calculateSmokePathCost,
   getSmokeLightBandAtPoint,
@@ -76,6 +77,26 @@ test("smoke runtime values clamp thickness and density", () => {
     type: "smoke",
     smoke: { thickness: 1, density: 1, densityPercent: 100 }
   }]);
+});
+
+test("GPU density render units depend on distinct state and animation, not stationary smoke count", () => {
+  const entry = (id, density, isAnimating = false) => ({
+    behavior: { uuid: `Behavior.${id}` },
+    smoke: { density },
+    region: { object: { isAnimating } }
+  });
+  const threeEqual = [entry("a", 0.5), entry("b", 0.5), entry("c", 0.5)];
+  assert.equal(buildSmokeGpuDensityRenderUnits(threeEqual, 0, { aggregateStatic: true }).size, 1);
+  assert.equal(
+    buildSmokeGpuDensityRenderUnits([...threeEqual, entry("moving", 0.5, true)], 0, { aggregateStatic: true }).size,
+    2,
+    "one moving Region adds one live render unit"
+  );
+  assert.equal(
+    buildSmokeGpuDensityRenderUnits([...threeEqual, entry("different-density", 0.75)], 0, { aggregateStatic: true }).size,
+    2,
+    "a genuinely different density keeps its own exact additive state"
+  );
 });
 
 test("non-planar smoke lights bypass native surface tests only when the observer plane is provably clear", () => {
@@ -1150,8 +1171,9 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     ClipperLib: globalThis.ClipperLib
   };
   const nativeRange = () => true;
+  const nativeLightPoint = (_visionSource, _mode, _target, visibilityTest) => visibilityTest.nativeVisible !== false;
   const basicSight = { _testRange: nativeRange };
-  const lightPerception = { _testRange: nativeRange };
+  const lightPerception = { _testRange: nativeRange, _testPoint: nativeLightPoint };
   const specialSense = { _testRange: nativeRange };
   const constrainedMasks = [];
   let emittedShapeShift = 0;
@@ -1389,7 +1411,8 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     const reachedByForeignLight = { point: { x: 100, y: 0, elevation: 0 } };
 
     assert.notEqual(basicSight._testRange, nativeRange);
-    assert.notEqual(lightPerception._testRange, nativeRange);
+    assert.equal(lightPerception._testRange, nativeRange);
+    assert.notEqual(lightPerception._testPoint, nativeLightPoint);
     assert.equal(specialSense._testRange, nativeRange);
     visionSource._createShapes();
     assert.deepEqual(constrainedMasks.map(mask => mask.name), [
@@ -1402,27 +1425,39 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     assert.equal(lightSource.shape.config.radius, 200);
     assert.equal(getSmokeLightBandAtPoint(lightSource, { x: 10, y: 0 }), "bright");
     assert.equal(basicSight._testRange(visionSource, { range: 1 }, token, reachedByForeignLight), true);
-    assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, outside), false);
-    assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, reachedByForeignLight), true);
-    assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, { document: {} }, outside), true);
-    assert.equal(differenceCalls, 1);
+    const smokePointTestsBeforeNativeRejection = mixedSmokePointTests;
+    assert.equal(lightPerception._testPoint(
+      visionSource,
+      { range: Infinity },
+      token,
+      { ...outside, nativeVisible: false }
+    ), false);
+    assert.equal(
+      mixedSmokePointTests,
+      smokePointTestsBeforeNativeRejection,
+      "a point rejected by native light perception must never enter smoke ray evaluation"
+    );
+    assert.equal(lightPerception._testPoint(visionSource, { range: Infinity }, token, outside), false);
+    assert.equal(lightPerception._testPoint(visionSource, { range: Infinity }, token, reachedByForeignLight), true);
+    assert.equal(lightPerception._testPoint(visionSource, { range: Infinity }, { document: {} }, outside), true);
+    assert.equal(differenceCalls, 0);
     const initialVisionConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
 
     // Foundry may initialize every light source again even when no light geometry changed. That native no-op must not
-    // invalidate either the observer constraint or the cached Region-minus-light geometry.
+    // invalidate either the observer constraint or the shared ray geometry.
     lightSource._createShapes();
     visionSource._createShapes();
     assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, initialVisionConstraint);
-    assert.equal(differenceCalls, 1);
+    assert.equal(differenceCalls, 0);
 
     // Foundry represents surface exposure as a PolygonTree. Recreating an equal tree is a native no-op, while an
-    // actual exposure-ring change must receive a new semantic light version without recursive polygon comparison.
+    // actual exposure-ring change must receive a new semantic light version without forcing Region-by-light clipping.
     emittedSurfaceExposureShift = 0.25;
     lightSource._createShapes();
     visionSource._createShapes();
     const surfaceExposureConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
     assert.deepEqual(surfaceExposureConstraint, initialVisionConstraint);
-    assert.equal(differenceCalls, 2);
+    assert.equal(differenceCalls, 0);
 
     // A semantically changed light outside this observer's bounds receives its own version without invalidating the
     // observer's local candidate signature.
@@ -1435,12 +1470,12 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     globalThis.canvas.effects.lightSources.add(distantLightSource);
     visionSource._createShapes();
     assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
-    assert.equal(differenceCalls, 2);
+    assert.equal(differenceCalls, 0);
     globalThis.canvas.effects.lightSources.delete(distantLightSource);
     distantLightSource._destroy();
 
-    // A light whose vertical sphere reaches this plane and has native shape-only semantics can use the same exact
-    // Region-minus-light path at another elevation. No per-ray light classifier is needed in that proven case.
+    // A light whose vertical sphere reaches this plane and has native shape-only semantics uses its already-built
+    // native polygon during the shared ray pass; no Region-by-light Clipper product is needed.
     const elevatedLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(elevatedLightSource, {
       active: true,
@@ -1453,8 +1488,8 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     const mixedConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
     assert.equal(
       mixedSmokePointTests,
-      0,
-      "shape-only elevated dispersion compiles Region-minus-light before tracing the contour"
+      1,
+      "the shared ray pass seeds native Region containment once per contour"
     );
 
     const radialBoundaryDistance = (points, origin, angle) => {
@@ -1497,13 +1532,15 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
         chargeClearDistance: false,
         useLightDispersion: true
       });
-      const actual = radialBoundaryDistance(mixedConstraint.points, origin, angle);
+      // The production PointSourcePolygon intersects this enclosing constraint
+      // with its native radius; the lightweight mock deliberately does not.
+      const actual = Math.min(200, radialBoundaryDistance(mixedConstraint.points, origin, angle));
       assert.ok(
         Math.abs(actual - reference.visibleDistance) <= 1e-6,
         `mixed dispersion ray ${index}: ${actual} !== ${reference.visibleDistance}`
       );
     }
-    assert.equal(differenceCalls, 4);
+    assert.equal(differenceCalls, 0);
     globalThis.canvas.effects.lightSources.delete(elevatedLightSource);
     elevatedLightSource._destroy();
 
@@ -1512,8 +1549,8 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     emittedShapeShift = 0.5;
     lightSource._createShapes();
     visionSource._createShapes();
-    assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
-    assert.equal(differenceCalls, 5);
+    assert.notDeepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    assert.equal(differenceCalls, 0);
 
     lightSource._configure({});
     assert.equal(lightSource.nativeConfigured, true);
@@ -1918,11 +1955,10 @@ test("all smoke densities derive smooth exact masks from one native LOS without 
     assert.equal(includedSmokeEdges[4], false);
     assert.equal(appliedConstraints.length, 5);
     const boundaryAnchoredConstraint = appliedConstraints.at(-1).points;
-    assert.equal(boundaryAnchoredConstraint.some((value, index) => (
-      index % 2 === 0
-      && Math.abs(value - (modifiedVisionSource.data.x + modifiedVisionSource.radius)) < 1e-6
-      && Math.abs(boundaryAnchoredConstraint[index + 1] - modifiedVisionSource.data.y) < 1e-6
-    )), true);
+    assert.ok(Math.abs(
+      Math.max(...boundaryAnchoredConstraint.filter((_value, index) => index % 2 === 0))
+      - (modifiedVisionSource.data.x + modifiedVisionSource.radius)
+    ) < 1e-6, "the sparse outer square still encloses the full native source radius");
     for (const [x, y] of [[0, 0], [100, 0], [100, 100], [0, 100]]) {
       const boundaryDx = x - modifiedVisionSource.data.x;
       const boundaryDy = y - modifiedVisionSource.data.y;
@@ -2152,22 +2188,33 @@ test("all smoke densities derive smooth exact masks from one native LOS without 
     animatedOwner.vision = animatedVisionSource;
     retessellateNativeLos = false;
     const animatedConstraints = [];
+    const animatedVisibleConstraints = [];
     const animatedOrigins = [];
     animatedSmokePointTests = 0;
     for (let frame = 0; frame <= 30; frame++) {
       animatedVisionSource.data.x = -20.25 + (frame / 10);
       animatedVisionSource._createShapes();
       const constraint = [...appliedConstraints.at(-1).points];
-      if (animatedConstraints.length) {
-        const previousConstraint = animatedConstraints.at(-1);
+      const visibleConstraint = [...constraint];
+      for (let index = 0; index < visibleConstraint.length; index += 2) {
+        const dx = visibleConstraint[index] - animatedVisionSource.data.x;
+        const dy = visibleConstraint[index + 1] - animatedVisionSource.data.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= animatedVisionSource.radius) continue;
+        visibleConstraint[index] = animatedVisionSource.data.x + ((dx / distance) * animatedVisionSource.radius);
+        visibleConstraint[index + 1] = animatedVisionSource.data.y + ((dy / distance) * animatedVisionSource.radius);
+      }
+      if (animatedVisibleConstraints.length) {
+        const previousConstraint = animatedVisibleConstraints.at(-1);
         const frameShift = Math.max(
-          directedHausdorff(previousConstraint, constraint),
-          directedHausdorff(constraint, previousConstraint)
+          directedHausdorff(previousConstraint, visibleConstraint),
+          directedHausdorff(visibleConstraint, previousConstraint)
         );
         assert.ok(frameShift <= 1, `frame ${frame} contour jump was ${frameShift}`);
       }
       animatedOrigins.push({ x: animatedVisionSource.data.x, y: animatedVisionSource.data.y });
       animatedConstraints.push(constraint);
+      animatedVisibleConstraints.push(visibleConstraint);
     }
     const relativeSignatures = animatedConstraints.map((points, frame) => points.map((value, index) => {
       const origin = animatedOrigins[frame];
@@ -2197,6 +2244,67 @@ test("all smoke densities derive smooth exact masks from one native LOS without 
       "the final animated contour equals a fresh exact calculation at the endpoint"
     );
 
+    // System-generated smoke is one gridless native circle. Foundry tessellates
+    // that circle only for its generic PolygonTree; the smoke solver must retain
+    // the primitive and must not classify or ray-trace every tessellated edge.
+    const analyticRegion = createSmokeRegion("analytic-native-circle", 50);
+    analyticRegion.shapes[0] = { type: "circle", x: 0, y: 0, radius: 20, gridBased: false };
+    analyticRegion.object.bounds = { x: -20, y: -20, width: 40, height: 40 };
+    let analyticPolygonPointTests = 0;
+    analyticRegion.polygonTree = {
+      polygons: [{ points: createTestCirclePoints(analyticRegion.shapes[0], 20) }],
+      testPoint: ({ x, y }) => {
+        analyticPolygonPointTests += 1;
+        return Math.hypot(x, y) <= 20;
+      }
+    };
+    globalThis.canvas.scene = createScene([analyticRegion]);
+    const analyticSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    Object.assign(analyticSource, {
+      data: { x: -30.25, y: 0.5, elevation: 0, externalRadius: 0 },
+      object: {
+        document: { detectionModes: { basicSight: { enabled: true, range: 1 } } },
+        getLightRadius: range => range * 100
+      }
+    });
+    analyticSource._createShapes();
+    assert.equal(
+      analyticPolygonPointTests,
+      0,
+      "an untouched gridless circle uses analytic intervals instead of its PolygonTree tessellation"
+    );
+
+    // A wall-restricted circle keeps PolygonTree semantics, but its retained
+    // arcs remain analytic and only the actual clipping chord is ray-traced.
+    const clippedCircle = createSmokeRegion("clipped-native-circle", 50);
+    clippedCircle.shapes[0] = { type: "circle", x: 0, y: 0, radius: 20, gridBased: false };
+    clippedCircle.object.bounds = { x: -20, y: -20, width: 20, height: 40 };
+    const clippedArcPoints = createTestCirclePoints(clippedCircle.shapes[0], 20).slice(10, 32);
+    let clippedPolygonPointTests = 0;
+    clippedCircle.polygonTree = {
+      polygons: [{ points: clippedArcPoints }],
+      testPoint: ({ x, y }) => {
+        clippedPolygonPointTests += 1;
+        return x <= 0 && Math.hypot(x, y) <= 20;
+      }
+    };
+    globalThis.canvas.scene = createScene([clippedCircle]);
+    const clippedCircleSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    Object.assign(clippedCircleSource, {
+      data: { x: -30.25, y: 0.5, elevation: 0, externalRadius: 0 },
+      object: analyticSource.object
+    });
+    clippedCircleSource._createShapes();
+    assert.ok(clippedPolygonPointTests > 0, "a clipped native circle classifies its native PolygonTree");
+    assert.ok(
+      clippedPolygonPointTests < 5,
+      "a clipped native circle does not reclassify tessellated arc intervals for every ray"
+    );
+    assert.ok(
+      appliedConstraints.at(-1).points.length / 2 < 50,
+      "circle-arc tessellation does not become visibility topology after wall clipping"
+    );
+
     globalThis.canvas.scene = createScene([]);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
     assert.equal(edges.size, 0);
@@ -2208,6 +2316,133 @@ test("all smoke densities derive smooth exact masks from one native LOS without 
     globalThis.CONFIG = previous.CONFIG;
     globalThis.Hooks = previous.Hooks;
     globalThis.PIXI = previous.PIXI;
+  }
+});
+
+test("stationary smoke Regions share one native darkness render unit while an animated Region stays live", () => {
+  const previous = {
+    canvas: globalThis.canvas,
+    game: globalThis.game,
+    foundry: globalThis.foundry,
+    CONST: globalThis.CONST,
+    PIXI: globalThis.PIXI
+  };
+  const regions = [
+    createSmokeRegion("aggregate-a", 50),
+    createSmokeRegion("aggregate-b", 50),
+    createSmokeRegion("aggregate-c", 50)
+  ];
+  const scene = createScene(regions);
+  const darknessMeshes = createNativeEffectsContainer();
+  const illuminationMeshes = createNativeEffectsContainer();
+  let blurFiltersCreated = 0;
+
+  class Buffer {
+    constructor(data) { this.data = data; }
+  }
+
+  class Geometry {
+    addAttribute(_name, buffer) {
+      this.vertexBuffer = buffer;
+      return this;
+    }
+    addIndex(buffer) {
+      this.indexBuffer = buffer;
+      return this;
+    }
+  }
+
+  class RegionMesh {
+    constructor(region) {
+      this.region = region;
+      this.geometry = region.geometry;
+      this.shader = { mode: 0, modifier: 0, uniforms: {}, get darknessLevel() { return this.modifier; } };
+    }
+    destroy() { this.parent?.removeChild(this); }
+  }
+
+  for (let index = 0; index < regions.length; index += 1) {
+    const region = regions[index];
+    region.parent = scene;
+    region.testPoint = region.polygonTree.testPoint;
+    region.object = {
+      document: region,
+      isAnimating: false,
+      geometry: {},
+      animationState: {
+        elevation: region.elevation,
+        triangulation: {
+          vertices: new Float32Array([index * 30, 0, (index * 30) + 10, 0, index * 30, 10]),
+          indices: new Uint16Array([0, 1, 2])
+        }
+      }
+    };
+  }
+
+  try {
+    globalThis.game = { time: { worldTime: 0 } };
+    globalThis.CONST = { CANVAS_PERFORMANCE_MODES: { LOW: 1 } };
+    globalThis.PIXI = {
+      Buffer,
+      Geometry,
+      Circle: { approximateVertexDensity: () => 32 }
+    };
+    globalThis.foundry = {
+      canvas: {
+        placeables: { regions: { RegionMesh } },
+        rendering: {
+          shaders: {
+            AdjustDarknessLevelRegionShader: class {},
+            IlluminationDarknessLevelRegionShader: class {}
+          }
+        }
+      }
+    };
+    globalThis.canvas = {
+      ready: true,
+      scene,
+      performance: { mode: 2 },
+      blurFilters: new Set(),
+      createBlurFilter() {
+        blurFiltersCreated += 1;
+        return {};
+      },
+      effects: {
+        illumination: {
+          darknessLevelMeshes: darknessMeshes,
+          invalidateDarknessLevelContainer() {}
+        }
+      },
+      visibility: { vision: { light: { global: { meshes: illuminationMeshes } } } },
+      environment: { globalLightSource: { active: false } },
+      perception: { update() {} }
+    };
+
+    syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
+    assert.equal(darknessMeshes.children.length, 1);
+    assert.equal(illuminationMeshes.children.length, 1);
+    assert.equal(blurFiltersCreated, 1, "three static Regions share one blur filter");
+    assert.equal(darknessMeshes.children[0].region.document.testPoint({ x: 5, y: 0, elevation: 0 }), true);
+
+    regions[2].object.isAnimating = true;
+    syncSmokeDarknessMeshes({ forceRendering: true });
+    assert.equal(darknessMeshes.children.length, 2, "one static aggregate plus one live native RegionMesh");
+    assert.equal(illuminationMeshes.children.length, 2);
+    assert.equal(darknessMeshes.children.some(mesh => mesh.region === regions[2].object), true);
+
+    regions[2].object.isAnimating = false;
+    syncSmokeDarknessMeshes({ forceRendering: true });
+    assert.equal(darknessMeshes.children.length, 1, "the settled Region rejoins the static aggregate");
+    assert.equal(illuminationMeshes.children.length, 1);
+  } finally {
+    if (globalThis.canvas?.scene === scene) {
+      globalThis.canvas.scene = createScene([]);
+      syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });
+    }
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
   }
 });
 
