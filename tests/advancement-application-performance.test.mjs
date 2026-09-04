@@ -73,19 +73,104 @@ test("ability selection and category toggles do not render the full application"
   assert.match(localActions, /#renderAbilityDetails/);
 });
 
-test("owned ability families stay selectable while ordinary owned abilities stay filtered", () => {
+test("all owned abilities stay visible and selectable, with or without evolution branches", () => {
   const prepareCategories = sourceBetween("  #prepareAbilityCategories(", "  #prepareSelectedAbility()");
   assert.match(prepareCategories, /familyOwned/);
   assert.match(prepareCategories, /currentOwnedSourceIdByFamily/);
   assert.match(prepareCategories, /currentOwnedEntry\.ability/);
-  assert.match(prepareCategories, /!abilityHasEvolutions\(ability\)/);
+  assert.doesNotMatch(prepareCategories, /if \(familyOwned && !abilityHasEvolutions\(ability\)\) return null/);
   assert.doesNotMatch(prepareCategories, /filter\(ability => !ownedAbilityIds\.has/);
+  assert.match(abilitiesTemplate, /\{\{#if owned\}\} owned\{\{\/if\}\}/);
   assert.match(abilitiesTemplate, /data-ability-family-source-id="\{\{familySourceId\}\}"/);
   const selection = sourceBetween("  static async #onSelectAbility(", "  static async #onSelectAbilityEvolutionNode(");
   assert.match(selection, /target\.dataset\.abilityFamilySourceId \|\| sourceId/);
   assert.match(selection, /#selectedAbilityFamilySourceId = familySourceId/);
   assert.match(selection, /#selectedAbilitySourceId = sourceId/);
+  const grant = sourceBetween("  static async #onGrantAbility(", "  #getSkillAdvancementMultiplierChanges(");
+  assert.doesNotMatch(grant, /#selectedAbility(?:Family)?SourceId = ""/);
 });
+
+test("purchased ordinary abilities and features remain in the list without offering another purchase", () => {
+  const plain = { id: "plain", name: "А изученная", system: {} };
+  const available = { id: "available", name: "В доступная", system: {} };
+  const locked = { id: "locked", name: "Б недоступная", system: { acquisitionRequirements: [{ met: false }] } };
+  const evolved = { id: "evolved", name: "Г эволюция", system: {} };
+  const root = { id: "root", name: "Исходная", system: { evolution: {
+    nodes: [{ id: evolved.id, ability: evolved }],
+    links: [{ fromId: "root", toId: evolved.id }]
+  } } };
+  const feature = { id: "feature", name: "Особенность", system: {} };
+  const hidden = { id: "hidden", name: "Скрытая", visible: false, system: {} };
+  const catalog = { categories: [
+    { id: "general", abilities: [plain, locked, root, available, hidden] },
+    { id: "features", abilities: [feature] }
+  ] };
+  const app = createAbilityListHarness(catalog);
+  let categories = app.prepare([evolved.id]);
+  assert.equal(categories[0].abilities.find(entry => entry.sourceId === plain.id).owned, false);
+  assert.equal(categories[1].abilities[0].canPurchaseTrait, true);
+
+  // Ownership wins over requirements which may no longer be met after buying.
+  plain.system.acquisitionRequirements = [{ met: false }];
+  categories = app.prepare([plain.id, feature.id, evolved.id, hidden.id]);
+  assert.deepEqual(categories[0].abilities.map(entry => entry.sourceId), [available.id, locked.id, plain.id, evolved.id]);
+  const ownedPlain = categories[0].abilities.find(entry => entry.sourceId === plain.id);
+  const ownedFeature = categories[1].abilities[0];
+  for (const entry of [ownedPlain, ownedFeature]) {
+    assert.equal(entry.owned, true);
+    assert.equal(entry.acquisitionAvailable, true, "owned tiles must not be marked unavailable/red");
+    assert.equal(entry.hasEvolution, false);
+    assert.equal(entry.statusLabel, "Изучено");
+    for (const action of ["canGrant", "canPurchaseTrait", "canSpendFree", "canStartManual"]) {
+      assert.equal(entry[action], false, action);
+    }
+  }
+  const ownedEvolution = categories[0].abilities.at(-1);
+  assert.equal(ownedEvolution.familySourceId, root.id);
+  assert.equal(ownedEvolution.hasEvolution, true);
+  assert.equal(ownedEvolution.statusLabel, "Текущая версия");
+  assert.equal(ownedEvolution.evolutionExhausted, true);
+
+  categories = app.prepare([]);
+  assert.equal(categories[0].abilities.find(entry => entry.sourceId === plain.id).owned, false);
+  assert.equal(categories[1].abilities[0].canPurchaseTrait, true);
+});
+
+function createAbilityListHarness(catalog) {
+  // Run the production preparation and sorting methods without the Foundry UI.
+  const Harness = new Function("getAbilityCatalog", `
+    const LOCKED_FEATURES_CATEGORY_ID = "features";
+    const getAbilitySourceId = item => item.sourceId;
+    const abilityHasEvolutions = ability => Boolean(ability?.system?.evolution?.nodes?.length);
+    const toInteger = value => Math.trunc(Number(value) || 0);
+    const formatResearchValue = String;
+    const getAbilityAcquisitionRequirementRows = (_actor, ability) => ability.system?.acquisitionRequirements ?? [];
+    const getAbilityAcquisitionRequirementLabel = () => "";
+    const hasUnsafeAbilityEvolutionAcquisitionChanges = () => false;
+    ${sourceBetween("function indexAbilityEvolutionFamily(", "function collectAbilityEvolutionGraph(")}
+    ${sourceBetween("function compareAbilityAvailability(", "function evaluateProgressionFormula(")}
+    return class {
+      #abilityById = new Map();
+      #abilityEntriesById = new Map();
+      #abilityRequirementRowsById = new Map();
+      #abilityTooltipHTMLCache = new Map();
+      #abilityRequirementContext = null;
+      #abilityEvolutionPreparationContext = null;
+      #expandedAbilityCategories = new Set();
+      #gmMode = false;
+      #selectedAbilitySourceId = "";
+      #selectedAbilityFamilySourceId = "";
+      #getTraitSessionTotal(value) { return value; }
+      ${sourceBetween("  #prepareAbilityCategories(", "  #prepareSelectedAbility()")}
+      ${sourceBetween("  #prepareAbilityEntry(", "  #getAbilityResearch(")}
+      prepare(ownedIds) {
+        this.actor = { items: ownedIds.map(sourceId => ({ type: "ability", sourceId })), system: {} };
+        return this.#prepareAbilityCategories({ researches: 100, traits: 1 });
+      }
+    };
+  `)(() => catalog);
+  return new Harness();
+}
 
 test("a stale ability selection clears safely without consulting an undefined catalog entry", () => {
   const prepareSelected = sourceBetween("  #prepareSelectedAbility()", "  #prepareAbilityEvolutionPanel()");

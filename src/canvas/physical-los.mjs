@@ -53,6 +53,10 @@ export function testObserverVisibilityBatch(observerToken, targetTokens = []) {
     object: observerToken
   });
   try {
+    // This helper answers point queries. Building a 360-degree smoke contour
+    // first would duplicate the exact directed smoke checks performed by the
+    // registered Basic Sight and Light Perception modes below.
+    source[POINT_ONLY_SMOKE_VISION] = true;
     Object.assign(source.blinded, observerToken._getVisionBlindedStates?.() ?? {});
     const sourceData = observerToken._getVisionSourceData();
     source.initialize({

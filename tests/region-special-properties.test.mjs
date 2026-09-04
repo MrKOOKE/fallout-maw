@@ -1200,6 +1200,7 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
   region.shapes[0] = { type: "circle", x: 0, y: 0, radius: 100 };
   region.object.bounds = { x: -100, y: -100, width: 200, height: 200 };
   let differenceCalls = 0;
+  let mixedSmokePointTests = 0;
   const dispersedPolygon = { points: [-100, -100, 0, -100, 0, 100, -100, 100] };
   const dispersedTree = {
     polygons: [dispersedPolygon],
@@ -1207,7 +1208,10 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
   };
   region.polygonTree = {
     polygons: [{ points: createTestCirclePoints(region.shapes[0]) }],
-    testPoint: ({ x, y }) => Math.hypot(x, y) <= 100,
+    testPoint: ({ x, y }) => {
+      mixedSmokePointTests += 1;
+      return Math.hypot(x, y) <= 100;
+    },
     intersectPolygon() {
       differenceCalls += 1;
       return dispersedTree;
@@ -1360,16 +1364,71 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     globalThis.canvas.effects.lightSources.delete(distantLightSource);
     distantLightSource._destroy();
 
-    // The same two-dimensional mask on another Foundry elevation cannot disperse smoke for this observer.
+    // A light whose vertical sphere reaches this plane but originates at another elevation cannot use a planar
+    // Clipper difference. Its exact midpoint tests must stay on the indexed scalar path instead of rebuilding one
+    // rich smoke profile for every radial contour sample.
     const elevatedLightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(elevatedLightSource, {
       active: true,
-      data: { x: 100, y: 0, elevation: 10, bright: 200, dim: 200 }
+      data: { x: 100, y: 0, elevation: 1, bright: 200, dim: 200 }
     });
     elevatedLightSource._createShapes();
     globalThis.canvas.effects.lightSources.add(elevatedLightSource);
+    mixedSmokePointTests = 0;
     visionSource._createShapes();
-    assert.deepEqual(constrainedMasks.findLast(mask => mask.name === "los")?.constraint, surfaceExposureConstraint);
+    const mixedConstraint = constrainedMasks.findLast(mask => mask.name === "los")?.constraint;
+    assert.equal(
+      mixedSmokePointTests,
+      1,
+      "mixed planar/non-planar dispersion seeds native PolygonTree containment once per contour"
+    );
+
+    const radialBoundaryDistance = (points, origin, angle) => {
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      let result = 0;
+      for (let index = 0, previous = points.length - 2;
+        index < points.length;
+        previous = index, index += 2) {
+        const ax = points[previous] - origin.x;
+        const ay = points[previous + 1] - origin.y;
+        const edgeX = points[index] - points[previous];
+        const edgeY = points[index + 1] - points[previous + 1];
+        const denominator = (dx * edgeY) - (dy * edgeX);
+        if (Math.abs(denominator) <= 1e-9) continue;
+        const distance = ((ax * edgeY) - (ay * edgeX)) / denominator;
+        const edgeT = ((ax * dy) - (ay * dx)) / denominator;
+        if (distance >= -1e-6 && edgeT >= -1e-6 && edgeT <= 1 + 1e-6) {
+          result = Math.max(result, distance);
+        }
+      }
+      return result;
+    };
+    const origin = {
+      x: visionSource.data.x,
+      y: visionSource.data.y,
+      elevation: visionSource.data.elevation
+    };
+    for (const index of [1, 9, 15, 17, 23, 31]) {
+      const angle = (Math.PI * 2 * index) / 32;
+      const destination = {
+        x: origin.x + (Math.cos(angle) * 200),
+        y: origin.y + (Math.sin(angle) * 200),
+        elevation: origin.elevation
+      };
+      const reference = measureSmokePath(origin, destination, {
+        scene,
+        elevation: origin.elevation,
+        budget: 100,
+        chargeClearDistance: false,
+        useLightDispersion: true
+      });
+      const actual = radialBoundaryDistance(mixedConstraint.points, origin, angle);
+      assert.ok(
+        Math.abs(actual - reference.visibleDistance) <= 1e-6,
+        `mixed dispersion ray ${index}: ${actual} !== ${reference.visibleDistance}`
+      );
+    }
     assert.equal(differenceCalls, 2);
     globalThis.canvas.effects.lightSources.delete(elevatedLightSource);
     elevatedLightSource._destroy();
@@ -1502,7 +1561,7 @@ test("opaque smoke keeps special senses on a cached native wall-only collision",
   }
 });
 
-test("all smoke densities constrain one native LOS without synthetic CanvasEdges", () => {
+test("all smoke densities derive smooth exact masks from one native LOS without synthetic CanvasEdges", () => {
   const previous = {
     canvas: globalThis.canvas,
     game: globalThis.game,
@@ -1994,6 +2053,75 @@ test("all smoke densities constrain one native LOS without synthetic CanvasEdges
         && second.x < 100
         && Math.abs(first.x - second.x) > 20;
     }), true);
+
+    // Foundry reinitializes an active VisionSource on every interpolated Token
+    // frame. Each frame must therefore receive its own exact contour; freezing
+    // and translating a settled snapshot makes the smoke boundary visibly jerk.
+    // The indexed scalar solver keeps those exact frame-by-frame updates cheap.
+    const animatedRegion = createSmokeRegion("animated-vision-contour", 100);
+    globalThis.canvas.scene = createScene([animatedRegion]);
+    let animatedSmokePointTests = 0;
+    const nativeAnimatedTestPoint = animatedRegion.polygonTree.testPoint;
+    animatedRegion.polygonTree.testPoint = point => {
+      animatedSmokePointTests += 1;
+      return nativeAnimatedTestPoint(point);
+    };
+    const animatedVisionSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    const animatedOwner = {
+      document: { detectionModes: { basicSight: { enabled: true, range: 1 } } },
+      getLightRadius: range => range * 100
+    };
+    Object.assign(animatedVisionSource, {
+      data: { x: -20.25, y: 1.75, elevation: 0, externalRadius: 0 },
+      object: animatedOwner
+    });
+    animatedOwner.vision = animatedVisionSource;
+    retessellateNativeLos = false;
+    const animatedConstraints = [];
+    const animatedOrigins = [];
+    animatedSmokePointTests = 0;
+    for (let frame = 0; frame <= 30; frame++) {
+      animatedVisionSource.data.x = -20.25 + (frame / 10);
+      animatedVisionSource._createShapes();
+      const constraint = [...appliedConstraints.at(-1).points];
+      if (animatedConstraints.length) {
+        const previousConstraint = animatedConstraints.at(-1);
+        const frameShift = Math.max(
+          directedHausdorff(previousConstraint, constraint),
+          directedHausdorff(constraint, previousConstraint)
+        );
+        assert.ok(frameShift <= 1, `frame ${frame} contour jump was ${frameShift}`);
+      }
+      animatedOrigins.push({ x: animatedVisionSource.data.x, y: animatedVisionSource.data.y });
+      animatedConstraints.push(constraint);
+    }
+    const relativeSignatures = animatedConstraints.map((points, frame) => points.map((value, index) => {
+      const origin = animatedOrigins[frame];
+      const relative = value - (index % 2 ? origin.y : origin.x);
+      return Math.round(relative * 10000) / 10000;
+    }).join(","));
+    assert.ok(new Set(relativeSignatures).size > 20, "the exact mask evolves through interpolated frames");
+    assert.ok(animatedSmokePointTests > 0, "the moving mask is recalculated against native geometry");
+    assert.ok(
+      animatedSmokePointTests < animatedConstraints.length * 100,
+      "the scalar solver does not classify the PolygonTree once per ray and interval"
+    );
+    const animatedEndpointConstraint = animatedConstraints.at(-1);
+
+    const freshEndpointSource = new globalThis.CONFIG.Canvas.visionSourceClass();
+    Object.assign(freshEndpointSource, {
+      data: { ...animatedVisionSource.data },
+      object: {
+        document: { detectionModes: { basicSight: { enabled: true, range: 1 } } },
+        getLightRadius: range => range * 100
+      }
+    });
+    freshEndpointSource._createShapes();
+    assert.deepEqual(
+      animatedEndpointConstraint,
+      appliedConstraints.at(-1).points,
+      "the final animated contour equals a fresh exact calculation at the endpoint"
+    );
 
     globalThis.canvas.scene = createScene([]);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });

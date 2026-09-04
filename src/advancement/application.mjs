@@ -1654,10 +1654,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           reason: "abilityGranted"
         });
       }
-      if (!abilityHasEvolutions(entry.rootAbility ?? entry.ability)) {
-        this.#selectedAbilitySourceId = "";
-        this.#selectedAbilityFamilySourceId = "";
-      }
       this.#syncDraftFromActor();
     }
     return this.forceRender();
@@ -2226,7 +2222,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         .map(ability => {
           const familySourceId = String(ability?.id ?? "");
           const familyOwned = ownedFamilyRootIds.has(familySourceId);
-          if (familyOwned && !abilityHasEvolutions(ability)) return null;
           const currentOwnedSourceId = currentOwnedSourceIdByFamily.get(familySourceId);
           const currentOwnedEntry = this.#abilityById.get(currentOwnedSourceId);
           const evolutionExhausted = Boolean(
@@ -2258,8 +2253,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
             requirementContext: this.#abilityRequirementContext,
             skillByKey
           });
-        })
-        .filter(Boolean);
+        });
       return {
         ...category,
         displayName: isFeatures
@@ -2399,6 +2393,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   } = {}) {
     const sourceId = String(ability?.id ?? "");
     const resolvedFamilySourceId = String(familySourceId || sourceId);
+    const hasEvolution = familyHasEvolution == null ? abilityHasEvolutions(ability) : Boolean(familyHasEvolution);
     const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const cost = Math.max(0, toInteger(ability?.system?.cost));
     const research = researchBySourceId.get(sourceId) ?? null;
@@ -2439,7 +2434,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       evolutionParentIds,
       familyOwned,
       familySourceId: resolvedFamilySourceId,
-      hasEvolution: familyHasEvolution == null ? abilityHasEvolutions(ability) : Boolean(familyHasEvolution),
+      hasEvolution,
       isEvolution,
       isFeature,
       cost,
@@ -2464,7 +2459,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       selected: resolvedFamilySourceId === this.#selectedAbilityFamilySourceId
         || sourceId === this.#selectedAbilitySourceId,
       statusLabel: currentOwned
-        ? "Текущая версия"
+        ? (isEvolution || hasEvolution ? "Текущая версия" : "Изучено")
         : familyOwned
           ? "Эволюция активна"
           : evolutionAcquisitionBlocked

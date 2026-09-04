@@ -2,6 +2,10 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { getSmokeRuntimeProperties } from "../utils/region-special-properties.mjs";
 import { toOptionalFiniteNumber } from "../utils/numbers.mjs";
 import { regionBehaviorTargetsActor } from "./region-targeting.mjs";
+import { compileSmokeSegmentBvh, querySmokeSegmentBvh } from "./smoke-segment-bvh.mjs";
+// #region codex-runtime-debug smoke-fps-root-cause import
+import { smokeDebugRecord, smokeDebugStart } from "./smoke-runtime-debug.mjs";
+// #endregion codex-runtime-debug
 import {
   actorHasSmokePerceptionChange,
   effectHasSmokePerceptionChange,
@@ -30,6 +34,7 @@ let smokeRevisionByScene = new WeakMap();
 let smokeStructureRevisionByScene = new WeakMap();
 let smokeIndexSignatureByScene = new WeakMap();
 let smokeGeometryByPolygonTree = new WeakMap();
+let smokeGeometryByLightShape = new WeakMap();
 let smokeSignatureByScene = new WeakMap();
 let sourceConstraintCache = new WeakMap();
 let clearSmokeLosCache = new WeakMap();
@@ -157,6 +162,7 @@ export function registerSmokeVisionHooks() {
     smokeStructureRevisionByScene = new WeakMap();
     smokeIndexSignatureByScene = new WeakMap();
     smokeGeometryByPolygonTree = new WeakMap();
+    smokeGeometryByLightShape = new WeakMap();
     smokeSignatureByScene = new WeakMap();
     sourceConstraintCache = new WeakMap();
     clearSmokeLosCache = new WeakMap();
@@ -259,6 +265,9 @@ export function notifySmokeRegionAnimation(region, { previousState = null } = {}
   const token = regionDocument?.attachment?.token;
   const scene = regionDocument?.parent;
   if (!scene || !token || !hasActiveSmokeBehavior(regionDocument)) return false;
+  // #region codex-runtime-debug H1
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   const signature = [
     Boolean(regionObject?.isAnimating),
     exactAnimationNumber(token.x),
@@ -278,6 +287,15 @@ export function notifySmokeRegionAnimation(region, { previousState = null } = {}
     && globalThis.canvas?.ready
     && attachSmokeAnimationTicker();
   if (!hasTickerFlush) throw new Error("Attached smoke requires the active Foundry Canvas ticker");
+  // #region codex-runtime-debug H1
+  smokeDebugRecord({
+    message: "attached smoke region animation notification",
+    hypothesisId: "H1",
+    location: "src/canvas/smoke-vision.mjs:notifySmokeRegionAnimation",
+    startedAt: debugStartedAt,
+    values: { queued: Number(queued), pendingRegions: pendingSmokeAnimationChangesByScene.get(scene)?.size ?? 0 }
+  });
+  // #endregion codex-runtime-debug
   return queued;
 }
 
@@ -459,6 +477,14 @@ export function invalidateSmokeRegionIndex(scene = canvas?.scene, {
   bumpStructure = true
 } = {}) {
   if (!scene) return;
+  // #region codex-runtime-debug H5
+  smokeDebugRecord({
+    message: "smoke index invalidation",
+    hypothesisId: "H5",
+    location: "src/canvas/smoke-vision.mjs:invalidateSmokeRegionIndex",
+    values: { bumpRevision: Number(bumpRevision), bumpStructure: Number(bumpStructure) }
+  });
+  // #endregion codex-runtime-debug
   smokeIndexByScene.delete(scene);
   if (bumpRevision) smokeRevisionByScene.set(scene, (smokeRevisionByScene.get(scene) ?? 0) + 1);
   if (bumpStructure) {
@@ -476,6 +502,9 @@ export function getSmokeRegionIndex(scene = canvas?.scene) {
   if (!scene) return null;
   const cached = smokeIndexByScene.get(scene);
   if (cached) return cached;
+  // #region codex-runtime-debug H5
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   const entries = [];
   const buckets = new Map();
   const regionStates = new Map();
@@ -563,6 +592,15 @@ export function getSmokeRegionIndex(scene = canvas?.scene) {
     revision: smokeRevisionByScene.get(scene) ?? 0
   };
   smokeIndexByScene.set(scene, index);
+  // #region codex-runtime-debug H5
+  smokeDebugRecord({
+    message: "smoke spatial index rebuild",
+    hypothesisId: "H5",
+    location: "src/canvas/smoke-vision.mjs:getSmokeRegionIndex",
+    startedAt: debugStartedAt,
+    values: { entries: entries.length, buckets: buckets.size, regions: regionStates.size }
+  });
+  // #endregion codex-runtime-debug
   return index;
 }
 
@@ -1012,6 +1050,9 @@ function createSmokeLightShape(source, basePolygon) {
 }
 
 function buildSmokeLightConstraints(source, radius, brightRadius, dimRadius, regionCandidates) {
+  // #region codex-runtime-debug H2
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   const { x, y, elevation } = source.data;
   const cachedEntries = sourceConstraintCache.get(source) ?? [];
   const relativeSmokeState = createRelativeSmokeCandidateState(
@@ -1023,11 +1064,23 @@ function buildSmokeLightConstraints(source, radius, brightRadius, dimRadius, reg
     && entry.radius === radius
     && entry.brightRadius === brightRadius
     && entry.dimRadius === dimRadius);
-  if (cached) return {
-    bright: createTranslatedSmokePolygon(cached.relativeBrightPoints, x, y),
-    dim: createTranslatedSmokePolygon(cached.relativeDimPoints, x, y),
-    combined: createTranslatedSmokePolygon(cached.relativeCombinedPoints, x, y)
-  };
+  if (cached) {
+    const constraints = {
+      bright: createTranslatedSmokePolygon(cached.relativeBrightPoints, x, y),
+      dim: createTranslatedSmokePolygon(cached.relativeDimPoints, x, y),
+      combined: createTranslatedSmokePolygon(cached.relativeCombinedPoints, x, y)
+    };
+    // #region codex-runtime-debug H2
+    smokeDebugRecord({
+      message: "smoke light constraint cache hit",
+      hypothesisId: "H2",
+      location: "src/canvas/smoke-vision.mjs:buildSmokeLightConstraints",
+      startedAt: debugStartedAt,
+      values: { smokeRegions: regionCandidates.length }
+    });
+    // #endregion codex-runtime-debug
+    return constraints;
+  }
 
   const origin = { x, y, elevation };
   const anchors = getSmokeConstraintAnchors(
@@ -1107,6 +1160,20 @@ function buildSmokeLightConstraints(source, radius, brightRadius, dimRadius, reg
     relativeDimPoints: getRelativeSmokePolygonPoints(constraints.dim, x, y),
     relativeCombinedPoints: getRelativeSmokePolygonPoints(constraints.combined, x, y)
   });
+  // #region codex-runtime-debug H2
+  smokeDebugRecord({
+    message: "smoke light constraint cache miss",
+    hypothesisId: "H2",
+    location: "src/canvas/smoke-vision.mjs:buildSmokeLightConstraints",
+    startedAt: debugStartedAt,
+    values: {
+      smokeRegions: regionCandidates.length,
+      anchors: anchors.length,
+      traces: traceCache.size,
+      combinedPoints: combinedPoints.length / 2
+    }
+  });
+  // #endregion codex-runtime-debug
   return constraints;
 }
 
@@ -1380,11 +1447,12 @@ function writeDispersedSmokeGeometryCache(behavior, entries, value) {
   dispersedSmokeGeometryCache.set(behavior, [value, ...entries].slice(0, SOURCE_CONSTRAINT_CACHE_LIMIT));
 }
 
-function getMaximumSmokeLightDispersion(point, candidates) {
+function getMaximumSmokeLightDispersion(point, candidates, stats = null) {
   for (const { source } of candidates) {
     if (typeof source?.testPoint !== "function") {
       throw new Error(`LightSource ${source?.sourceId ?? "<unknown>"} has no native point test`);
     }
+    if (stats) stats.lightPointTests += 1;
     if (!source.testPoint(point)) continue;
     return 1;
   }
@@ -1427,6 +1495,9 @@ function isGlobalLightSource(source) {
 function buildSmokeVisionConstraint(source, radius, budget) {
   radius = Number.isFinite(radius) ? radius : (canvas.dimensions?.maxR ?? 0);
   if (!radius || budget === null) return null;
+  // #region codex-runtime-debug H2
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   const { x, y, elevation } = source.data;
   const targetActor = source.object?.actor ?? source.object?.document?.actor ?? null;
   const perceptionPercent = getActorSmokePerceptionPercent(targetActor);
@@ -1442,7 +1513,17 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     elevation,
     targetActor
   }).filter(requiresRayAttenuation);
-  if (!regionCandidates.length) return null;
+  if (!regionCandidates.length) {
+    // #region codex-runtime-debug H2,H3
+    smokeDebugRecord({
+      message: "smoke vision constraint without candidate region",
+      hypothesisId: ["H2", "H3"],
+      location: "src/canvas/smoke-vision.mjs:buildSmokeVisionConstraint",
+      startedAt: debugStartedAt
+    });
+    // #endregion codex-runtime-debug
+    return null;
+  }
   const lightCandidates = getSmokeDispersionCandidates(bounds, { elevation });
   const relativeLightState = createRelativeSmokeLightCandidateState(lightCandidates, { x, y, elevation });
   const relativeSmokeState = createRelativeSmokeCandidateState(
@@ -1456,9 +1537,26 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     && entry.budget === budget
     && entry.targetActorUuid === (targetActor?.uuid ?? "")
     && entry.perceptionPercent === perceptionPercent);
-  if (cached) return createTranslatedSmokePolygon(cached.relativePoints, x, y);
+  if (cached) {
+    const constraint = createTranslatedSmokePolygon(cached.relativePoints, x, y);
+    // #region codex-runtime-debug H2
+    smokeDebugRecord({
+      message: "smoke vision constraint cache hit",
+      hypothesisId: "H2",
+      location: "src/canvas/smoke-vision.mjs:buildSmokeVisionConstraint",
+      startedAt: debugStartedAt,
+      values: { smokeRegions: regionCandidates.length, lightCandidates: lightCandidates.length }
+    });
+    // #endregion codex-runtime-debug
+    return constraint;
+  }
   const origin = { x, y, elevation };
   const anchors = getSmokeConstraintAnchors(origin, radius, regionCandidates, lightCandidates);
+  const rayTracer = createSmokeVisionRayTracer(origin, radius, budget, {
+    regionCandidates,
+    lightCandidates,
+    densityAdjustment
+  });
   const traceCache = new Map();
   const trace = rawAngle => {
     const angle = normalizeConstraintAngle(rawAngle);
@@ -1466,19 +1564,7 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     if (cachedTrace) return cachedTrace;
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-    const destination = { x: x + (dx * radius), y: y + (dy * radius), elevation };
-    const profile = buildSmokePathProfile(origin, destination, {
-      elevation,
-      regionCandidates,
-      useLightDispersion: true,
-      lightCandidates,
-      densityAdjustment
-    });
-    const smokeCost = calculateProfileCost(profile, { chargeClearDistance: false });
-    const traversed = budget === Infinity
-      ? smokeCost !== Infinity
-      : smokeCost <= Math.max(0, Number(budget) || 0) + EPSILON;
-    const distance = calculateProfileVisibleDistance(profile, budget, { chargeClearDistance: false });
+    const { distance, traversed } = rayTracer(dx, dy);
     const result = { angle, dx, dy, distance, traversed };
     traceCache.set(angle, result);
     return result;
@@ -1533,7 +1619,410 @@ function buildSmokeVisionConstraint(source, radius, budget) {
     perceptionPercent,
     relativePoints: getRelativeSmokePolygonPoints(constraint, x, y)
   });
+  // #region codex-runtime-debug H2
+  smokeDebugRecord({
+    message: "smoke vision constraint cache miss",
+    hypothesisId: "H2",
+    location: "src/canvas/smoke-vision.mjs:buildSmokeVisionConstraint",
+    startedAt: debugStartedAt,
+    values: {
+      smokeRegions: regionCandidates.length,
+      lightCandidates: lightCandidates.length,
+      anchors: anchors.length,
+      traces: traceCache.size,
+      fastTraces: rayTracer.stats.fastTraces,
+      fallbackTraces: rayTracer.stats.fallbackTraces,
+      raySegmentTests: rayTracer.stats.raySegmentTests,
+      lightSegmentTests: rayTracer.stats.lightSegmentTests,
+      lightPointTests: rayTracer.stats.lightPointTests,
+      nonPlanarLights: rayTracer.stats.nonPlanarLights,
+      polygonPointTests: rayTracer.stats.polygonPointTests,
+      points: points.length / 2
+    }
+  });
+  // #endregion codex-runtime-debug
   return constraint;
+}
+
+/**
+ * Compile the immutable smoke geometry once for an entire radial contour. The
+ * general path API deliberately returns rich segment profiles, but a vision
+ * contour asks the same scalar question hundreds of times: how far can this
+ * one ray travel? Keeping that hot path scalar avoids rebuilding Maps, Sets,
+ * profile objects, and the same dispersed PolygonTree for every angle.
+ */
+function createSmokeVisionRayTracer(origin, radius, budget, {
+  regionCandidates,
+  lightCandidates,
+  densityAdjustment
+}) {
+  const stats = {
+    fastTraces: 0,
+    fallbackTraces: 0,
+    intervalFallbacks: 0,
+    raySegmentTests: 0,
+    lightSegmentTests: 0,
+    lightPointTests: 0,
+    nonPlanarLights: 0,
+    polygonPointTests: 0
+  };
+  const prepared = prepareSmokeVisionRayGeometry(origin, regionCandidates, lightCandidates, {
+    densityAdjustment,
+    stats
+  });
+  const destination = { x: origin.x, y: origin.y, elevation: origin.elevation };
+  const maximumCost = budget === Infinity ? Infinity : Math.max(0, Number(budget) || 0);
+  let trace;
+  if (prepared) {
+    trace = (dx, dy) => {
+      stats.fastTraces += 1;
+      destination.x = origin.x + (dx * radius);
+      destination.y = origin.y + (dy * radius);
+      return tracePreparedSmokeBudgetRay(origin, destination, radius, maximumCost, prepared, stats);
+    };
+  } else {
+    trace = (dx, dy) => {
+      stats.fallbackTraces += 1;
+      destination.x = origin.x + (dx * radius);
+      destination.y = origin.y + (dy * radius);
+      const profile = buildSmokePathProfile(origin, destination, {
+        elevation: origin.elevation,
+        regionCandidates,
+        useLightDispersion: true,
+        lightCandidates,
+        densityAdjustment
+      });
+      const smokeCost = calculateProfileCost(profile, { chargeClearDistance: false });
+      return {
+        traversed: maximumCost === Infinity ? smokeCost !== Infinity : smokeCost <= maximumCost + EPSILON,
+        distance: calculateProfileVisibleDistance(profile, maximumCost, { chargeClearDistance: false })
+      };
+    };
+  }
+  trace.stats = stats;
+  return trace;
+}
+
+function prepareSmokeVisionRayGeometry(origin, regionCandidates, lightCandidates, {
+  densityAdjustment,
+  stats
+}) {
+  const hasLightDispersion = lightCandidates.length > 0;
+  const usePlanarDifference = hasLightDispersion
+    && lightCandidates.every(candidate => candidate.planarDifference !== false);
+  const useRayDispersion = hasLightDispersion && !usePlanarDifference;
+  stats.nonPlanarLights = lightCandidates.reduce(
+    (count, candidate) => count + Number(candidate.planarDifference === false),
+    0
+  );
+  const groupsByGeometry = new Map();
+  for (const entry of regionCandidates) {
+    let geometry = entry.geometry;
+    if (usePlanarDifference) {
+      geometry = getDispersedSmokeGeometry(entry, lightCandidates);
+      if (!geometry) return null;
+    }
+    if (!geometry?.polygonTree || !Array.isArray(geometry.segments)) return null;
+    // A base Region with no planar segments may require its native 3D movement
+    // segmentizer. An empty planar difference, in contrast, is exactly empty.
+    if (!geometry.segments.length && !usePlanarDifference) return null;
+
+    let group = groupsByGeometry.get(geometry);
+    if (!group) {
+      const originInside = geometry.segments.length
+        ? Boolean(geometry.polygonTree.testPoint(origin))
+        : false;
+      stats.polygonPointTests += Number(geometry.segments.length > 0);
+      group = {
+        geometry,
+        originInside,
+        originOnBoundary: geometry.segments.length
+          ? isPointOnSmokeGeometryBoundary(origin, geometry.segments)
+          : false,
+        retained: 1,
+        intervals: [],
+        intersections: [],
+        segmentCandidates: [],
+        bvhStack: []
+      };
+      groupsByGeometry.set(geometry, group);
+    }
+    const density = Math.max(0, Number(entry.smoke?.density) || 0);
+    const perceivedDensity = Math.min(1, density + densityAdjustment);
+    group.retained *= 1 - perceivedDensity;
+  }
+  return {
+    groups: [...groupsByGeometry.values()],
+    breakpoints: [],
+    rayDispersionCandidates: useRayDispersion ? lightCandidates : [],
+    rayDispersionBoundaries: useRayDispersion
+      ? lightCandidates.map(candidate => ({
+        candidate,
+        geometry: getSmokeLightShapeGeometry(candidate),
+        segmentCandidates: [],
+        bvhStack: []
+      }))
+      : [],
+    dispersionPoint: { x: origin.x, y: origin.y, elevation: origin.elevation }
+  };
+}
+
+function tracePreparedSmokeBudgetRay(origin, destination, radius, maximumCost, prepared, stats) {
+  const groups = prepared.groups;
+  for (const group of groups) {
+    getFastPolygonTreeRayIntervals(group, origin, destination, group.intervals, stats);
+  }
+  if (groups.length === 1 && !prepared.rayDispersionCandidates.length) {
+    return traceSingleSmokeIntervalGroup(groups[0].intervals, groups[0].retained, radius, maximumCost);
+  }
+
+  const breakpoints = prepared.breakpoints;
+  breakpoints.length = 2;
+  breakpoints[0] = 0;
+  breakpoints[1] = 1;
+  for (const group of groups) {
+    for (let index = 0; index < group.intervals.length; index += 2) {
+      breakpoints.push(group.intervals[index], group.intervals[index + 1]);
+    }
+  }
+  for (const candidate of prepared.rayDispersionBoundaries) {
+    addIndexedSmokeLightRayBreakpoints(breakpoints, candidate, origin, destination, stats);
+  }
+  breakpoints.sort((left, right) => left - right);
+  let uniqueLength = 0;
+  for (let index = 0; index < breakpoints.length; index += 1) {
+    const value = breakpoints[index];
+    if (uniqueLength && Object.is(value, breakpoints[uniqueLength - 1])) continue;
+    breakpoints[uniqueLength++] = value;
+  }
+  breakpoints.length = uniqueLength;
+
+  let remaining = maximumCost;
+  let accumulatedCost = 0;
+  for (let index = 1; index < breakpoints.length; index += 1) {
+    const start = breakpoints[index - 1];
+    const end = breakpoints[index];
+    if (end - start <= EPSILON) continue;
+    const midpoint = (start + end) / 2;
+    let retained = 1;
+    for (const group of groups) {
+      if (smokeIntervalsContainT(group.intervals, midpoint)) retained *= group.retained;
+    }
+    if (Math.abs(retained - 1) <= EPSILON) continue;
+    if (prepared.rayDispersionCandidates.length) {
+      const point = prepared.dispersionPoint;
+      point.x = origin.x + ((destination.x - origin.x) * midpoint);
+      point.y = origin.y + ((destination.y - origin.y) * midpoint);
+      if (getMaximumSmokeLightDispersion(point, prepared.rayDispersionCandidates, stats) >= 1 - EPSILON) retained = 1;
+      if (Math.abs(retained - 1) <= EPSILON) continue;
+    }
+    if (retained <= EPSILON) {
+      return { traversed: false, distance: start * radius };
+    }
+    const segmentCost = (radius * (end - start)) / retained;
+    accumulatedCost += segmentCost;
+    if (remaining + EPSILON < segmentCost) {
+      return { traversed: false, distance: (start * radius) + (remaining * retained) };
+    }
+    remaining -= segmentCost;
+  }
+  return {
+    traversed: maximumCost === Infinity ? accumulatedCost !== Infinity : accumulatedCost <= maximumCost + EPSILON,
+    distance: radius
+  };
+}
+
+function getSmokeLightShapeGeometry(candidate) {
+  const shape = candidate?.source?.shape;
+  const points = shape?.points;
+  // Match addPolygonRayBreakpoints: a shape without one native flat polygon
+  // contributes no known topology events, but its native testPoint still
+  // classifies the intervals supplied by the smoke geometry.
+  if (!shape || !Array.isArray(points) || points.length < 6) return null;
+  const version = Number(candidate?.ranges?.version) || 0;
+  const cached = smokeGeometryByLightShape.get(shape);
+  if (cached?.version === version) return cached.geometry;
+  const geometry = createSmokeGeometry(null, [shape]);
+  smokeGeometryByLightShape.set(shape, { version, geometry });
+  return geometry;
+}
+
+function addIndexedSmokeLightRayBreakpoints(breakpoints, preparedCandidate, from, to, stats) {
+  const geometry = preparedCandidate.geometry;
+  if (!geometry?.segments.length) return;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const segmentCandidates = querySmokeSegmentBvh(
+    geometry.segmentBvh,
+    from.x,
+    from.y,
+    to.x,
+    to.y,
+    preparedCandidate.segmentCandidates,
+    preparedCandidate.bvhStack
+  );
+  for (const segmentIndex of segmentCandidates) {
+    const segment = geometry.segments[segmentIndex];
+    stats.raySegmentTests += 1;
+    stats.lightSegmentTests += 1;
+    const edgeDx = segment.b.x - segment.a.x;
+    const edgeDy = segment.b.y - segment.a.y;
+    const denominator = (dx * edgeDy) - (dy * edgeDx);
+    if (Math.abs(denominator) <= EPSILON) continue;
+    const offsetX = segment.a.x - from.x;
+    const offsetY = segment.a.y - from.y;
+    const t = ((offsetX * edgeDy) - (offsetY * edgeDx)) / denominator;
+    const u = ((offsetX * dy) - (offsetY * dx)) / denominator;
+    if (t < -EPSILON || t > 1 + EPSILON || u < -EPSILON || u > 1 + EPSILON) continue;
+    breakpoints.push(Math.max(0, Math.min(1, t)));
+  }
+}
+
+function traceSingleSmokeIntervalGroup(intervals, retained, radius, maximumCost) {
+  let remaining = maximumCost;
+  let accumulatedCost = 0;
+  for (let index = 0; index < intervals.length; index += 2) {
+    const start = intervals[index];
+    const end = intervals[index + 1];
+    if (end - start <= EPSILON || Math.abs(retained - 1) <= EPSILON) continue;
+    if (retained <= EPSILON) return { traversed: false, distance: start * radius };
+    const segmentCost = (radius * (end - start)) / retained;
+    accumulatedCost += segmentCost;
+    if (remaining + EPSILON < segmentCost) {
+      return { traversed: false, distance: (start * radius) + (remaining * retained) };
+    }
+    remaining -= segmentCost;
+  }
+  return {
+    traversed: maximumCost === Infinity ? accumulatedCost !== Infinity : accumulatedCost <= maximumCost + EPSILON,
+    distance: radius
+  };
+}
+
+function smokeIntervalsContainT(intervals, t) {
+  for (let index = 0; index < intervals.length; index += 2) {
+    if (t >= intervals[index] - EPSILON && t <= intervals[index + 1] + EPSILON) return true;
+  }
+  return false;
+}
+
+/**
+ * A non-degenerate ray crosses each PolygonTree boundary alternately. Foundry
+ * already represents Region geometry as a nested even/odd PolygonTree, so one
+ * native containment query at the origin is enough to classify every interval.
+ * Vertex and collinear cases intentionally fall back to the reference midpoint
+ * classifier instead of guessing at boundary parity.
+ */
+function getFastPolygonTreeRayIntervals(group, from, to, output, stats) {
+  output.length = 0;
+  const geometry = group.geometry;
+  if (!geometry.segments.length) return output;
+  if (group.originOnBoundary) {
+    stats.intervalFallbacks += 1;
+    return copySmokeIntervals(getPolygonTreeRayIntervals(
+      geometry,
+      from,
+      to,
+      stats,
+      group.segmentCandidates,
+      group.bvhStack
+    ), output);
+  }
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const minX = Math.min(from.x, to.x);
+  const maxX = Math.max(from.x, to.x);
+  const minY = Math.min(from.y, to.y);
+  const maxY = Math.max(from.y, to.y);
+  const intersections = group.intersections;
+  intersections.length = 0;
+  let ambiguous = false;
+  const segmentCandidates = querySmokeSegmentBvh(
+    geometry.segmentBvh,
+    from.x,
+    from.y,
+    to.x,
+    to.y,
+    group.segmentCandidates,
+    group.bvhStack
+  );
+  for (const segmentIndex of segmentCandidates) {
+    const segment = geometry.segments[segmentIndex];
+    if (segment.maxX < minX || segment.minX > maxX || segment.maxY < minY || segment.minY > maxY) continue;
+    stats.raySegmentTests += 1;
+    const edgeDx = segment.b.x - segment.a.x;
+    const edgeDy = segment.b.y - segment.a.y;
+    const denominator = (dx * edgeDy) - (dy * edgeDx);
+    if (Math.abs(denominator) <= EPSILON) {
+      const collinearity = ((segment.a.x - from.x) * dy) - ((segment.a.y - from.y) * dx);
+      if (Math.abs(collinearity) <= EPSILON * Math.max(1, Math.abs(dx) + Math.abs(dy))) ambiguous = true;
+      continue;
+    }
+    const offsetX = segment.a.x - from.x;
+    const offsetY = segment.a.y - from.y;
+    const t = ((offsetX * edgeDy) - (offsetY * edgeDx)) / denominator;
+    const u = ((offsetX * dy) - (offsetY * dx)) / denominator;
+    if (t < -EPSILON || t > 1 + EPSILON || u < -EPSILON || u > 1 + EPSILON) continue;
+    if (u <= EPSILON || u >= 1 - EPSILON || t <= EPSILON) {
+      ambiguous = true;
+      break;
+    }
+    if (t < 1 - EPSILON) intersections.push(Math.max(0, Math.min(1, t)));
+  }
+  if (!ambiguous && intersections.length > 1) {
+    intersections.sort((left, right) => left - right);
+    for (let index = 1; index < intersections.length; index += 1) {
+      if (intersections[index] - intersections[index - 1] <= EPSILON) {
+        ambiguous = true;
+        break;
+      }
+    }
+  }
+  if (ambiguous) {
+    stats.intervalFallbacks += 1;
+    return copySmokeIntervals(getPolygonTreeRayIntervals(
+      geometry,
+      from,
+      to,
+      stats,
+      group.segmentCandidates,
+      group.bvhStack
+    ), output);
+  }
+
+  let inside = group.originInside;
+  let start = 0;
+  for (const intersection of intersections) {
+    if (inside && intersection - start > EPSILON) output.push(start, intersection);
+    inside = !inside;
+    start = intersection;
+  }
+  if (inside && 1 - start > EPSILON) output.push(start, 1);
+  return output;
+}
+
+function copySmokeIntervals(intervals, output) {
+  output.length = 0;
+  for (const [start, end] of intervals) output.push(start, end);
+  return output;
+}
+
+function isPointOnSmokeGeometryBoundary(point, segments) {
+  for (const segment of segments) {
+    if (point.x < segment.minX - EPSILON || point.x > segment.maxX + EPSILON
+      || point.y < segment.minY - EPSILON || point.y > segment.maxY + EPSILON) continue;
+    const dx = segment.b.x - segment.a.x;
+    const dy = segment.b.y - segment.a.y;
+    const lengthSquared = (dx * dx) + (dy * dy);
+    if (lengthSquared <= EPSILON * EPSILON) continue;
+    const rawT = (((point.x - segment.a.x) * dx) + ((point.y - segment.a.y) * dy)) / lengthSquared;
+    const t = Math.max(0, Math.min(1, rawT));
+    const offsetX = point.x - (segment.a.x + (dx * t));
+    const offsetY = point.y - (segment.a.y + (dy * t));
+    if ((offsetX * offsetX) + (offsetY * offsetY) <= EPSILON * EPSILON) return true;
+  }
+  return false;
 }
 
 function createRelativeSmokeCandidateState(entries, origin) {
@@ -1979,10 +2468,9 @@ function requiresRayAttenuation(entry) {
 }
 
 /**
- * The rendered LOS contains smoke. Special wall-aware senses which use
- * Foundry's default LOS method must keep their original wall-only semantics.
- * A direct native collision test is substantially cheaper than constructing a
- * second full LOS polygon for every vision source and is cached per test point.
+ * Special wall-aware senses keep their original wall-only semantics. A direct
+ * native collision test is cached per test point and remains independent from
+ * the radial smoke presentation mask.
  */
 function patchSpecialSenseSmokeLos({ required = false } = {}) {
   const DetectionMode = globalThis.foundry?.canvas?.perception?.DetectionMode;
@@ -2073,7 +2561,14 @@ function getRegionRayIntervals(entry, from, to, elevation, geometryOverride) {
     .filter(([a, b]) => b - a > EPSILON);
 }
 
-function getPolygonTreeRayIntervals(geometry, from, to) {
+function getPolygonTreeRayIntervals(
+  geometry,
+  from,
+  to,
+  stats = null,
+  segmentCandidates = [],
+  bvhStack = []
+) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const minX = Math.min(from.x, to.x);
@@ -2081,7 +2576,17 @@ function getPolygonTreeRayIntervals(geometry, from, to) {
   const minY = Math.min(from.y, to.y);
   const maxY = Math.max(from.y, to.y);
   const intersections = [0, 1];
-  for (const segment of geometry.segments) {
+  querySmokeSegmentBvh(
+    geometry.segmentBvh,
+    from.x,
+    from.y,
+    to.x,
+    to.y,
+    segmentCandidates,
+    bvhStack
+  );
+  for (const segmentIndex of segmentCandidates) {
+    const segment = geometry.segments[segmentIndex];
     if (segment.maxX < minX || segment.minX > maxX || segment.maxY < minY || segment.minY > maxY) continue;
     const edgeDx = segment.b.x - segment.a.x;
     const edgeDy = segment.b.y - segment.a.y;
@@ -2105,6 +2610,7 @@ function getPolygonTreeRayIntervals(geometry, from, to) {
     const end = unique[i];
     if (end - start <= EPSILON) continue;
     const midpoint = (start + end) / 2;
+    if (stats) stats.polygonPointTests += 1;
     if (!geometry.polygonTree.testPoint({
       x: from.x + (dx * midpoint),
       y: from.y + (dy * midpoint)
@@ -2174,6 +2680,7 @@ function createSmokeGeometry(polygonTree, polygons) {
     polygonTree,
     polygons,
     segments,
+    segmentBvh: compileSmokeSegmentBvh(segments),
     anchorX,
     anchorY,
     localPoints
@@ -2329,11 +2836,33 @@ function flushAnimatedSmokeFrame() {
   const scene = globalThis.canvas?.scene;
   const changes = scene && pendingSmokeAnimationChangesByScene.get(scene);
   if (!scene || !changes?.size || pendingSmokeAnimationCommitsByScene.has(scene)) return;
+  // #region codex-runtime-debug H1,H3
+  const debugStartedAt = smokeDebugStart();
+  let debugCommit = null;
+  // #endregion codex-runtime-debug
   try {
-    pendingSmokeAnimationCommitsByScene.set(scene, refreshAnimatedSmokeSources(scene, changes));
+    debugCommit = refreshAnimatedSmokeSources(scene, changes);
+    pendingSmokeAnimationCommitsByScene.set(scene, debugCommit);
     smokeAnimationFailureKeyByScene.delete(scene);
   } catch (error) {
     reportAnimatedSmokeFailure(scene, changes, error);
+  // #region codex-runtime-debug H1,H3
+  } finally {
+    smokeDebugRecord({
+      message: "animated smoke refresh transaction",
+      hypothesisId: ["H1", "H3"],
+      location: "src/canvas/smoke-vision.mjs:flushAnimatedSmokeFrame",
+      startedAt: debugStartedAt,
+      values: {
+        changedRegions: changes.size,
+        affectedLightingSources: debugCommit?.affectedLightingSources?.length ?? 0,
+        affectedVisionSources: debugCommit?.affectedVisionSources?.length ?? 0,
+        sharedFogTokens: debugCommit?.sharedFogTokens?.length ?? 0,
+        consumerZones: debugCommit?.lightingConsumerZones?.length ?? 0,
+        refreshDarknessTexture: Number(Boolean(debugCommit?.refreshDarknessTexture))
+      }
+    });
+  // #endregion codex-runtime-debug
   }
 }
 
@@ -2342,6 +2871,9 @@ function commitAnimatedSmokeFrame() {
   let commit = scene && pendingSmokeAnimationCommitsByScene.get(scene);
   if (!scene || !commit) return true;
   const changes = pendingSmokeAnimationChangesByScene.get(scene);
+  // #region codex-runtime-debug H1,H3
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   try {
     if (commit.awaitingNativeVisibility) {
       const refreshVisibility = canvas.visibility?.refresh;
@@ -2381,6 +2913,22 @@ function commitAnimatedSmokeFrame() {
   } catch (error) {
     reportAnimatedSmokeFailure(scene, changes, error);
     return false;
+  // #region codex-runtime-debug H1,H3
+  } finally {
+    smokeDebugRecord({
+      message: "animated smoke commit transaction",
+      hypothesisId: ["H1", "H3"],
+      location: "src/canvas/smoke-vision.mjs:commitAnimatedSmokeFrame",
+      startedAt: debugStartedAt,
+      values: {
+        changedRegions: changes?.size ?? 0,
+        affectedLightingSources: commit?.affectedLightingSources?.length ?? 0,
+        affectedVisionSources: commit?.affectedVisionSources?.length ?? 0,
+        sharedFogTokens: commit?.sharedFogTokens?.length ?? 0,
+        awaitingNativeVisibility: Number(Boolean(commit?.awaitingNativeVisibility))
+      }
+    });
+  // #endregion codex-runtime-debug
   }
 }
 
@@ -2423,6 +2971,9 @@ function reportAnimatedSmokeFailure(scene, changes, error) {
 }
 
 function refreshAnimatedSmokeSources(scene, changes) {
+  // #region codex-runtime-debug H3
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   const spatialUpdate = updateAnimatedSmokeRegionIndex(scene, changes);
   const { index, currentStates, densityZones, darknessZones, refreshDarknessTexture } = spatialUpdate;
   if (refreshDarknessTexture) {
@@ -2566,6 +3117,24 @@ function refreshAnimatedSmokeSources(scene, changes) {
     for (const influence of influences) lightingConsumerZones.push(createSmokeConsumerZone(influence));
   }
 
+  // #region codex-runtime-debug H3
+  smokeDebugRecord({
+    message: "animated smoke source fan-out",
+    hypothesisId: "H3",
+    location: "src/canvas/smoke-vision.mjs:refreshAnimatedSmokeSources",
+    startedAt: debugStartedAt,
+    values: {
+      changedRegions: changes?.size ?? 0,
+      totalLightSources: allLightSources.length,
+      totalDarknessSources: darknessSources.length,
+      totalVisionSources: allVisionSources.length,
+      affectedLightingSources: affectedLightingSources.length,
+      affectedVisionSources: affectedVisionSources.length,
+      sharedFogTokens: sharedFogTokens.length,
+      consumerZones: lightingConsumerZones.length
+    }
+  });
+  // #endregion codex-runtime-debug
   return {
     scene,
     currentStates,
@@ -2725,6 +3294,9 @@ function captureSmokeSourceTransactionState(source) {
 }
 
 function initializeExactSmokeSource(source) {
+  // #region codex-runtime-debug H3
+  const debugStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   const collectionName = source?.constructor?.effectsCollection;
   const collection = canvas.effects?.[collectionName];
   const sourceId = source?.sourceId;
@@ -2761,6 +3333,14 @@ function initializeExactSmokeSource(source) {
   if (source.attached !== true || collection.get?.(sourceId) !== source) {
     throw new Error(`Native source ${sourceId} left effects.${collectionName} during exact initialization`);
   }
+  // #region codex-runtime-debug H3
+  smokeDebugRecord({
+    message: `exact smoke ${collectionName} source initialization`,
+    hypothesisId: "H3",
+    location: "src/canvas/smoke-vision.mjs:initializeExactSmokeSource",
+    startedAt: debugStartedAt
+  });
+  // #endregion codex-runtime-debug
 }
 
 function isEffectSourceAuthoritativelyOwned(source) {
@@ -2884,6 +3464,9 @@ function getEmittedEffectEdgePriority(source, influence) {
 }
 
 function commitAnimatedSmokeRender(commit) {
+  // #region codex-runtime-debug H1,H3
+  const debugInitializeStartedAt = smokeDebugStart();
+  // #endregion codex-runtime-debug
   initializeAnimatedSmokeCommitSources(commit);
   const {
     scene,
@@ -2895,6 +3478,18 @@ function commitAnimatedSmokeRender(commit) {
     lightingConsumerZones,
     transactionStates
   } = commit;
+  // #region codex-runtime-debug H1,H3
+  smokeDebugRecord({
+    message: "animated smoke source initialization phase",
+    hypothesisId: ["H1", "H3"],
+    location: "src/canvas/smoke-vision.mjs:commitAnimatedSmokeRender:init",
+    startedAt: debugInitializeStartedAt,
+    values: {
+      affectedLightingSources: affectedLightingSources.length,
+      affectedVisionSources: affectedVisionSources.length
+    }
+  });
+  // #endregion codex-runtime-debug
   const changedConstraintTypes = new Set();
   for (const source of affectedLightingSources) {
     const before = transactionStates.get(source);
@@ -2905,7 +3500,19 @@ function commitAnimatedSmokeRender(commit) {
     } else if (getEffectSourcePriority(source) > 0) changedConstraintTypes.add("darkness");
   }
   if (changedConstraintTypes.size) {
+    // #region codex-runtime-debug H3
+    const debugConstraintsStartedAt = smokeDebugStart();
+    // #endregion codex-runtime-debug
     updateAffectedRegionShapeConstraints(scene, changedConstraintTypes, lightingConsumerZones);
+    // #region codex-runtime-debug H3
+    smokeDebugRecord({
+      message: "animated smoke region constraint update",
+      hypothesisId: "H3",
+      location: "src/canvas/smoke-vision.mjs:commitAnimatedSmokeRender:region-constraints",
+      startedAt: debugConstraintsStartedAt,
+      values: { constraintTypes: changedConstraintTypes.size, consumerZones: lightingConsumerZones.length }
+    });
+    // #endregion codex-runtime-debug
   }
 
   const perceptionFlags = canvas.perception?.renderFlags;
@@ -2914,6 +3521,11 @@ function commitAnimatedSmokeRender(commit) {
   const nativeVisionCommit = hasPendingFlag("refreshVision");
   const nativeVisionSourceRefresh = hasPendingFlag("refreshVisionSources");
   const nativeVisionModeCommit = hasPendingFlag("initializeVisionModes");
+  // #region codex-runtime-debug H3
+  const debugSourceRefreshStartedAt = smokeDebugStart();
+  let debugLightingRefreshes = 0;
+  let debugVisionRefreshes = 0;
+  // #endregion codex-runtime-debug
 
   let globalVisionModeChanged = commit.globalVisionModeRefreshRequired;
   if (visionModeChanged && !nativeVisionModeCommit) {
@@ -2948,14 +3560,36 @@ function commitAnimatedSmokeRender(commit) {
       : affectedLightingSources;
     for (const source of lightingSources) {
       source.refresh();
+      // #region codex-runtime-debug H3
+      debugLightingRefreshes += 1;
+      // #endregion codex-runtime-debug
       reconcileSmokeSourceMeshes(source, { vision: false });
       refreshAffectedAmbientLightField(source);
     }
   }
   for (const source of affectedVisionSources) {
-    if (!nativeLightingCommit || !nativeVisionSourceRefresh) source.refresh();
+    if (!nativeLightingCommit || !nativeVisionSourceRefresh) {
+      source.refresh();
+      // #region codex-runtime-debug H3
+      debugVisionRefreshes += 1;
+      // #endregion codex-runtime-debug
+    }
     if (!nativeLightingCommit) reconcileSmokeSourceMeshes(source, { vision: true });
   }
+  // #region codex-runtime-debug H3
+  smokeDebugRecord({
+    message: "animated smoke source refresh phase",
+    hypothesisId: "H3",
+    location: "src/canvas/smoke-vision.mjs:commitAnimatedSmokeRender:source-refresh",
+    startedAt: debugSourceRefreshStartedAt,
+    values: {
+      lightingRefreshes: debugLightingRefreshes,
+      visionRefreshes: debugVisionRefreshes,
+      nativeLightingCommit: Number(nativeLightingCommit),
+      nativeVisionSourceRefresh: Number(nativeVisionSourceRefresh)
+    }
+  });
+  // #endregion codex-runtime-debug
   const emitsLightingRefresh = !nativeLightingCommit
     && Boolean(
       refreshDarknessTexture
@@ -3022,10 +3656,22 @@ function commitAnimatedSmokeRender(commit) {
       throw new Error("Foundry CanvasVisibility.refresh is required for attached smoke");
     }
     strictSmokeVisionInitializationDepth += 1;
+    // #region codex-runtime-debug H1,H3
+    const debugVisibilityStartedAt = smokeDebugStart();
+    // #endregion codex-runtime-debug
     try {
       refreshVisibility.call(canvas.visibility);
     } finally {
       strictSmokeVisionInitializationDepth -= 1;
+      // #region codex-runtime-debug H1,H3
+      smokeDebugRecord({
+        message: "animated smoke visibility refresh",
+        hypothesisId: ["H1", "H3"],
+        location: "src/canvas/smoke-vision.mjs:commitAnimatedSmokeRender:visibility",
+        startedAt: debugVisibilityStartedAt,
+        values: { sharedFogTokens: sharedFogTokens.length }
+      });
+      // #endregion codex-runtime-debug
     }
   }
   if (requiresVisibility && !hasPendingFlag("refreshOcclusionMask")) {
@@ -3033,7 +3679,18 @@ function commitAnimatedSmokeRender(commit) {
     if (typeof refreshOcclusionMask !== "function") {
       throw new Error("Foundry occlusion-mask refresh is required for attached smoke");
     }
+    // #region codex-runtime-debug H1,H3
+    const debugOcclusionStartedAt = smokeDebugStart();
+    // #endregion codex-runtime-debug
     refreshOcclusionMask.call(canvas.masks.occlusion);
+    // #region codex-runtime-debug H1,H3
+    smokeDebugRecord({
+      message: "animated smoke occlusion refresh",
+      hypothesisId: ["H1", "H3"],
+      location: "src/canvas/smoke-vision.mjs:commitAnimatedSmokeRender:occlusion",
+      startedAt: debugOcclusionStartedAt
+    });
+    // #endregion codex-runtime-debug
   }
   return true;
 }
@@ -3411,6 +4068,18 @@ function unionBounds(boundsList) {
 }
 
 function scheduleSmokeRefresh({ forceRendering = false, forceVision = false } = {}) {
+  // #region codex-runtime-debug H5
+  smokeDebugRecord({
+    message: "smoke refresh scheduled",
+    hypothesisId: "H5",
+    location: "src/canvas/smoke-vision.mjs:scheduleSmokeRefresh",
+    values: {
+      alreadyPending: Number(Boolean(scheduleSmokeRefresh.pending)),
+      forceRendering: Number(Boolean(forceRendering)),
+      forceVision: Number(Boolean(forceVision))
+    }
+  });
+  // #endregion codex-runtime-debug
   scheduleSmokeRefresh.forceRendering ||= forceRendering;
   scheduleSmokeRefresh.forceVision ||= forceVision;
   if (scheduleSmokeRefresh.pending) return;
@@ -3427,6 +4096,12 @@ function scheduleSmokeRefresh({ forceRendering = false, forceVision = false } = 
 
 export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = false } = {}) {
   if (!canvas?.ready || !canvas.scene) return;
+  // #region codex-runtime-debug H4,H5
+  const debugStartedAt = smokeDebugStart();
+  let debugCreatedPairs = 0;
+  let debugDestroyedPairs = 0;
+  let debugUpdatedPairs = 0;
+  // #endregion codex-runtime-debug
   const index = getSmokeRegionIndex(canvas.scene);
   const desired = new Map();
   for (const entry of index?.entries ?? []) desired.set(entry.behavior.uuid, entry);
@@ -3449,6 +4124,9 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
     destroySmokeMeshPair(uuid, meshes);
     smokeMeshes.delete(uuid);
     renderingChanged = true;
+    // #region codex-runtime-debug H4,H5
+    debugDestroyedPairs += 1;
+    // #endregion codex-runtime-debug
   }
   for (const [uuid, entry] of desired) {
     const object = entry.region.object;
@@ -3457,6 +4135,9 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
     if (existing) {
       const meshChanged = updateSmokeMeshPair(existing, entry.smoke.thickness);
       renderingChanged ||= meshChanged;
+      // #region codex-runtime-debug H4,H5
+      debugUpdatedPairs += Number(meshChanged);
+      // #endregion codex-runtime-debug
       continue;
     }
     const darknessMesh = new foundry.canvas.placeables.regions.RegionMesh(object, shaders.AdjustDarknessLevelRegionShader);
@@ -3472,6 +4153,9 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
     illuminationMeshes.addChild(illuminationMesh);
     smokeMeshes.set(uuid, { darknessMesh, illuminationMesh, thickness: entry.smoke.thickness });
     renderingChanged = true;
+    // #region codex-runtime-debug H4,H5
+    debugCreatedPairs += 1;
+    // #endregion codex-runtime-debug
   }
   if (renderingChanged) {
     canvas.effects.illumination.invalidateDarknessLevelContainer(true);
@@ -3487,6 +4171,26 @@ export function syncSmokeDarknessMeshes({ forceRendering = false, forceVision = 
       refreshVision
     });
   }
+  // #region codex-runtime-debug H4,H5
+  const blurredPairs = [...smokeMeshes.values()].filter(meshes => Boolean(meshes.darknessMesh?._blurFilter)).length;
+  smokeDebugRecord({
+    message: "smoke mesh synchronization",
+    hypothesisId: ["H4", "H5"],
+    location: "src/canvas/smoke-vision.mjs:syncSmokeDarknessMeshes",
+    startedAt: debugStartedAt,
+    values: {
+      desiredPairs: desired.size,
+      livePairs: smokeMeshes.size,
+      blurredPairs,
+      createdPairs: debugCreatedPairs,
+      destroyedPairs: debugDestroyedPairs,
+      updatedPairs: debugUpdatedPairs,
+      renderingChanged: Number(Boolean(renderingChanged)),
+      sourceGeometryChanged: Number(Boolean(sourceGeometryChanged)),
+      perceptionUpdate: Number(Boolean(renderingChanged || refreshVision))
+    }
+  });
+  // #endregion codex-runtime-debug
 }
 
 function updateSmokeMeshPair(meshes, thickness) {
