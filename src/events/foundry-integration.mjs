@@ -23,14 +23,11 @@ import {
 import { createFoundryEventReactionRuntime } from "./foundry-event-reactions.mjs";
 import { serializeLegacyReactionContext } from "./legacy-reaction-context.mjs";
 import {
-  collectEventReactionKeysFromItem,
   configureEventReactionSubscriptionItems,
+  eventParticipantHasReactionKey,
   eventReactionIndexHasKey,
   registerEventReactionSubscriptionIndexHooks
 } from "./event-reaction-index.mjs";
-import {
-  getActorEventReactionSourceItems
-} from "./event-reaction-scanner.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
   collectAbilityEventActionOptions,
@@ -65,7 +62,7 @@ export function registerFoundrySystemEventIntegration() {
   if (registered) return eventRuntime;
   registered = true;
   registerAbilityActionQueries();
-  configureEventReactionSubscriptionItems(getActorItemsWithActiveHudModules);
+  configureEventReactionSubscriptionItems(getActorItemsWithActiveHudModules, { actorLocal: true });
 
   eventRuntime = createFoundryEventReactionRuntime({
     registerRootFinalizer: registerSystemEventRootFinalizer,
@@ -176,24 +173,6 @@ async function interceptEventReactions({ event, scope } = {}) {
   }
   if (managed) managedReactionResults.set(event.eventId, result);
   return reactionResultDirective(result, descriptor.capabilities);
-}
-
-async function eventParticipantHasReactionKey(event = {}) {
-  const eventKey = String(event?.key ?? "").trim();
-  const actorUuids = new Set([
-    event?.source?.actorUuid,
-    event?.target?.actorUuid
-  ].map(value => String(value ?? "").trim()).filter(Boolean));
-  for (const actorUuid of actorUuids) {
-    const actor = await fromUuid(actorUuid);
-    if (!actor) continue;
-    for (const item of getActorEventReactionSourceItems(actor, {
-      getItems: getActorItemsWithActiveHudModules
-    })) {
-      if (collectEventReactionKeysFromItem(item).includes(eventKey)) return true;
-    }
-  }
-  return false;
 }
 
 async function adaptLegacyReactionEvent(eventKey, context = {}) {

@@ -9,13 +9,9 @@ import { getCharacteristicAliases, getSkillAliases } from "../formulas/normaliza
 import { DEFAULT_NEEDS } from "../config/defaults.mjs";
 import {
   getActorNeedSettings,
-  getCharacteristicSettings,
   getCreatureOptions,
   getNeedSettings,
-  getProficiencySettings,
-  getResourceSettings,
-  getSkillAdvancementSettings,
-  getSkillSettings
+  getPreparedRuntimeSettings
 } from "../settings/accessors.mjs";
 import { toInteger } from "./numbers.mjs";
 import { formatFormulaForDisplay } from "./formula-display.mjs";
@@ -34,7 +30,6 @@ const INITIAL_ACTOR_FORMULA_VARIABLE_ALIASES = new Set([
 ].map(alias => String(alias ?? "").toLowerCase()));
 let actorFormulaDataCache = new WeakMap();
 let sharedFormulaSettingsCache = null;
-let sharedFormulaSettingsCacheScheduled = false;
 
 export function evaluateActorFormula(formula, actor = null, { fallback = 0, minimum = 0, context = "" } = {}) {
   const text = String(formula ?? "").trim();
@@ -56,22 +51,29 @@ export function buildActorFormulaData(actor = null, { stage = "prepared", cache 
   const cached = cache ? getCachedActorFormulaData(actor, normalizedStage) : null;
   if (cached) return cached;
 
+  // #region codex-runtime-debug H9a temporary formula context count
+  globalThis.__falloutMawGameplayProbe?.count?.("actor.formulaData.rebuild", "H9a");
+  // #endregion
+
   const {
     characteristicSettings,
     skillSettings,
+    skillAdvancementSettings,
     resourceSettings,
     needSettings: globalNeedSettings,
-    proficiencySettings
+    proficiencySettings,
+    creatureOptions
   } = getSharedFormulaSettings();
   const needSettings = getFormulaNeedSettings(actor, {
     includeGlobal: true,
-    globalSettings: globalNeedSettings
+    globalSettings: globalNeedSettings,
+    creatureOptions
   });
   const characteristics = buildActorFormulaCharacteristics(actor, characteristicSettings, {
     includeDevelopment: normalizedStage === "initial-active-effect"
   });
   const skills = normalizedStage === "initial-active-effect"
-    ? buildInitialActiveEffectSkillValues(actor, characteristicSettings, skillSettings, characteristics)
+    ? buildInitialActiveEffectSkillValues(actor, characteristicSettings, skillSettings, characteristics, skillAdvancementSettings)
     : getSkillValues(actor?.system?.skills ?? {});
   const formulaReferences = buildActorFormulaReferenceData({
     system: actor?.system ?? {},
@@ -182,7 +184,8 @@ export function getActorFormulaAutocompleteEntries(subject = null) {
     resources: settings.resourceSettings,
     needs: getFormulaNeedSettings(actor, {
       includeGlobal: true,
-      globalSettings: settings.needSettings
+      globalSettings: settings.needSettings,
+      creatureOptions: settings.creatureOptions
     }),
     proficiencies: settings.proficiencySettings,
     limbs: getFormulaLimbSettings(actor),
@@ -210,14 +213,14 @@ export function formatActorFormulaForDisplay(formula = "0", actor = null, { incl
   });
 }
 
-function getFormulaNeedSettings(actor = null, { includeGlobal = false, globalSettings = null } = {}) {
+function getFormulaNeedSettings(actor = null, { includeGlobal = false, globalSettings = null, creatureOptions = null } = {}) {
   const globals = includeGlobal || !actor
     ? (Array.isArray(globalSettings) ? globalSettings : safeGetNeedSettings())
     : [];
   if (!actor) return globals;
   let actorSettings = [];
   try {
-    actorSettings = getActorNeedSettings(actor);
+    actorSettings = getActorNeedSettings(actor, creatureOptions);
   } catch (_error) {
     actorSettings = [];
   }
@@ -277,22 +280,21 @@ function resolveFormulaActor(subject = null) {
 }
 
 function getSharedFormulaSettings() {
-  if (sharedFormulaSettingsCache) return sharedFormulaSettingsCache;
+  const runtimeSettings = getPreparedRuntimeSettings();
+  if (sharedFormulaSettingsCache?.runtimeSettings === runtimeSettings) return sharedFormulaSettingsCache;
+  // Settings invalidation changes the snapshot identity before Actors reset.
+  // Actor values and construct-owned needs are still rebuilt per preparation.
   const snapshot = {
-    characteristicSettings: getCharacteristicSettings(),
-    skillSettings: getSkillSettings(),
-    resourceSettings: getResourceSettings(),
-    needSettings: safeGetNeedSettings(),
-    proficiencySettings: getProficiencySettings()
+    runtimeSettings,
+    characteristicSettings: runtimeSettings.characteristicSettings,
+    skillSettings: runtimeSettings.skillSettings,
+    skillAdvancementSettings: runtimeSettings.skillAdvancementSettings,
+    resourceSettings: runtimeSettings.resourceSettings,
+    needSettings: runtimeSettings.needSettings.length ? runtimeSettings.needSettings : getFallbackNeedSettings(),
+    proficiencySettings: runtimeSettings.proficiencySettings,
+    creatureOptions: runtimeSettings.creatureOptions
   };
   sharedFormulaSettingsCache = snapshot;
-  if (!sharedFormulaSettingsCacheScheduled) {
-    sharedFormulaSettingsCacheScheduled = true;
-    queueMicrotask(() => {
-      if (sharedFormulaSettingsCache === snapshot) sharedFormulaSettingsCache = null;
-      sharedFormulaSettingsCacheScheduled = false;
-    });
-  }
   return snapshot;
 }
 
@@ -357,8 +359,7 @@ function buildActorFormulaCharacteristics(actor = null, characteristicSettings =
   );
 }
 
-function buildInitialActiveEffectSkillValues(actor = null, characteristicSettings = [], skillSettings = [], characteristics = {}) {
-  const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+function buildInitialActiveEffectSkillValues(actor, characteristicSettings, skillSettings, characteristics, skillAdvancementSettings) {
   const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics);
   const skillBonuses = calculateSkillDevelopmentBonuses(
     skillSettings,

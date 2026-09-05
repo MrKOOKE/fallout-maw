@@ -29,7 +29,7 @@ import {
   INVENTORY_EXPECTED_IDS_OPTION
 } from "../inventory/constants.mjs";
 import { validateActorNonInventoryPlacementState } from "../inventory/repair.mjs";
-import { getCreatureOptions } from "../settings/accessors.mjs";
+import { getCreatureOptions, getPreparedRuntimeSettings } from "../settings/accessors.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
 import { handleItemDamageUpdate, prepareItemDamageUpdate } from "../combat/damage-hub.mjs";
 import {
@@ -37,12 +37,34 @@ import {
   getCreatureEquipmentSlotSelectionKeys,
   getCreatureWeaponSlotSelectionKeys
 } from "../utils/equipment-slots.mjs";
+import {
+  AbilityDataModel,
+  DiseaseDataModel,
+  GearDataModel,
+  TraumaDataModel
+} from "../data/models/item-data-models.mjs";
+import { getUnchangedItemSystemField } from "./item-model-initialization.mjs";
+import { getPreviewItemValidationOptions } from "./token-clone-initialization.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
+const REUSABLE_ITEM_MODELS = new Set([AbilityDataModel, DiseaseDataModel, GearDataModel, TraumaDataModel]);
 
 export class FalloutMaWItem extends Item {
   static TRAUMA_CREATE_OPTION = TRAUMA_CREATE_OPTION;
   static DISEASE_CREATE_OPTION = DISEASE_CREATE_OPTION;
+
+  validate(options = {}) {
+    if (this.constructor !== FalloutMaWItem) return super.validate(options);
+    return super.validate(getPreviewItemValidationOptions(this, options));
+  }
+
+  *_initializationOrder() {
+    for (const [name, field] of super._initializationOrder()) {
+      yield [name, name === "system"
+        ? getUnchangedItemSystemField(this, field, REUSABLE_ITEM_MODELS)
+        : field];
+    }
+  }
 
   static async deleteDocuments(ids = [], operation = {}) {
     const actor = await getInventoryOperationActor(operation);
@@ -615,7 +637,7 @@ function hasStoredStackPartPlacement(part) {
 function getCleanSlotRequirementSource(itemOrData) {
   const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
   if (!hasSlotRequirementSource(source)) return {};
-  const creatureOptions = getCreatureOptions();
+  const { creatureOptions } = getPreparedRuntimeSettings();
   return {
     system: {
       occupiedSlots: cleanBooleanSlotSelections(
@@ -635,7 +657,10 @@ function getCleanSlotRequirementSource(itemOrData) {
 function getSlotRequirementDeletionUpdates(itemOrData) {
   const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
   if (!hasSlotRequirementSource(source)) return {};
-  const creatureOptions = getCreatureOptions();
+  // Slot validity depends on world settings, not on the Item update. Keep
+  // cleaning stale selections after settings changes without rebuilding all
+  // race data (including natural Items and needs) for each durability change.
+  const { creatureOptions } = getPreparedRuntimeSettings();
   const validEquipmentKeys = getCreatureEquipmentSlotSelectionKeys(creatureOptions);
   const validWeaponKeys = getCreatureWeaponSlotSelectionKeys(creatureOptions);
   return {
@@ -645,7 +670,8 @@ function getSlotRequirementDeletionUpdates(itemOrData) {
 }
 
 function hasSlotRequirementSource(source = {}) {
-  return Boolean(source.system?.occupiedSlots || source.system?.weaponSlotRequirement?.slots);
+  return Object.keys(source.system?.occupiedSlots ?? {}).length > 0
+    || Object.keys(source.system?.weaponSlotRequirement?.slots ?? {}).length > 0;
 }
 
 function getSlotRequirementRecordDeletionUpdates(path, slots = {}, validKeys = new Set()) {

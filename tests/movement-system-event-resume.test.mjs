@@ -84,16 +84,24 @@ test("system-event movement gate rejects stale async resumes without timing assu
       }]
     }
   };
-  globalThis.canvas = {
-    scene: { id: "scene", uuid: "Scene.scene" },
-    tokens: { placeables: [{ actor: reactor }] }
+  const reactorToken = {
+    id: "reactor-token",
+    uuid: "Scene.scene.Token.reactor-token",
+    actor: reactor
   };
+  globalThis.canvas = {
+    scene: { id: "scene", uuid: "Scene.scene", tokens: { contents: [reactorToken] } },
+    tokens: { placeables: [{ document: reactorToken, actor: reactor }] }
+  };
+  reactorToken.parent = globalThis.canvas.scene;
 
   try {
-    await getEventReactionSubscriptionIndex().ensureFresh();
-    // Keep the O(1) subscription result but remove live candidates so the test
-    // exercises only movement ordering, not reaction UI.
-    globalThis.canvas.tokens.placeables = [];
+    const subscriptionIndex = getEventReactionSubscriptionIndex();
+    await subscriptionIndex.ensureFresh();
+    assert.equal(subscriptionIndex.hasAnyOf(["fallout-maw.movement.token.beforeStart"]), true);
+    // Keep the subscription's Actor on the scene: removing it must invalidate
+    // membership. This fixture registers only movement hooks, so no reaction
+    // executor or reaction UI is installed while the async gate is exercised.
     registerFoundryMovementSystemEventHooks();
     const preMoveToken = callbacks.get("preMoveToken");
     assert.equal(typeof preMoveToken, "function");

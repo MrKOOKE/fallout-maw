@@ -221,6 +221,123 @@ test("deduplicates concurrent and completed occurrences for the full root lifeti
   assert.equal(executions, 1);
 });
 
+test("completed results remain mutable and independent from both private completion caches", async () => {
+  const { dispatcher } = createHarness({ limits: { completedCacheSize: 1 } });
+  let observed;
+  let executions = 0;
+  dispatcher.registerSystemEventObserver({
+    id: "retain-view",
+    eventKeys: EVENT,
+    observe: ({ event }) => { observed = event; executions += 1; }
+  });
+
+  await dispatcher.withSystemEventRoot({ operationId: "completion-isolation" }, async scope => {
+    const payload = { nested: { value: 1 } };
+    const firstPromise = scope.emit(EVENT, payload, { occurrenceKey: "first" });
+    payload.nested.value = 90;
+    const first = await firstPromise;
+    const firstView = observed;
+    assert.equal(Object.isFrozen(first), false);
+    assert.equal(Object.isFrozen(firstView.data.nested), true);
+    assert.throws(() => { firstView.data.nested.value = 70; }, TypeError);
+    first.data.nested.value = 99;
+    first.event.data.nested.value = 98;
+
+    const globalCached = await scope.emit(EVENT, {}, { occurrenceKey: "first" });
+    assert.equal(globalCached.data.nested.value, 1);
+    assert.equal(globalCached.event.data.nested.value, 1);
+    globalCached.data.nested.value = 97;
+    assert.equal(firstView.data.nested.value, 1);
+
+    // Evict the global entry while its root remains live, exercising root-local replay.
+    await scope.emit(EVENT, { nested: { value: 2 } }, { occurrenceKey: "other" });
+    const rootCached = await scope.emit(EVENT, {}, { occurrenceKey: "first" });
+    assert.equal(rootCached.data.nested.value, 1);
+    rootCached.data.nested.value = 96;
+    const rootCachedAgain = await scope.emit(EVENT, {}, { occurrenceKey: "first" });
+    assert.equal(rootCachedAgain.data.nested.value, 1);
+    assert.equal(executions, 2);
+  });
+});
+
+test("cached failed outcomes preserve payload isolation and failure reasons", async () => {
+  const rejected = { ...descriptor(EVENT), validate: () => false };
+  const { dispatcher } = createHarness({ descriptors: [rejected] });
+  await dispatcher.withSystemEventRoot({ operationId: "failed-completion-isolation" }, async scope => {
+    for (const [key, reason] of [[EVENT, "invalidPayload"], ["unknown.event", "unknownEvent"]]) {
+      const payload = { nested: { value: 1 } };
+      const first = await scope.emit(key, payload, { occurrenceKey: key });
+      assert.equal(first.ok, false);
+      assert.equal(first.reason, reason);
+      payload.nested.value = 8;
+      first.data.nested.value = 9;
+      first.errors.push({ message: "public mutation" });
+      const replay = await scope.emit(key, {}, { occurrenceKey: key });
+      assert.equal(replay.reason, reason);
+      assert.equal(replay.data.nested.value, 1);
+      assert.deepEqual(replay.errors, []);
+    }
+  });
+});
+
+test("listener snapshots and cached cancellation survive public result mutations", async () => {
+  const { dispatcher } = createHarness();
+  const snapshots = [];
+  dispatcher.registerSystemEventInterceptor({
+    id: "patch-and-cancel",
+    eventKeys: EVENT,
+    intercept: ({ event, control }) => {
+      snapshots.push({ event, control });
+      return { patches: [{ op: "replace", path: "/data/value", value: 2 }], cancel: { scope: "current", reason: "stop" } };
+    }
+  });
+  dispatcher.registerSystemEventObserver({
+    id: "post-patch",
+    eventKeys: EVENT,
+    observe: ({ event, control }) => snapshots.push({ event, control })
+  });
+  await dispatcher.withSystemEventRoot({ operationId: "cancel-completion-isolation" }, async scope => {
+    const first = await scope.emit(EVENT, { value: 1 }, { occurrenceKey: "cancelled" });
+    first.control.current = false;
+    first.control.reasons[0].reason = "changed";
+    first.appliedPatches[0].value = 100;
+    const replay = await scope.emit(EVENT, {}, { occurrenceKey: "cancelled" });
+    assert.equal(replay.control.current, true);
+    assert.equal(replay.control.reasons[0].reason, "stop");
+    assert.equal(replay.appliedPatches[0].value, 2);
+    assert.equal(snapshots[0].event.data.value, 1);
+    assert.equal(snapshots[0].control.current, false);
+    assert.equal(snapshots[1].event.data.value, 2);
+    assert.equal(snapshots[1].control.current, true);
+    assert.equal(snapshots.length, 2);
+  });
+});
+
+test("reentrant child result mutations cannot alter later child occurrence replay", async () => {
+  const { dispatcher } = createHarness();
+  let childExecutions = 0;
+  let parentId;
+  dispatcher.registerSystemEventObserver({
+    id: "child",
+    eventKeys: CHILD_EVENT,
+    observe: ({ event }) => { childExecutions += 1; parentId = event.parentEventId; }
+  });
+  dispatcher.registerSystemEventInterceptor({
+    id: "parent",
+    eventKeys: EVENT,
+    intercept: async ({ event, scope }) => {
+      const child = await scope.emit(CHILD_EVENT, { value: 1 }, { occurrenceKey: "child" });
+      child.data.value = 100;
+      const replay = await scope.emit(CHILD_EVENT, {}, { occurrenceKey: "child" });
+      assert.equal(replay.data.value, 1);
+      assert.equal(parentId, event.eventId);
+    }
+  });
+  const result = await dispatcher.dispatchSystemEvent(EVENT, { value: 2 }, { operationId: "reentrant-completion-isolation" });
+  assert.deepEqual(result.errors, []);
+  assert.equal(childExecutions, 1);
+});
+
 test("allows a handler with a finer external recursion guard to opt out of the coarse guard", async () => {
   const { dispatcher } = createHarness();
   let executions = 0;

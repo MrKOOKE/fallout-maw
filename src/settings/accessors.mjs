@@ -393,6 +393,9 @@ export function getCreatureOptions(
   damageTypes = getDamageTypeSettings(),
   resources = getResourceSettings()
 ) {
+  // #region codex-runtime-debug H9a temporary normalization count
+  globalThis.__falloutMawGameplayProbe?.count?.("settings.creatures.normalize", "H9a");
+  // #endregion
   const options = { includeEnergyRegeneration: resources.some(resource => resource.key === "power") };
   try {
     return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics, damageTypes, options);
@@ -458,11 +461,11 @@ export function getNeedSettings() {
   return getAllRaceNeedSettings();
 }
 
-export function getActorNeedSettings(actor) {
+export function getActorNeedSettings(actor, creatureOptions = null) {
   if (actor?.type === "construct") return getConstructPartNeedSettings(actor?.items);
   const raceId = actor?.system?.creature?.raceId ?? actor?.creature?.raceId ?? "";
   if (!raceId) return [];
-  const race = getCreatureOptions().races.find(entry => entry.id === raceId);
+  const race = (creatureOptions ?? getCreatureOptions()).races.find(entry => entry.id === raceId);
   return normalizeNeedSettings(race?.needSettings ?? []);
 }
 
@@ -470,10 +473,10 @@ export function getRaceNeedSettings(race) {
   return normalizeNeedSettings(race?.needSettings ?? []);
 }
 
-export function getAllRaceNeedSettings() {
+export function getAllRaceNeedSettings(creatureOptions = getCreatureOptions()) {
   const entries = [];
   const used = new Set();
-  for (const race of getCreatureOptions().races) {
+  for (const race of creatureOptions.races) {
     for (const need of normalizeNeedSettings(race.needSettings ?? [])) {
       if (used.has(need.key)) continue;
       used.add(need.key);
@@ -582,6 +585,10 @@ export function getTraumaSettings(creatureOptions = getCreatureOptions(), damage
 export function getPreparedRuntimeSettings() {
   if (preparedRuntimeSettingsCache) return preparedRuntimeSettingsCache;
 
+  // #region codex-runtime-debug H9a temporary settings snapshot count
+  globalThis.__falloutMawGameplayProbe?.count?.("settings.runtimeSnapshot.rebuild", "H9a");
+  // #endregion
+
   const characteristicSettings = getCharacteristicSettings();
   const skillSettings = getSkillSettings();
   const damageTypeSettings = getDamageTypeSettings();
@@ -598,6 +605,7 @@ export function getPreparedRuntimeSettings() {
     resourceSettings,
     rulesProfile,
     creatureOptions,
+    needSettings: getAllRaceNeedSettings(creatureOptions),
     traumaSettings: getTraumaSettings(creatureOptions, damageTypeSettings)
   });
   return preparedRuntimeSettingsCache;

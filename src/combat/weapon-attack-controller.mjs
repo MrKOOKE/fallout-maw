@@ -1,5 +1,8 @@
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+// #region codex-runtime-debug H21 temporary numeric request composition
+import { captureDamageRequestProbe, recordDamageRequestProbe } from "../debug/damage-request-probe.mjs";
+// #endregion codex-runtime-debug
 import { mergeSkillCheckResultPolicies } from "../rolls/skill-check-result-policy.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
@@ -4397,6 +4400,7 @@ export function buildWeaponExplosionDamageRequests({
   source = {},
   damageModifier = null
 } = {}) {
+  const __codexRequestProbe = captureDamageRequestProbe(); // codex-runtime-debug H21
   const actor = targetToken?.actor;
   if (!actor || !center) return [];
   const falloff = Number(radiusPixels) > 0
@@ -4446,6 +4450,11 @@ export function buildWeaponExplosionDamageRequests({
       });
     }
   }
+  // #region codex-runtime-debug H21 one numeric summary per generated target impact
+  recordDamageRequestProbe(__codexRequestProbe, "weapon.explosionDamageRequests", requests, {
+    configuredPellets: pelletDamages.length, configuredDamageTypes: normalizedTypes.length
+  });
+  // #endregion codex-runtime-debug
   return requests;
 }
 
@@ -5721,6 +5730,12 @@ export class WeaponAttackController {
   }
 
   async runInteractiveAttackOperation(operation) {
+    // codex-runtime-debug: actual user-confirmation operation, before the attack ID rotates.
+    const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("attack.interactive", "H5", {
+      sourceActorItemCount: this.token?.actor?.items?.size ?? 0,
+      targetCount: this.targets?.length ?? 0,
+      attackId: this.attackId ?? ""
+    });
     try {
       return await operation();
     } catch (error) {
@@ -5732,6 +5747,8 @@ export class WeaponAttackController {
         this.destroy();
       }
       return false;
+    } finally {
+      __codexFinish?.(); // codex-runtime-debug
     }
   }
 
@@ -5749,6 +5766,11 @@ export class WeaponAttackController {
   }
 
   async playAttemptWeaponAnimations(trajectories = [], { delayMs = null } = {}) {
+    // codex-runtime-debug: distinguish animation waits from computation.
+    const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("attack.animations", "H5", {
+      attackId: this.attackId ?? ""
+    });
+    try {
     await playWeaponAttackAnimations({
       weapon: this.weapon,
       weaponFunctionId: this.weaponFunctionId,
@@ -5756,6 +5778,9 @@ export class WeaponAttackController {
       trajectories,
       delayMs: delayMs ?? getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
     });
+    } finally {
+      __codexFinish?.(); // codex-runtime-debug
+    }
   }
 
   async spendCurrentAttackCosts({
@@ -5767,6 +5792,13 @@ export class WeaponAttackController {
     delayedThrownItemData = null,
     actionContext = null
   } = {}) {
+    // codex-runtime-debug: document/resource commits during an actual attack.
+    const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("attack.costs", "H1", {
+      sourceActorItemCount: this.token?.actor?.items?.size ?? 0,
+      targetCount: this.targets?.length ?? 0,
+      attackId: this.attackId ?? ""
+    });
+    try {
     this.spentQuantityItemData = null;
     const resolvedActionContext = actionContext && typeof actionContext === "object"
       ? actionContext
@@ -5928,6 +5960,9 @@ export class WeaponAttackController {
     this.weaponNoiseAttempted = weaponAttempted;
     this.interruptForIncapacitation();
     return true;
+    } finally {
+      __codexFinish?.(); // codex-runtime-debug
+    }
   }
 
   async executeAgainstToken(targetToken) {
@@ -8074,6 +8109,7 @@ export class WeaponAttackController {
   }
 
   async performVolleyAttack() {
+    const __codexRequestProbe = captureDamageRequestProbe(); // codex-runtime-debug H21
     if (this.processing || !this.geometry) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
@@ -8152,6 +8188,11 @@ export class WeaponAttackController {
       }
       if (this.attackCanceledByReaction) break;
     }
+    // #region codex-runtime-debug H21 distinguish cycles, targets and generated components
+    recordDamageRequestProbe(__codexRequestProbe, "weapon.volleyDamageRequests", damageRequests, {
+      attackCycles: finalGeometries.length
+    });
+    // #endregion codex-runtime-debug
     if (!delayedExplosion) await this.dodgeExposure.flush();
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
@@ -16147,6 +16188,9 @@ async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionReq
 
 async function withWeaponDamagePreparedEvents(requests = [], operation) {
   const sourceRequests = (Array.isArray(requests) ? requests : [requests]).filter(Boolean);
+  // #region codex-runtime-debug H21 exactly one collection summary before per-request emits
+  recordDamageRequestProbe(captureDamageRequestProbe(), "weapon.damagePreparedRequests", sourceRequests);
+  // #endregion codex-runtime-debug
   if (!sourceRequests.length) return operation([]);
   const attackId = String(sourceRequests.find(request => request?.source?.attackId)?.source?.attackId ?? foundry.utils.randomID());
   const inheritedChainRef = sourceRequests.find(request => request?.source?.chainRef)?.source?.chainRef ?? null;

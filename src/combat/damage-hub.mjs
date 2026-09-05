@@ -98,6 +98,9 @@ import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
+// #region codex-runtime-debug H21 temporary numeric request composition
+import { captureDamageRequestProbe, recordDamageRequestProbe } from "../debug/damage-request-probe.mjs";
+// #endregion codex-runtime-debug
 import { registerCombatRoundStartHandler } from "./turn-events.mjs";
 import {
   getConstructPartLimbKey,
@@ -779,6 +782,9 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
       damageEventIndex: index
     }))
     .filter(request => request.actorUuid);
+  // #region codex-runtime-debug H21 confirm request cardinality after normalization and root inheritance
+  recordDamageRequestProbe(captureDamageRequestProbe(), "damage.normalizedRequests", normalized);
+  // #endregion codex-runtime-debug
   if (!normalized.length) return single ? undefined : [];
   const inheritedChainRef = normalized.find(request => request.source?.chainRef)?.source?.chainRef ?? null;
   const operationId = String(
@@ -2183,6 +2189,13 @@ async function applyDamageApplicationsNow(
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
+  // codex-runtime-debug: actual per-Actor damage work, after mutation-queue admission.
+  const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("damage.applyActor", "H1", {
+    targetActorItemCount: actor.items?.size ?? 0,
+    targetCount: 1,
+    attackId: requests[0]?.source?.attackId ?? ""
+  });
+  try {
   if (isPhantomEntity(actor)) {
     const phantomResults = combineItemConditionDamagePackets(requests, actorUuid)
       .filter(data => data.mode === MODE_DAMAGE && data.scope !== SCOPE_ITEM_CONDITION)
@@ -2420,6 +2433,9 @@ async function applyDamageApplicationsNow(
     }
   }
   return results;
+  } finally {
+    __codexFinish?.(); // codex-runtime-debug
+  }
 }
 
 export function createDamageBatchPreparationContext(actor) {
@@ -3194,9 +3210,21 @@ export function clampActorLimbValuesToCurrentCaps(
 
 export function synchronizeActorLimbValueCaps(actor) {
   if (!canApplyDamageLocally(actor)) return undefined;
+  // #region codex-runtime-debug H14 cap convergence can be queued behind damage application
+  const queuedAt = Date.now(), queuedStart = performance.now();
+  globalThis.__falloutMawGameplayProbe?.count("damage.limbCapSync.queued", "H14");
+  // #endregion codex-runtime-debug
   return queueActorDamageMutation(actor, async freshActor => {
     if (!freshActor) return undefined;
+    // #region codex-runtime-debug H14 measure admitted work separately from queue waiting
+    const probeData = { actorId: freshActor.id, tokenId: freshActor.token?.id,
+      itemCount: freshActor.items?.size ?? 0, updatedFields: 0, queuedAt,
+      queueMs: performance.now() - queuedStart };
+    const finish = globalThis.__falloutMawGameplayProbe?.span("damage.limbCapSync.apply", "H14", probeData);
+    try {
+    // #endregion codex-runtime-debug
     const updates = buildLimbValueCapSyncUpdate(freshActor);
+    probeData.updatedFields = Object.keys(updates).length; // codex-runtime-debug
     if (!Object.keys(updates).length) return freshActor;
     await freshActor.update(updates, {
       falloutMawSkipDamageStatusSync: true,
@@ -3204,6 +3232,7 @@ export function synchronizeActorLimbValueCaps(actor) {
     });
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
+    } finally { finish?.(); } // codex-runtime-debug
   });
 }
 
@@ -3736,6 +3765,9 @@ function queueActorDamageMutation(actorOrUuid, operation) {
 }
 
 export async function runDamageHubOperation(operation, { operationRef = "" } = {}) {
+  // codex-runtime-debug: includes global queue admission and the admitted workflow.
+  const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("damage.hubOperation", "H5");
+  try {
   const requestedRef = String(operationRef ?? "").trim();
   // Damage may trigger an awaited check whose chosen reaction deals damage before the parent operation can finish.
   // Only the opaque reference issued by that active operation may enter it recursively; unrelated damage stays queued.
@@ -3768,6 +3800,9 @@ export async function runDamageHubOperation(operation, { operationRef = "" } = {
   } finally {
     if (activeDamageHubOperation === operationContext) activeDamageHubOperation = null;
     releaseQueuedOperation();
+  }
+  } finally {
+    __codexFinish?.(); // codex-runtime-debug
   }
 }
 

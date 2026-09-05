@@ -5,6 +5,8 @@ import { parseFormula, normalizeFormulaOptions } from "./parser.mjs";
 import { normalizeCharacteristicSettings, normalizeFormulaMap, normalizeNeedSettings, normalizeResourceSettings, normalizeSkillSettings } from "./normalization.mjs";
 
 const formulaEvaluationCache = new WeakMap();
+const settingsFormulaPlans = new Map();
+const MAX_SETTINGS_FORMULA_PLANS = 64;
 
 export function evaluateFormula(formula, data = {}) {
   const source = String(formula ?? "0");
@@ -61,6 +63,27 @@ function createFormulaEvaluationContext(data = {}) {
   };
 }
 
+/**
+ * A settings group shares one vocabulary and one compiled expression plan.
+ * Actor values remain on the per-call data record and are read at evaluation
+ * time. The plan key contains only formula text and normalized aliases: even
+ * callers which mutate a settings array in place cannot reuse an old rule.
+ * Keep a bounded set because settings editors also evaluate unsaved formulas.
+ */
+function prepareSettingsFormulaData(data, formulas) {
+  const context = createFormulaEvaluationContext(data);
+  const key = JSON.stringify([context.options, formulas.map(formula => String(formula ?? "0"))]);
+  let plan = settingsFormulaPlans.get(key);
+  if (plan) settingsFormulaPlans.delete(key);
+  else plan = context;
+  settingsFormulaPlans.set(key, plan);
+  if (settingsFormulaPlans.size > MAX_SETTINGS_FORMULA_PLANS) {
+    settingsFormulaPlans.delete(settingsFormulaPlans.keys().next().value);
+  }
+  formulaEvaluationCache.set(data, plan);
+  return data;
+}
+
 export function evaluateFormulaVariables(formula, variables = {}) {
   const normalizedVariables = Object.fromEntries(
     Object.entries(variables ?? {}).map(([key, value]) => [String(key).toLowerCase(), Number(value) || 0])
@@ -77,16 +100,17 @@ export function evaluateFormulaVariables(formula, variables = {}) {
 export function evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics = {}) {
   const normalizedSkills = normalizeSkillSettings(skillSettings);
   const normalizedCharacteristics = normalizeCharacteristicSettings(characteristicSettings);
+  const data = prepareSettingsFormulaData({
+    characteristicSettings: normalizedCharacteristics,
+    characteristics
+  }, normalizedSkills.map(skill => skill.formula));
 
   return Object.fromEntries(
     normalizedSkills.map(skill => {
       try {
         return [
           skill.key,
-          evaluateFormula(skill.formula, {
-            characteristicSettings: normalizedCharacteristics,
-            characteristics
-          })
+          evaluateFormula(skill.formula, data)
         ];
       } catch (error) {
         console.warn(
@@ -125,6 +149,14 @@ export function evaluateNeedSettings(
 function evaluateFormulaSettings(settings = [], characteristicSettings, skillSettings, characteristics = {}, skills = {}, variables = {}) {
   const normalizedCharacteristics = normalizeCharacteristicSettings(characteristicSettings);
   const normalizedSkills = normalizeSkillSettings(skillSettings);
+  const data = prepareSettingsFormulaData({
+    characteristicSettings: normalizedCharacteristics,
+    skillSettings: normalizedSkills,
+    characteristics,
+    skills,
+    formulaVariables: variables,
+    variables: Object.keys(variables ?? {})
+  }, settings.map(setting => setting.formula));
 
   return Object.fromEntries(
     settings.map(setting => {
@@ -133,14 +165,7 @@ function evaluateFormulaSettings(settings = [], characteristicSettings, skillSet
           setting.key,
           Math.max(
             0,
-            evaluateFormula(setting.formula, {
-              characteristicSettings: normalizedCharacteristics,
-              skillSettings: normalizedSkills,
-              characteristics,
-              skills,
-              formulaVariables: variables,
-              variables: Object.keys(variables ?? {})
-            })
+            evaluateFormula(setting.formula, data)
           )
         ];
       } catch (error) {
@@ -167,18 +192,19 @@ export function evaluateFormulaMap(
   const normalized = normalizeFormulaMap(formulas, definitions);
   const normalizedCharacteristics = normalizeCharacteristicSettings(characteristicSettings);
   const normalizedSkills = normalizeSkillSettings(skillSettings);
+  const data = prepareSettingsFormulaData({
+    characteristicSettings: normalizedCharacteristics,
+    skillSettings: normalizedSkills,
+    characteristics,
+    skills
+  }, definitions.map(definition => normalized[definition.key]));
 
   return Object.fromEntries(
     definitions.map(definition => {
       try {
         return [
           definition.key,
-          evaluateFormula(normalized[definition.key], {
-            characteristicSettings: normalizedCharacteristics,
-            skillSettings: normalizedSkills,
-            characteristics,
-            skills
-          })
+          evaluateFormula(normalized[definition.key], data)
         ];
       } catch (error) {
         console.warn(

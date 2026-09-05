@@ -740,6 +740,12 @@ export async function syncActorAbilityEffects(actor, context = {}) {
   if (processingActors.has(actor.uuid)) return;
 
   processingActors.add(actor.uuid);
+  // #region codex-runtime-debug H14 actual deferred effect work, after queue admission
+  const finish = globalThis.__falloutMawGameplayProbe?.span("ability.syncEffects", "H14", {
+    actorId: actor.id, tokenId: actor.token?.id, itemCount: actor.items?.size ?? 0,
+    contextKeys: Object.keys(context).slice(0, 12)
+  });
+  // #endregion codex-runtime-debug
   try {
     const abilityItems = actor.itemTypes?.ability
       ?? actor.items?.filter(item => item.type === "ability")
@@ -831,6 +837,7 @@ export async function syncActorAbilityEffects(actor, context = {}) {
     }
   } finally {
     processingActors.delete(actor.uuid);
+    finish?.(); // codex-runtime-debug
   }
 }
 

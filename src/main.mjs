@@ -31,9 +31,11 @@ import { registerDataModels, registerTrackableAttributes } from "./data/index.mj
 import {
   FalloutMaWActiveEffect,
   FalloutMaWActor,
+  FalloutMaWActorDelta,
   FalloutMaWCombat,
   FalloutMaWCombatant,
   FalloutMaWItem,
+  FalloutMaWScene,
   FalloutMaWTokenDocument
 } from "./documents/index.mjs";
 import { registerAdvancementMediaSocket } from "./advancement/media.mjs";
@@ -158,9 +160,11 @@ Hooks.once("init", () => {
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.ActiveEffect.documentClass = FalloutMaWActiveEffect;
   CONFIG.Actor.documentClass = FalloutMaWActor;
+  CONFIG.ActorDelta.documentClass = FalloutMaWActorDelta;
   CONFIG.Combat.documentClass = FalloutMaWCombat;
   CONFIG.Combatant.documentClass = FalloutMaWCombatant;
   CONFIG.Item.documentClass = FalloutMaWItem;
+  CONFIG.Scene.documentClass = FalloutMaWScene;
   CONFIG.Token.documentClass = FalloutMaWTokenDocument;
   CONFIG.Token.objectClass = FalloutMaWToken;
   CONFIG.Canvas.layers.tokens.layerClass = FalloutMaWTokenLayer;

@@ -21,8 +21,19 @@ const {
   collectActiveSceneReactorActors,
   collectEventReactionReactorActors,
   collectEventReactionCandidates,
+  getActorEventReactionSourceItems,
   evaluateEventReactionSecondaryConditions
 } = await import("../src/events/event-reaction-scanner.mjs");
+
+test("reaction sources ignore ordinary inventory before resolving synthetic UUIDs", () => {
+  const inactive = Array.from({length:800}, (_,i) => ({id:String(i), type:'gear', system:{},
+    get uuid() { throw new Error('Ordinary inventory UUID must not be resolved'); }}));
+  const ability = {id:'ability',uuid:'Actor.a.Item.ability',type:'ability',system:{functions:[]}};
+  const gear = {id:'gear',uuid:'Actor.a.Item.gear',type:'gear',system:{equipped:true,functions:{freeSettings:{enabled:true}}}};
+  const actor={uuid:'Actor.a'};
+  assert.deepEqual(getActorEventReactionSourceItems(actor,{getItems:()=>[...inactive,ability,gear,ability]}),[ability,gear]);
+  assert.deepEqual(getActorEventReactionSourceItems(actor,{getItems:()=>[{...ability,uuid:undefined}]}).map(i=>i.id),['ability']);
+});
 const {
   REACTION_COST_FAILURES,
   STRICT_REACTION_RESOURCE_UPDATE_OPTION,

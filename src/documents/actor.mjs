@@ -72,9 +72,16 @@ import {
 } from "./actor-effect-preparation-index.mjs";
 import { expandDetectionModeRangeEffectChange } from "../canvas/vision-effect-keys.mjs";
 import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
+import { withUnchangedActorItemSources } from "./item-model-initialization.mjs";
+import { initializeValidatedPreviewActor } from "./token-clone-initialization.mjs";
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
 export class FalloutMaWActor extends Actor {
+  _initialize(options = {}) {
+    if (this.constructor !== FalloutMaWActor) return super._initialize(options);
+    return initializeValidatedPreviewActor(this, options, () => super._initialize(options));
+  }
+
   static migrateData(source) {
     source = super.migrateData(source);
     return migrateActorData(source);
@@ -205,6 +212,12 @@ export class FalloutMaWActor extends Actor {
     if (!["character", "construct"].includes(this.type)) return;
     if (this.type === "construct") void syncConstructPartConditionDamage(this, changes);
     handleActorDamageUpdate(this, changes, options);
+  }
+
+  _updateCommit(copy, diff, options, state) {
+    return withUnchangedActorItemSources(this, diff, () => (
+      super._updateCommit(copy, diff, options, state)
+    ));
   }
 
   prepareData() {

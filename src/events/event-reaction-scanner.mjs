@@ -73,9 +73,11 @@ export function getActorEventReactionSourceItems(actor = null, {
   const sources = [];
   const seen = new Set();
   for (const item of getItems(actor) ?? []) {
+    // Most inventory entries cannot supply reactions. Their synthetic UUID
+    // walks the ActorDelta/Token/Scene ancestry, so resolve it only for sources.
+    if (item?.type !== "ability" && !isActiveEventReactionGearItem(item)) continue;
     const uuid = String(item?.uuid ?? `${actor?.uuid ?? ""}.Item.${item?.id ?? ""}`).trim();
     if (!uuid || seen.has(uuid)) continue;
-    if (item?.type !== "ability" && !isActiveEventReactionGearItem(item)) continue;
     seen.add(uuid);
     sources.push(item);
   }

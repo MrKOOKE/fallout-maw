@@ -28,6 +28,79 @@ const CANCEL_CAPABILITIES_BY_SCOPE = Object.freeze({
   root: new Set(["cancelRoot", "cancel", "cancelSync"])
 });
 
+// #region codex-runtime-debug H18 bounded reason codes; never retain error messages or payloads.
+const FAIL_OPEN_PROBE_REASONS = new Set([
+  "failOpen", "unknownEvent", "depthLimit", "eventLimit", "invalidPayload", "invalidChain",
+  "invalidLease", "expiredLineage", "invalidLineage", "invalidParent", "leaseOwnerMismatch",
+  "unknownRoot", "rootClosed", "rootClosing", "noAuthority", "notAuthority", "notRootOwner",
+  "socketUnavailable", "authorityTimeout", "authorityError", "unsupportedOperation"
+]);
+// #endregion codex-runtime-debug
+
+// #region codex-runtime-debug H21 bounded event fanout summaries, independent of document data.
+const ROOT_PROBE_KINDS = new Set([
+  "weaponAttack", "weaponDamagePrepared", "commandedWeaponAttacks", "damageHub", "skillCheck",
+  "tokenMovement", "tokenMovementCommitted", "tokenMovementStopped", "abilityAction", "systemEvent"
+]);
+const rootProbeSummaries = new WeakMap();
+function getRootProbeSummary(root, created = false) {
+  if (!root) return null;
+  let runKey;
+  try { runKey = globalThis.__falloutMawGameplayProbe?.activeRunId?.(); }
+  catch { rootProbeSummaries.delete(root); return null; }
+  if (!runKey) { rootProbeSummaries.delete(root); return null; }
+  let summary = rootProbeSummaries.get(root);
+  if (summary?.runKey !== runKey) {
+    summary = { runKey, createdDuringRun: created, startedAt: Date.now(), eventTypes: new Map(),
+      rejectedReasons: new Map(), maxDepth: 0, maxLineage: 0, recursionSkips: 0,
+      openedExisting: 0, inheritedLeases: 0, leaseKinds: new Map() };
+    rootProbeSummaries.set(root, summary);
+  }
+  return summary;
+}
+function recordRootProbeEvent(root, eventKey, status, reason = "") {
+  const summary = getRootProbeSummary(root);
+  if (!summary) return;
+  // A custom catalog/event name can contain arbitrary input. Only built-in catalog keys leave this process.
+  let key = getSystemEventDescriptor(eventKey)?.key ?? "other";
+  if (!summary.eventTypes.has(key) && summary.eventTypes.size >= 23) key = "other";
+  let counts = summary.eventTypes.get(key);
+  if (!counts) {
+    counts = { attempted: 0, admitted: 0, rejected: 0, completedDedupe: 0, rootDedupe: 0, inflightDedupe: 0 };
+    summary.eventTypes.set(key, counts);
+  }
+  counts[status] += 1;
+  if (status === "rejected") {
+    const code = FAIL_OPEN_PROBE_REASONS.has(reason) ? reason : "other";
+    summary.rejectedReasons.set(code, (summary.rejectedReasons.get(code) ?? 0) + 1);
+  }
+}
+function recordRootProbeDepth(root, depth, lineage) {
+  const summary = getRootProbeSummary(root);
+  if (!summary) return;
+  summary.maxDepth = Math.max(summary.maxDepth, depth);
+  summary.maxLineage = Math.max(summary.maxLineage, lineage?.size ?? 0);
+}
+function flushRootProbeSummary(root) {
+  const summary = getRootProbeSummary(root);
+  rootProbeSummaries.delete(root);
+  if (!summary) return;
+  const data = {
+    rootKind: ROOT_PROBE_KINDS.has(root.meta.kind) ? root.meta.kind : "other",
+    createdDuringRun: summary.createdDuringRun, startedAt: summary.startedAt,
+    durationMs: Math.max(0, Date.now() - summary.startedAt), admittedTotal: root.eventCount,
+    reactionCount: root.reactionCount, reactionsDisabled: root.reactionsDisabled,
+    maxDepth: summary.maxDepth, maxLineage: summary.maxLineage, recursionSkips: summary.recursionSkips,
+    openedExisting: summary.openedExisting, inheritedLeases: summary.inheritedLeases,
+    leaseKinds: Array.from(summary.leaseKinds, ([kind, count]) => ({ kind, count })),
+    eventTypes: Array.from(summary.eventTypes, ([eventKey, counts]) => ({ eventKey, ...counts })),
+    rejectedReasons: Array.from(summary.rejectedReasons, ([reason, count]) => ({ reason, count }))
+  };
+  try { globalThis.__falloutMawGameplayProbe?.event?.("events.rootSummary", "H21", data); }
+  catch { /* Diagnostic transport must never interrupt root settlement. */ }
+}
+// #endregion codex-runtime-debug
+
 /**
  * Create an isolated system-event dispatcher. All Foundry access is supplied by the runtime adapter so the core can
  * be exercised in plain Node tests.
@@ -333,6 +406,10 @@ export function createSystemEventDispatcher({
     if (knownRootId) {
       const knownRoot = roots.get(knownRootId);
       if (knownRoot && !knownRoot.closeRequested) {
+        // #region codex-runtime-debug H21 existing-operation lease, no identifiers retained.
+        const rootProbe = getRootProbeSummary(knownRoot);
+        if (rootProbe) rootProbe.openedExisting += 1;
+        // #endregion codex-runtime-debug
         const leaseId = resolvedRuntime.randomId();
         knownRoot.leases.set(leaseId, {
           id: leaseId,
@@ -384,6 +461,9 @@ export function createSystemEventDispatcher({
       finalizerErrors: []
     };
     roots.set(rootId, root);
+    // #region codex-runtime-debug H21 begin only while recording is active.
+    getRootProbeSummary(root, true);
+    // #endregion codex-runtime-debug
     operationRoots.set(operationKey, rootId);
     scheduleRootWatchdog(root);
     return buildOpenedRootResult(root, ownerLeaseId, true);
@@ -394,6 +474,14 @@ export function createSystemEventDispatcher({
       allowClosing: false,
       allowAuthorityLeaseAcquisition: true
     });
+    // #region codex-runtime-debug H21 distinguish inherited workflow fanout from recursive events.
+    const rootProbe = getRootProbeSummary(validated.root);
+    if (rootProbe) {
+      rootProbe.inheritedLeases += 1;
+      const kind = ROOT_PROBE_KINDS.has(meta.kind) ? meta.kind : "other";
+      rootProbe.leaseKinds.set(kind, (rootProbe.leaseKinds.get(kind) ?? 0) + 1);
+    }
+    // #endregion codex-runtime-debug
     const leaseId = resolvedRuntime.randomId();
     validated.root.leases.set(leaseId, {
       id: leaseId,
@@ -430,11 +518,24 @@ export function createSystemEventDispatcher({
     const occurrenceKey = String(payload.options?.occurrenceKey ?? "").trim() || resolvedRuntime.randomId();
     const rootId = String(payload.chainRef?.rootId ?? "").trim();
     const dedupeKey = `${rootId}:${eventKey}:${occurrenceKey}`;
+    // #region codex-runtime-debug H21 attempts include dedupe; a closed root has already emitted its summary.
+    recordRootProbeEvent(roots.get(rootId), eventKey, "attempted");
+    // #endregion codex-runtime-debug
     pruneTimedCache(completedEvents, resolvedLimits.completedCacheTtlMs, resolvedLimits.completedCacheSize);
     const completed = getTimedCache(completedEvents, dedupeKey, resolvedLimits.completedCacheTtlMs);
-    if (completed && completed.ownerUserId === requesterUserId) return Promise.resolve(jsonSafeClone(completed.value));
+    if (completed && completed.ownerUserId === requesterUserId) {
+      // #region codex-runtime-debug H21
+      recordRootProbeEvent(roots.get(rootId), eventKey, "completedDedupe");
+      // #endregion codex-runtime-debug
+      return Promise.resolve(jsonSafeClone(completed.value));
+    }
     const inflight = inFlightEvents.get(dedupeKey);
-    if (inflight && inflight.ownerUserId === requesterUserId) return inflight.promise;
+    if (inflight && inflight.ownerUserId === requesterUserId) {
+      // #region codex-runtime-debug H21
+      recordRootProbeEvent(roots.get(rootId), eventKey, "inflightDedupe");
+      // #endregion codex-runtime-debug
+      return inflight.promise;
+    }
 
     let validated;
     try {
@@ -442,10 +543,19 @@ export function createSystemEventDispatcher({
       // finish emitting while the root waits for that lease; no new leases can be acquired once closure begins.
       validated = validateChainRef(payload.chainRef, requesterUserId, { allowClosing: true, internal });
     } catch (error) {
-      return Promise.resolve(createFailOpenOutcome(eventKey, payload.payload, errorReason(error)));
+      const reason = errorReason(error);
+      // #region codex-runtime-debug H21 codes only, never an exception message.
+      recordRootProbeEvent(roots.get(rootId), eventKey, "rejected", reason);
+      // #endregion codex-runtime-debug
+      return Promise.resolve(createFailOpenOutcome(eventKey, payload.payload, reason));
     }
     const rootCompleted = validated.root.completedEvents.get(dedupeKey);
-    if (rootCompleted) return Promise.resolve(jsonSafeClone(rootCompleted));
+    if (rootCompleted) {
+      // #region codex-runtime-debug H21
+      recordRootProbeEvent(validated.root, eventKey, "rootDedupe");
+      // #endregion codex-runtime-debug
+      return Promise.resolve(jsonSafeClone(rootCompleted));
+    }
 
     const operation = dispatchAuthorityEvent({
       root: validated.root,
@@ -457,8 +567,11 @@ export function createSystemEventDispatcher({
       options: payload.options ?? {},
       requesterUserId
     }).then(outcome => {
-      validated.root.completedEvents.set(dedupeKey, jsonSafeClone(outcome));
-      setTimedCache(completedEvents, dedupeKey, outcome, resolvedLimits.completedCacheSize, { ownerUserId: requesterUserId });
+      // dispatchAuthorityEvent constructs an independent, deeply frozen JSON outcome
+      // on both success and fail-open paths. The two private caches can retain that
+      // same snapshot. Public and dedupe readers receive an independent copy.
+      validated.root.completedEvents.set(dedupeKey, outcome);
+      storeTimedCacheValue(completedEvents, dedupeKey, outcome, resolvedLimits.completedCacheSize, { ownerUserId: requesterUserId });
       return jsonSafeClone(outcome);
     }).finally(() => inFlightEvents.delete(dedupeKey));
     inFlightEvents.set(dedupeKey, { ownerUserId: requesterUserId, promise: operation });
@@ -479,16 +592,30 @@ export function createSystemEventDispatcher({
     touchRoot(root);
     try {
       const descriptor = resolvedCatalog.getDescriptor(eventKey);
-      if (!descriptor) return createFailOpenOutcome(eventKey, payload, "unknownEvent");
+      if (!descriptor) {
+        // #region codex-runtime-debug H21
+        recordRootProbeEvent(root, eventKey, "rejected", "unknownEvent");
+        // #endregion codex-runtime-debug
+        return createFailOpenOutcome(eventKey, payload, "unknownEvent");
+      }
 
       const parent = parentEventId ? root.events.get(parentEventId) : null;
       const depth = parent ? parent.depth + 1 : 0;
+      // #region codex-runtime-debug H21 max attempted ancestry, including rejected events.
+      recordRootProbeDepth(root, depth, lineage);
+      // #endregion codex-runtime-debug
       if (depth > resolvedLimits.maxDepth) {
+        // #region codex-runtime-debug H21
+        recordRootProbeEvent(root, eventKey, "rejected", "depthLimit");
+        // #endregion codex-runtime-debug
         root.reactionsDisabled = true;
         warnRootLimit(root, "depth", `System-event root '${root.id}' exceeded maximum depth ${resolvedLimits.maxDepth}.`);
         return createFailOpenOutcome(eventKey, payload, "depthLimit", root);
       }
       if (root.eventCount >= resolvedLimits.maxEventsPerRoot) {
+        // #region codex-runtime-debug H21
+        recordRootProbeEvent(root, eventKey, "rejected", "eventLimit");
+        // #endregion codex-runtime-debug
         root.reactionsDisabled = true;
         warnRootLimit(root, "events", `System-event root '${root.id}' exceeded ${resolvedLimits.maxEventsPerRoot} events.`);
         return createFailOpenOutcome(eventKey, payload, "eventLimit", root);
@@ -506,10 +633,17 @@ export function createSystemEventDispatcher({
           throw createDispatcherError("invalidPayload", `Payload validation failed for '${eventKey}'.`);
         }
       } catch (error) {
-        return createFailOpenOutcome(eventKey, payload, errorReason(error) || "invalidPayload", root);
+        const reason = errorReason(error) || "invalidPayload";
+        // #region codex-runtime-debug H21
+        recordRootProbeEvent(root, eventKey, "rejected", reason);
+        // #endregion codex-runtime-debug
+        return createFailOpenOutcome(eventKey, payload, reason, root);
       }
 
       root.eventCount += 1;
+      // #region codex-runtime-debug H21 count only native admission, preserving all limit checks.
+      recordRootProbeEvent(root, eventKey, "admitted");
+      // #endregion codex-runtime-debug
       root.sequence += 1;
       const eventId = resolvedRuntime.randomId();
       const eventNode = {
@@ -609,6 +743,10 @@ export function createSystemEventDispatcher({
     const { root, eventNode, baseEnvelope, state, descriptorCapabilities, allowedPatchPaths } = context;
     const recursionKey = `${entry.kind}:${entry.id}:${baseEnvelope.key}`;
     if (entry.guardRecursion && eventNode.lineage.has(recursionKey)) {
+      // #region codex-runtime-debug H21 actual recursion guard skips, no handler IDs.
+      const rootProbe = getRootProbeSummary(root);
+      if (rootProbe) rootProbe.recursionSkips += 1;
+      // #endregion codex-runtime-debug
       state.skippedHandlers.push({ id: entry.id, kind: entry.kind, reason: "recursion" });
       return;
     }
@@ -778,6 +916,9 @@ export function createSystemEventDispatcher({
           }
         }
       } finally {
+        // #region codex-runtime-debug H21 one bounded summary after all root finalizers settle.
+        flushRootProbeSummary(root);
+        // #endregion codex-runtime-debug
         roots.delete(root.id);
         closedRoots.set(root.id, { closedAt: resolvedRuntime.now(), ownerUserId: root.ownerUserId });
         pruneClosedRoots();
@@ -858,6 +999,7 @@ export function createSystemEventDispatcher({
     registerSystemEventDispatcherSocket: registerSocket,
     getSelectableSystemEvents: getSelectable
   });
+
 }
 
 const defaultDispatcher = createSystemEventDispatcher();
@@ -1157,6 +1299,10 @@ function recordHandlerError(state, entry, code, error) {
 }
 
 function createFailOpenOutcome(eventKey, payload, reason = "failOpen", root = null) {
+  // #region codex-runtime-debug H18 aggregate only, with a finite label vocabulary.
+  try { globalThis.__falloutMawGameplayProbe?.count?.(`events.failOpen.${FAIL_OPEN_PROBE_REASONS.has(reason) ? reason : "other"}`, "H18"); }
+  catch { /* Diagnostic counters must not change fail-open behavior. */ }
+  // #endregion codex-runtime-debug
   return deepFreeze({
     ok: false,
     reason: String(reason ?? "failOpen"),
@@ -1170,6 +1316,10 @@ function createFailOpenOutcome(eventKey, payload, reason = "failOpen", root = nu
 }
 
 function jsonSafeClone(value) {
+  // #region codex-runtime-debug H18 no payload traversal beyond the existing implementation.
+  try { globalThis.__falloutMawGameplayProbe?.count?.("events.jsonSafeClone.calls", "H18"); }
+  catch { /* Diagnostic counters must not change serialization. */ }
+  // #endregion codex-runtime-debug
   assertJsonSafe(value);
   if (value === undefined) return null;
   return structuredClone(value);
@@ -1274,6 +1424,12 @@ function defaultRandomId() {
 function setTimedCache(cache, key, value, maximumSize, metadata = {}) {
   cache.delete(key);
   cache.set(key, { value: jsonSafeClone(value), storedAt: Date.now(), ...metadata });
+  while (cache.size > maximumSize) cache.delete(cache.keys().next().value);
+}
+
+function storeTimedCacheValue(cache, key, value, maximumSize, metadata = {}) {
+  cache.delete(key);
+  cache.set(key, { value, storedAt: Date.now(), ...metadata });
   while (cache.size > maximumSize) cache.delete(cache.keys().next().value);
 }
 

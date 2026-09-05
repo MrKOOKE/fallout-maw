@@ -72,12 +72,16 @@ const {
 } = await import("../src/events/foundry-document-events.mjs");
 const {
   getAbilityCatalog,
+  getActorNeedSettings,
+  getCreatureOptions,
   invalidateAbilityCatalogCache,
   invalidatePreparedRuntimeSettingsCache,
   getPreparedRuntimeSettings,
   refreshPreparedActorsAfterSkillSettingsChange,
   syncSettingsIntoSystemConfig
 } = await import("../src/settings/accessors.mjs");
+const { buildActorFormulaData } = await import("../src/utils/actor-formulas.mjs");
+const { prepareActorOrganismDevelopmentLimitBase } = await import("../src/races/organism-development.mjs");
 const {
   isInventoryRelevantActorUpdate
 } = await import("../src/inventory/migration.mjs");
@@ -251,5 +255,79 @@ test("skill settings refresh invalidates a cached default ability catalog", () =
   } finally {
     settingValues.clear();
     invalidateAbilityCatalogCache();
+  }
+});
+
+test("Actor base and effect formulas reuse settings while keeping live Actor and construct values", () => {
+  const races = [
+    { id: "race-a", organismDevelopment: { limit: 41 }, needSettings: [{ key: "fuel", label: "First race", abbr: "fa", formula: "10" }] },
+    { id: "race-b", organismDevelopment: { limit: 72 }, needSettings: [{ key: "fuel", label: "Second race", abbr: "fb", formula: "20" }] }
+  ];
+  settingValues.set("creatureOptions", { types: [], races });
+  invalidatePreparedRuntimeSettingsCache();
+  try {
+    const settings = getPreparedRuntimeSettings();
+    const settingsBefore = structuredClone(settings);
+    const readsBefore = settingReads;
+    const actor = { type: "character", system: {
+      creature: { raceId: "race-b" }, characteristics: { strength: 4 },
+      skills: { rangedCombat: { value: 17 } }, needs: { fuel: { value: 3 } }
+    } };
+    prepareActorOrganismDevelopmentLimitBase(actor.system);
+    assert.equal(actor.system.organismDevelopment.limit, 72);
+    const data = buildActorFormulaData(actor, { cache: false });
+    assert.equal(data.needSettings.find(need => need.key === "fuel").label, "Second race");
+    assert.equal(data.skills.rangedCombat, 17);
+    buildActorFormulaData(actor, { stage: "initial-active-effect", cache: false });
+
+    actor.system.creature.raceId = "race-a";
+    actor.system.skills.rangedCombat.value = 29;
+    prepareActorOrganismDevelopmentLimitBase(actor.system);
+    assert.equal(actor.system.organismDevelopment.limit, 41);
+    const changed = buildActorFormulaData(actor, { cache: false });
+    assert.equal(changed.skills.rangedCombat, 29);
+    assert.equal(changed.needSettings.find(need => need.key === "fuel").label, "First race");
+    assert.equal(settingReads, readsBefore, "no settings rereads while preparing either phase");
+
+    const part = { type: "gear", system: { placement: { mode: "constructPart" }, functions: {
+      constructPart: { enabled: true, needs: [{ key: "oil", label: "Old oil", formula: "10" }] }
+    } } };
+    const construct = { type: "construct", items: [part], system: {} };
+    assert.equal(buildActorFormulaData(construct, { cache: false }).needSettings.find(need => need.key === "oil").label, "Old oil");
+    part.system.functions.constructPart.needs[0].label = "New oil";
+    assert.equal(buildActorFormulaData(construct, { cache: false }).needSettings.find(need => need.key === "oil").label, "New oil");
+    construct.items = [];
+    assert.equal(buildActorFormulaData(construct, { cache: false }).needSettings.some(need => need.key === "oil"), false);
+    assert.deepEqual(settings, settingsBefore, "calculations do not mutate the shared settings");
+  } finally {
+    settingValues.clear();
+    invalidatePreparedRuntimeSettingsCache();
+  }
+});
+
+test("settings refresh updates race limits and formula definitions immediately; editor getters stay independent", () => {
+  const race = { id: "custom", organismDevelopment: { limit: 35 }, needSettings: [{ key: "fuel", label: "Before", formula: "10" }] };
+  settingValues.set("creatureOptions", { types: [], races: [race] });
+  invalidatePreparedRuntimeSettingsCache();
+  try {
+    const actor = { type: "character", system: { creature: { raceId: "custom" } } };
+    const before = buildActorFormulaData(actor, { cache: false });
+    assert.equal(before.needSettings.find(need => need.key === "fuel").label, "Before");
+    race.organismDevelopment.limit = 83;
+    race.needSettings[0].label = "After";
+    syncSettingsIntoSystemConfig();
+    prepareActorOrganismDevelopmentLimitBase(actor.system);
+    assert.equal(actor.system.organismDevelopment.limit, 83);
+    assert.equal(buildActorFormulaData(actor, { cache: false }).needSettings.find(need => need.key === "fuel").label, "After");
+    assert.equal(before.needSettings.find(need => need.key === "fuel").label, "Before");
+    const editor = getCreatureOptions();
+    editor.races[0].organismDevelopment.limit = 1;
+    getActorNeedSettings(actor)[0].label = "Editor modification";
+    prepareActorOrganismDevelopmentLimitBase(actor.system);
+    assert.equal(actor.system.organismDevelopment.limit, 83);
+    assert.equal(buildActorFormulaData(actor, { cache: false }).needSettings.find(need => need.key === "fuel").label, "After");
+  } finally {
+    settingValues.clear();
+    invalidatePreparedRuntimeSettingsCache();
   }
 });

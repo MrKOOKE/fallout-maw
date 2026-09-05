@@ -114,10 +114,14 @@ export function collectEventReactionKeysFromItem(item = null) {
  * O(1) demand index for Event Reaction subscriptions on the active scene.
  * Without this, every selectable system event scans all scene actors/items even when
  * no event-reaction functions exist (functionChecks: 0 in production logs).
+ * Actor-local invalidations reuse the completed scans of other exact Documents.
+ * Providers with cross-Actor dependencies must keep full refreshes (the default
+ * for an injected getItems provider unless canReuseActorItems opts in).
  */
 export function createEventReactionSubscriptionIndex({
   getReactors = () => getActiveSceneWorldTimeActors(),
   getItems = undefined,
+  canReuseActorItems = () => getItems === undefined,
   setTimer = globalThis.setTimeout,
   clearTimer = globalThis.clearTimeout,
   coalesceMs = DEFAULT_COALESCE_MS
@@ -125,15 +129,24 @@ export function createEventReactionSubscriptionIndex({
   let generation = 0;
   let keys = new Set();
   let actorsByKey = new Map();
+  let recordsByActor = new WeakMap();
+  let dirtyActors = new WeakSet();
+  let fullRefresh = true;
   let totalSubscriptions = 0;
   let dirty = true;
   let timerId = null;
   let rebuildPromise = null;
   let invalidationRevision = 0;
 
-  function markDirty() {
+  function markDirty(actor = null) {
     invalidationRevision += 1;
     dirty = true;
+    if (actor && typeof actor === "object") dirtyActors.add(actor);
+    else fullRefresh = true;
+    // #region codex-runtime-debug H12 verify hook ownership in the actual client
+    globalThis.__falloutMawGameplayProbe?.count(actor && typeof actor === "object"
+      ? "events.indexInvalidationLocal" : "events.indexInvalidationFull", "H12");
+    // #endregion codex-runtime-debug
     if (timerId !== null) return;
     timerId = setTimer(() => {
       timerId = null;
@@ -149,32 +162,58 @@ export function createEventReactionSubscriptionIndex({
     const rebuildRevision = invalidationRevision;
     let pendingRebuild;
     pendingRebuild = Promise.resolve().then(async () => {
+      // codex-runtime-debug: time real scene-wide rebuilds, excluding warm lookups.
+      const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("events.rebuildIndex", "H2");
+      try {
       const nextKeys = new Set();
       const nextActorsByKey = new Map();
+      const nextRecordsByActor = new WeakMap();
+      const reuseUnchanged = !fullRefresh && canReuseActorItems();
       let nextTotal = 0;
+      let scannedActors = 0, reusedActors = 0; // codex-runtime-debug
       for (const actor of await getReactors() ?? []) {
-        const actorKeys = new Set();
-        for (const item of getActorEventReactionSourceItems(actor, getItems ? { getItems } : {})) {
-          for (const eventKey of collectEventReactionKeysFromItem(item)) {
-            nextKeys.add(eventKey);
-            actorKeys.add(eventKey);
-            nextTotal += 1;
+        let record = reuseUnchanged && !dirtyActors.has(actor) ? recordsByActor.get(actor) : null;
+        if (record) reusedActors += 1; // codex-runtime-debug
+        if (!record) {
+          scannedActors += 1; // codex-runtime-debug
+          record = { keys: new Set(), total: 0 };
+          for (const item of getActorEventReactionSourceItems(actor, getItems ? { getItems } : {})) {
+            for (const eventKey of collectEventReactionKeysFromItem(item)) {
+              record.keys.add(eventKey);
+              record.total += 1;
+            }
           }
         }
-        for (const eventKey of actorKeys) {
+        nextTotal += record.total;
+        for (const eventKey of record.keys) {
+          nextKeys.add(eventKey);
           const actors = nextActorsByKey.get(eventKey) ?? [];
           actors.push(actor);
           nextActorsByKey.set(eventKey, actors);
         }
+        // An empty scan also proves that this exact Document has no reactions.
+        // Document identity matters: synthetic Actors can be replaced while
+        // retaining their UUID, before the scene index has been invalidated.
+        if (actor && typeof actor === "object") nextRecordsByActor.set(actor, record);
       }
+      // #region codex-runtime-debug H12 measure inventory scans rather than rebuild count
+      globalThis.__falloutMawGameplayProbe?.count("events.indexActorsScanned", "H12", scannedActors);
+      globalThis.__falloutMawGameplayProbe?.count("events.indexActorsReused", "H12", reusedActors);
+      // #endregion codex-runtime-debug
       if (invalidationRevision === rebuildRevision) {
         keys = nextKeys;
         actorsByKey = nextActorsByKey;
+        recordsByActor = nextRecordsByActor;
+        dirtyActors = new WeakSet();
+        fullRefresh = false;
         totalSubscriptions = nextTotal;
         dirty = false;
         generation += 1;
       }
       return snapshot();
+      } finally {
+        __codexFinish?.(); // codex-runtime-debug
+      }
     }).finally(() => {
       if (rebuildPromise === pendingRebuild) rebuildPromise = null;
     });
@@ -211,6 +250,13 @@ export function createEventReactionSubscriptionIndex({
     return actorsByKey.get(key) ?? [];
   }
 
+  function hasActorEventKey(actor, eventKey) {
+    if (dirty) return null;
+    const record = recordsByActor.get(actor);
+    if (!record) return null;
+    return record.keys.has(String(eventKey ?? "").trim());
+  }
+
   function reset() {
     invalidationRevision += 1;
     if (timerId !== null) clearTimer(timerId);
@@ -218,6 +264,9 @@ export function createEventReactionSubscriptionIndex({
     rebuildPromise = null;
     keys = new Set();
     actorsByKey = new Map();
+    recordsByActor = new WeakMap();
+    dirtyActors = new WeakSet();
+    fullRefresh = true;
     totalSubscriptions = 0;
     dirty = true;
     generation += 1;
@@ -229,6 +278,7 @@ export function createEventReactionSubscriptionIndex({
     hasEventKey,
     hasAnyOf,
     getActorsForEventKey,
+    hasActorEventKey,
     reset,
     snapshot,
     get empty() {
@@ -243,16 +293,19 @@ export function createEventReactionSubscriptionIndex({
 let index = null;
 let hooksRegistered = false;
 let configuredItemProvider = null;
+let configuredItemProviderIsLocal = false;
 
-export function configureEventReactionSubscriptionItems(getItems = null) {
+export function configureEventReactionSubscriptionItems(getItems = null, { actorLocal = false } = {}) {
   configuredItemProvider = typeof getItems === "function" ? getItems : null;
+  configuredItemProviderIsLocal = actorLocal === true;
   index?.markDirty();
 }
 
 export function getEventReactionSubscriptionIndex() {
   if (!index) {
     index = createEventReactionSubscriptionIndex({
-      getItems: actor => configuredItemProvider?.(actor) ?? getActorItemDocuments(actor)
+      getItems: actor => configuredItemProvider?.(actor) ?? getActorItemDocuments(actor),
+      canReuseActorItems: () => !configuredItemProvider || configuredItemProviderIsLocal
     });
   }
   return index;
@@ -266,33 +319,48 @@ export function registerEventReactionSubscriptionIndexHooks({
   hooksRegistered = true;
   const current = getIndex();
   const bump = () => current.markDirty();
+  const bumpOwner = document => {
+    let actor = document;
+    while (actor && actor.documentName !== "Actor") actor = actor.parent;
+    // A world Actor may also supply data to many synthetic Actors. Only an
+    // unlinked token's own Actor has a locally bounded dependency here.
+    if (actor?.isToken === true && actor.token?.actorLink === false) current.markDirty(actor);
+    else bump();
+  };
 
   const registrations = [
     ["canvasReady", bump],
     ["canvasTearDown", () => current.reset()],
+    ["createSetting", bump],
+    ["updateSetting", bump],
+    ["deleteSetting", bump],
     ["createToken", bump],
     ["deleteToken", bump],
-    ["createItem", bump],
-    ["updateItem", (_item, changes = {}, options = {}) => {
-      if (itemUpdateInvalidatesEventReactionIndex(changes, options)) bump();
+    ["createItem", bumpOwner],
+    ["updateItem", (item, changes = {}, options = {}) => {
+      if (itemUpdateInvalidatesEventReactionIndex(changes, options)) bumpOwner(item);
     }],
-    ["deleteItem", bump],
+    ["deleteItem", bumpOwner],
     ["createActor", bump],
     ["deleteActor", bump],
-    ["updateActor", (_actor, changes = {}) => {
-      if (actorUpdateInvalidatesEventReactionIndex(changes)) bump();
+    ["updateActor", (actor, changes = {}) => {
+      if (actorUpdateInvalidatesEventReactionIndex(changes)) {
+        if (getChangedPaths(changes).some(path => path.startsWith("flags.fallout-maw.actorContainer")
+          || path.startsWith("flags.fallout-maw.travelGroup"))) bump();
+        else bumpOwner(actor);
+      }
     }],
     ["updateToken", (_token, changes = {}) => {
       if (tokenUpdateInvalidatesEventReactionIndex(changes)) bump();
     }],
     ["createActiveEffect", effect => {
-      if (activeEffectInvalidatesEventReactionIndex(effect)) bump();
+      if (activeEffectInvalidatesEventReactionIndex(effect)) bumpOwner(effect);
     }],
     ["updateActiveEffect", (effect, changes = {}) => {
-      if (activeEffectInvalidatesEventReactionIndex(effect, changes)) bump();
+      if (activeEffectInvalidatesEventReactionIndex(effect, changes)) bumpOwner(effect);
     }],
     ["deleteActiveEffect", effect => {
-      if (activeEffectInvalidatesEventReactionIndex(effect)) bump();
+      if (activeEffectInvalidatesEventReactionIndex(effect)) bumpOwner(effect);
     }]
   ].map(([name, callback]) => ({ name, id: hooks.on(name, callback) }));
 
@@ -331,6 +399,32 @@ export async function eventReactionIndexGetActors(eventKey) {
   if (known !== null) return known;
   await ensureIndexFresh(current);
   return current.getActorsForEventKey(eventKey) ?? [];
+}
+
+/** Scan participants only when the fresh scene index has not covered their Document. */
+export async function eventParticipantHasReactionKey(envelope = {}, {
+  resolveUuid = uuid => globalThis.fromUuid?.(uuid) ?? null,
+  getIndex = getEventReactionSubscriptionIndex,
+  getItems = actor => configuredItemProvider?.(actor) ?? getActorItemDocuments(actor)
+} = {}) {
+  const eventKey = String(envelope?.key ?? "").trim();
+  const actorUuids = new Set([
+    envelope?.source?.actorUuid,
+    envelope?.target?.actorUuid
+  ].map(value => String(value ?? "").trim()).filter(Boolean));
+  for (const actorUuid of actorUuids) {
+    const actor = await resolveUuid(actorUuid);
+    if (!actor) continue;
+    const known = getIndex().hasActorEventKey(actor, eventKey);
+    if (known !== null) {
+      if (known) return true;
+      continue;
+    }
+    for (const item of getActorEventReactionSourceItems(actor, { getItems })) {
+      if (collectEventReactionKeysFromItem(item).includes(eventKey)) return true;
+    }
+  }
+  return false;
 }
 
 export async function collectIndexedEventReactionReactorActors(envelope = {}, {

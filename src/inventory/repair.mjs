@@ -61,6 +61,7 @@ const KNOWN_NON_INVENTORY_PLACEMENT_MODES = new Set([
   "prosthesis",
   "constructPart"
 ]);
+const readOnlyPlacementValidators = new WeakSet();
 
 /**
  * Build a deterministic, side-effect-free repair plan for embedded Item data.
@@ -78,7 +79,9 @@ export function planInventoryRepair(items, rootDimensions = {}, options = {}) {
   const sourceItems = getItemsArray(items)
     .filter(isInventoryManagedItem)
     .filter(item => getItemId(item));
-  const projectedItems = sourceItems.map(cloneItemData);
+  const readOnlyValidation = !options.isNonInventoryPlacementValid
+    || readOnlyPlacementValidators.has(options.isNonInventoryPlacementValid);
+  const projectedItems = sourceItems.map(item => cloneRepairProjection(item, readOnlyValidation));
   const sourceById = new Map(sourceItems.map(item => [getItemId(item), item]));
   const projectedById = new Map(projectedItems.map(item => [getItemId(item), item]));
   const sourceOrder = new Map(sourceItems.map((item, index) => [getItemId(item), index]));
@@ -343,7 +346,7 @@ export function createActorNonInventoryPlacementValidator(actor, race = null, it
   const naturalWeaponSlots = new Set();
   const actorItems = getItemsArray(items ?? actor?.items);
 
-  return (item, projectedItems = actorItems) => {
+  const validate = (item, projectedItems = actorItems) => {
     const placementItems = getItemsArray(projectedItems);
     const placement = getItemSystem(item).placement ?? {};
     const mode = String(placement.mode ?? "");
@@ -426,6 +429,8 @@ export function createActorNonInventoryPlacementValidator(actor, race = null, it
 
     return false;
   };
+  readOnlyPlacementValidators.add(validate);
+  return validate;
 }
 
 /**
@@ -1116,8 +1121,57 @@ function getStrictPositiveInteger(value) {
   return Number.isInteger(number) && number > 0 ? number : 0;
 }
 
-function cloneItemData(item) {
+/** Take an independent full snapshot, including custom serializer output. */
+export function cloneInventoryItemData(item) {
   const source = typeof item?.toObject === "function" ? item.toObject() : item;
+  // Native Item serialization already returns an independent source copy.
+  // Plain records and custom serializers
+  // still require a detached clone, including custom compatibility shims.
+  const Document = globalThis.foundry?.abstract?.Document;
+  const DataModel = globalThis.foundry?.abstract?.DataModel;
+  const BaseItem = globalThis.foundry?.documents?.BaseItem;
+  const BaseEffect = globalThis.foundry?.documents?.BaseActiveEffect;
+  if (Document && BaseItem && item instanceof BaseItem
+    && item.toObject === Document.prototype.toObject && item.constructor.shimData === BaseItem.shimData
+    && (globalThis.CONFIG?.ActiveEffect?.documentClass ?? BaseEffect)?.shimData === BaseEffect?.shimData
+    && [globalThis.CONFIG?.Item, globalThis.CONFIG?.ActiveEffect].every(config =>
+      Object.values(config?.dataModels ?? {}).every(Model => Model.shimData === DataModel?.shimData))) {
+    // #region codex-runtime-debug H11 native inventory projection avoids duplicate copy
+    globalThis.__falloutMawGameplayProbe?.count("inventory.repair.singleSourceCopy", "H11");
+    // #endregion codex-runtime-debug
+    return source;
+  }
   if (typeof structuredClone === "function") return structuredClone(source);
   return JSON.parse(JSON.stringify(source));
+}
+
+function cloneRepairProjection(item, readOnlyValidation) {
+  // The planner writes only equipped/locked, container.parentId and placement
+  // fields in prepareProjectedItemForContext. All other branches are read-only.
+  // Sharing those branches with the immutable expected snapshot avoids copying
+  // every weapon function, effect and description merely to test grid positions.
+  // External predicates receive a fully detached object, as before.
+  if (!readOnlyValidation || typeof item?.toObject === "function"
+    || !isPlainRecord(item) || !isPlainRecord(item.system)
+    || (item.system.container != null && !isPlainRecord(item.system.container))
+    || (item.system.placement != null && !isPlainRecord(item.system.placement))) {
+    return cloneInventoryItemData(item);
+  }
+  // #region codex-runtime-debug H11 verify the actual snapshot-to-projection path
+  globalThis.__falloutMawGameplayProbe?.count("inventory.repair.placementProjection", "H11");
+  // #endregion codex-runtime-debug
+  return {
+    ...item,
+    system: {
+      ...item.system,
+      container: { ...item.system.container },
+      placement: { ...item.system.placement }
+    }
+  };
+}
+
+function isPlainRecord(value) {
+  if (!value || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

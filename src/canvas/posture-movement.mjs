@@ -241,6 +241,12 @@ async function syncTokenPostureDocument(tokenDocument) {
 async function syncTokenPostureEffect(tokenDocument) {
   const actor = tokenDocument?.actor;
   if (!actor?.isOwner) return;
+  // #region codex-runtime-debug H14 detached updateToken consequence may outlive the bulk flusher
+  const finish = globalThis.__falloutMawGameplayProbe?.span("posture.syncEffect", "H14", {
+    tokenId: tokenDocument.id, actorId: actor.id, itemCount: actor.items?.size ?? 0
+  });
+  try {
+  // #endregion codex-runtime-debug
 
   const action = normalizeMovementAction(tokenDocument?._source?.movementAction);
   const posture = isPostureEffectAction(action) ? POSTURE_ACTION_CONFIGS[action] : null;
@@ -264,6 +270,7 @@ async function syncTokenPostureEffect(tokenDocument) {
   }
 
   await actor.createEmbeddedDocuments("ActiveEffect", [data], getPostureEffectOperationOptions(action));
+  } finally { finish?.(); } // codex-runtime-debug
 }
 
 async function deleteExistingPostureEffects(actor, ids = []) {

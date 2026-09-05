@@ -28,7 +28,16 @@ export async function endBulkOperation() {
 
   const context = state;
   state = createBulkState();
-  for (const flusher of flushers) await flusher(context);
+  for (const flusher of flushers) {
+    // #region codex-runtime-debug H14 include the work after damage application
+    const finish = globalThis.__falloutMawGameplayProbe?.span(`bulk.${flusher.name || "anonymous"}`, "H14", {
+      abilityActorCount: context.abilityActors.size, postureActorCount: context.postureActors.size,
+      stealthActorCount: context.stealthActors.size, auraState: context.auraState
+    });
+    // #endregion codex-runtime-debug
+    try { await flusher(context); }
+    finally { finish?.(); } // codex-runtime-debug
+  }
 }
 
 export function registerBulkOperationFlusher(flusher) {

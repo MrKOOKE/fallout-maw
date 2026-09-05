@@ -1,5 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { getCreatureOptions } from "../settings/accessors.mjs";
+import { getPreparedRuntimeSettings } from "../settings/accessors.mjs";
 import { prepareHudWeaponSetsContext } from "./actor-display-data.mjs";
 import { isTraumaDiseaseSuppressionEffectKey } from "./active-effect-changes.mjs";
 import { getItemContainerParentId } from "./inventory-containers.mjs";
@@ -44,19 +44,20 @@ export function resolveActiveHudWeaponSet(actor = null, weaponSets = null) {
 export function getHudWeaponSetsForActor(actor = null) {
   if (!actor) return [];
 
+  const { creatureOptions } = getPreparedRuntimeSettings();
   const signature = getHudWeaponSetsCacheSignature(actor);
   const cached = hudWeaponSetsCache.get(actor);
-  if (cached?.signature === signature) {
+  if (cached?.signature === signature && cached.creatureOptions === creatureOptions) {
     return cached.sets;
   }
 
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const race = creatureOptions.races.find(entry => entry.id === actor?.system?.creature?.raceId);
   const inventory = prepareHudWeaponSetsContext(actor, race);
   const sets = [
     ...(inventory.naturalWeaponSet ? [inventory.naturalWeaponSet] : []),
     ...(inventory.weaponSets ?? [])
   ];
-  hudWeaponSetsCache.set(actor, { signature, sets });
+  hudWeaponSetsCache.set(actor, { signature, creatureOptions, sets });
   return sets;
 }
 

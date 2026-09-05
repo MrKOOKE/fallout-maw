@@ -25,6 +25,32 @@ test("a valid plain-object inventory is already repaired", () => {
   assert.deepEqual(plan.repairs, []);
 });
 
+test("placement projection leaves the complete frozen conflict-check snapshot unchanged", () => {
+  const items=[createItem({id:'broken',parentId:'missing',equipped:true,locked:true}),createItem({id:'valid',x:2})];
+  items[0].flags={custom:{nested:['preserved']}};
+  items[0].system.functions.weapon={damage:{formula:'2d6'}};
+  items[0].system.stackParts=[{quantity:1,x:1,y:1}];
+  const before=structuredClone(items);
+  const freeze=value=>{if(value&&typeof value==='object'){for(const child of Object.values(value))freeze(child);Object.freeze(value);}};
+  freeze(items);
+  const plan=planInventoryRepair(items,{columns:4,rows:1});
+  assert.ok(plan.updates.length);assert.deepEqual(items,before);
+  assert.deepEqual(plan,planInventoryRepair(before,{columns:4,rows:1},{isNonInventoryPlacementValid:()=>true}));
+});
+
+test("custom placement predicates still receive detached nested data for every projected item", () => {
+  const items=[createItem({id:'weapon',mode:'weapon'}),createItem({id:'stored',x:2})];
+  items[0].system.functions.weapon={damage:{formula:'original'}};
+  items[1].flags={custom:{value:'original'}};
+  const before=structuredClone(items);
+  const plan=planInventoryRepair(items,{columns:4,rows:1},{isNonInventoryPlacementValid:(item,projected)=>{
+    item.system.functions.weapon.damage.formula='changed';
+    projected[1].flags.custom.value='changed';
+    return false;
+  }});
+  assert.ok(plan.updates.length);assert.deepEqual(items,before);
+});
+
 test("manual locks on valid active placements remain untouched", () => {
   const weapon = createItem({
     id: "released-weapon",

@@ -1,4 +1,4 @@
-import { getCharacteristicSettings, getCreatureOptions } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getPreparedRuntimeSettings } from "../settings/accessors.mjs";
 import {
   DEFAULT_ORGANISM_DEVELOPMENT_LIMIT
 } from "../settings/creature-options.mjs";
@@ -172,7 +172,7 @@ export function prepareActorOrganismDevelopmentLimitBase(system) {
   if (!system || typeof system !== "object") return;
   const raceId = String(system.creature?.raceId ?? "");
   const race = raceId
-    ? getCreatureOptions().races.find(entry => entry.id === raceId) ?? null
+    ? getPreparedRuntimeSettings().creatureOptions.races.find(entry => entry.id === raceId) ?? null
     : null;
   system.organismDevelopment ??= {};
   system.organismDevelopment.limit = getOrganismDevelopmentLimitBase(race);

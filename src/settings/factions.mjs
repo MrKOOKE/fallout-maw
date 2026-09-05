@@ -72,11 +72,28 @@ export async function setFactionMatrix(matrix, factions = getFactionSettings()) 
   return normalized;
 }
 
-export function getFactionScore(fromFaction, toFaction, matrix = getFactionMatrix()) {
+export function getFactionScore(fromFaction, toFaction, matrix) {
   const from = normalizeFactionName(fromFaction, DEFAULT_FACTION_NAME);
   const to = normalizeFactionName(toFaction, DEFAULT_FACTION_NAME);
   if (!from || !to || from === to) return 0;
+  if (matrix === undefined) return getConfiguredFactionScore(from, to);
   return getScoreFromMatrix(matrix, from, to);
+}
+
+/** Read the requested cell with the same rules as the normalized editor matrix.
+ * Relation checks do not need to allocate every faction pair. Read settings on
+ * each call so edits, including in-place changes, are immediately visible.
+ */
+function getConfiguredFactionScore(from, to) {
+  const factions = getFactionSettings();
+  if (from !== DEFAULT_FACTION_NAME && !factions.includes(from)) return 0;
+  if (to !== DEFAULT_FACTION_NAME && !factions.includes(to)) return 0;
+  try {
+    const source = game.settings.get(FALLOUT_MAW.id, FACTION_MATRIX_SETTING);
+    return getScoreFromMatrix(source && typeof source === "object" ? source : {}, from, to);
+  } catch (_error) {
+    return 0;
+  }
 }
 
 export function setFactionScoreMutable(matrix, fromFaction, toFaction, value) {

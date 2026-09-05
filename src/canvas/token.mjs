@@ -47,6 +47,7 @@ import { resolveTokenTargetAlpha } from "./token-target-alpha.mjs";
 import { localViewReceivesPhantomVision } from "./phantom-vision.mjs";
 import { getLivingSteelEffectTooltipRows } from "../abilities/living-steel.mjs";
 import { EffectTooltipController } from "./effect-tooltip-controller.mjs";
+import { withTokenPreviewClone } from "../documents/token-clone-initialization.mjs";
 
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
 const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -176,6 +177,10 @@ function waitForAbilityRoutePathReady(context, timeoutMs = 750) {
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  clone() {
+    return withTokenPreviewClone(this.document, () => super.clone());
+  }
+
   /** Let an allied illusion contribute sight without granting control of its actor. */
   _isVisionSource() {
     return super._isVisionSource() || (

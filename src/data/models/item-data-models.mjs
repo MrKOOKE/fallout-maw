@@ -1,4 +1,5 @@
 import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
+import { getPreviewItemValidationOptions } from "../../documents/token-clone-initialization.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField, TypedSchemaField } = foundry.data.fields;
 const OPTIONAL_FUNCTION_FIELD_OPTIONS = Object.freeze({ required: false });
@@ -16,6 +17,11 @@ const WEAPON_SPECIAL_PROPERTY_ATTACK_POWER = "attackPower";
 const WEAPON_SPECIAL_PROPERTY_CRITICAL_DAMAGE = "criticalDamage";
 const WEAPON_SPECIAL_PROPERTY_ADDITIONAL_PROFICIENCIES = "additionalProficiencies";
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
+  validate(options = {}) {
+    if (![GearDataModel, AbilityDataModel, TraumaDataModel, DiseaseDataModel].includes(this.constructor)) return super.validate(options);
+    return super.validate(getPreviewItemValidationOptions(this, options));
+  }
+
   static defineSchema() {
     return {
       description: new HTMLField({ required: false, blank: true, initial: "" }),

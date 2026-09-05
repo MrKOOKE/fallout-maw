@@ -7,7 +7,10 @@ globalThis.foundry = {
     ux: { FormDataExtended: class {} },
     handlebars: { renderTemplate: () => "" }
   },
-  utils: {}
+  utils: {
+    deepClone: structuredClone,
+    mergeObject: (base, update) => ({ ...base, ...update })
+  }
 };
 globalThis.game = {
   settings: {
