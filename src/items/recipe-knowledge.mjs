@@ -4,11 +4,18 @@ import { resolveWorldItemSync } from "../utils/world-items.mjs";
 export const KNOWN_CRAFT_ITEMS_FLAG = "knownCraftItems";
 export const DEFAULT_CRAFT_RECIPE_ID = "recipe1";
 
+const knownCraftItemUuidCache = new WeakMap();
+
 export function getKnownCraftItemUuids(actor = null) {
   const stored = actor?.getFlag?.(SYSTEM_ID, KNOWN_CRAFT_ITEMS_FLAG);
-  return new Set((Array.isArray(stored) ? stored : [])
+  if (!actor) return new Set();
+  const cached = knownCraftItemUuidCache.get(actor);
+  if (cached?.stored === stored) return cached.uuids;
+  const uuids = new Set((Array.isArray(stored) ? stored : [])
     .map(value => String(value ?? "").trim())
     .filter(Boolean));
+  knownCraftItemUuidCache.set(actor, { stored, uuids });
+  return uuids;
 }
 
 export async function setKnownCraftItemUuids(actor = null, values = []) {
@@ -18,12 +25,19 @@ export async function setKnownCraftItemUuids(actor = null, values = []) {
     .filter(Boolean)))
     .sort((left, right) => left.localeCompare(right));
   await actor.setFlag(SYSTEM_ID, KNOWN_CRAFT_ITEMS_FLAG, normalized);
+  const stored = actor.getFlag?.(SYSTEM_ID, KNOWN_CRAFT_ITEMS_FLAG);
+  knownCraftItemUuidCache.set(actor, {
+    stored,
+    uuids: new Set(Array.isArray(stored) ? stored : normalized)
+  });
   return normalized;
 }
 
 export function actorKnowsCraftItem(actor = null, itemOrUuid = null) {
   const uuid = getCraftKnowledgeItemUuid(itemOrUuid);
-  return Boolean(uuid && getKnownCraftItemUuids(actor).has(uuid));
+  const known = getKnownCraftItemUuids(actor);
+  const result = Boolean(uuid && known.has(uuid));
+  return result;
 }
 
 export async function grantCraftItemKnowledge(actor = null, itemUuids = []) {

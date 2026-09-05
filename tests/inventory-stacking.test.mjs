@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+let settingsReads = 0;
 globalThis.game = {
   settings: {
     get: () => {
+      settingsReads += 1;
       throw new Error("use defaults");
     }
   }
@@ -29,7 +31,11 @@ globalThis.foundry = {
   }
 };
 
-const { canStackInventoryItems } = await import("../src/inventory/stacking.mjs");
+const {
+  canStackInventoryItems,
+  createInventoryStackCandidateIndex,
+  getInventoryStackCandidates
+} = await import("../src/inventory/stacking.mjs");
 
 test("equipment with the same slots but different requirement modes does not stack", () => {
   const source = createGear("all");
@@ -37,6 +43,26 @@ test("equipment with the same slots but different requirement modes does not sta
 
   assert.equal(canStackInventoryItems(source, target), false);
   assert.equal(canStackInventoryItems(source, createGear("all")), true);
+});
+
+test("unrelated stack candidates are rejected before normalized settings are read", () => {
+  const source = createGear("all");
+  const unrelated = createGear("all");
+  unrelated.name = "Unrelated";
+  settingsReads = 0;
+
+  assert.equal(canStackInventoryItems(source, unrelated), false);
+  assert.equal(settingsReads, 0);
+});
+
+test("candidate index returns only items with matching cheap stack scalars", () => {
+  const source = createGear("all");
+  const compatibleCandidate = createGear("all");
+  const unrelated = createGear("all");
+  unrelated.img = "icons/svg/mystery-man.svg";
+  const index = createInventoryStackCandidateIndex([compatibleCandidate, unrelated]);
+
+  assert.deepEqual(getInventoryStackCandidates(index, source), [compatibleCandidate]);
 });
 
 function createGear(occupiedSlotMode) {

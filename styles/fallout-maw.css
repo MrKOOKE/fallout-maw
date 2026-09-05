@@ -19261,6 +19261,13 @@ label.checkbox.fallout-maw-ability-change-choice {
   gap: 0.2rem;
 }
 
+.fallout-maw-craft-window-recipe-limit {
+  color: rgba(232, 212, 136, 0.72);
+  font-family: "Courier New", Courier, monospace;
+  margin: 0.35rem 0.25rem;
+  text-align: center;
+}
+
 .fallout-maw-butchering-tool-requirement {
   align-items: end;
   display: grid;

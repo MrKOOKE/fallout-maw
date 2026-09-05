@@ -20,25 +20,13 @@ import {
  * stack currently lives, not what the stack contains.
  */
 export function canStackInventoryItems(sourceData = null, targetItem = null) {
-  if (!sourceData || !targetItem) return false;
+  if (!hasMatchingInventoryStackScalars(sourceData, targetItem)) return false;
   const sourceSystem = sourceData.system ?? {};
   const targetSystem = targetItem.system ?? {};
   const creatureOptions = getCreatureOptions();
 
   return (
-    sourceData.type === targetItem.type
-    && !isContainerItem(sourceData)
-    && !isContainerItem(targetItem)
-    && sourceData.name === targetItem.name
-    && sourceData.img === targetItem.img
-    && isItemLocked(sourceData) === isItemLocked(targetItem)
-    && Number(sourceSystem.weight) === Number(targetSystem.weight)
-    && Number(sourceSystem.price) === Number(targetSystem.price)
-    && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
-    && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
-    && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
-    && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
-    && serializeEquipmentSlotRequirement(sourceSystem, creatureOptions)
+    serializeEquipmentSlotRequirement(sourceSystem, creatureOptions)
       === serializeEquipmentSlotRequirement(targetSystem, creatureOptions)
     && serializeWeaponSlotRequirement(sourceSystem, creatureOptions)
       === serializeWeaponSlotRequirement(targetSystem, creatureOptions)
@@ -52,12 +40,58 @@ export function canStackInventoryItems(sourceData = null, targetItem = null) {
  * A positive result still has to pass {@link canStackInventoryItems}.
  */
 export function canMaybeStackInventoryItems(sourceData = null, targetItem = null) {
+  if (!hasMatchingInventoryStackScalars(sourceData, targetItem)) return false;
+  if (getItemQuantity(targetItem) >= getItemMaxStack(targetItem)) return false;
+
+  return true;
+}
+
+/**
+ * Build a cheap stable bucket key for candidate discovery. Exact compatibility
+ * still uses {@link canStackInventoryItems}; this key prevents unrelated Items
+ * from triggering settings normalization or function serialization.
+ */
+export function getInventoryStackCandidateKey(itemOrData = null) {
+  if (!itemOrData || isContainerItem(itemOrData)) return "";
+  const system = itemOrData.system ?? {};
+  const footprint = getItemFootprint(system);
+  return JSON.stringify([
+    String(itemOrData.type ?? ""),
+    String(itemOrData.name ?? ""),
+    String(itemOrData.img ?? ""),
+    isItemLocked(itemOrData),
+    Number(system.weight),
+    Number(system.price),
+    String(system.priceCurrency ?? ""),
+    getItemMaxStack(system),
+    footprint.width,
+    footprint.height
+  ]);
+}
+
+export function createInventoryStackCandidateIndex(items = []) {
+  const byKey = new Map();
+  for (const item of Array.from(items?.contents ?? items ?? [])) {
+    const key = getInventoryStackCandidateKey(item);
+    if (!key) continue;
+    const bucket = byKey.get(key) ?? [];
+    bucket.push(item);
+    byKey.set(key, bucket);
+  }
+  return byKey;
+}
+
+export function getInventoryStackCandidates(index = null, itemOrData = null) {
+  const key = getInventoryStackCandidateKey(itemOrData);
+  return key ? index?.get(key) ?? [] : [];
+}
+
+function hasMatchingInventoryStackScalars(sourceData = null, targetItem = null) {
   if (!sourceData || !targetItem) return false;
   if (sourceData.type !== targetItem.type) return false;
   if (isContainerItem(sourceData) || isContainerItem(targetItem)) return false;
   if (sourceData.name !== targetItem.name || sourceData.img !== targetItem.img) return false;
   if (isItemLocked(sourceData) !== isItemLocked(targetItem)) return false;
-  if (getItemQuantity(targetItem) >= getItemMaxStack(targetItem)) return false;
 
   const sourceSystem = sourceData.system ?? {};
   const targetSystem = targetItem.system ?? {};

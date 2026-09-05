@@ -65,7 +65,8 @@ test("preset autosave is armed only after all ready maintenance has finished", (
   )?.[1] ?? "";
   const finalizeIndex = readyBody.indexOf("await finalizeSettingsPresetStartup();");
 
-  assert.ok(finalizeIndex > readyBody.indexOf("initializeCraftRecipeWorldIndex();"));
+  assert.ok(finalizeIndex >= 0);
+  assert.doesNotMatch(readyBody, /initializeCraftRecipeWorldIndex|getCraftRecipeSummaries/);
   const afterFinalize = readyBody.slice(
     finalizeIndex + "await finalizeSettingsPresetStartup();".length
   );

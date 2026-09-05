@@ -84,7 +84,6 @@ import {
   registerSearchInventorySocket,
   transferItemBetweenActors
 } from "./apps/search-inventory.mjs";
-import { initializeCraftRecipeWorldIndex } from "./apps/craft-window.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerDroppedItemHooks } from "./items/dropped-items.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
@@ -298,7 +297,6 @@ async function initializeFalloutMawReadyState() {
   await syncPeriodicDamageRegionEffects();
   await armFoundryVisionTracking();
   await startConsciousnessStatusSynchronization();
-  initializeCraftRecipeWorldIndex();
   await removeObsoleteWorldSettings();
   // Ignore setting mutations produced by startup maintenance. From this point
   // onward, a managed setting change is a real runtime/user change and may use

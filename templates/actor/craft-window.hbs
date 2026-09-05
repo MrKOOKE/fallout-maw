@@ -180,27 +180,7 @@
       <label class="fallout-maw-craft-window-recipe-search">
         <input type="search" value="{{recipeSearch}}" placeholder="Поиск" data-craft-recipe-search>
       </label>
-      <div class="fallout-maw-craft-window-recipe-list fallout-maw-pane-scroll" data-search-scroll-key="craft:recipes">
-        {{#each recipeCategories}}
-        <section class="fallout-maw-craft-window-recipe-category {{#if collapsed}}collapsed{{/if}}" data-craft-recipe-category="{{label}}">
-          <div class="fallout-maw-craft-window-recipe-category-header" role="button" tabindex="0" data-craft-recipe-category-toggle="{{key}}" aria-expanded="{{#if collapsed}}false{{else}}true{{/if}}">
-            <i class="fa-solid {{#if collapsed}}fa-caret-right{{else}}fa-caret-down{{/if}}"></i>
-            <span>{{label}}</span>
-            <strong>{{count}}</strong>
-          </div>
-          <div class="fallout-maw-craft-window-recipe-category-list">
-            {{#each recipes}}
-            <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{itemUuid}}" data-recipe-search-text="{{displayName}} {{recipeName}} {{../label}}">
-              <img src="{{img}}" alt="{{displayName}}">
-              <span class="name">{{displayName}}</span>
-            </article>
-            {{/each}}
-          </div>
-        </section>
-        {{else}}
-        <p class="fallout-maw-empty-list">Рецептов нет.</p>
-        {{/each}}
-      </div>
+      {{> "systems/fallout-maw/templates/actor/parts/craft-window-recipe-list.hbs"}}
     </aside>
   </div>
 </div>
