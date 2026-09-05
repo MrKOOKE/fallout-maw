@@ -74,12 +74,9 @@ export function registerSmokeVisionHooks() {
   patchSmokeRegionAnimationFrames();
   patchSmokeVisibilityRefresh();
   patchSmokeDetectionRanges();
-  patchSmokeGpuVisibilityRefresh();
   registerVisionSourceClass();
   registerLightSourceClass();
   registerDarknessSourceClass();
-  Hooks.on("visibilityRefresh", refreshSmokeGpuVisibilityMasks);
-  Hooks.on("canvasPan", invalidateSmokeScreenCaches);
   Hooks.on("createRegion", document => refreshForDocument(document));
   Hooks.on("deleteRegion", document => refreshForDocument(document));
   Hooks.on("updateRegion", (document, changed) => {
@@ -149,7 +146,6 @@ export function registerSmokeVisionHooks() {
     patchSmokeRegionAnimationFrames({ required: true });
     patchSmokeVisibilityRefresh({ required: true });
     patchSmokeDetectionRanges({ required: true });
-    patchSmokeGpuVisibilityRefresh({ required: true });
     registerVisionSourceClass({ required: true });
     registerLightSourceClass({ required: true });
     registerDarknessSourceClass({ required: true });
@@ -1290,7 +1286,6 @@ function registerVisionSourceClass({ required = false } = {}) {
 
     destroy(...args) {
       failedNativeSmokeSources.delete(this);
-      destroySmokeGpuVisionState(this);
       return super.destroy(...args);
     }
 
@@ -1312,16 +1307,9 @@ function registerVisionSourceClass({ required = false } = {}) {
       const sightRadius = Math.max(0, Number(this.radius || this.data.externalRadius) || 0);
       const radius = Math.max(lightRadius, sightRadius);
       const budget = getBasicSightRadius(this, sightRadius) ?? sightRadius;
-      if (isPrimarySmokeGpuVisionSource(this)) {
-        const prepared = prepareSmokeGpuVisionSource(this, {
-          index,
-          lightRadius,
-          sightRadius,
-          radius,
-          budget
-        });
-        if (prepared) return;
-      }
+      // Keep Foundry's native VisionSource polygons authoritative. Replacing
+      // them in the scene-wide visibility texture changes vision-mode
+      // compositing for every actor whenever any smoke exists.
       const constraint = buildSmokeVisionConstraint(this, radius, budget);
       if (!constraint || radius <= 0) return;
 
