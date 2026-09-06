@@ -331,11 +331,6 @@ function isPrimarySmokeGpuVisionSource(source) {
   return Boolean(source?.object && source.object.vision === source);
 }
 
-function isUnattachedSmokeSharedFogSource(source) {
-  const object = source?.object;
-  return Boolean(object && !source.attached && ("vision" in object) && object.vision !== source);
-}
-
 function invalidateSmokeScreenCaches() {
   for (const state of smokeGpuVisionStates.values()) {
     if (state.densityMask) state.densityMask.renderDirty = true;
@@ -1299,10 +1294,6 @@ function registerVisionSourceClass({ required = false } = {}) {
       // VisionSource class but replaces this radial polygon with the equivalent
       // single-ray gate exposed below.
       if (this[POINT_ONLY_SMOKE_VISION]) return;
-      // Foundry draws its private, unattached shared-fog sources through a
-      // separate LegacyGraphics path. The GPU mask below never participates in
-      // that path, so allocating two full-screen textures here was dead work.
-      if (isUnattachedSmokeSharedFogSource(this)) return;
       const lightRadius = Math.max(0, Number(this.lightRadius) || 0);
       const sightRadius = Math.max(0, Number(this.radius || this.data.externalRadius) || 0);
       const radius = Math.max(lightRadius, sightRadius);

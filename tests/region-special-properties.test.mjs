@@ -1372,6 +1372,7 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     const temporaryObserver = {
       hasSight: true,
       sourceId: "Token.temporary-smoke-observer",
+      vision: { sourceId: "Token.temporary-smoke-observer" },
       actor: {},
       document: {
         id: "temporary-smoke-observer",
@@ -1404,6 +1405,24 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     );
     temporaryMask.destroy();
 
+    const constraintsBeforeRadialMask = constrainedMasks.length;
+    const radialMask = createObserverOrdinaryVisionMask(temporaryObserver, {
+      origin: { x: 0, y: 0, elevation: 0 }
+    });
+    assert.ok(radialMask);
+    assert.equal(
+      constrainedMasks.length,
+      constraintsBeforeRadialMask + 1,
+      "the radial stealth preview must apply the same smoke constraint as the observer's vision"
+    );
+    assert.equal(
+      radialMask.contains({ x: 75, y: 0, elevation: 0 }),
+      false,
+      "the visual stealth zone must not extend beyond smoke-limited sight"
+    );
+    radialMask.destroy();
+
+    const constraintsBeforeNativeSources = constrainedMasks.length;
     const lightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
     Object.assign(lightSource, {
       active: true,
@@ -1435,7 +1454,7 @@ test("partial smoke keeps a point-only stealth mask on Basic Sight without a rad
     assert.notEqual(lightPerception._testPoint, nativeLightPoint);
     assert.equal(specialSense._testRange, nativeRange);
     visionSource._createShapes();
-    assert.deepEqual(constrainedMasks.map(mask => mask.name), [
+    assert.deepEqual(constrainedMasks.slice(constraintsBeforeNativeSources).map(mask => mask.name), [
       "emitted-light",
       "los"
     ]);
