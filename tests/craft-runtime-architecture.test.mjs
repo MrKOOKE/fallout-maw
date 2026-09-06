@@ -26,7 +26,7 @@ test("recipe browser materializes a bounded list and uses delegated controls", (
 
 test("known recipe membership reuses one Set until the actor flag changes", () => {
   assert.match(knowledgeSource, /const knownCraftItemUuidCache = new WeakMap\(\)/);
-  assert.match(knowledgeSource, /cached\?\.stored === stored/);
+  assert.match(knowledgeSource, /cached && cached\.stored === stored/);
   assert.match(knowledgeSource, /knownCraftItemUuidCache\.set\(actor, \{ stored, uuids \}\)/);
 });
 

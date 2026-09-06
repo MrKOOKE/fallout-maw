@@ -79,10 +79,8 @@ export function buildFalseBreachEffectData({
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: {
-      seconds: normalized.durationSeconds,
-      startTime: now
-    },
+    start: { time: now },
+    duration: { value: normalized.durationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: buildFalseBreachEffectChanges(normalized) },
     flags: {
       [SYSTEM_ID]: {
@@ -251,7 +249,8 @@ async function applyOrRefreshFalseBreachMark(markedActor, sourceEffect) {
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: settings.markDurationSeconds, startTime: now },
+    start: { time: now },
+    duration: { value: settings.markDurationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: buildFalseBreachMarkChanges(settings) },
     flags: {
       [SYSTEM_ID]: {

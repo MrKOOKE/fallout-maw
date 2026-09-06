@@ -18,7 +18,7 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
     requiresDirectionSelection: false,
     circularGeometry: true,
     customExecution: true,
-    accuracyModifier: -30
+    accuracyModifier: 0
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.lunge]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.lunge,
@@ -66,29 +66,36 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
 });
 
 export function createWhirlwindAttackModifier({
-  accuracyModifier = -30,
+  accuracyModifier = 0,
   label = "Способность",
-  onBeforeAttack = null
+  onBeforeAttack = null,
+  targetLowestCriticalLimb = false
 } = {}) {
   return normalizeWeaponAttackModifier({
     key: WEAPON_ATTACK_MODIFIER_KEYS.whirlwind,
     label,
     accuracyModifier,
-    onBeforeAttack
+    onBeforeAttack,
+    targetLowestCriticalLimb: Boolean(targetLowestCriticalLimb)
   });
 }
 
 export function createLungeAttackModifier({
   label = "Способность",
-  onDestroy = null
+  onDestroy = null,
+  resultPolicy = null,
+  suppressGuardianAngelReaction = false
 } = {}) {
   return normalizeWeaponAttackModifier({
     key: WEAPON_ATTACK_MODIFIER_KEYS.lunge,
     label,
     onDestroy,
+    resultPolicy,
+    suppressGuardianAngelReaction,
     finishAfterAttack: true
   });
 }
+
 
 export function createCounterSniperAttackModifier({
   onDestroy = null,

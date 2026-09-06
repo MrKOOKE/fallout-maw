@@ -124,7 +124,8 @@ export function buildHunterRaceEffectData({
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: normalized.durationSeconds, startTime: now },
+    start: { time: now },
+    duration: { value: normalized.durationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: [] },
     flags: {
       [SYSTEM_ID]: {

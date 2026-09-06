@@ -30,6 +30,8 @@ test("Reaction Hub timeout follows combat settings and keeps 20 seconds only as 
 
   const {
     REACTION_HUB_TESTING,
+    createReactionHubResult,
+    mergeReactionHubResults,
     registerReactionEventSemanticAdapter,
     requestReactionEvent
   } = await import("../src/combat/reaction-hub.mjs");
@@ -44,6 +46,22 @@ test("Reaction Hub timeout follows combat settings and keeps 20 seconds only as 
   assert.equal(REACTION_HUB_TESTING.getReactionTimeoutMs(), 20_000);
   assert.equal(REACTION_HUB_TESTING.normalizeReactionTimeoutMs(250), 1_000);
   assert.equal(REACTION_HUB_TESTING.normalizeReactionTimeoutMs(999_999), 600_000);
+  assert.deepEqual(
+    mergeReactionHubResults(
+      createReactionHubResult({ handled: true, advantageCount: 1 }),
+      createReactionHubResult({ status: "success", disadvantageCount: 2 })
+    ),
+    {
+      handled: true,
+      status: "success",
+      cancelCurrent: false,
+      cancelRemaining: false,
+      difficultyBonus: 0,
+      advantageCount: 1,
+      disadvantageCount: 2,
+      reason: ""
+    }
+  );
 
   game.user = { id: "gm" };
   game.users = { activeGM: { id: "gm" } };

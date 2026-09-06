@@ -1136,9 +1136,6 @@ export function cloneInventoryItemData(item) {
     && (globalThis.CONFIG?.ActiveEffect?.documentClass ?? BaseEffect)?.shimData === BaseEffect?.shimData
     && [globalThis.CONFIG?.Item, globalThis.CONFIG?.ActiveEffect].every(config =>
       Object.values(config?.dataModels ?? {}).every(Model => Model.shimData === DataModel?.shimData))) {
-    // #region codex-runtime-debug H11 native inventory projection avoids duplicate copy
-    globalThis.__falloutMawGameplayProbe?.count("inventory.repair.singleSourceCopy", "H11");
-    // #endregion codex-runtime-debug
     return source;
   }
   if (typeof structuredClone === "function") return structuredClone(source);
@@ -1157,9 +1154,6 @@ function cloneRepairProjection(item, readOnlyValidation) {
     || (item.system.placement != null && !isPlainRecord(item.system.placement))) {
     return cloneInventoryItemData(item);
   }
-  // #region codex-runtime-debug H11 verify the actual snapshot-to-projection path
-  globalThis.__falloutMawGameplayProbe?.count("inventory.repair.placementProjection", "H11");
-  // #endregion codex-runtime-debug
   return {
     ...item,
     system: {

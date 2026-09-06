@@ -430,7 +430,10 @@ test("coordinator commits only the selected collection and skips cancelled selec
       type: "test",
       routeOrder: 1,
       waypoint: movementWaypoint({ x: 100 }),
-      remainingWaypoints: [movementWaypoint({ x: 200, checkpoint: true })]
+      remainingWaypoints: [
+        movementWaypoint({ x: 100, checkpoint: false }),
+        movementWaypoint({ x: 200, checkpoint: true })
+      ]
     }] : [],
     pauseNativeMovement: true,
     execute: ({ nativeMovementPaused }) => {
@@ -444,6 +447,7 @@ test("coordinator commits only the selected collection and skips cancelled selec
     onMove: async ({ token, waypoints, options }) => {
       nativePauseCalls.push(`move:${waypoints.map(waypoint => waypoint.x).join(",")}:${options.showRuler}`);
       const interruption = waypoints[0];
+      assert.equal(interruption.checkpoint, true);
       const chunk = {
         id: "native-paused-chunk",
         chain: [],
@@ -486,6 +490,99 @@ test("coordinator commits only the selected collection and skips cancelled selec
     "resume"
   ]);
   assert.equal(nativePauseToken._source.x, 200);
+
+  const completedDestinationCalls = [];
+  let finishDestinationAnimation;
+  const destinationAnimation = new Promise(resolve => { finishDestinationAnimation = resolve; });
+  interruptions.registerMovementInterruptionProvider({
+    id: "test-completed-destination-interruption",
+    collect: ({ tokenDocument, movement }) => (
+      tokenDocument.id === "completed-destination-interruption"
+      && movement.id === "movement-completed-destination-interruption"
+    ) ? [{
+      eventId: "completed-destination-event",
+      type: "test",
+      routeOrder: 1,
+      waypoint: movementWaypoint({ x: 100 }),
+      remainingWaypoints: [movementWaypoint({ x: 100, checkpoint: true })]
+    }] : [],
+    pauseNativeMovement: true,
+    execute: ({ nativeMovementPaused }) => {
+      completedDestinationCalls.push(`execute:${nativeMovementPaused}`);
+      return true;
+    }
+  });
+  const completedDestinationToken = makeMovableToken("completed-destination-interruption", {
+    onMove: async ({ token, waypoints, options }) => {
+      completedDestinationCalls.push(`move:${waypoints.map(waypoint => waypoint.x).join(",")}`);
+      const destination = waypoints.at(-1);
+      Object.assign(token._source, destination);
+      moveToken(token, {
+        id: "completed-destination-chunk",
+        chain: [],
+        origin: movementWaypoint({ x: 0 }),
+        destination,
+        passed: { waypoints: [destination] },
+        pending: { waypoints: [] },
+        state: "completed",
+        animation: { ended: Promise.resolve() }
+      }, options);
+      return true;
+    }
+  });
+  completedDestinationToken.rendered = true;
+  completedDestinationToken.object = { movementAnimationPromise: destinationAnimation };
+  completedDestinationToken.pauseMovement = () => {
+    completedDestinationCalls.push("pause");
+    return null;
+  };
+  assert.equal(preMoveToken(completedDestinationToken, {
+    id: "movement-completed-destination-interruption",
+    origin: { ...completedDestinationToken._source },
+    destination: movementWaypoint({ x: 100 }),
+    passed: { waypoints: [movementWaypoint({ x: 100 })] }
+  }, {}), false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(completedDestinationCalls, ["move:100"]);
+  finishDestinationAnimation();
+  assert.equal((await waitForSystemMovementSettlement(completedDestinationToken)).settled, true);
+  assert.deepEqual(completedDestinationCalls, ["move:100", "execute:undefined"]);
+  assert.equal(completedDestinationToken._source.x, 100);
+
+  const originInterruptionCalls = [];
+  interruptions.registerMovementInterruptionProvider({
+    id: "test-origin-interruption",
+    collect: ({ tokenDocument, movement }) => (
+      tokenDocument.id === "origin-interruption"
+      && movement.id === "movement-origin-interruption"
+    ) ? [{
+      eventId: "origin-interruption-event",
+      type: "test",
+      routeOrder: 0,
+      waypoint: movementWaypoint({ x: 0 }),
+      remainingWaypoints: [movementWaypoint({ x: 100, checkpoint: true })]
+    }] : [],
+    pauseNativeMovement: true,
+    execute: ({ nativeMovementPaused }) => {
+      originInterruptionCalls.push(`execute:${nativeMovementPaused}`);
+      return true;
+    }
+  });
+  const originInterruptionToken = makeMovableToken("origin-interruption", {
+    onMove: async ({ waypoints }) => {
+      originInterruptionCalls.push(`move:${waypoints.map(waypoint => waypoint.x).join(",")}`);
+      return true;
+    }
+  });
+  assert.equal(preMoveToken(originInterruptionToken, {
+    id: "movement-origin-interruption",
+    origin: { ...originInterruptionToken._source },
+    destination: movementWaypoint({ x: 100 }),
+    passed: { waypoints: [movementWaypoint({ x: 100 })] }
+  }, {}), false);
+  assert.equal((await waitForSystemMovementSettlement(originInterruptionToken)).settled, true);
+  assert.deepEqual(originInterruptionCalls, ["execute:undefined"]);
+  assert.equal(originInterruptionToken._source.x, 0);
 
   const rejectedCalls = [];
   interruptions.registerMovementInterruptionProvider({

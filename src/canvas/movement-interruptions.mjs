@@ -578,8 +578,12 @@ async function runMovementInterruption(
       if (
         event.moveToWaypoint !== false
         && provider?.pauseNativeMovement === true
+        // A movement cannot be paused at its zero-length origin checkpoint.
+        // Handle that interruption in place so Foundry never animates the
+        // token forward and then receives a compensating move back.
+        && hasPositionChanged(tokenDocument, prepareMovementWaypoint(event.waypoint, tokenDocument))
         && Array.isArray(event.remainingWaypoints)
-        && event.remainingWaypoints.length > 0
+        && hasMovementAfterInterruption(event)
         && typeof tokenDocument.pauseMovement === "function"
       ) {
         const nativeResult = await moveTokenThroughNativeInterruption(
@@ -804,16 +808,7 @@ function pauseControlledMovementAtWaypoint(tokenDocument, movement, operation, c
   context.pauseState = state;
   state.triggered = true;
   const pausePromise = (async () => {
-    const animationEnded = tokenDocument?.rendered && tokenDocument?.object?.movementAnimationPromise
-      ? tokenDocument.object.movementAnimationPromise
-      : movement?.animation?.ended;
-    if (animationEnded?.then) {
-      if (typeof globalThis.game?.raceWithWindowHidden === "function") {
-        await globalThis.game.raceWithWindowHidden(animationEnded);
-      } else {
-        await animationEnded;
-      }
-    }
+    await waitForTokenMovementAnimation(tokenDocument, movement);
 
     const shouldResume = await context.pauseHandler({ tokenDocument, movement, operation });
     state.handled = true;
@@ -1027,11 +1022,30 @@ function getMovementThroughInterruptionWaypoints(tokenDocument, movement = {}, e
   for (const waypoint of getMovementPrefixWaypoints(tokenDocument, movement, event)) {
     appendRouteWaypoint(waypoints, waypoint);
   }
-  for (const waypoint of event.remainingWaypoints ?? []) {
+  const remainingWaypoints = event.remainingWaypoints ?? [];
+  let remainingIndex = 0;
+  const interruptionKey = waypoints.length ? getPhysicalPositionKey(waypoints.at(-1)) : "";
+  // Providers may include the reached interruption point as the first
+  // remaining waypoint. Do not let that duplicate replace the checkpoint
+  // produced by getMovementPrefixWaypoints, otherwise Foundry runs through
+  // the point without emitting the moveToken hook where pauseMovement belongs.
+  while (
+    remainingIndex < remainingWaypoints.length
+    && interruptionKey
+    && getPhysicalPositionKey(remainingWaypoints[remainingIndex]) === interruptionKey
+  ) remainingIndex += 1;
+  for (const waypoint of remainingWaypoints.slice(remainingIndex)) {
     appendRouteWaypoint(waypoints, waypoint);
   }
   if (waypoints.length) waypoints.at(-1).checkpoint = true;
   return waypoints;
+}
+
+function hasMovementAfterInterruption(event = {}) {
+  const interruptionKey = getPhysicalPositionKey(event.waypoint);
+  return (event.remainingWaypoints ?? []).some(waypoint => (
+    getPhysicalPositionKey(waypoint) !== interruptionKey
+  ));
 }
 
 async function moveTokenToInterruption(
@@ -1050,10 +1064,22 @@ async function moveTokenToInterruption(
     operation,
     { chainRef, showRuler: false }
   ), controlledOptions);
-  // Foundry V14 resolves TokenDocument#move only after the movement workflow,
-  // including its animation, has completed or been prevented.
   if (!completed) return false;
+  if (!isAtDestination(tokenDocument, destination)) return false;
+  await waitForTokenMovementAnimation(tokenDocument, tokenDocument?.movement ?? movement);
   return isAtDestination(tokenDocument, destination);
+}
+
+async function waitForTokenMovementAnimation(tokenDocument, movement = {}) {
+  const animationEnded = tokenDocument?.rendered && tokenDocument?.object?.movementAnimationPromise
+    ? tokenDocument.object.movementAnimationPromise
+    : movement?.animation?.ended;
+  if (!animationEnded?.then) return;
+  if (typeof globalThis.game?.raceWithWindowHidden === "function") {
+    await globalThis.game.raceWithWindowHidden(animationEnded);
+  } else {
+    await animationEnded;
+  }
 }
 
 function createMovementInterruptionParticipants(tokenDocument, event = {}) {

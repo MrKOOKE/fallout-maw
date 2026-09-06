@@ -532,6 +532,82 @@ test("aura descriptor preserves target-only and event-reaction semantics", () =>
   }]), false);
 });
 
+test("Crowd Fighter projects both melee discounts only with three nearby combatants", () => {
+  const previousCombat = game.combat;
+  const previousScene = canvas.scene;
+  const previousGrid = canvas.grid;
+  const previousTokens = canvas.tokens.placeables;
+  const scene = { id: "crowd-scene" };
+  const makeActor = id => ({
+    id,
+    uuid: `Actor.${id}`,
+    statuses: new Set(),
+    system: { characteristics: {}, skills: {}, resources: {}, limbs: {} },
+    getFlag: (_scope, key) => key === "factionBelongs" ? [id] : undefined
+  });
+  const sourceActor = makeActor("crowd-fighter");
+  const makeToken = (actor, id, x) => ({
+    id,
+    actor,
+    center: { x, y: 0 },
+    checkCollision: () => false,
+    document: { id, uuid: `Scene.crowd.Token.${id}`, x, y: 0, hidden: false, parent: scene }
+  });
+  const sourceToken = makeToken(sourceActor, "source", 0);
+  const enemyTokens = [1, 2, 3].map(index => makeToken(makeActor(`enemy-${index}`), `enemy-${index}`, index * 100));
+  const abilityFunction = {
+    id: "crowd-discount",
+    type: ABILITY_FUNCTION_TYPES.effectChanges,
+    changes: [
+      change("aimed", "system.costs.actions.aimedMeleeAttack", "-1"),
+      change("ordinary", "system.costs.actions.meleeAttack", "-1")
+    ],
+    conditions: [condition("crowd-presence", ABILITY_CONDITION_TYPES.aura, {
+      auraMode: ABILITY_AURA_MODES.selfWhenPresent,
+      auraRadiusMeters: "5",
+      requiredCount: "3",
+      auraTargetGroups: ["enemy", "neutral"],
+      auraCombatOnly: true,
+      auraCombatantsOnly: true,
+      auraIncludeSelf: false,
+      auraIgnoreHidden: true,
+      auraIgnoreIncapacitated: true,
+      auraWallsBlock: true
+    })]
+  };
+  const allTokens = [sourceToken, ...enemyTokens];
+
+  try {
+    canvas.scene = scene;
+    canvas.grid = { measurePath: ([from, to]) => ({ distance: Math.hypot(to.x - from.x, to.y - from.y) / 100 }) };
+    canvas.tokens.placeables = allTokens;
+    game.combat = {
+      started: true,
+      scene,
+      combatants: allTokens.map(token => ({ tokenId: token.id, actor: token.actor }))
+    };
+    const projected = getAbilityEffectProjectionFromFunctions(sourceActor, [abilityFunction], {
+      actorToken: sourceToken,
+      abilityItemId: "crowd-fighter-item"
+    }).changes;
+    assert.deepEqual(projected.map(entry => [entry.key, entry.value]), [
+      ["system.costs.actions.aimedMeleeAttack", "-1"],
+      ["system.costs.actions.meleeAttack", "-1"]
+    ]);
+
+    canvas.tokens.placeables = allTokens.slice(0, 3);
+    assert.deepEqual(getAbilityEffectProjectionFromFunctions(sourceActor, [abilityFunction], {
+      actorToken: sourceToken,
+      abilityItemId: "crowd-fighter-item"
+    }).changes, []);
+  } finally {
+    game.combat = previousCombat;
+    canvas.scene = previousScene;
+    canvas.grid = previousGrid;
+    canvas.tokens.placeables = previousTokens;
+  }
+});
+
 test("managed projection markers stop the system's own ActiveEffect requeue hooks", () => {
   const hookNames = ["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"];
   const previousCounts = Object.fromEntries(

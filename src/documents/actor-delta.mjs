@@ -39,13 +39,6 @@ export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
       ...context,
       requiresSystemMergeCheck: context.requiresSystemMergeCheck || patch.hasSystemReplacement
     } : null);
-    // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-    globalThis.__falloutMawGameplayProbe?.count(
-      scalarCommits.get(this) ? "actor-delta.scalar.commit.eligible"
-        : context ? "actor-delta.scalar.commit.ineligible-cleaned-diff" : "actor-delta.scalar.commit.no-update-context",
-      "H1"
-    );
-    // #endregion codex-runtime-debug
     try {
       return super._updateCommit(copy, diff, options, state);
     } finally {
@@ -56,61 +49,23 @@ export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
   updateSyntheticActor() {
     const context = scalarCommits.get(this);
     const current = context && isCurrentContext(this, context);
-    if (current && isEquivalentSystemMerge(this, context)) {
-      // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-      globalThis.__falloutMawGameplayProbe?.count("actor-delta.scalar.skip-redundant-rebuild", "H1");
-      // #endregion codex-runtime-debug
-      return;
-    }
-    // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-    globalThis.__falloutMawGameplayProbe?.count(
-      context ? current ? "actor-delta.scalar.rebuild.system-merge-mismatch" : "actor-delta.scalar.rebuild.stale-context"
-        : "actor-delta.scalar.rebuild.no-scalar-commit",
-      "H1"
-    );
-    // #endregion codex-runtime-debug
+    if (current && isEquivalentSystemMerge(this, context)) return;
     return super.updateSyntheticActor();
   }
 }
 
 function createScalarUpdateContext(delta, changes, options) {
-  if (Number(globalThis.game?.release?.generation) !== 14) {
-    // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-    globalThis.__falloutMawGameplayProbe?.count("actor-delta.scalar.input.unsupported-generation", "H1");
-    // #endregion codex-runtime-debug
-    return null;
-  }
-  if (options.recursive === false || options.dryRun || options.restoreDelta) {
-    // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-    globalThis.__falloutMawGameplayProbe?.count(
-      options.recursive === false ? "actor-delta.scalar.input.nonrecursive"
-        : options.dryRun ? "actor-delta.scalar.input.dry-run" : "actor-delta.scalar.input.restore-delta",
-      "H1"
-    );
-    // #endregion codex-runtime-debug
-    return null;
-  }
+  if (Number(globalThis.game?.release?.generation) !== 14) return null;
+  if (options.recursive === false || options.dryRun || options.restoreDelta) return null;
   const patch = inspectNonEmbeddedPatch(changes, delta.id);
-  if (!patch) {
-    // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-    globalThis.__falloutMawGameplayProbe?.count("actor-delta.scalar.input.ineligible-patch", "H1");
-    // #endregion codex-runtime-debug
-    return null;
-  }
+  if (!patch) return null;
   const context = {
     parent: delta.parent,
     actor: delta.syntheticActor,
     baseActor: delta.parent?.baseActor,
     requiresSystemMergeCheck: patch.hasSystemReplacement
   };
-  const current = isCurrentContext(delta, context);
-  // #region codex-runtime-debug H1 ActorDelta scalar eligibility
-  globalThis.__falloutMawGameplayProbe?.count(
-    current ? "actor-delta.scalar.input.eligible" : "actor-delta.scalar.input.unmaterialized-or-replaced-context",
-    "H1"
-  );
-  // #endregion codex-runtime-debug
-  return current ? context : null;
+  return isCurrentContext(delta, context) ? context : null;
 }
 
 function isCurrentContext(delta, { parent, actor, baseActor }) {
@@ -178,14 +133,7 @@ function isEquivalentSystemMerge(delta, context) {
   // in that case native reapplication restores them and must still run. Compare
   // only the system data, avoiding inventory serialization or reconstruction.
   const merged = utils.mergeObject(utils.deepClone(baseSystem), utils.deepClone(deltaSystem));
-  const equivalent = utils.equals(merged, actorSystem);
-  // #region codex-runtime-debug H1 committed replacement equivalence
-  globalThis.__falloutMawGameplayProbe?.count(
-    equivalent ? "actor-delta.system-replacement.merge-equivalent" : "actor-delta.system-replacement.requires-native-merge",
-    "H1"
-  );
-  // #endregion codex-runtime-debug
-  return equivalent;
+  return utils.equals(merged, actorSystem);
 }
 
 function isPlainRecord(value) {

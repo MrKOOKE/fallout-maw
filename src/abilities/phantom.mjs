@@ -141,7 +141,8 @@ export async function createPhantomForActor({
       transfer: false,
       disabled: false,
       showIcon: 0,
-      duration: { seconds: duration, startTime },
+      start: { time: startTime },
+      duration: { value: duration, units: "seconds", expiry: null, expired: false },
       system: { changes: [] },
       flags: {
         [SYSTEM_ID]: {

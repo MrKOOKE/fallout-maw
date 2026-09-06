@@ -15,15 +15,8 @@ const serializeTokenSource = createTokenSourceSerializer(TokenDocument);
  */
 export class FalloutMaWTokenDocument extends TokenDocument {
   toObject(source = true) {
-    // #region codex-runtime-debug H7a inline measurement preserves method identity
-    const finish = globalThis.__falloutMawGameplayProbe?.tokenSerialization?.(this, source);
-    try {
-    // #endregion codex-runtime-debug
-      if (this.constructor !== FalloutMaWTokenDocument) return super.toObject(source);
-      return serializeTokenSource(this, source, () => super.toObject(source));
-    // #region codex-runtime-debug H7a
-    } finally { finish?.(); }
-    // #endregion codex-runtime-debug
+    if (this.constructor !== FalloutMaWTokenDocument) return super.toObject(source);
+    return serializeTokenSource(this, source, () => super.toObject(source));
   }
 
   clone(data = {}, context = {}) {

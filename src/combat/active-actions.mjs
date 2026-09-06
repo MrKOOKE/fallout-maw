@@ -1659,10 +1659,14 @@ function isPointInRect(point, rect) {
 }
 
 function getTokenRect(tokenDocument, position = null) {
-  const size = getTokenPixelSize(tokenDocument);
+  const document = tokenDocument?.document ?? tokenDocument;
+  const size = getTokenPixelSize(document);
   return {
-    x: Number(position?.x ?? tokenDocument.x) || 0,
-    y: Number(position?.y ?? tokenDocument.y) || 0,
+    // During Foundry V14's moveToken hook the committed source already holds
+    // the reached checkpoint while the prepared data-field getter can still
+    // expose the preceding waypoint until the update workflow finishes.
+    x: Number(position?.x ?? document?._source?.x ?? document?.x) || 0,
+    y: Number(position?.y ?? document?._source?.y ?? document?.y) || 0,
     width: size.width,
     height: size.height
   };

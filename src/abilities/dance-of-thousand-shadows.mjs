@@ -122,7 +122,8 @@ export async function activateDanceOfThousandShadows({
       transfer: false,
       disabled: false,
       showIcon: 2,
-      duration: { seconds: durationSeconds, startTime },
+      start: { time: startTime },
+      duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
       system: { changes: [] },
       flags: {
         [SYSTEM_ID]: {

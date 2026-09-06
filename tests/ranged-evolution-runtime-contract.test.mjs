@@ -10,6 +10,10 @@ const fixedFunctions = await readFile(
   new URL("../src/abilities/fixed-functions.mjs", import.meta.url),
   "utf8"
 );
+const deepPenetration = await readFile(
+  new URL("../src/abilities/deep-penetration.mjs", import.meta.url),
+  "utf8"
+);
 const skillCheck = await readFile(
   new URL("../src/rolls/skill-check.mjs", import.meta.url),
   "utf8"
@@ -127,6 +131,61 @@ test("reaction energy joins the weapon actor-resource vector instead of spending
   assert.match(controller, /!requireResourceCommit \|\| controller\.attackCostsCommitted/u);
 });
 
+test("Deep Penetration is a paid attack toggle and preserves fractional-impact structure", () => {
+  const resolution = fixedFunctions.slice(
+    fixedFunctions.indexOf("async function processDeepPenetrationResolution"),
+    fixedFunctions.indexOf("async function collectDisarmReactionOffers")
+  );
+  assert.match(fixedFunctions, /function requestDeepPenetrationWeaponActionModifiers/u);
+  assert.match(fixedFunctions, /source:\s*"deepPenetration"[\s\S]*?energyCost:\s*getEnergyCost/u);
+  assert.match(resolution, /extractDeepPenetrationDamageRows\(context\?\.damageResults\)/u);
+  assert.match(resolution, /selectDeepPenetrationTargetRows/u);
+  assert.match(deepPenetration, /pelletImpactCount:\s*Math\.max\(1, Math\.trunc\(finiteNumber\(source\.pelletImpactCount\)\)/u);
+  assert.match(deepPenetration, /pelletImpactIndex:\s*Math\.max\(0, Math\.trunc\(finiteNumber\(source\.pelletImpactIndex\)\)/u);
+  assert.match(resolution, /result\.pelletImpactCount > 1[\s\S]*?pelletImpactCount:\s*result\.pelletImpactCount[\s\S]*?pelletImpactIndex:/u);
+  assert.doesNotMatch(fixedFunctions, /DEEP_PENETRATION_REACTION_PROVIDER_ID/u);
+});
+
+test("cleave constrained attacks use the ordinary weapon pipeline and one explicit target", () => {
+  const strictExecution = controller.slice(
+    controller.indexOf("async executeStrictlyAgainstToken"),
+    controller.indexOf("async performStrictSelectedTargetAttack")
+  );
+  const scriptedExecution = controller.slice(
+    controller.indexOf("export async function executeWeaponAttackAgainstToken"),
+    controller.indexOf("export function collectValidWeaponAttackTargets")
+  );
+  const cleaveExecution = fixedFunctions.slice(
+    fixedFunctions.indexOf("async function executeCleavePass"),
+    fixedFunctions.indexOf("function collectCleavePathTargets")
+  );
+
+  assert.match(strictExecution, /if \(!this\.usesAbilityTrialResolution\(\)\)/u);
+  assert.match(strictExecution, /await this\.performDirectedAttack\(direction\.key\)/u);
+  assert.match(strictExecution, /await this\.performAimedAttack\(this\.selectedLimbKey\)/u);
+  assert.match(scriptedExecution, /targetTokenUuidAllowlist/u);
+  assert.match(scriptedExecution, /targetTokenUuidAllowlist\s*\n\s*\}\);/u);
+  assert.match(cleaveExecution, /strictTargetResolution:\s*true/u);
+  assert.match(cleaveExecution, /targetTokenUuidAllowlist:\s*\[String\(entry\.token\.document\?\.uuid/u);
+});
+
+test("Where Are You Going pauses native movement on the reached transition cell", () => {
+  const provider = fixedFunctions.slice(
+    fixedFunctions.indexOf("function registerWhereAreYouGoingMovementProvider"),
+    fixedFunctions.indexOf("function collectWhereAreYouGoingMovementInterruptions")
+  );
+  const execution = fixedFunctions.slice(
+    fixedFunctions.indexOf("async function executeWhereAreYouGoingMovementInterruption"),
+    fixedFunctions.indexOf("async function collectWhereAreYouGoingReactionOffers")
+  );
+  assert.match(provider, /pauseNativeMovement:\s*true/u);
+  assert.match(execution, /nativeMovementPaused\s*=\s*false/u);
+  assert.match(execution, /REACTION_RESULT\.success\) return nativeMovementPaused \? false : undefined/u);
+  assert.match(execution, /if \(nativeMovementPaused\)[\s\S]*?triggerMode !== "approach"[\s\S]*?suppressWhereAreYouGoingReactors[\s\S]*?return true/u);
+  assert.match(fixedFunctions, /segmentIndex \+ \(approach \? 1 : 0\)/u);
+  assert.match(fixedFunctions, /event\.triggerMode === "approach" \? \[\] : \(event\.reactorTokenUuids/u);
+});
+
 test("periodic damage keeps source mechanics isolated by packet through every timed tick", () => {
   assert.match(damageHub, /function getPeriodicDamageSourceIdentity[\s\S]*?damagePacketId[\s\S]*?conditionWearPacketId/u);
   assert.match(damageHub, /buildDamageEffectChangeKey\([\s\S]*?resolvedSourceIdentity/u);
@@ -144,4 +203,15 @@ test("resolved attacks preserve the displayed weapon name after quantity deletio
   assert.match(compatibilityEvents, /weaponName:\s*String\(context\.weaponName/u);
   assert.match(cascadeRuntime, /weaponName:\s*event\?\.data\?\.weaponName/u);
   assert.match(fixedFunctions, /const weaponName = String\(context\?\.weaponName \?\? weapon\?\.name/u);
+});
+
+test("melee evolution runtime branches on fixed-function identity", () => {
+  assert.match(fixedFunctions, /ABILITY_FIXED_FUNCTION_KEYS\.headChopper/u);
+  assert.match(fixedFunctions, /ABILITY_FIXED_FUNCTION_KEYS\.cleaveMastery/u);
+  assert.match(fixedFunctions, /function getDeepPenetrationRuntimeSettings/u);
+  assert.match(fixedFunctions, /function getDoubleAttackRuntimeSettings/u);
+  assert.match(fixedFunctions, /ABILITY_FIXED_FUNCTION_KEYS\.parry/u);
+  assert.match(fixedFunctions, /ABILITY_FIXED_FUNCTION_KEYS\.spinalStrike/u);
+  assert.match(fixedFunctions, /ABILITY_FIXED_FUNCTION_KEYS\.idealStrike/u);
+  assert.doesNotMatch(fixedFunctions, /settings\.(?:cleavePath|returnCleave|preemptive|triggerOnApproach|overloadOnMissOnly|activeEnabled)/u);
 });

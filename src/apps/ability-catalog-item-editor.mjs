@@ -77,6 +77,7 @@ import {
   normalizeAbilityConstructs,
   normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
+  normalizeParrySettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
   normalizeCounterSniperSettings,
@@ -114,6 +115,8 @@ import {
   normalizeKeepAwaySettings,
   normalizeLookSettings,
   normalizeLungeSettings,
+  normalizeCleaveSettings,
+  normalizeCleaveMasterySettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeReactiveSettings,
@@ -131,13 +134,21 @@ import {
   normalizeTrophyCollectorSettings,
   normalizeRicochetMasterySettings,
   normalizeCorpseAfterCorpseSettings,
+  normalizeCrowdCrusherSettings,
+  normalizeDeepPenetrationSettings,
+  normalizeDeepPenetrationPiercingSettings,
+  normalizeToTheBoneSettings,
   normalizeHawkEyePiercingSettings,
   normalizeTrueBulletSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeInsuranceAttackSettings,
+  normalizeTripleAttackSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeConcussionSettings,
+  normalizeCleanStrikeSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeHuntingGroundsSettings,
   normalizeTempoSettings,
@@ -145,7 +156,10 @@ import {
   normalizeKnockOffBalanceSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
+  normalizeHeadChopperSettings,
   normalizeWhereAreYouGoingSettings,
+  normalizeSpinalStrikeSettings,
+  normalizeIdealStrikeSettings,
   normalizeEventReactionProgressRequired,
   normalizeAbilityFunctions,
   getAbilitySourceId
@@ -2661,6 +2675,9 @@ const RANGED_EVOLUTION_FIXED_SETTING_FIELDS = Object.freeze({
   [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse]: [
     "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "damagePercentBonus", "attackWaitDurationSeconds"
   ],
+  [ABILITY_FIXED_FUNCTION_KEYS.slaughter]: [
+    "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "damagePercentBonus", "attackWaitDurationSeconds"
+  ],
   [ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing]: ["defenseIgnorePercent", "resistanceIgnorePercent"],
   [ABILITY_FIXED_FUNCTION_KEYS.trueBullet]: [
     "activationEnergyCost", "overloadEnergyCost", "overloadDurationSeconds", "criticalSuccessChanceThreshold"
@@ -2816,15 +2833,28 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
-  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+  if ([ABILITY_FIXED_FUNCTION_KEYS.whirlwind, ABILITY_FIXED_FUNCTION_KEYS.headChopper].includes(fixedKey)) {
+    const prefix = `fixed.${fixedKey}`;
     return {
-      energyCost: row.querySelector("[data-field='fixed.whirlwind.energyCost']")?.value,
-      overloadEnergyCost: row.querySelector("[data-field='fixed.whirlwind.overloadEnergyCost']")?.value,
+      energyCost: row.querySelector(`[data-field='${prefix}.energyCost']`)?.value,
+      overloadEnergyCost: row.querySelector(`[data-field='${prefix}.overloadEnergyCost']`)?.value,
       overloadDurationSeconds: durationPartsToSeconds(
-        row.querySelector("[data-field='fixed.whirlwind.overloadDurationAmount']")?.value,
-        row.querySelector("[data-field='fixed.whirlwind.overloadDurationUnit']")?.value
+        row.querySelector(`[data-field='${prefix}.overloadDurationAmount']`)?.value,
+        row.querySelector(`[data-field='${prefix}.overloadDurationUnit']`)?.value
       ),
-      accuracyModifier: row.querySelector("[data-field='fixed.whirlwind.accuracyModifier']")?.value
+      accuracyModifier: row.querySelector(`[data-field='${prefix}.accuracyModifier']`)?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher) {
+    return {
+      maximumCharges: row.querySelector("[data-field='fixed.crowdCrusher.maximumCharges']")?.value,
+      activationCharges: row.querySelector("[data-field='fixed.crowdCrusher.activationCharges']")?.value,
+      qualifyingTargets: row.querySelector("[data-field='fixed.crowdCrusher.qualifyingTargets']")?.value,
+      durationSeconds: row.querySelector("[data-field='fixed.crowdCrusher.durationSeconds']")?.value,
+      movementPointBonus: row.querySelector("[data-field='fixed.crowdCrusher.movementPointBonus']")?.value,
+      inheritAimedLimbOnPath: Boolean(row.querySelector("[data-field='fixed.crowdCrusher.inheritAimedLimbOnPath']")?.checked),
+      hitAllConeTargets: Boolean(row.querySelector("[data-field='fixed.crowdCrusher.hitAllConeTargets']")?.checked),
+      extraAttackWhenMultipleTargets: Boolean(row.querySelector("[data-field='fixed.crowdCrusher.extraAttackWhenMultipleTargets']")?.checked)
     };
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds) {
@@ -2889,22 +2919,43 @@ function readFixedFunctionSettings(row) {
       attackAdvantage: row.querySelector("[data-field='fixed.falseBreach.attackAdvantage']")?.value
     };
   }
-  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.lunge,
+    ABILITY_FIXED_FUNCTION_KEYS.cleave,
+    ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+  ].includes(fixedKey)) {
+    const prefix = `fixed.${fixedKey}`;
     return {
-      energyCost: row.querySelector("[data-field='fixed.lunge.energyCost']")?.value,
-      maxCells: row.querySelector("[data-field='fixed.lunge.maxCells']")?.value,
-      overloadEnergyCost: row.querySelector("[data-field='fixed.lunge.overloadEnergyCost']")?.value,
+      energyCost: row.querySelector(`[data-field='${prefix}.energyCost']`)?.value,
+      maxCells: row.querySelector(`[data-field='${prefix}.maxCells']`)?.value,
+      overloadEnergyCost: row.querySelector(`[data-field='${prefix}.overloadEnergyCost']`)?.value,
       overloadDurationSeconds: durationPartsToSeconds(
-        row.querySelector("[data-field='fixed.lunge.overloadDurationAmount']")?.value,
-        row.querySelector("[data-field='fixed.lunge.overloadDurationUnit']")?.value
+        row.querySelector(`[data-field='${prefix}.overloadDurationAmount']`)?.value,
+        row.querySelector(`[data-field='${prefix}.overloadDurationUnit']`)?.value
       )
     };
   }
-  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
+    ABILITY_FIXED_FUNCTION_KEYS.toTheBone
+  ].includes(fixedKey)) {
+    const prefix = `fixed.${fixedKey}`;
     return {
-      energyCost: row.querySelector("[data-field='fixed.doubleAttack.energyCost']")?.value,
-      duplicateCount: row.querySelector("[data-field='fixed.doubleAttack.duplicateCount']")?.value,
-      requiredSkillKey: row.querySelector("[data-field='fixed.doubleAttack.requiredSkillKey']")?.value
+      energyCost: row.querySelector(`[data-field='${prefix}.energyCost']`)?.value,
+      conversionLimitPercent: row.querySelector(`[data-field='${prefix}.conversionLimitPercent']`)?.value,
+      requiredSkillKey: row.querySelector(`[data-field='${prefix}.requiredSkillKey']`)?.value
+    };
+  }
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.tripleAttack
+  ].includes(fixedKey)) {
+    const prefix = `fixed.${fixedKey}`;
+    return {
+      energyCost: row.querySelector(`[data-field='${prefix}.energyCost']`)?.value,
+      requiredSkillKey: row.querySelector(`[data-field='${prefix}.requiredSkillKey']`)?.value
     };
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
@@ -2912,7 +2963,46 @@ function readFixedFunctionSettings(row) {
       energyCost: row.querySelector("[data-field='fixed.fullForce.energyCost']")?.value,
       requiredSkillKey: row.querySelector("[data-field='fixed.fullForce.requiredSkillKey']")?.value,
       damagePercentBonus: row.querySelector("[data-field='fixed.fullForce.damagePercentBonus']")?.value,
-      conditionCostMultiplier: row.querySelector("[data-field='fixed.fullForce.conditionCostMultiplier']")?.value
+      conditionCostMultiplier: row.querySelector("[data-field='fixed.fullForce.conditionCostMultiplier']")?.value,
+      fractionalImpactBonus: row.querySelector("[data-field='fixed.fullForce.fractionalImpactBonus']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.concussion) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.concussion.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.concussion.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.concussion.overloadDurationSeconds']")?.value,
+      advantageCount: row.querySelector("[data-field='fixed.concussion.advantageCount']")?.value,
+      targetSkillKey: row.querySelector("[data-field='fixed.concussion.targetSkillKey']")?.value,
+      difficultyBase: row.querySelector("[data-field='fixed.concussion.difficultyBase']")?.value,
+      sourceSkillKey: row.querySelector("[data-field='fixed.concussion.sourceSkillKey']")?.value,
+      normalStunPercent: row.querySelector("[data-field='fixed.concussion.normalStunPercent']")?.value,
+      criticalLimbStunPercent: row.querySelector("[data-field='fixed.concussion.criticalLimbStunPercent']")?.value,
+      stunDurationSeconds: row.querySelector("[data-field='fixed.concussion.stunDurationSeconds']")?.value,
+      highLimbDamagePercent: row.querySelector("[data-field='fixed.concussion.highLimbDamagePercent']")?.value,
+      highDamageDifficultyMultiplier: row.querySelector("[data-field='fixed.concussion.highDamageDifficultyMultiplier']")?.value,
+      unconsciousnessDifficultyMultiplier: row.querySelector("[data-field='fixed.concussion.unconsciousnessDifficultyMultiplier']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleanStrike) {
+    return {
+      maximumCharges: row.querySelector("[data-field='fixed.cleanStrike.maximumCharges']")?.value,
+      rechargeSeconds: row.querySelector("[data-field='fixed.cleanStrike.rechargeSeconds']")?.value,
+      hitChanceThreshold: row.querySelector("[data-field='fixed.cleanStrike.hitChanceThreshold']")?.value,
+      penetrationBonus: row.querySelector("[data-field='fixed.cleanStrike.penetrationBonus']")?.value,
+      weaponConditionLossPercent: row.querySelector("[data-field='fixed.cleanStrike.weaponConditionLossPercent']")?.value,
+      targetEquipmentDamagePercent: row.querySelector("[data-field='fixed.cleanStrike.targetEquipmentDamagePercent']")?.value,
+      actionPointRestore: row.querySelector("[data-field='fixed.cleanStrike.actionPointRestore']")?.value
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.idealStrike) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.idealStrike.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.idealStrike.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.idealStrike.overloadDurationSeconds']")?.value,
+      guaranteedHitChanceThreshold: row.querySelector("[data-field='fixed.idealStrike.guaranteedHitChanceThreshold']")?.value,
+      activeResistanceIgnorePercent: row.querySelector("[data-field='fixed.idealStrike.activeResistanceIgnorePercent']")?.value,
+      killFollowUp: Boolean(row.querySelector("[data-field='fixed.idealStrike.killFollowUp']")?.checked)
     };
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands) {
@@ -3207,15 +3297,20 @@ function readFixedFunctionSettings(row) {
       overflowDurationSeconds: row.querySelector("[data-field='fixed.painLord.overflowDurationSeconds']")?.value
     };
   }
-  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
+  if ([ABILITY_FIXED_FUNCTION_KEYS.counterAttack, ABILITY_FIXED_FUNCTION_KEYS.parry].includes(fixedKey)) {
+    const prefix = `fixed.${fixedKey}`;
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.parry) return {
+      reactionEnergyCost: row.querySelector(`[data-field='${prefix}.reactionEnergyCost']`)?.value,
+      requiredSkillKey: row.querySelector(`[data-field='${prefix}.requiredSkillKey']`)?.value
+    };
     return {
-      reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
-      reactionOverloadEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionOverloadEnergyCost']")?.value,
+      reactionEnergyCost: row.querySelector(`[data-field='${prefix}.reactionEnergyCost']`)?.value,
+      reactionOverloadEnergyCost: row.querySelector(`[data-field='${prefix}.reactionOverloadEnergyCost']`)?.value,
       reactionOverloadDurationSeconds: durationPartsToSeconds(
-        row.querySelector("[data-field='fixed.counterAttack.reactionOverloadDurationAmount']")?.value,
-        row.querySelector("[data-field='fixed.counterAttack.reactionOverloadDurationUnit']")?.value
+        row.querySelector(`[data-field='${prefix}.reactionOverloadDurationAmount']`)?.value,
+        row.querySelector(`[data-field='${prefix}.reactionOverloadDurationUnit']`)?.value
       ),
-      requiredSkillKey: row.querySelector("[data-field='fixed.counterAttack.requiredSkillKey']")?.value
+      requiredSkillKey: row.querySelector(`[data-field='${prefix}.requiredSkillKey']`)?.value
     };
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight) {
@@ -3266,13 +3361,14 @@ function readFixedFunctionSettings(row) {
       reactionOverloadDurationSeconds: row.querySelector("[data-field='fixed.counterSniper.reactionOverloadDurationSeconds']")?.value
     };
   }
-  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
+  if ([ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing, ABILITY_FIXED_FUNCTION_KEYS.spinalStrike].includes(fixedKey)) {
+    const prefix = `fixed.${fixedKey}`;
     return {
-      reactionEnergyCost: row.querySelector("[data-field='fixed.whereAreYouGoing.reactionEnergyCost']")?.value,
-      reactionOverloadEnergyCost: row.querySelector("[data-field='fixed.whereAreYouGoing.reactionOverloadEnergyCost']")?.value,
+      reactionEnergyCost: row.querySelector(`[data-field='${prefix}.reactionEnergyCost']`)?.value,
+      reactionOverloadEnergyCost: row.querySelector(`[data-field='${prefix}.reactionOverloadEnergyCost']`)?.value,
       reactionOverloadDurationSeconds: durationPartsToSeconds(
-        row.querySelector("[data-field='fixed.whereAreYouGoing.reactionOverloadDurationAmount']")?.value,
-        row.querySelector("[data-field='fixed.whereAreYouGoing.reactionOverloadDurationUnit']")?.value
+        row.querySelector(`[data-field='${prefix}.reactionOverloadDurationAmount']`)?.value,
+        row.querySelector(`[data-field='${prefix}.reactionOverloadDurationUnit']`)?.value
       )
     };
   }
@@ -3633,6 +3729,7 @@ const RANGED_EVOLUTION_FIXED_SETTINGS_DISPLAYS = Object.freeze({
   [ABILITY_FIXED_FUNCTION_KEYS.trophyCollector]: ["fixedTrophyCollectorSettings", normalizeTrophyCollectorSettings],
   [ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery]: ["fixedRicochetMasterySettings", normalizeRicochetMasterySettings],
   [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse]: ["fixedCorpseAfterCorpseSettings", normalizeCorpseAfterCorpseSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.slaughter]: ["fixedSlaughterSettings", normalizeCorpseAfterCorpseSettings],
   [ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing]: ["fixedHawkEyePiercingSettings", normalizeHawkEyePiercingSettings],
   [ABILITY_FIXED_FUNCTION_KEYS.trueBullet]: ["fixedTrueBulletSettings", normalizeTrueBulletSettings]
 });
@@ -3705,8 +3802,19 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     ? prepareLuckyCoinSettingsForDisplay(normalized.fixedSettings)
     : null;
-  const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
-    ? prepareWhirlwindSettingsForDisplay(normalized.fixedSettings)
+  const fixedWhirlwindSettings = [ABILITY_FIXED_FUNCTION_KEYS.whirlwind, ABILITY_FIXED_FUNCTION_KEYS.headChopper].includes(fixedKey)
+    ? {
+        ...prepareWhirlwindSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper
+            ? normalizeHeadChopperSettings(normalized.fixedSettings)
+            : normalized.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper ? "Головорезка" : "Вихрь"
+      }
+    : null;
+  const fixedCrowdCrusherSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher
+    ? normalizeCrowdCrusherSettings(normalized.fixedSettings)
     : null;
   const fixedHuntingGroundsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds
     ? prepareHuntingGroundsSettingsForDisplay(normalized.fixedSettings)
@@ -3717,14 +3825,68 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedFalseBreachSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach
     ? prepareFalseBreachSettingsForDisplay(normalized.fixedSettings)
     : null;
-  const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
-    ? prepareLungeSettingsForDisplay(normalized.fixedSettings)
+  const fixedLungeSettings = [
+    ABILITY_FIXED_FUNCTION_KEYS.lunge,
+    ABILITY_FIXED_FUNCTION_KEYS.cleave,
+    ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+  ].includes(fixedKey)
+    ? {
+        ...prepareLungeSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave
+            ? normalizeCleaveSettings(normalized.fixedSettings)
+            : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+              ? normalizeCleaveMasterySettings(normalized.fixedSettings)
+              : normalized.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge ? "Выпад" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave ? "Рассечение" : "Рассечение II"
+      }
     : null;
-  const fixedDoubleAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
-    ? prepareDoubleAttackSettingsForDisplay(normalized.fixedSettings)
+  const fixedDeepPenetrationSettings = [
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
+    ABILITY_FIXED_FUNCTION_KEYS.toTheBone
+  ].includes(fixedKey)
+    ? {
+        ...prepareDeepPenetrationSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing
+            ? normalizeDeepPenetrationPiercingSettings(normalized.fixedSettings)
+            : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheBone
+              ? normalizeToTheBoneSettings(normalized.fixedSettings)
+              : normalized.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetration ? "Глубокое проникновение" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing ? "Глубокое проникновение II" : "До кости"
+      }
+    : null;
+  const fixedDoubleAttackSettings = [
+    ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.tripleAttack
+  ].includes(fixedKey)
+    ? {
+        ...prepareDoubleAttackSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack
+            ? normalizeInsuranceAttackSettings(normalized.fixedSettings)
+            : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tripleAttack
+              ? normalizeTripleAttackSettings(normalized.fixedSettings)
+              : normalized.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack ? "Двоечка" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack ? "Страховочка" : "Троечка"
+      }
     : null;
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(normalized.fixedSettings)
+    : null;
+  const fixedParrySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.parry
+    ? {
+        ...normalizeParrySettings(normalized.fixedSettings),
+        skillChoices: buildSkillChoices(
+          normalizeParrySettings(normalized.fixedSettings).requiredSkillKey,
+          getSkillSettings()
+        )
+      }
     : null;
   const fixedOversightSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight
     ? prepareOversightSettingsForDisplay(normalized.fixedSettings)
@@ -3738,11 +3900,28 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
     ? normalizeCounterSniperSettings(normalized.fixedSettings)
     : null;
-  const fixedWhereAreYouGoingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
-    ? prepareWhereAreYouGoingSettingsForDisplay(normalized.fixedSettings)
+  const fixedWhereAreYouGoingSettings = [ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing, ABILITY_FIXED_FUNCTION_KEYS.spinalStrike].includes(fixedKey)
+    ? {
+        ...prepareWhereAreYouGoingSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike
+            ? normalizeSpinalStrikeSettings(normalized.fixedSettings)
+            : normalized.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike ? "Зашибу!" : "Ты куда собрался?"
+      }
     : null;
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ? prepareFullForceSettingsForDisplay(normalized.fixedSettings)
+    : null;
+  const fixedConcussionSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.concussion
+    ? prepareConcussionSettingsForDisplay(normalized.fixedSettings)
+    : null;
+  const fixedCleanStrikeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleanStrike
+    ? normalizeCleanStrikeSettings(normalized.fixedSettings)
+    : null;
+  const fixedIdealStrikeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.idealStrike
+    ? normalizeIdealStrikeSettings(normalized.fixedSettings)
     : null;
   const fixedTwoHandsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands
     ? normalizeTwoHandsSettings(normalized.fixedSettings)
@@ -3874,17 +4053,23 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
     fixedWhirlwindSettings,
+    fixedCrowdCrusherSettings,
     fixedHuntingGroundsSettings,
     fixedTempoSettings,
     fixedFalseBreachSettings,
     fixedLungeSettings,
+    fixedDeepPenetrationSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedParrySettings,
     fixedOversightSettings,
     fixedWatchOutSettings,
     fixedFullControlSettings,
     fixedCounterSniperSettings,
     fixedFullForceSettings,
+    fixedConcussionSettings,
+    fixedCleanStrikeSettings,
+    fixedIdealStrikeSettings,
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
@@ -4318,6 +4503,14 @@ function prepareLungeSettingsForDisplay(settings = {}) {
   };
 }
 
+function prepareDeepPenetrationSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDeepPenetrationSettings(settings);
+  return {
+    ...normalized,
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
 function prepareDoubleAttackSettingsForDisplay(settings = {}) {
   const normalized = normalizeDoubleAttackSettings(settings);
   return {
@@ -4387,6 +4580,16 @@ function prepareFullForceSettingsForDisplay(settings = {}) {
   return {
     ...normalized,
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareConcussionSettingsForDisplay(settings = {}) {
+  const normalized = normalizeConcussionSettings(settings);
+  const skills = getSkillSettings();
+  return {
+    ...normalized,
+    sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
   };
 }
 

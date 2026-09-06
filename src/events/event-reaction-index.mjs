@@ -143,10 +143,6 @@ export function createEventReactionSubscriptionIndex({
     dirty = true;
     if (actor && typeof actor === "object") dirtyActors.add(actor);
     else fullRefresh = true;
-    // #region codex-runtime-debug H12 verify hook ownership in the actual client
-    globalThis.__falloutMawGameplayProbe?.count(actor && typeof actor === "object"
-      ? "events.indexInvalidationLocal" : "events.indexInvalidationFull", "H12");
-    // #endregion codex-runtime-debug
     if (timerId !== null) return;
     timerId = setTimer(() => {
       timerId = null;
@@ -162,20 +158,14 @@ export function createEventReactionSubscriptionIndex({
     const rebuildRevision = invalidationRevision;
     let pendingRebuild;
     pendingRebuild = Promise.resolve().then(async () => {
-      // codex-runtime-debug: time real scene-wide rebuilds, excluding warm lookups.
-      const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("events.rebuildIndex", "H2");
-      try {
       const nextKeys = new Set();
       const nextActorsByKey = new Map();
       const nextRecordsByActor = new WeakMap();
       const reuseUnchanged = !fullRefresh && canReuseActorItems();
       let nextTotal = 0;
-      let scannedActors = 0, reusedActors = 0; // codex-runtime-debug
       for (const actor of await getReactors() ?? []) {
         let record = reuseUnchanged && !dirtyActors.has(actor) ? recordsByActor.get(actor) : null;
-        if (record) reusedActors += 1; // codex-runtime-debug
         if (!record) {
-          scannedActors += 1; // codex-runtime-debug
           record = { keys: new Set(), total: 0 };
           for (const item of getActorEventReactionSourceItems(actor, getItems ? { getItems } : {})) {
             for (const eventKey of collectEventReactionKeysFromItem(item)) {
@@ -196,10 +186,6 @@ export function createEventReactionSubscriptionIndex({
         // retaining their UUID, before the scene index has been invalidated.
         if (actor && typeof actor === "object") nextRecordsByActor.set(actor, record);
       }
-      // #region codex-runtime-debug H12 measure inventory scans rather than rebuild count
-      globalThis.__falloutMawGameplayProbe?.count("events.indexActorsScanned", "H12", scannedActors);
-      globalThis.__falloutMawGameplayProbe?.count("events.indexActorsReused", "H12", reusedActors);
-      // #endregion codex-runtime-debug
       if (invalidationRevision === rebuildRevision) {
         keys = nextKeys;
         actorsByKey = nextActorsByKey;
@@ -211,9 +197,6 @@ export function createEventReactionSubscriptionIndex({
         generation += 1;
       }
       return snapshot();
-      } finally {
-        __codexFinish?.(); // codex-runtime-debug
-      }
     }).finally(() => {
       if (rebuildPromise === pendingRebuild) rebuildPromise = null;
     });

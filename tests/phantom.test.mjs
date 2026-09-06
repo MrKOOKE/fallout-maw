@@ -134,7 +134,8 @@ test("phantom integrates expiry, direct damage cleanup and central mechanical ex
   assert.match(phantom, /result\.phantomDestroyed !== true/);
   assert.match(phantom, /if \(isWeaponAttackDamageResult\(result\)\) continue/);
   assert.match(phantom, /registerStealthObserverExclusionProvider\(PHANTOM_OBSERVER_PROVIDER_ID, observerSeesActivePhantom\)/);
-  assert.match(phantom, /duration: \{ seconds: duration, startTime \}/);
+  assert.match(phantom, /start: \{ time: startTime \}/);
+  assert.match(phantom, /duration: \{ value: duration, units: "seconds", expiry: null, expired: false \}/);
   assert.match(entity, /excludeFromMechanics: true/);
   assert.match(entity, /acceptsDirectDamage: true/);
   assert.match(observers, /isPhantomEntity\(hiddenToken\) \|\| isPhantomEntity\(observerToken\)/);

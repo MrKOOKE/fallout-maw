@@ -827,18 +827,20 @@ export const REACTION_HUB_TESTING = Object.freeze({
   normalizeReactionTimeoutMs
 });
 
-function createReactionHubResult(data = {}) {
+export function createReactionHubResult(data = {}) {
   return {
     handled: Boolean(data.handled),
     status: String(data.status ?? REACTION_RESULT.declined),
     cancelCurrent: Boolean(data.cancelCurrent),
     cancelRemaining: Boolean(data.cancelRemaining),
     difficultyBonus: toInteger(data.difficultyBonus),
+    advantageCount: Math.max(0, toInteger(data.advantageCount)),
+    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)),
     reason: String(data.reason ?? "")
   };
 }
 
-function mergeReactionHubResults(current = {}, next = {}) {
+export function mergeReactionHubResults(current = {}, next = {}) {
   const left = createReactionHubResult(current);
   const right = createReactionHubResult(next);
   const statusPriority = {
@@ -855,6 +857,8 @@ function mergeReactionHubResults(current = {}, next = {}) {
     cancelCurrent: left.cancelCurrent || right.cancelCurrent,
     cancelRemaining: left.cancelRemaining || right.cancelRemaining,
     difficultyBonus: left.difficultyBonus + right.difficultyBonus,
+    advantageCount: left.advantageCount + right.advantageCount,
+    disadvantageCount: left.disadvantageCount + right.disadvantageCount,
     reason: right.reason || left.reason
   });
 }

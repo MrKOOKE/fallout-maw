@@ -93,22 +93,14 @@ test("multiple moves, rotations and elevation changes retain only their original
   ]);
 });
 
-test("the system serializer and inline diagnostic retain coordinate history without visiting inventory", () => {
+test("the system serializer retains coordinate history without visiting inventory", () => {
   const scene = createScene();
   const document = new FalloutMaWTokenDocument("one");
   scene.tokens.set("one", document);
   const serializer = document.toObject;
-  let recorded = 0;
-  globalThis.__falloutMawGameplayProbe = {
-    tokenSerialization() {throw new Error("Coordinate history must not serialize a Token even with diagnostics active");},
-    count(name, _hypothesis, n) {if (name === "movement.coordinateHistory") recorded += n;}
-  };
-  try {
-    scene._preUpdateDescendantDocuments(scene, "tokens", [{_id: "one", x: 500}], {}, "user");
-    assert.deepEqual(snapshots[0][1], [{_id: "one", x: 10}]);
-    assert.equal(recorded, 1);
-    assert.equal(document.toObject, serializer);
-  } finally {delete globalThis.__falloutMawGameplayProbe;}
+  scene._preUpdateDescendantDocuments(scene, "tokens", [{_id: "one", x: 500}], {}, "user");
+  assert.deepEqual(snapshots[0][1], [{_id: "one", x: 10}]);
+  assert.equal(document.toObject, serializer);
 });
 
 test("custom compatibility serialization on a system Token retains native history", () => {

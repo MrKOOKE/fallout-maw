@@ -98,9 +98,6 @@ import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
-// #region codex-runtime-debug H21 temporary numeric request composition
-import { captureDamageRequestProbe, recordDamageRequestProbe } from "../debug/damage-request-probe.mjs";
-// #endregion codex-runtime-debug
 import { registerCombatRoundStartHandler } from "./turn-events.mjs";
 import {
   getConstructPartLimbKey,
@@ -782,9 +779,6 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
       damageEventIndex: index
     }))
     .filter(request => request.actorUuid);
-  // #region codex-runtime-debug H21 confirm request cardinality after normalization and root inheritance
-  recordDamageRequestProbe(captureDamageRequestProbe(), "damage.normalizedRequests", normalized);
-  // #endregion codex-runtime-debug
   if (!normalized.length) return single ? undefined : [];
   const inheritedChainRef = normalized.find(request => request.source?.chainRef)?.source?.chainRef ?? null;
   const operationId = String(
@@ -1324,6 +1318,21 @@ function serializeDamageCycleSocketResults(results = []) {
       scope: result.scope ?? "",
       limbKey: result.limbKey ?? "",
       damageTypeKey: result.damageTypeKey ?? "",
+      ...(Array.isArray(result.damageApplications) ? {
+        damageApplications: result.damageApplications.map(application => ({
+          damageEventIndex: Number.isInteger(Number(application?.damageEventIndex))
+            ? Number(application.damageEventIndex)
+            : -1,
+          limbKey: String(application?.limbKey ?? ""),
+          damageTypeKey: String(application?.damageTypeKey ?? ""),
+          incomingAmount: roundDamageAmount(application?.incomingAmount),
+          mitigationBlocked: roundDamageAmount(
+            application?.mitigationBlocked
+            ?? application?.damageMitigationDisplay?.blocked
+          ),
+          source: serializeDamageEventSource(application?.source)
+        }))
+      } : {}),
       ...(phantomDestroyed ? {
         phantomDestroyed: true,
         source: {
@@ -2189,13 +2198,6 @@ async function applyDamageApplicationsNow(
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
-  // codex-runtime-debug: actual per-Actor damage work, after mutation-queue admission.
-  const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("damage.applyActor", "H1", {
-    targetActorItemCount: actor.items?.size ?? 0,
-    targetCount: 1,
-    attackId: requests[0]?.source?.attackId ?? ""
-  });
-  try {
   if (isPhantomEntity(actor)) {
     const phantomResults = combineItemConditionDamagePackets(requests, actorUuid)
       .filter(data => data.mode === MODE_DAMAGE && data.scope !== SCOPE_ITEM_CONDITION)
@@ -2373,6 +2375,7 @@ async function applyDamageApplicationsNow(
       const deltas = getDamageEventIndexEntry(applicationDeltaIndex, entry.damageEventIndex);
       return {
         damageEventIndex: entry.damageEventIndex,
+        limbKey: String(entry.limbKey ?? ""),
         damageTypeKey: entry.damageTypeKey,
         incomingAmount: Math.max(0, roundDamageAmount(entry.incomingAmount)),
         amountBeforeResistance: Math.max(0, roundDamageAmount(entry.amountBeforeResistance)),
@@ -2433,9 +2436,6 @@ async function applyDamageApplicationsNow(
     }
   }
   return results;
-  } finally {
-    __codexFinish?.(); // codex-runtime-debug
-  }
 }
 
 export function createDamageBatchPreparationContext(actor) {
@@ -2773,7 +2773,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     }
     limbStates = result.limbStates;
     damageAccumulation = result.damageAccumulation;
-    shockCheck = result.shockCheck;
+    shockCheck = scaleShockCheckDifficulty(result.shockCheck, data.source);
     actualHealthDelta = independentHealthRules ? independentHealthDelta : result.healthDelta;
     actualLimbDelta = result.limbDelta;
     if (shouldUpdateLimb) {
@@ -3210,21 +3210,9 @@ export function clampActorLimbValuesToCurrentCaps(
 
 export function synchronizeActorLimbValueCaps(actor) {
   if (!canApplyDamageLocally(actor)) return undefined;
-  // #region codex-runtime-debug H14 cap convergence can be queued behind damage application
-  const queuedAt = Date.now(), queuedStart = performance.now();
-  globalThis.__falloutMawGameplayProbe?.count("damage.limbCapSync.queued", "H14");
-  // #endregion codex-runtime-debug
   return queueActorDamageMutation(actor, async freshActor => {
     if (!freshActor) return undefined;
-    // #region codex-runtime-debug H14 measure admitted work separately from queue waiting
-    const probeData = { actorId: freshActor.id, tokenId: freshActor.token?.id,
-      itemCount: freshActor.items?.size ?? 0, updatedFields: 0, queuedAt,
-      queueMs: performance.now() - queuedStart };
-    const finish = globalThis.__falloutMawGameplayProbe?.span("damage.limbCapSync.apply", "H14", probeData);
-    try {
-    // #endregion codex-runtime-debug
     const updates = buildLimbValueCapSyncUpdate(freshActor);
-    probeData.updatedFields = Object.keys(updates).length; // codex-runtime-debug
     if (!Object.keys(updates).length) return freshActor;
     await freshActor.update(updates, {
       falloutMawSkipDamageStatusSync: true,
@@ -3232,7 +3220,6 @@ export function synchronizeActorLimbValueCaps(actor) {
     });
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
-    } finally { finish?.(); } // codex-runtime-debug
   });
 }
 
@@ -3765,9 +3752,6 @@ function queueActorDamageMutation(actorOrUuid, operation) {
 }
 
 export async function runDamageHubOperation(operation, { operationRef = "" } = {}) {
-  // codex-runtime-debug: includes global queue admission and the admitted workflow.
-  const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("damage.hubOperation", "H5");
-  try {
   const requestedRef = String(operationRef ?? "").trim();
   // Damage may trigger an awaited check whose chosen reaction deals damage before the parent operation can finish.
   // Only the opaque reference issued by that active operation may enter it recursively; unrelated damage stays queued.
@@ -3800,9 +3784,6 @@ export async function runDamageHubOperation(operation, { operationRef = "" } = {
   } finally {
     if (activeDamageHubOperation === operationContext) activeDamageHubOperation = null;
     releaseQueuedOperation();
-  }
-  } finally {
-    __codexFinish?.(); // codex-runtime-debug
   }
 }
 
@@ -6861,7 +6842,7 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     actualHealthDelta += entryHealthDelta;
     entry.actualHealthDelta = Math.max(0, Number(entryHealthDelta) || 0);
     entry.actualLimbDelta = Math.max(0, Number(result.limbDelta) || 0);
-    if (result.shockCheck) shockChecks.push(result.shockCheck);
+    if (result.shockCheck) shockChecks.push(scaleShockCheckDifficulty(result.shockCheck, entry.source));
   }
 
   if (independentHealthRules && actualHealthDelta > 0) {
@@ -9488,6 +9469,7 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
         incoming: incomingDamage,
         final: finalAmount,
         penetration: mitigationPenetration,
+        multiplier: Math.max(0, Number(source?.targetEquipmentConditionDamageMultiplier) || 1),
         state: options.equipmentConditionDamageState,
         packetId: getConditionWearPacketId(source)
       })
@@ -9528,6 +9510,16 @@ function calculatePercentageDamageReduction(amount, percentage) {
   const normalizedPercentage = Math.min(100, Number(percentage) || 0);
   const magnitude = Math.floor(amount * Math.abs(normalizedPercentage) / 100);
   return normalizedPercentage < 0 ? -magnitude : magnitude;
+}
+
+function scaleShockCheckDifficulty(shockCheck = null, source = {}) {
+  if (!shockCheck) return shockCheck;
+  const multiplier = Math.max(1, Number(source?.unconsciousnessDifficultyMultiplier) || 1);
+  if (multiplier === 1) return shockCheck;
+  return {
+    ...shockCheck,
+    difficulty: Math.max(0, Math.round((Number(shockCheck.difficulty) || 0) * multiplier))
+  };
 }
 
 function applySourceMitigationIgnore(value = 0, percent = 0) {
@@ -9798,7 +9790,7 @@ function isResistanceOverheatEffect(effect) {
   return data?.kind === RESISTANCE_OVERHEAT_EFFECT_KIND;
 }
 
-function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damageType = null, damageTypeKey = "", incoming = 0, final = 0, penetration = 0, state = null, packetId = "" } = {}) {
+function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damageType = null, damageTypeKey = "", incoming = 0, final = 0, penetration = 0, multiplier = 1, state = null, packetId = "" } = {}) {
   const settings = damageType?.settings?.equipmentConditionDamage;
   if (!settings?.enabled || !itemWear.size) return [];
 
@@ -9825,7 +9817,7 @@ function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damage
         mitigation: wear.mitigation,
         penetration
       });
-      amount = Math.max(0, evaluateFormulaVariables(formula, variables));
+      amount = Math.max(0, evaluateFormulaVariables(formula, variables)) * Math.max(0, Number(multiplier) || 1);
     } catch (error) {
       console.warn(`${SYSTEM_ID} | Equipment condition damage formula error (${damageTypeKey}): ${error.message}`);
       continue;

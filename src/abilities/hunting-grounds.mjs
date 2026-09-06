@@ -684,7 +684,8 @@ async function performHuntingGroundsPreyCheck({
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: remaining, startTime: getWorldTime() },
+    start: { time: getWorldTime() },
+    duration: { value: remaining, units: "seconds", expiry: null, expired: false },
     system: {
       changes: buildPreyEffectChanges(
         preyData.marks,
@@ -715,7 +716,8 @@ function buildHuntingGroundsSessionEffectData({ sourceActor, abilityItem, runtim
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: runtime.durationSeconds, startTime: identifiers.createdAt },
+    start: { time: identifiers.createdAt },
+    duration: { value: runtime.durationSeconds, units: "seconds", expiry: null, expired: false },
     system: {
       changes: [{
         key: getDetectionModeRangeEffectKey(HUNTING_GROUNDS_DETECTION_MODE_ID),

@@ -393,9 +393,6 @@ export function getCreatureOptions(
   damageTypes = getDamageTypeSettings(),
   resources = getResourceSettings()
 ) {
-  // #region codex-runtime-debug H9a temporary normalization count
-  globalThis.__falloutMawGameplayProbe?.count?.("settings.creatures.normalize", "H9a");
-  // #endregion
   const options = { includeEnergyRegeneration: resources.some(resource => resource.key === "power") };
   try {
     return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics, damageTypes, options);
@@ -584,10 +581,6 @@ export function getTraumaSettings(creatureOptions = getCreatureOptions(), damage
  */
 export function getPreparedRuntimeSettings() {
   if (preparedRuntimeSettingsCache) return preparedRuntimeSettingsCache;
-
-  // #region codex-runtime-debug H9a temporary settings snapshot count
-  globalThis.__falloutMawGameplayProbe?.count?.("settings.runtimeSnapshot.rebuild", "H9a");
-  // #endregion
 
   const characteristicSettings = getCharacteristicSettings();
   const skillSettings = getSkillSettings();

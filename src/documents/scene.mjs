@@ -69,9 +69,6 @@ function getMovementOriginals(scene, parent, collection, changes, options, userI
     // a snapshot independent of the document and the incoming update object.
     originals.push(foundry.utils.deepClone(original));
   }
-  // #region codex-runtime-debug H7b verify coordinate history without changing method identity
-  globalThis.__falloutMawGameplayProbe?.count("movement.coordinateHistory", "H7b", originals.length);
-  // #endregion codex-runtime-debug
   return originals;
 }
 

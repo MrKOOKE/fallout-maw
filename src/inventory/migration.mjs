@@ -93,19 +93,9 @@ export async function repairActorInventory(actor, {
     return { actor, changed: false, updates: [], repairs: [] };
   }
 
-  // #region codex-runtime-debug H11 measure the complete automatic repair path
-  const captureFinished = globalThis.__falloutMawGameplayProbe?.span("inventory.repair.capture", "H11", { actorId: actor.id, itemCount: actor.items?.size });
-  // #endregion codex-runtime-debug
-  let expectedItems;
-  try { expectedItems = Array.from(actor.items ?? [], cloneInventoryItemData); }
-  finally { captureFinished?.(); } // codex-runtime-debug
+  const expectedItems = Array.from(actor.items ?? [], cloneInventoryItemData);
   const resolvedRace = race ?? getActorRace(actor);
-  // #region codex-runtime-debug H11 snapshot planning remains read-only
-  const planFinished = globalThis.__falloutMawGameplayProbe?.span("inventory.repair.plan", "H11", { actorId: actor.id, itemCount: expectedItems.length });
-  // #endregion codex-runtime-debug
-  let plan;
-  try { plan = await planActorInventoryRepair(actor, resolvedRace, { items: expectedItems }); }
-  finally { planFinished?.(); } // codex-runtime-debug
+  const plan = await planActorInventoryRepair(actor, resolvedRace, { items: expectedItems });
   if (!plan.updates.length) {
     return { actor, changed: false, ...plan };
   }

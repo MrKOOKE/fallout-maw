@@ -6242,7 +6242,8 @@ function normalizeCraftSearchText(value = "") {
 
 async function getCraftRecipeSummaries(actor = null) {
   const knownUuids = getKnownCraftItemUuids(actor);
-  if (craftRecipeCatalog?.actorUuid === actor?.uuid && craftRecipeCatalog.knownUuids === knownUuids) {
+  if (craftRecipeCatalog && craftRecipeCatalog.actorUuid === (actor?.uuid ?? "")
+    && craftRecipeCatalog.knownUuids === knownUuids) {
     return craftRecipeCatalog.recipes;
   }
 

@@ -939,6 +939,41 @@ test("canvas target-selection sessions finish once and preserve the cancellation
   }
 });
 
+test("adjacency reads the committed V14 token source during moveToken hooks", async () => {
+  const previousCanvas = globalThis.canvas;
+  globalThis.canvas = {
+    grid: { size: 100, sizeX: 100, sizeY: 100, isSquare: true },
+    scene: { grid: { size: 100, sizeX: 100, sizeY: 100, isSquare: true } }
+  };
+  try {
+    const { areTokensAdjacent } = await import("../src/combat/active-actions.mjs");
+    const scene = { grid: globalThis.canvas.grid };
+    const reactor = {
+      x: 3900,
+      y: 3200,
+      _source: { x: 3900, y: 3200, width: 1, height: 1 },
+      width: 1,
+      height: 1,
+      parent: scene,
+      getSize: () => ({ width: 100, height: 100 })
+    };
+    const mover = {
+      // V14 can retain the preceding prepared value until its update workflow
+      // finishes even though _source already contains the reached checkpoint.
+      x: 4100,
+      y: 3200,
+      _source: { x: 4000, y: 3200, width: 1, height: 1 },
+      width: 1,
+      height: 1,
+      parent: scene,
+      getSize: () => ({ width: 100, height: 100 })
+    };
+    assert.equal(areTokensAdjacent(reactor, mover), true);
+  } finally {
+    globalThis.canvas = previousCanvas;
+  }
+});
+
 test("a movement authorization which resolves late cannot supersede a newer canvas selector", async () => {
   const previousGlobals = new Map();
   const installGlobal = (key, value) => {

@@ -183,8 +183,11 @@ async function createOrRefreshAbilityFunctionCooldown(actor, { item, abilityFunc
       img: effectData.img,
       disabled: false,
       showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-      "duration.seconds": durationSeconds,
-      "duration.startTime": startTime,
+      "start.time": startTime,
+      "duration.value": durationSeconds,
+      "duration.units": "seconds",
+      "duration.expiry": null,
+      "duration.expired": false,
       [`flags.${SYSTEM_ID}.${ABILITY_FUNCTION_COOLDOWN_FLAG_KEY}`]: flagData
     });
   }
@@ -202,10 +205,8 @@ function buildCooldownEffectData(item, abilityFunction, condition, flagData, { s
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: {
-      seconds: durationSeconds,
-      startTime
-    },
+    start: { time: startTime },
+    duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: [] },
     flags: {
       [SYSTEM_ID]: {

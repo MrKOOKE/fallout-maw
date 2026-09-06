@@ -63,6 +63,7 @@ const LEGACY_CONTEXT_FIELDS = Object.freeze({
     "movementId",
     "moverActorUuid",
     "moverTokenUuid",
+    "triggerMode",
     "reactorTokenUuids"
   ]),
   oversightThreshold: Object.freeze([
@@ -124,6 +125,22 @@ export function serializeLegacyReactionContext(eventKey, rawContext = {}) {
   const chainRef = rawContext.chainRef ?? rawContext.falloutMawSystemEventChainRef;
   if (chainRef !== undefined && chainRef !== null) serialized.chainRef = serializeChainRef(chainRef);
   return serializeSystemEventPayload(serialized);
+}
+
+/** Narrow a target-atomic legacy occurrence. */
+export function narrowLegacyReactionContextToTarget(eventKey, context = {}, target = null) {
+  if (!target) return { ...context };
+  const narrowed = { ...context };
+  if (eventKey === "tokenLeavingAdjacency") {
+    narrowed.reactorTokenUuids = target.tokenUuid ? [target.tokenUuid] : [];
+    return narrowed;
+  }
+
+  if (target.actorUuid) narrowed.targetActorUuid = target.actorUuid;
+  if (target.tokenUuid) narrowed.targetTokenUuid = target.tokenUuid;
+  if (Array.isArray(narrowed.targetActorUuids)) narrowed.targetActorUuids = target.actorUuid ? [target.actorUuid] : [];
+  if (Array.isArray(narrowed.targetTokenUuids)) narrowed.targetTokenUuids = target.tokenUuid ? [target.tokenUuid] : [];
+  return narrowed;
 }
 
 function serializeRange(value, field) {

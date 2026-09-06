@@ -28,6 +28,8 @@ import {
   normalizeCascadeSettings,
   normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
+  normalizeParrySettings,
+  normalizeCrowdCrusherSettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
   normalizeCounterSniperSettings,
@@ -38,9 +40,16 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeInsuranceAttackSettings,
+  normalizeTripleAttackSettings,
+  normalizeDeepPenetrationSettings,
+  normalizeDeepPenetrationPiercingSettings,
+  normalizeToTheBoneSettings,
   normalizeFourLeafCloverSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeConcussionSettings,
+  normalizeCleanStrikeSettings,
   normalizeGrapplingMasterSettings,
   normalizeGoodEnoughSettings,
   normalizeCorrespondingToolApproachSettings,
@@ -73,6 +82,8 @@ import {
   normalizeLookSettings,
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
+  normalizeCleaveSettings,
+  normalizeCleaveMasterySettings,
   normalizeReaperSettings,
   normalizeToTheEndSettings,
   normalizeVirtuosoSettings,
@@ -84,13 +95,20 @@ import {
   normalizeTrueBulletSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
+  normalizeHeadChopperSettings,
   normalizeHuntingGroundsSettings,
   normalizeTempoSettings,
   normalizeFalseBreachSettings,
-  normalizeWhereAreYouGoingSettings
+  normalizeWhereAreYouGoingSettings,
+  normalizeSpinalStrikeSettings,
+  normalizeIdealStrikeSettings
 } from "../settings/abilities.mjs";
 export { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
 import { createCorrespondingToolApproachResolver } from "./corresponding-tool-approach.mjs";
+import {
+  extractDeepPenetrationDamageRows,
+  selectDeepPenetrationTargetRows
+} from "./deep-penetration.mjs";
 import { registerToolWorkflowModifierProvider } from "../utils/tool-workflow-modifiers.mjs";
 import { openAnatomyStudyApplication } from "../apps/anatomy-study.mjs";
 import { openPerfectFitApplication } from "../apps/perfect-fit.mjs";
@@ -168,11 +186,16 @@ import {
   registerWeaponAttackResolvedHandler,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
+import { getAbilityAttackSettings } from "../combat/attack-source.mjs";
 import {
   DEUS_EX_MACHINA_PROGRESS_FLAG_ROOT,
   DEUS_EX_MACHINA_PROGRESS_OPTION
 } from "./deus-ex-machina-progress-runtime.mjs";
-import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
+import {
+  createCounterSniperAttackModifier,
+  createLungeAttackModifier,
+  createWhirlwindAttackModifier
+} from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
@@ -524,6 +547,8 @@ const ACTIVE_APPLICATION_AUTHORITY_CACHE_MS = 5 * 60 * 1000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+const CROWD_CRUSHER_EFFECT_FLAG_KEY = "crowdCrusher";
+const CONCUSSION_EFFECT_FLAG_KEY = "concussion";
 const PAIN_LORD_ITEM_UPDATE_RELEVANCE_OPTION = "falloutMawPainLordItemUpdateRelevant";
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead"
@@ -715,6 +740,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.slaughter,
+    label: "Резня",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.slaughter,
+      fixedSettings: normalizeCorpseAfterCorpseSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.hawkEye,
     label: "Соколиный глаз",
     passive: true,
@@ -825,6 +859,25 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.headChopper,
+    label: "Головорезка",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.headChopper,
+      fixedSettings: normalizeHeadChopperSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher,
+    label: "Сокрушитель толп",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher,
+      fixedSettings: normalizeCrowdCrusherSettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.reactive,
     label: "Реактивный",
     active: true,
@@ -842,12 +895,50 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.cleave,
+    label: "Рассечение",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cleave,
+      fixedSettings: normalizeCleaveSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery,
+    label: "Рассечение II",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery,
+      fixedSettings: normalizeCleaveMasterySettings()
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
     label: "Двоечка",
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
+    label: "Страховочка",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
+      fixedSettings: normalizeInsuranceAttackSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.tripleAttack,
+    label: "Троечка",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.tripleAttack,
+      fixedSettings: normalizeTripleAttackSettings()
     })
   }),
   Object.freeze({
@@ -896,6 +987,45 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniper
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.parry,
+    label: "Парирование",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.parry,
+      fixedSettings: normalizeParrySettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
+    label: "Глубокое проникновение",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
+      fixedSettings: normalizeDeepPenetrationSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
+    label: "Глубокое проникновение II",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
+      fixedSettings: normalizeDeepPenetrationPiercingSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.toTheBone,
+    label: "До кости",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.toTheBone,
+      fixedSettings: normalizeToTheBoneSettings()
     })
   }),
   Object.freeze({
@@ -1003,6 +1133,42 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.goodEnough,
       fixedSettings: normalizeGoodEnoughSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.spinalStrike,
+    label: "Зашибу!",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.spinalStrike,
+      fixedSettings: normalizeSpinalStrikeSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.concussion,
+    label: "Сострясение",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.concussion,
+      fixedSettings: normalizeConcussionSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.cleanStrike,
+    label: "Чистый удар",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cleanStrike,
+      fixedSettings: normalizeCleanStrikeSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.idealStrike,
+    label: "Идеальный удар",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.idealStrike,
+      fixedSettings: normalizeIdealStrikeSettings()
     })
   }),
   Object.freeze({
@@ -1330,6 +1496,10 @@ function registerFixedAbilityRuntimeHooks() {
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
   registerWeaponAttackResolvedHandler(
+    "fallout-maw.fixed.deepPenetration",
+    runFixedAbilityRuntimeHandler(processDeepPenetrationResolution)
+  );
+  registerWeaponAttackResolvedHandler(
     "fallout-maw.fixed.counterAttack",
     runFixedAbilityRuntimeHandler(requestCounterAttackReaction)
   );
@@ -1380,6 +1550,9 @@ function registerFixedAbilityRuntimeHooks() {
       await consumeAllOrNothingResultEffects(context);
       await processCorpseAfterCorpseResolution(context);
       await consumeLethalAttackPreparationEffects(context);
+      await processCrowdCrusherResolution(context);
+      await processConcussionResolution(context);
+      await processCleanStrikeResolution(context);
       if (context?.deferredImpactPending !== true) {
         await processReaperAttackResolution(context);
         await processSandmanAttackResolution(context);
@@ -1392,10 +1565,16 @@ function registerFixedAbilityRuntimeHooks() {
   );
   Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestDoubleAttackDuplicate(context);
+    requestCrowdCrusherDuplicate(context);
   }));
   Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestAnatomyStudyWeaponActionModifiers(context);
+    requestDeepPenetrationWeaponActionModifiers(context);
+    requestDoubleAttackWeaponActionModifiers(context);
     requestFullForceWeaponActionModifiers(context);
+    requestCrowdCrusherWeaponActionModifiers(context);
+    requestConcussionWeaponActionModifiers(context);
+    requestCleanStrikeWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
     requestCascadeWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
@@ -1583,7 +1762,8 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       if ([
         ABILITY_FIXED_FUNCTION_KEYS.lethalShot,
         ABILITY_FIXED_FUNCTION_KEYS.lethalStrike,
-        ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse
+        ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
+        ABILITY_FIXED_FUNCTION_KEYS.slaughter
       ].includes(entry.fixedKey)) {
         return {
           key: getFixedFunctionStateKey(entry),
@@ -1605,6 +1785,25 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: stateKey,
           label: "Следующая атака",
           value: state[stateKey]?.pending ? "Готова" : "Не подготовлена"
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher) {
+        const settings = normalizeCrowdCrusherSettings(entry.fixedSettings);
+        return {
+          key: getFixedFunctionStateKey(entry),
+          label: "Бойня",
+          current: Math.min(settings.maximumCharges, Math.max(0, toInteger(state[getFixedFunctionStateKey(entry)]?.charges))),
+          required: settings.maximumCharges
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleanStrike) {
+        const settings = normalizeCleanStrikeSettings(entry.fixedSettings);
+        const chargeState = getCleanStrikeChargeState(state[getFixedFunctionStateKey(entry)], settings);
+        return {
+          key: getFixedFunctionStateKey(entry),
+          label: "Заряды",
+          current: chargeState.charges,
+          required: chargeState.maximum
         };
       }
       const maintainedTargetDefinition = MAINTAINED_TARGET_DEFINITIONS_BY_KEY.get(entry.fixedKey);
@@ -1836,8 +2035,17 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.whirlwind,
+    ABILITY_FIXED_FUNCTION_KEYS.headChopper
+  ].includes(abilityFunction.fixedKey)) {
     const used = await useWhirlwind(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher) {
+    const used = await useCrowdCrusher(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -1864,7 +2072,11 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.lunge,
+    ABILITY_FIXED_FUNCTION_KEYS.cleave,
+    ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+  ].includes(abilityFunction.fixedKey)) {
     const used = await useLunge(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
@@ -1882,7 +2094,11 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.tripleAttack
+  ].includes(abilityFunction.fixedKey)) {
     await toggleDoubleAttack(actor, item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
@@ -1890,6 +2106,16 @@ export async function useFixedAbilityFunctionItem({
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
     await toggleFullForce(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if ([
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
+    ABILITY_FIXED_FUNCTION_KEYS.toTheBone
+  ].includes(abilityFunction.fixedKey)) {
+    await toggleDeepPenetration(actor, item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
   }
@@ -1903,6 +2129,18 @@ export async function useFixedAbilityFunctionItem({
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     await toggleAiming(actor, item, abilityFunction);
     await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.concussion) {
+    const used = await useConcussion(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.idealStrike) {
+    const used = await useIdealStrike(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
     return true;
   }
 
@@ -2070,7 +2308,8 @@ export async function useFixedAbilityFunctionItem({
   if ([
     ABILITY_FIXED_FUNCTION_KEYS.lethalShot,
     ABILITY_FIXED_FUNCTION_KEYS.lethalStrike,
-    ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse
+    ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
+    ABILITY_FIXED_FUNCTION_KEYS.slaughter
   ].includes(abilityFunction.fixedKey)) {
     const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -7599,7 +7838,10 @@ async function useRage(actor, abilityItem, abilityFunction) {
 
 async function useWhirlwind(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = normalizeWhirlwindSettings(abilityFunction.fixedSettings);
+  const headChopper = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper;
+  const settings = headChopper
+    ? normalizeHeadChopperSettings(abilityFunction.fixedSettings)
+    : normalizeWhirlwindSettings(abilityFunction.fixedSettings);
   const token = getActorSceneToken(actor);
   if (!token) {
     ui.notifications.warn(`${abilityName}: выберите токен актера на сцене.`);
@@ -7623,6 +7865,7 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
     attackModifier: createWhirlwindAttackModifier({
       label: abilityName,
       accuracyModifier: settings.accuracyModifier,
+      targetLowestCriticalLimb: headChopper,
       onBeforeAttack: async () => {
         const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
         if (!hasEnergy(actor, energyCost)) {
@@ -7645,6 +7888,117 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
     ui.notifications.warn(`${abilityName}: не удалось начать атаку выбранным оружием.`);
     return false;
   }
+  return true;
+}
+
+async function useCrowdCrusher(actor, abilityItem, abilityFunction) {
+  const settings = normalizeCrowdCrusherSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const charges = Math.min(settings.maximumCharges, Math.max(0, toInteger(state[stateKey]?.charges)));
+  if (charges < settings.activationCharges) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: зарядов Бойни ${charges} / ${settings.activationCharges}.`);
+    return false;
+  }
+  if (findCrowdCrusherEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: режим Бойни уже активен.`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    charges: charges - settings.activationCharges
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  const startTime = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: `${getAbilityDisplayName(abilityItem)}: Бойня`,
+    img: abilityItem.img || "icons/svg/sword.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    start: { time: startTime },
+    duration: { value: settings.durationSeconds, units: "seconds", expiry: null, expired: false },
+    system: {
+      changes: settings.movementPointBonus ? [{
+        key: "system.resources.movementPoints.bonus",
+        type: "add",
+        value: String(settings.movementPointBonus),
+        phase: "initial",
+        priority: null
+      }] : []
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [CROWD_CRUSHER_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  await createAbilityChatMessage(actor, abilityItem, `Режим Бойни активен на ${formatDuration(settings.durationSeconds)}.`);
+  return true;
+}
+
+async function useConcussion(actor, abilityItem, abilityFunction) {
+  const settings = normalizeConcussionSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (state[stateKey]?.pending) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: удар уже подготовлен.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost) || !(await spendEnergy(actor, energyCost))) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: true
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  await createAbilityChatMessage(actor, abilityItem, "Следующая атака Ближнего боя усилена.");
+  return true;
+}
+
+async function useIdealStrike(actor, abilityItem, abilityFunction) {
+  const settings = normalizeIdealStrikeSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (state[stateKey]?.activePending) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: идеальный удар уже подготовлен.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost) || !(await spendEnergy(actor, energyCost))) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    activePending: true
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  await createAbilityChatMessage(actor, abilityItem, "Следующая подходящая атака не промахнётся и обойдёт Сопротивление.");
   return true;
 }
 
@@ -8028,7 +8382,13 @@ function getWhirlwindWeaponFunctionIds(weapon) {
 
 async function useLunge(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = normalizeLungeSettings(abilityFunction.fixedSettings);
+  const cleave = abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.lunge;
+  const cleaveMastery = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery;
+  const settings = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+    ? normalizeCleaveMasterySettings(abilityFunction.fixedSettings)
+    : abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave
+      ? normalizeCleaveSettings(abilityFunction.fixedSettings)
+      : normalizeLungeSettings(abilityFunction.fixedSettings);
   const token = getActorSceneToken(actor);
   if (!token) {
     ui.notifications.warn(`${abilityName}: выберите токен актера на сцене.`);
@@ -8053,6 +8413,22 @@ async function useLunge(actor, abilityItem, abilityFunction) {
 
   await actor.setFlag(SYSTEM_ID, "selectedHudWeaponSetKey", candidate.weaponSet);
   await actor.setFlag(SYSTEM_ID, "selectedHudWeaponItemId", candidate.weapon.id);
+
+  if (cleave) {
+    return executeCleaveLunge({
+      actor,
+      abilityItem,
+      abilityFunction,
+      abilityName,
+      settings,
+      token,
+      candidate,
+      destination,
+      origin,
+      energyCost,
+      cleaveMastery
+    });
+  }
 
   const phantom = createLungePhantom(token, destination);
   let moved = false;
@@ -8109,6 +8485,135 @@ async function useLunge(actor, abilityItem, abilityFunction) {
 
   await createAbilityChatMessage(actor, abilityItem, "Позиция выбрана, атака началась.");
   return true;
+}
+
+async function executeCleaveLunge({
+  actor,
+  abilityItem,
+  abilityFunction,
+  abilityName,
+  settings,
+  token,
+  candidate,
+  destination,
+  origin,
+  energyCost,
+  cleaveMastery = false
+}) {
+  if (!hasEnergy(actor, energyCost) || !(await spendEnergy(actor, energyCost))) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  const outwardTargets = collectCleavePathTargets(token.document, origin, destination);
+  await executeCleavePass({
+    token,
+    candidate,
+    targets: outwardTargets,
+    destination,
+    abilityName,
+    guaranteedHitChanceThreshold: cleaveMastery ? 10 : 0,
+    targetLowestCriticalLimb: cleaveMastery
+  });
+  const stay = await promptLungeReturnChoice(abilityName);
+  if (!stay) {
+    const returnTargets = collectCleavePathTargets(token.document, destination, origin)
+      .filter(entry => !isActorUnableToAct(entry.token.actor));
+    await executeCleavePass({
+      token,
+      candidate,
+      targets: returnTargets,
+      destination: origin,
+      abilityName,
+      targetLowestCriticalLimb: cleaveMastery
+    });
+  }
+  await createAbilityChatMessage(actor, abilityItem, "Рассечение завершено.");
+  return true;
+}
+
+async function executeCleavePass({
+  token,
+  candidate,
+  targets,
+  destination,
+  abilityName,
+  guaranteedHitChanceThreshold = 0,
+  targetLowestCriticalLimb = false
+}) {
+  for (const entry of targets) {
+    if (!entry?.token?.actor || isActorUnableToAct(token.actor)) break;
+    if (entry.waypoint) await moveTokenDocumentAndWait(token.document, entry.waypoint);
+    const selectedLimbKey = targetLowestCriticalLimb
+      ? getLowestHealthCriticalLimbKey(entry.token.actor)
+      : "";
+    const resultPolicy = guaranteedHitChanceThreshold > 0 ? {
+      disabledResultsWhenSuccessChanceAbove: { criticalFailure: true, failure: true },
+      successChanceThreshold: guaranteedHitChanceThreshold
+    } : null;
+    await executeWeaponAttackAgainstToken({
+      attackerToken: token.document?.object ?? token,
+      targetToken: entry.token.object ?? entry.token,
+      weapon: candidate.weapon,
+      actionKey: candidate.actionKey,
+      weaponFunctionId: candidate.weaponFunctionId,
+      attackModifier: createLungeAttackModifier({
+        label: abilityName,
+        resultPolicy,
+        suppressGuardianAngelReaction: false
+      }),
+      selectedLimbKey,
+      strictTargetResolution: true,
+      skipActionPointCost: true,
+      suspendActiveAttack: true,
+      targetTokenUuidAllowlist: [String(entry.token.document?.uuid ?? entry.token.uuid ?? "")]
+    });
+  }
+  await moveTokenDocumentAndWait(token.document, destination);
+}
+
+function collectCleavePathTargets(tokenDocument, start, end) {
+  const width = Math.max(1, Number(tokenDocument?.width) || 1);
+  const height = Math.max(1, Number(tokenDocument?.height) || 1);
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const steps = Math.max(1, Math.ceil(Math.hypot(end.x - start.x, end.y - start.y) / gridSize));
+  const samples = Array.from({ length: steps + 1 }, (_value, index) => ({
+    x: start.x + ((end.x - start.x) * index / steps),
+    y: start.y + ((end.y - start.y) * index / steps),
+    elevation: Number(start.elevation ?? tokenDocument?.elevation) || 0
+  }));
+  const rows = [];
+  for (const other of tokenDocument?.parent?.tokens?.contents ?? []) {
+    if (!other?.actor || other.id === tokenDocument.id || !isWhereAreYouGoingOpponent(tokenDocument.actor, other.actor)) continue;
+    const index = samples.findIndex(waypoint => areTokensAdjacentAt(tokenDocument, waypoint, other, null));
+    if (index < 0) continue;
+    rows.push({
+      token: other.object ?? other,
+      waypoint: {
+        x: samples[index].x,
+        y: samples[index].y,
+        elevation: samples[index].elevation,
+        width,
+        height
+      },
+      index
+    });
+  }
+  return rows.sort((left, right) => left.index - right.index);
+}
+
+function getLowestHealthCriticalLimbKey(actor) {
+  return Object.entries(actor?.system?.limbs ?? {})
+    .filter(([limbKey]) => isCriticalLimb(actor, limbKey) && !isLimbDestroyed(actor, limbKey))
+    .sort(([, left], [, right]) => (
+      ((Number(left?.value) || 0) / Math.max(1, Number(left?.max) || 1))
+      - ((Number(right?.value) || 0) / Math.max(1, Number(right?.max) || 1))
+    ))
+    .at(0)?.[0] ?? "";
 }
 
 function getLungeWeaponCandidate(actor) {
@@ -8521,6 +9026,7 @@ function registerWhereAreYouGoingMovementProvider() {
     id: WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID,
     collect: runFixedAbilityRuntimeHandler(collectWhereAreYouGoingMovementInterruptions),
     execute: runFixedAbilityRuntimeHandler(executeWhereAreYouGoingMovementInterruption),
+    pauseNativeMovement: true,
     synchronizeOnMove: true,
     synchronize: runFixedAbilityRuntimeHandler(synchronizeWhereAreYouGoingSuppression)
   });
@@ -8545,23 +9051,35 @@ function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement,
       .filter(Boolean)
   ]);
 
-  const reactors = (tokenDocument.parent?.tokens?.contents ?? [])
-    .filter(other => other?.actor && other.id !== tokenDocument.id)
-    .filter(other => isTokenActiveCombatant(combat, other))
-    .filter(other => canUseWhereAreYouGoingReaction(other.actor))
-    .filter(other => isWhereAreYouGoingOpponent(other.actor, mover))
-    .filter(other => getActorWhereAreYouGoingEntries(other.actor).some(entry => {
+  const reactors = [];
+  for (const other of tokenDocument.parent?.tokens?.contents ?? []) {
+    if (
+      !other?.actor
+      || other.id === tokenDocument.id
+      || !isTokenActiveCombatant(combat, other)
+      || !canUseWhereAreYouGoingReaction(other.actor)
+      || !isWhereAreYouGoingOpponent(other.actor, mover)
+    ) continue;
+    const abilityEntries = getActorWhereAreYouGoingEntries(other.actor);
+    let canLeave = false;
+    let canApproach = false;
+    for (const entry of abilityEntries) {
       const reactionEnergyCost = getAbilityEnergyCost(
         other.actor,
         entry.abilityItem,
         entry.abilityFunction,
         entry.settings.reactionEnergyCost
       );
-      return getAvailableWhereAreYouGoingWeaponCandidates(other.actor, {
+      const available = getAvailableWhereAreYouGoingWeaponCandidates(other.actor, {
         token: other,
         reactionEnergyCost
       }).length > 0;
-    }));
+      if (!available) continue;
+      canLeave = true;
+      if (entry.triggerOnApproach) canApproach = true;
+    }
+    if (canLeave) reactors.push({ token: other, canApproach });
+  }
   if (!reactors.length) return [];
 
   const samples = getMovementRouteSamples(tokenDocument, movement);
@@ -8572,23 +9090,32 @@ function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement,
       routeOrder += 1;
       const previous = segmentSamples[segmentIndex - 1];
       const current = segmentSamples[segmentIndex];
-      const leavingReactors = reactors.filter(reactor => {
+      const transitions = reactors.map(({ token: reactor, canApproach }) => {
         const wasAdjacent = areTokensAdjacentAt(tokenDocument, previous.waypoint, reactor, null);
         const isAdjacent = areTokensAdjacentAt(tokenDocument, current.waypoint, reactor, null);
-        if (skippedReactorTokenUuids.has(reactor.uuid)) return false;
-        return wasAdjacent && !isAdjacent;
-      });
-      if (!leavingReactors.length) continue;
+        if (skippedReactorTokenUuids.has(reactor.uuid)) return null;
+        if (wasAdjacent && !isAdjacent) return { reactor, mode: "leave" };
+        return !wasAdjacent && isAdjacent && canApproach ? { reactor, mode: "approach" } : null;
+      }).filter(Boolean);
+      if (!transitions.length) continue;
+
+      // Leaving the old adjacent cell happens before entering the new one. Treat
+      // each transition type as its own interruption; a continued route is
+      // collected again for a later approach at the newly reached cell.
+      const triggerMode = transitions.some(entry => entry.mode === "leave") ? "leave" : "approach";
+      const triggeringReactors = transitions.filter(entry => entry.mode === triggerMode);
+      const approach = triggerMode === "approach";
       return [{
         type: REACTION_EVENT_KEYS.tokenLeavingAdjacency,
-        eventId: `${movement?.id ?? foundry.utils.randomID()}:${routeOrder}`,
-        routeOrder: Math.max(0, routeOrder - 1),
+        eventId: `${movement?.id ?? foundry.utils.randomID()}:${routeOrder}:${triggerMode}`,
+        routeOrder: approach ? routeOrder : Math.max(0, routeOrder - 1),
         priority: -100,
-        waypoint: previous.waypoint,
-        reactorTokenUuids: leavingReactors.map(reactor => reactor.uuid),
+        waypoint: approach ? current.waypoint : previous.waypoint,
+        triggerMode,
+        reactorTokenUuids: triggeringReactors.map(entry => entry.reactor.uuid),
         remainingWaypoints: buildRemainingMovementWaypoints(
           segmentSamples,
-          segmentIndex,
+          segmentIndex + (approach ? 1 : 0),
           samples,
           index,
           movement.pending?.waypoints ?? []
@@ -8605,6 +9132,7 @@ async function executeWhereAreYouGoingMovementInterruption({
   event,
   options,
   chainRef = null,
+  nativeMovementPaused = false,
   isCurrent = null
 } = {}) {
   const mover = tokenDocument?.actor;
@@ -8614,12 +9142,24 @@ async function executeWhereAreYouGoingMovementInterruption({
     moverActorUuid: mover.uuid,
     moverTokenUuid: tokenDocument.uuid,
     reactorTokenUuids: event?.reactorTokenUuids ?? [],
+    triggerMode: event?.triggerMode === "approach" ? "approach" : "leave",
     chainRef,
     title: "Реакция на перемещение",
-    message: `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
+    message: event?.triggerMode === "approach"
+      ? `${mover.name} встал на соседнюю клетку.`
+      : `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
   });
-  if (result?.status === REACTION_RESULT.success) return;
+  // A successful reaction cancels the rest of the route. When Foundry has
+  // paused its native movement, false tells the coordinator to stop it at the
+  // reached checkpoint instead of resuming past the reactor.
+  if (result?.status === REACTION_RESULT.success) return nativeMovementPaused ? false : undefined;
   if (typeof isCurrent === "function" && !isCurrent()) return false;
+  if (nativeMovementPaused) {
+    if (event?.triggerMode !== "approach") {
+      suppressWhereAreYouGoingReactors(tokenDocument, event?.reactorTokenUuids ?? []);
+    }
+    return true;
+  }
   await resumeWhereAreYouGoingMovement(tokenDocument, movement, event, options, chainRef);
 }
 
@@ -8628,18 +9168,20 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
   const mover = await fromUuid(String(context.moverActorUuid ?? ""));
   const moverToken = await fromUuid(String(context.moverTokenUuid ?? ""));
   if (!mover || !moverToken) return [];
+  const triggerMode = context.triggerMode === "approach" ? "approach" : "leave";
 
   const offers = [];
   for (const reactorTokenUuid of context.reactorTokenUuids ?? []) {
     const reactorToken = await fromUuid(String(reactorTokenUuid ?? ""));
     const reactor = reactorToken?.actor;
-    if (
-      !reactor
-      || !canUseWhereAreYouGoingReaction(reactor)
-      || !areTokensAdjacent(reactorToken, moverToken)
-      || !isWhereAreYouGoingOpponent(reactor, mover)
-    ) continue;
+    const usable = Boolean(reactor && canUseWhereAreYouGoingReaction(reactor));
+    const adjacent = Boolean(reactorToken && areTokensAdjacent(reactorToken, moverToken));
+    const opponent = Boolean(reactor && isWhereAreYouGoingOpponent(reactor, mover));
+    if (!reactor || !usable || !adjacent || !opponent) {
+      continue;
+    }
     const entry = getActorWhereAreYouGoingEntries(reactor).find(candidateEntry => {
+      if (triggerMode === "approach" && !candidateEntry.triggerOnApproach) return false;
       const reactionEnergyCost = getAbilityEnergyCost(
         reactor,
         candidateEntry.abilityItem,
@@ -8651,7 +9193,9 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
         reactionEnergyCost
       }).length > 0;
     });
-    if (!entry) continue;
+    if (!entry) {
+      continue;
+    }
     const reactionEnergyCost = getAbilityEnergyCost(
       reactor,
       entry.abilityItem,
@@ -8662,7 +9206,9 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
       token: reactorToken,
       reactionEnergyCost
     });
-    if (!candidates.length) continue;
+    if (!candidates.length) {
+      continue;
+    }
     const attackEnergyCost = Math.min(...candidates.map(candidate => Math.max(0, toInteger(candidate.attackEnergyCost))));
     const energyCost = getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost);
     offers.push({
@@ -8675,7 +9221,7 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
         context.movementId ?? foundry.utils.randomID()
       ].join(":"),
       label: getAbilityDisplayName(entry.abilityItem),
-      description: `Остановить ${mover.name} и нанести неприцельный удар.`,
+      description: `${triggerMode === "approach" ? "Встретить" : "Остановить"} ${mover.name} и нанести неприцельный удар.`,
       img: entry.abilityItem.img || "icons/svg/sword.svg",
       costLines: buildReactionEnergyCostLines(entry.settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
@@ -8732,7 +9278,7 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
     return { handled: true, status: REACTION_RESULT.failed };
   }
 
-  const used = await executeWeaponAttackAgainstToken({
+  const attackResult = await executeWeaponAttackAgainstToken({
     attackerToken: reactorToken.object ?? reactorToken,
     targetToken: moverToken.object ?? moverToken,
     weapon,
@@ -8741,9 +9287,15 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
     skipActionPointCost: true,
     additionalActorResourceCosts: resourcePreview.additionalActorResourceCosts,
     requireResourceCommit: true,
-    ignoreReactionLock: true
+    ignoreReactionLock: true,
+    returnOutcome: true
   });
-  if (used && Math.max(0, toInteger(entry.settings.reactionOverloadEnergyCost)) > 0) {
+  const used = attackResult?.executed === true;
+  const missed = used && attackResult.outcome?.successfulAttack !== true;
+  const shouldApplyOverload = used
+    && Math.max(0, toInteger(entry.settings.reactionOverloadEnergyCost)) > 0
+    && missed;
+  if (shouldApplyOverload) {
     await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
       name: getAbilityOverloadName(entry.abilityItem),
       energyCost: entry.settings.reactionOverloadEnergyCost,
@@ -8872,10 +9424,10 @@ async function resumeWhereAreYouGoingMovement(
 ) {
   const waypoints = Array.isArray(event.remainingWaypoints) ? event.remainingWaypoints : [];
   if (!tokenDocument || !waypoints.length) return false;
-  const reactorTokenUuids = (event.reactorTokenUuids ?? [])
+  const reactorTokenUuids = (event.triggerMode === "approach" ? [] : (event.reactorTokenUuids ?? []))
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean);
-  suppressWhereAreYouGoingReactors(tokenDocument, reactorTokenUuids);
+  if (reactorTokenUuids.length) suppressWhereAreYouGoingReactors(tokenDocument, reactorTokenUuids);
   return withMovementResumeContext(
     tokenDocument,
     INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
@@ -8955,13 +9507,17 @@ async function requestCounterAttackReaction(context = {}) {
 }
 
 async function collectCounterAttackReactionOffers({ eventKey = "", context = {} } = {}) {
-  if (eventKey !== REACTION_EVENT_KEYS.weaponAttackResolved) return [];
+  if (![REACTION_EVENT_KEYS.weaponAttackResolved, REACTION_EVENT_KEYS.weaponAttackTargeted].includes(eventKey)) return [];
+  if (eventKey === REACTION_EVENT_KEYS.weaponAttackTargeted && context?.deferredImpactResolution === true) return [];
   const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
   const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
   if (!attacker || !attackerToken) return [];
 
   const offers = [];
-  const targetTokenUuids = Array.from(new Set((context.targetTokenUuids ?? [])
+  const targetTokenUuids = Array.from(new Set([
+    ...(context.targetTokenUuids ?? []),
+    context.targetTokenUuid
+  ]
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   for (const targetTokenUuid of targetTokenUuids) {
@@ -8969,7 +9525,8 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
     const defender = defenderToken?.actor ?? null;
     if (!defender || defender.uuid === attacker.uuid) continue;
     if (!areTokensAdjacent(defenderToken, attackerToken)) continue;
-    const entry = getActorCounterAttackEntry(defender);
+    const preemptive = eventKey === REACTION_EVENT_KEYS.weaponAttackTargeted;
+    const entry = getActorCounterAttackEntry(defender, null, { preemptive });
     if (!entry) continue;
     const settings = entry.settings;
     const reactionEnergyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
@@ -8989,13 +9546,16 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
       reactionId: COUNTER_ATTACK_REACTION_PROVIDER_ID,
       offerId: `${COUNTER_ATTACK_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
       label: getAbilityDisplayName(entry.abilityItem),
-      description: `Ответить ${entry.weapon.name}: ${attacker.name}.`,
+      description: preemptive
+        ? `Ударить ${attacker.name} до его атаки: ${entry.weapon.name}.`
+        : `Ответить ${entry.weapon.name}: ${attacker.name}.`,
       img: entry.abilityItem.img || entry.weapon.img || "icons/svg/sword.svg",
       costLines: buildReactionEnergyCostLines(settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
       weaponId: entry.weapon.id,
       weaponFunctionId: entry.weaponFunctionId,
+      preemptive,
       defenderTokenUuid: defenderToken.uuid,
       attackerTokenUuid: attackerToken.uuid,
       reactionEnergyCost,
@@ -9010,7 +9570,9 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
   const defender = await fromUuid(String(offer.actorUuid ?? ""));
   const defenderTokenDocument = await fromUuid(String(offer.defenderTokenUuid ?? ""));
   const attackerTokenDocument = await fromUuid(String(offer.attackerTokenUuid ?? ""));
-  const entry = getActorCounterAttackEntry(defender, offer);
+  const entry = getActorCounterAttackEntry(defender, offer, {
+    preemptive: offer.preemptive === true
+  });
   if (!defender || !defenderTokenDocument || !attackerTokenDocument || !entry) return { handled: false };
   const settings = entry.settings;
   const reactionEnergyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
@@ -9025,7 +9587,7 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
   if (!areTokensAdjacent(defenderTokenDocument, attackerTokenDocument)) return { handled: false };
   if (resourcePreview.missing) return { handled: false };
 
-  const used = await executeWeaponAttackAgainstToken({
+  const attackResult = await executeWeaponAttackAgainstToken({
     attackerToken: defenderTokenDocument.object ?? defenderTokenDocument,
     targetToken: attackerTokenDocument.object ?? attackerTokenDocument,
     weapon: entry.weapon,
@@ -9037,9 +9599,10 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
     additionalActorResourceCosts: resourcePreview.additionalActorResourceCosts,
     requireResourceCommit: true,
     ignoreReactionLock: true,
-    suspendActiveAttack: true
+    suspendActiveAttack: true,
+    returnOutcome: true
   });
-  if (!used) {
+  if (!attackResult?.executed) {
     await createAbilityChatMessage(defender, entry.abilityItem, "Не удалось выполнить удар.");
     return { handled: true, status: REACTION_RESULT.failed };
   }
@@ -9049,7 +9612,108 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
     durationSeconds: settings.reactionOverloadDurationSeconds
   });
   await createAbilityChatMessage(defender, entry.abilityItem, "Ответная атака выполнена.");
-  return { handled: true, status: REACTION_RESULT.success };
+  const successfulAttack = attackResult.outcome?.successfulAttack === true;
+  const attackerUnableToContinue = successfulAttack && isActorUnableToAct(attackerTokenDocument.actor);
+  if (attackerUnableToContinue) requestWeaponAttackCompletion({ attackId: context.attackId });
+  return {
+    handled: true,
+    status: REACTION_RESULT.success,
+    cancelCurrent: attackerUnableToContinue,
+    cancelRemaining: attackerUnableToContinue,
+    disadvantageCount: successfulAttack && !attackerUnableToContinue ? settings.disadvantageOnHit : 0
+  };
+}
+
+function getDeepPenetrationRuntimeSettings(abilityFunction = {}) {
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetration) {
+    return {
+      ...normalizeDeepPenetrationSettings(abilityFunction.fixedSettings),
+      blockedDamageMultiplier: 1,
+      penetrationMultiplier: 0
+    };
+  }
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing) {
+    return {
+      ...normalizeDeepPenetrationPiercingSettings(abilityFunction.fixedSettings),
+      blockedDamageMultiplier: 1,
+      penetrationMultiplier: 1
+    };
+  }
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheBone) {
+    return {
+      ...normalizeToTheBoneSettings(abilityFunction.fixedSettings),
+      blockedDamageMultiplier: 2,
+      penetrationMultiplier: 1.3
+    };
+  }
+  return null;
+}
+
+async function processDeepPenetrationResolution(context = {}) {
+  if (context?.canceledByReaction === true) return;
+  const entries = context?.modifierState?.getOption?.("deepPenetrationEntries") ?? [];
+  if (!Array.isArray(entries) || !entries.length) return;
+  const actor = context?.actor ?? fromUuidSync(String(context?.attackerUuid ?? context?.actorUuid ?? ""));
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+
+  const rows = extractDeepPenetrationDamageRows(context?.damageResults);
+  if (!rows.length) return;
+  const killedActorUuids = new Set((context?.killedTargetUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean));
+  for (const row of rows) {
+    const target = fromUuidSync(String(row.actorUuid ?? ""));
+    if (target?.statuses?.has?.(STATUS_EFFECTS.dead)) killedActorUuids.add(target.uuid);
+  }
+
+  const extraDamageRequests = [];
+  for (const entry of entries) {
+    const settings = entry?.settings ?? {};
+    const convertedRows = selectDeepPenetrationTargetRows(rows, settings.conversionLimitPercent, {
+      primaryActorUuid: context?.selectedTargetActorUuid,
+      primaryTokenUuid: context?.selectedTargetTokenUuid,
+      targetTokenUuids: context?.targetTokenUuids,
+      killedActorUuids
+    });
+    const extraAttackId = `${context.attackId ?? foundry.utils.randomID()}:deepPenetration:${entry.abilityFunctionId}`;
+    for (const result of convertedRows) {
+      const amount = Math.max(0, Math.round(
+        result.convertedAmount * Math.max(0, Number(settings.blockedDamageMultiplier) || 0)
+      ));
+      if (amount <= 0) continue;
+      extraDamageRequests.push({
+        actorUuid: result.actorUuid,
+        limbKey: result.limbKey,
+        amount,
+        damageTypeKey: result.damageTypeKey,
+        scope: "healthAndLimb",
+        applyMitigation: true,
+        processDamageTypeSettings: true,
+        source: {
+          attackId: extraAttackId,
+          attackerActorUuid: actor.uuid,
+          attackerUuid: actor.uuid,
+          attackerTokenUuid: String(context.tokenUuid ?? ""),
+          targetTokenUuid: result.targetTokenUuid,
+          weaponUuid: String(context.weaponUuid ?? ""),
+          actionKey: String(context.actionKey ?? ""),
+          weaponFunctionId: String(context.weaponFunctionId ?? ""),
+          penetrationPower: Math.max(0, Math.round(
+            result.penetrationPower * Math.max(0, Number(settings.penetrationMultiplier) || 0)
+          )),
+          deepPenetration: true,
+          deepPenetrationFunctionId: String(entry.abilityFunctionId ?? ""),
+          ...(result.pelletImpactCount > 1 ? {
+            pelletImpactCount: result.pelletImpactCount,
+            pelletImpactIndex: Math.min(result.pelletImpactCount - 1, result.pelletImpactIndex)
+          } : {}),
+          chainRef: context.chainRef ?? null,
+          damageHubOperationRef: String(context.damageHubOperationRef ?? "")
+        }
+      });
+    }
+  }
+  if (extraDamageRequests.length) await requestDamageApplications(extraDamageRequests);
 }
 
 async function collectDisarmReactionOffers({ eventKey = "", context = {} } = {}) {
@@ -9450,7 +10114,7 @@ function getActorDisarmEntry(actor, offer = null) {
   return null;
 }
 
-function getActorCounterAttackEntry(actor, offer = null) {
+function getActorCounterAttackEntry(actor, offer = null, { preemptive = null } = {}) {
   const abilityItemId = String(offer?.abilityItemId ?? "");
   const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
   const weaponId = String(offer?.weaponId ?? "").trim();
@@ -9458,9 +10122,24 @@ function getActorCounterAttackEntry(actor, offer = null) {
   for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
     if (abilityItemId && abilityItem.id !== abilityItemId) continue;
     const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
-      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack && (!abilityFunctionId || entry.id === abilityFunctionId));
+      .find(entry => (
+        [ABILITY_FIXED_FUNCTION_KEYS.counterAttack, ABILITY_FIXED_FUNCTION_KEYS.parry].includes(entry.fixedKey)
+        && (!abilityFunctionId || entry.id === abilityFunctionId)
+        && (preemptive === null || (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.parry) === preemptive)
+      ));
     if (!abilityFunction) continue;
-    const settings = normalizeCounterAttackSettings(abilityFunction.fixedSettings);
+    const parry = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.parry;
+    const settings = parry
+      ? {
+          ...normalizeParrySettings(abilityFunction.fixedSettings),
+          reactionOverloadEnergyCost: 0,
+          reactionOverloadDurationSeconds: 0,
+          disadvantageOnHit: 2
+        }
+      : {
+          ...normalizeCounterAttackSettings(abilityFunction.fixedSettings),
+          disadvantageOnHit: 0
+        };
     const candidate = getCounterAttackWeaponCandidate(actor, settings, {
       weaponId,
       weaponFunctionId: requestedWeaponFunctionId
@@ -9480,11 +10159,17 @@ function getActorWhereAreYouGoingEntries(actor) {
   const entries = [];
   for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
-      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) continue;
+      if (![
+        ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing,
+        ABILITY_FIXED_FUNCTION_KEYS.spinalStrike
+      ].includes(abilityFunction.fixedKey)) continue;
       entries.push({
         abilityItem,
         abilityFunction,
-        settings: normalizeWhereAreYouGoingSettings(abilityFunction.fixedSettings)
+        triggerOnApproach: abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike,
+        settings: abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike
+          ? normalizeSpinalStrikeSettings(abilityFunction.fixedSettings)
+          : normalizeWhereAreYouGoingSettings(abilityFunction.fixedSettings)
       });
     }
   }
@@ -9559,7 +10244,7 @@ function getCounterAttackWeaponCandidate(actor, settings = {}, { weaponId = "", 
     ?? null;
 }
 
-function getCounterAttackWeaponCandidates(actor, settings = {}) {
+function getCounterAttackWeaponCandidates(actor, settings = {}, { actionKey = "meleeAttack" } = {}) {
   const rows = [];
   const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
   for (const weapon of actor?.items?.contents ?? []) {
@@ -9572,11 +10257,11 @@ function getCounterAttackWeaponCandidates(actor, settings = {}) {
         ? weapon.system?.functions?.weapon
         : getAdditionalWeaponFunctionData(weapon, weaponFunctionId);
       if (String(weaponData?.skillKey ?? "").trim() !== settings.requiredSkillKey) continue;
-      if (!hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) continue;
-      if (
+      if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) continue;
+      if (actionKey === "meleeAttack" && (
         !isWeaponAttackModeEnabled(weapon, "meleeAttack", "thrust", weaponFunctionId)
         && !isWeaponAttackModeEnabled(weapon, "meleeAttack", "swing", weaponFunctionId)
-      ) continue;
+      )) continue;
       rows.push({ weapon, weaponSet, weaponFunctionId });
     }
   }
@@ -9860,8 +10545,9 @@ async function useEmergencyOperations(actor, abilityItem, abilityFunction) {
 
 async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = normalizeDoubleAttackSettings(abilityFunction.fixedSettings);
-  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(settings.duplicateCount));
+  const settings = getDoubleAttackRuntimeSettings(abilityFunction);
+  if (!settings) return false;
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
@@ -9882,6 +10568,28 @@ async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
 async function toggleFullForce(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeFullForceSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
+async function toggleDeepPenetration(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = getDeepPenetrationRuntimeSettings(abilityFunction);
+  if (!settings) return false;
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
@@ -10220,6 +10928,37 @@ async function toggleAiming(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+function getDoubleAttackRuntimeSettings(abilityFunction = {}) {
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
+    return {
+      ...normalizeDoubleAttackSettings(abilityFunction.fixedSettings),
+      duplicateCount: 1,
+      duplicateOnlyAfterMiss: false,
+      duplicateAdvantage: 0,
+      forceFinalCriticalAfterHits: false
+    };
+  }
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack) {
+    return {
+      ...normalizeInsuranceAttackSettings(abilityFunction.fixedSettings),
+      duplicateCount: 1,
+      duplicateOnlyAfterMiss: true,
+      duplicateAdvantage: 1,
+      forceFinalCriticalAfterHits: false
+    };
+  }
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tripleAttack) {
+    return {
+      ...normalizeTripleAttackSettings(abilityFunction.fixedSettings),
+      duplicateCount: 2,
+      duplicateOnlyAfterMiss: false,
+      duplicateAdvantage: 0,
+      forceFinalCriticalAfterHits: true
+    };
+  }
+  return null;
+}
+
 async function toggleBullseye(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeBullseyeSettings(abilityFunction.fixedSettings);
@@ -10314,7 +11053,7 @@ async function useRicochet(actor, abilityItem, abilityFunction) {
 
 async function useLethalAttack(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
-  const settings = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse
+  const settings = [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse, ABILITY_FIXED_FUNCTION_KEYS.slaughter].includes(abilityFunction.fixedKey)
     ? normalizeCorpseAfterCorpseSettings(abilityFunction.fixedSettings)
     : normalizeLethalAttackSettings(abilityFunction.fixedSettings);
   if (findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction)) {
@@ -10338,27 +11077,105 @@ async function useLethalAttack(actor, abilityItem, abilityFunction) {
 }
 
 function requestDoubleAttackDuplicate(context = {}) {
-  const actor = context?.actor ?? null;
-  const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
-  if (!actor || !weaponSkillKey || typeof context?.addDuplicateRequest !== "function") return;
+  if (typeof context?.addDuplicateRequest !== "function") return;
+  const entries = context?.controller?.getWeaponActionModifierState?.().getOption("doubleAttackEntries") ?? [];
+  for (const entry of entries) {
+    context.addDuplicateRequest({
+      source: "doubleAttack",
+      label: entry.label,
+      count: Math.max(1, toInteger(entry.settings.duplicateCount)),
+      onlyAfterMiss: entry.settings.duplicateOnlyAfterMiss,
+      advantageCount: entry.settings.duplicateAdvantage,
+      forceFinalCriticalAfterHits: entry.settings.forceFinalCriticalAfterHits
+    });
+  }
+}
 
+function requestDoubleAttackWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const modifierState = context?.modifierState ?? null;
+  const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
+  if (
+    !actor
+    || !modifierState
+    || !weaponSkillKey
+    || getAbilityAttackSettings(context.weapon, context.weaponFunctionId)
+  ) return;
+
+  const entries = [];
   for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
-    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
-      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack)
-      .filter(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active));
-    for (const abilityFunction of functions) {
-      const settings = normalizeDoubleAttackSettings(abilityFunction.fixedSettings);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (
+        !state[getFixedFunctionStateKey(abilityFunction)]?.active
+      ) continue;
+      const settings = getDoubleAttackRuntimeSettings(abilityFunction);
+      if (!settings) continue;
       if (weaponSkillKey !== settings.requiredSkillKey) continue;
-      const duplicateCount = Math.max(1, toInteger(settings.duplicateCount));
-      const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * duplicateCount;
-      context.addDuplicateRequest({
+      const label = getAbilityDisplayName(abilityItem);
+      modifierState.addSpendRequirement({
         source: "doubleAttack",
+        label,
+        energyCost: getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost)
+      });
+      entries.push({ label, settings });
+    }
+  }
+  if (entries.length) modifierState.setOption("doubleAttackEntries", entries);
+}
+
+function requestDeepPenetrationWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const modifierState = context?.modifierState ?? null;
+  const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
+  if (
+    !actor
+    || !modifierState
+    || !ATTACKING_WEAPON_ACTION_KEYS.includes(String(context?.actionKey ?? ""))
+    || !weaponSkillKey
+  ) return;
+
+  const entries = [];
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (!state[getFixedFunctionStateKey(abilityFunction)]?.active) continue;
+      const settings = getDeepPenetrationRuntimeSettings(abilityFunction);
+      if (!settings || weaponSkillKey !== settings.requiredSkillKey) continue;
+      const getEnergyCost = ({ attackCount = 1 } = {}) => (
+        getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost)
+        * Math.max(1, toInteger(attackCount))
+      );
+      modifierState.addSpendRequirement({
+        source: "deepPenetration",
         label: getAbilityDisplayName(abilityItem),
-        count: duplicateCount,
-        onBeforeDuplicate: async () => spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost)
+        energyCost: getEnergyCost
+      });
+      entries.push({
+        abilityItemId: String(abilityItem.id ?? ""),
+        abilityFunctionId: String(abilityFunction.id ?? ""),
+        fixedKey: abilityFunction.fixedKey,
+        settings
       });
     }
+  }
+  if (entries.length) modifierState.setOption("deepPenetrationEntries", entries);
+}
+
+function requestCrowdCrusherDuplicate(context = {}) {
+  const actor = context?.actor ?? null;
+  const controller = context?.controller ?? null;
+  if (!actor || !controller || typeof context?.addDuplicateRequest !== "function") return;
+  if ((controller.getAttackResolutionTargets?.() ?? []).length <= 1) return;
+  for (const entry of getActorCrowdCrusherEntries(actor)) {
+    if (!entry.settings.extraAttackWhenMultipleTargets) continue;
+    if (!findCrowdCrusherEffect(actor, entry.abilityItem, entry.abilityFunction)) continue;
+    context.addDuplicateRequest({
+      source: "crowdCrusher",
+      label: getAbilityDisplayName(entry.abilityItem),
+      count: 1
+    });
+    return;
   }
 }
 
@@ -10402,6 +11219,13 @@ function requestFullForceWeaponActionModifiers(context = {}) {
       if (weaponSkillKey !== settings.requiredSkillKey) continue;
       context.modifierState.addCombatValue("damagePercent", settings.damagePercentBonus);
       context.modifierState.multiplyResourceCost("condition", settings.conditionCostMultiplier);
+      context.modifierState.setOption(
+        "fractionalImpactBonus",
+        Math.max(
+          toInteger(context.modifierState.getOption("fractionalImpactBonus")),
+          settings.fractionalImpactBonus
+        )
+      );
       const getEnergyCost = ({ attackCount = 1 } = {}) => (
         getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount))
       );
@@ -10412,6 +11236,129 @@ function requestFullForceWeaponActionModifiers(context = {}) {
       });
     }
   }
+}
+
+function requestCrowdCrusherWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (
+    !actor
+    || !context?.modifierState
+    || !ATTACKING_WEAPON_ACTION_KEYS.includes(String(context?.actionKey ?? ""))
+    || String(context?.weaponData?.skillKey ?? "") !== "meleeCombat"
+  ) return;
+  for (const entry of getActorCrowdCrusherEntries(actor)) {
+    if (entry.settings.inheritAimedLimbOnPath) {
+      context.modifierState.setOption("inheritAimedLimbOnPath", true);
+    }
+    if (!findCrowdCrusherEffect(actor, entry.abilityItem, entry.abilityFunction)) continue;
+    if (entry.settings.hitAllConeTargets) context.modifierState.setOption("hitAllConeTargets", true);
+    return;
+  }
+}
+
+function requestConcussionWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || !context?.modifierState || String(context?.weaponData?.skillKey ?? "") !== "meleeCombat") return;
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.concussion) continue;
+      if (!state[getFixedFunctionStateKey(abilityFunction)]?.pending) continue;
+      const settings = normalizeConcussionSettings(abilityFunction.fixedSettings);
+      const currentEdge = context.modifierState.getOption("attackEdge") ?? {};
+      context.modifierState.setOption("attackEdge", {
+        ...currentEdge,
+        advantage: settings.advantageCount > 0,
+        advantageCount: Math.max(
+          0,
+          toInteger(currentEdge.advantageCount ?? (currentEdge.advantage ? 1 : 0))
+        ) + settings.advantageCount
+      });
+      context.modifierState.setOption("unconsciousnessDifficultyMultiplier", settings.unconsciousnessDifficultyMultiplier);
+      const entries = context.modifierState.getOption("concussionEntries") ?? [];
+      entries.push({ abilityItem, abilityFunction, settings });
+      context.modifierState.setOption("concussionEntries", entries);
+      context.modifierState.addSpendRequirement({
+        source: "concussion",
+        label: getAbilityDisplayName(abilityItem),
+        spend: () => consumePreparedFixedState(abilityItem, abilityFunction, "pending")
+      });
+    }
+  }
+}
+
+function requestCleanStrikeWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || !context?.modifierState || String(context?.weaponData?.skillKey ?? "") !== "meleeCombat") return;
+  const passiveCandidates = [];
+  const idealCandidates = [];
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? []);
+    const passiveFunction = functions.find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleanStrike) ?? null;
+    let passiveEntry = null;
+    if (passiveFunction) {
+      const settings = normalizeCleanStrikeSettings(passiveFunction.fixedSettings);
+      const chargeState = getCleanStrikeChargeState(state[getFixedFunctionStateKey(passiveFunction)], settings);
+      passiveEntry = { abilityItem, abilityFunction: passiveFunction, settings, chargeState };
+      if (chargeState.charges > 0) passiveCandidates.push(passiveEntry);
+    }
+    for (const abilityFunction of functions) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.idealStrike) continue;
+      if (!state[getFixedFunctionStateKey(abilityFunction)]?.activePending) continue;
+      idealCandidates.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeIdealStrikeSettings(abilityFunction.fixedSettings),
+        passiveEntry
+      });
+    }
+  }
+  if (!passiveCandidates.length && !idealCandidates.length) return;
+  const handlers = context.modifierState.getOption("attackCommitHandlers") ?? [];
+  handlers.push(async ({ originalHitChance = 0 }) => {
+    const passive = passiveCandidates.filter(entry => Number(originalHitChance) > entry.settings.hitChanceThreshold);
+    const ideal = idealCandidates.filter(entry => Number(originalHitChance) > entry.settings.guaranteedHitChanceThreshold);
+    if (!passive.length && !ideal.length) return;
+    if (passive.length) {
+      context.modifierState.setOption("cleanStrikeResolvedEntries", passive);
+      context.modifierState.addCombatValue(
+        "penetration",
+        Math.max(...passive.map(entry => entry.settings.penetrationBonus))
+      );
+      context.modifierState.setOption(
+        "successfulConditionCostMultiplier",
+        Math.max(0, Math.min(...passive.map(entry => 1 - (entry.settings.weaponConditionLossPercent / 100))))
+      );
+      context.modifierState.setOption(
+        "targetEquipmentConditionDamageMultiplier",
+        Math.max(1, ...passive.map(entry => 1 + (entry.settings.targetEquipmentDamagePercent / 100)))
+      );
+    }
+    if (!ideal.length) return;
+    context.modifierState.setOption("idealStrikeEntries", ideal);
+    context.modifierState.setOption("attackResultPolicy", mergeSkillCheckResultPolicies(
+      context.modifierState.getOption("attackResultPolicy"),
+      ...ideal.map(entry => ({
+        disabledResultsWhenSuccessChanceAbove: { criticalFailure: true, failure: true },
+        successChanceThreshold: entry.settings.guaranteedHitChanceThreshold
+      }))
+    ));
+    const mitigationIgnore = context.modifierState.getOption("targetMitigationIgnore") ?? {};
+    context.modifierState.setOption("targetMitigationIgnore", {
+      ...mitigationIgnore,
+      resistanceIgnorePercent: Math.max(
+        Number(mitigationIgnore.resistanceIgnorePercent) || 0,
+        ...ideal.map(entry => entry.settings.activeResistanceIgnorePercent)
+      )
+    });
+    for (const entry of ideal) context.modifierState.addSpendRequirement({
+      source: "idealStrike",
+      label: getAbilityDisplayName(entry.abilityItem),
+      spend: () => consumePreparedFixedState(entry.abilityItem, entry.abilityFunction, "activePending")
+    });
+  });
+  context.modifierState.setOption("attackCommitHandlers", handlers);
 }
 
 function requestAimingWeaponActionModifiers(context = {}) {
@@ -10689,7 +11636,10 @@ function requestLethalAttackWeaponActionModifiers(context = {}) {
       if (!requiredActionKey || actionKey !== requiredActionKey) continue;
       const effect = findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction);
       if (!effect) continue;
-      const corpseAfterCorpse = abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse;
+      const corpseAfterCorpse = [
+        ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
+        ABILITY_FIXED_FUNCTION_KEYS.slaughter
+      ].includes(abilityFunction.fixedKey);
       const settings = corpseAfterCorpse
         ? normalizeCorpseAfterCorpseSettings(abilityFunction.fixedSettings)
         : normalizeLethalAttackSettings(abilityFunction.fixedSettings);
@@ -10871,6 +11821,7 @@ function getLethalAttackActionKey(fixedKey = "") {
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot) return "aimedShot";
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike) return "aimedMeleeAttack";
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse) return "aimedShot";
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.slaughter) return "aimedMeleeAttack";
   return "";
 }
 
@@ -10923,6 +11874,299 @@ async function processCorpseAfterCorpseResolution(context = {}) {
       fixedKey: entry.abilityFunction.fixedKey
     });
   }
+}
+
+async function processCrowdCrusherResolution(context = {}) {
+  if (
+    context?.attackCheckAggregate !== true
+    || String(context?.weaponData?.skillKey ?? "") !== "meleeCombat"
+  ) return;
+  const actor = context?.actor ?? fromUuidSync(String(context?.attackerUuid ?? context?.actorUuid ?? ""));
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const preExistingUnconscious = new Set(context?.preExistingUnconsciousTargetActorUuids ?? []);
+  const incapacitated = new Set();
+  for (const actorUuid of context?.killedTargetUuids ?? []) {
+    const targetActor = fromUuidSync(String(actorUuid ?? ""));
+    if (targetActor && isWhereAreYouGoingOpponent(actor, targetActor)) incapacitated.add(actorUuid);
+  }
+  for (const actorUuid of context?.successfulAttackTargetActorUuids ?? []) {
+    const targetActor = fromUuidSync(String(actorUuid ?? ""));
+    if (
+      targetActor?.statuses?.has?.("unconscious")
+      && !preExistingUnconscious.has(actorUuid)
+      && isWhereAreYouGoingOpponent(actor, targetActor)
+    ) {
+      incapacitated.add(actorUuid);
+    }
+  }
+  for (const entry of getActorCrowdCrusherEntries(actor)) {
+    if (incapacitated.size < entry.settings.qualifyingTargets) continue;
+    const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+    const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+    if (String(state[stateKey]?.lastChargeAttackId ?? "") === String(context?.attackId ?? "")) continue;
+    const charges = Math.min(
+      entry.settings.maximumCharges,
+      Math.max(0, toInteger(state[stateKey]?.charges)) + 1
+    );
+    state[stateKey] = {
+      ...state[stateKey],
+      fixedKey: entry.abilityFunction.fixedKey,
+      charges,
+      lastChargeAttackId: String(context?.attackId ?? "")
+    };
+    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+    await createAbilityChatMessage(actor, entry.abilityItem, `Бойня: ${charges} / ${entry.settings.maximumCharges}.`);
+  }
+}
+
+async function processConcussionResolution(context = {}) {
+  if (context?.attackCheckAggregate !== true || context?.successfulAttack !== true) return;
+  const entries = context?.modifierState?.getOption?.("concussionEntries");
+  if (!Array.isArray(entries) || !entries.length) return;
+  const sourceActor = context?.actor ?? fromUuidSync(String(context?.attackerUuid ?? context?.actorUuid ?? ""));
+  const sourceToken = fromUuidSync(String(context?.tokenUuid ?? ""));
+  if (!sourceActor || (!game.user?.isGM && !sourceActor.isOwner)) return;
+  for (const entry of entries) {
+    for (const targetActorUuid of context?.successfulAttackTargetActorUuids ?? []) {
+      const targetActor = fromUuidSync(String(targetActorUuid ?? ""));
+      if (!targetActor) continue;
+      const targetTokenUuid = (context?.targetTokenUuids ?? []).find(uuid => (
+        fromUuidSync(String(uuid ?? ""))?.actor?.uuid === targetActorUuid
+      ));
+      const targetToken = targetTokenUuid ? fromUuidSync(targetTokenUuid) : null;
+      const damageRows = (context?.damageResults ?? []).filter(result => result?.actor?.uuid === targetActorUuid);
+      const limbKey = String(damageRows.find(result => result?.limbKey)?.limbKey ?? context?.selectedLimbKey ?? "");
+      const limb = targetActor.system?.limbs?.[limbKey];
+      const limbDamage = damageRows.reduce((sum, result) => sum + Math.max(0, Number(result?.limbDelta) || 0), 0);
+      const highDamage = limb && limbDamage > (Math.max(1, Number(limb.max) || 1) * entry.settings.highLimbDamagePercent / 100);
+      const baseDifficulty = entry.settings.difficultyBase + getActorSkillValue(sourceActor, entry.settings.sourceSkillKey);
+      const difficulty = Math.max(0, Math.round(
+        baseDifficulty * (highDamage ? entry.settings.highDamageDifficultyMultiplier : 1)
+      ));
+      const outcome = await requestSkillCheck({
+        actor: targetActor,
+        skillKey: entry.settings.targetSkillKey,
+        animate: false,
+        prompt: false,
+        requester: "concussion",
+        chainRef: context?.chainRef ?? null,
+        data: {
+          difficulty,
+          actorToken: targetToken?.object ?? targetToken,
+          targetActor: sourceActor,
+          targetToken: sourceToken?.object ?? sourceToken,
+          weaponAttackId: String(context?.attackId ?? "")
+        },
+        source: { abilityItemUuid: entry.abilityItem.uuid, weaponAttackId: String(context?.attackId ?? "") },
+        messageData: { flavor: `${getAbilityDisplayName(entry.abilityItem)}: проверка Стойкости` }
+      });
+      if (isSuccessfulSkillCheck(outcome)) continue;
+      await applyConcussionStunEffect({
+        sourceActor,
+        targetActor,
+        abilityItem: entry.abilityItem,
+        abilityFunction: entry.abilityFunction,
+        settings: entry.settings,
+        limbKey
+      });
+    }
+  }
+}
+
+async function processCleanStrikeResolution(context = {}) {
+  if (context?.attackCheckAggregate !== true) return;
+  const passiveEntries = context?.modifierState?.getOption?.("cleanStrikeResolvedEntries") ?? [];
+  const idealEntries = context?.modifierState?.getOption?.("idealStrikeEntries") ?? [];
+  if ((!passiveEntries.length && !idealEntries.length) || context?.successfulAttack !== true) return;
+  const actor = context?.actor ?? fromUuidSync(String(context?.attackerUuid ?? context?.actorUuid ?? ""));
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  for (const entry of passiveEntries) {
+    if (!(await consumeCleanStrikeCharge(entry))) continue;
+    await restoreReaperActionPoints(actor, entry.settings.actionPointRestore);
+  }
+  const newlyIncapacitated = new Set(context?.killedTargetUuids ?? []);
+  const preExistingUnconscious = new Set(context?.preExistingUnconsciousTargetActorUuids ?? []);
+  for (const actorUuid of context?.successfulAttackTargetActorUuids ?? []) {
+    const targetActor = fromUuidSync(String(actorUuid ?? ""));
+    if (targetActor?.statuses?.has?.("unconscious") && !preExistingUnconscious.has(actorUuid)) {
+      newlyIncapacitated.add(actorUuid);
+    }
+  }
+  if (!newlyIncapacitated.size) return;
+  for (const entry of idealEntries.filter(candidate => candidate.settings.killFollowUp)) {
+    if (entry.passiveEntry) await restoreCleanStrikeCharge(entry.passiveEntry);
+    await startIdealStrikeFollowUp(actor, entry, context);
+    break;
+  }
+}
+
+async function consumePreparedFixedState(abilityItem, abilityFunction, key) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (!state[stateKey]?.[key]) return true;
+  state[stateKey] = { ...state[stateKey], fixedKey: abilityFunction.fixedKey, [key]: false };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  return true;
+}
+
+function getActorCrowdCrusherEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeCrowdCrusherSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
+}
+
+function findCrowdCrusherEffect(actor, abilityItem, abilityFunction) {
+  return Array.from(actor?.effects ?? []).find(effect => {
+    if (effect?.disabled || effect?.isExpired) return false;
+    const data = effect.getFlag?.(SYSTEM_ID, CROWD_CRUSHER_EFFECT_FLAG_KEY)
+      ?? effect.flags?.[SYSTEM_ID]?.[CROWD_CRUSHER_EFFECT_FLAG_KEY];
+    return data
+      && String(data.functionId ?? "") === String(abilityFunction?.id ?? "")
+      && (
+        String(data.abilitySourceId ?? "") === String(getAbilitySourceId(abilityItem) ?? "")
+        || String(data.abilityItemId ?? "") === String(abilityItem?.id ?? "")
+      );
+  }) ?? null;
+}
+
+function getCleanStrikeChargeState(state = {}, settings = {}, worldTime = Number(game.time?.worldTime) || 0) {
+  const maximum = Math.max(1, toInteger(settings.maximumCharges));
+  let charges = state?.charges === undefined
+    ? maximum
+    : Math.min(maximum, Math.max(0, toInteger(state.charges)));
+  let rechargeStartedAt = Math.max(0, Number(state?.rechargeStartedAt) || worldTime);
+  if (charges < maximum && worldTime > rechargeStartedAt) {
+    const recovered = Math.floor((worldTime - rechargeStartedAt) / Math.max(1, settings.rechargeSeconds));
+    charges = Math.min(maximum, charges + recovered);
+    if (recovered > 0) rechargeStartedAt += recovered * settings.rechargeSeconds;
+  }
+  return { charges, maximum, rechargeStartedAt };
+}
+
+async function consumeCleanStrikeCharge(entry) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+  const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+  const now = Number(game.time?.worldTime) || 0;
+  const chargeState = getCleanStrikeChargeState(state[stateKey], entry.settings, now);
+  if (chargeState.charges <= 0) return false;
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: entry.abilityFunction.fixedKey,
+    charges: chargeState.charges - 1,
+    rechargeStartedAt: chargeState.charges >= chargeState.maximum ? now : chargeState.rechargeStartedAt
+  };
+  await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  return true;
+}
+
+async function restoreCleanStrikeCharge(entry) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+  const stateKey = getFixedFunctionStateKey(entry.abilityFunction);
+  const chargeState = getCleanStrikeChargeState(state[stateKey], entry.settings);
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: entry.abilityFunction.fixedKey,
+    charges: Math.min(chargeState.maximum, chargeState.charges + 1),
+    rechargeStartedAt: chargeState.rechargeStartedAt
+  };
+  await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+}
+
+async function applyConcussionStunEffect({ sourceActor, targetActor, abilityItem, abilityFunction, settings, limbKey = "" }) {
+  const stunPercent = isCriticalLimb(targetActor, limbKey)
+    ? settings.criticalLimbStunPercent
+    : settings.normalStunPercent;
+  const startTime = Number(game.time?.worldTime) || 0;
+  return targetActor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: `${getAbilityDisplayName(abilityItem)}: Оглушение ${stunPercent}%`,
+    img: abilityItem.img || "icons/svg/daze.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    start: { time: startTime },
+    duration: { value: settings.stunDurationSeconds, units: "seconds", expiry: null, expired: false },
+    system: { changes: [{
+      key: "system.combat.stun",
+      type: "add",
+      value: String(stunPercent),
+      phase: "initial",
+      priority: null
+    }] },
+    flags: { [SYSTEM_ID]: { kind: "temporary", [CONCUSSION_EFFECT_FLAG_KEY]: {
+      sourceActorUuid: sourceActor.uuid,
+      abilityItemId: abilityItem.id,
+      functionId: abilityFunction.id,
+      createdAt: startTime
+    } } }
+  }], { animate: false });
+}
+
+async function startIdealStrikeFollowUp(actor, entry, context) {
+  const sourceTokenDocument = fromUuidSync(String(context?.tokenUuid ?? ""));
+  const sourceToken = sourceTokenDocument?.object ?? sourceTokenDocument;
+  if (!sourceToken?.actor) return false;
+  const targets = (canvas.tokens?.placeables ?? [])
+    .filter(token => token?.actor && !isActorUnableToAct(token.actor))
+    .filter(token => areTokensAdjacent(sourceToken, token))
+    .filter(token => isWhereAreYouGoingOpponent(actor, token.actor));
+  if (!targets.length) return false;
+  const target = targets.length === 1
+    ? targets[0]
+    : await promptIdealStrikeTarget(targets, getAbilityDisplayName(entry.abilityItem));
+  if (!target) return false;
+  const candidates = getCounterAttackWeaponCandidates(
+    actor,
+    { requiredSkillKey: "meleeCombat" },
+    { actionKey: "aimedMeleeAttack" }
+  );
+  const sourceWeaponUuid = String(context?.weaponUuid ?? "");
+  const candidate = candidates.find(row => row.weapon.uuid === sourceWeaponUuid) ?? candidates.at(0);
+  if (!candidate) return false;
+  return startForcedAimedAttackSelection({
+    label: getAbilityDisplayName(entry.abilityItem),
+    attackerToken: sourceToken,
+    targetToken: target,
+    weapon: candidate.weapon,
+    weaponFunctionId: candidate.weaponFunctionId,
+    actionKey: "aimedMeleeAttack",
+    chainRef: context?.chainRef ?? null,
+    damageHubOperationRef: context?.damageHubOperationRef ?? ""
+  });
+}
+
+async function promptIdealStrikeTarget(targets, abilityName) {
+  const options = targets.map((token, index) => `
+    <label class="fallout-maw-radio-card">
+      <input type="radio" name="targetUuid" value="${escapeAttribute(token.document?.uuid ?? "")}" ${index === 0 ? "checked" : ""}>
+      <img src="${escapeAttribute(token.document?.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt="">
+      <span><strong>${escapeHTML(token.actor?.name ?? "Цель")}</strong></span>
+    </label>
+  `).join("");
+  const formData = await DialogV2.input({
+    window: { title: `${abilityName}: следующая цель` },
+    content: `<div class="fallout-maw-lucky-coin-skill-grid">${options}</div>`,
+    ok: {
+      label: "Атаковать",
+      icon: "fa-solid fa-crosshairs",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 520 },
+    rejectClose: false
+  });
+  const uuid = String(formData?.targetUuid ?? "");
+  return targets.find(token => token.document?.uuid === uuid) ?? null;
 }
 
 async function consumeKeepAwayPreparation(abilityItem, abilityFunction) {
@@ -11892,7 +13136,8 @@ async function processNightmareFearOperation({
       transfer: false,
       disabled: false,
       showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-      duration: { seconds: settings.fearDurationSeconds, startTime: now },
+      start: { time: now },
+      duration: { value: settings.fearDurationSeconds, units: "seconds", expiry: null, expired: false },
       system: { changes },
       flags: {
         [SYSTEM_ID]: {
@@ -11981,32 +13226,6 @@ async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, 
 async function spendCurseAndBlessingEnergyNow(actor, abilityItem, abilityFunction, energyCost = 0) {
   const cost = Math.max(0, toInteger(energyCost));
   if (!hasCurseAndBlessingEnergy(actor, cost)) {
-    await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
-    await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
-    return false;
-  }
-  if (!cost) return true;
-  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
-  const nextValue = Math.max(toInteger(resource?.min), getActorEnergy(actor) - cost);
-  const update = {
-    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue
-  };
-  if (resource && Object.hasOwn(resource, "spent")) {
-    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
-  }
-  await actor.update(update);
-  return true;
-}
-
-async function spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
-  return runActorEnergyMutation(actor, () => (
-    spendDoubleAttackEnergyNow(actor, abilityItem, abilityFunction, energyCost)
-  ));
-}
-
-async function spendDoubleAttackEnergyNow(actor, abilityItem, abilityFunction, energyCost = 0) {
-  const cost = Math.max(0, toInteger(energyCost));
-  if (!hasEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
     await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
     return false;
@@ -12288,10 +13507,8 @@ async function applyLethalAttackPreparationEffect(actor, abilityItem, abilityFun
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: {
-      seconds: durationSeconds,
-      startTime
-    },
+    start: { time: startTime },
+    duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: [] },
     flags: {
       [SYSTEM_ID]: {
@@ -12843,7 +14060,8 @@ async function createOrRefreshInconspicuousEffect(actor, entry) {
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: durationSeconds, startTime },
+    start: { time: startTime },
+    duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
     system: {
       changes: [{
         key: "system.skills.stealth.bonus",

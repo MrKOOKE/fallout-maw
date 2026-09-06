@@ -10,7 +10,7 @@ export function getKnownCraftItemUuids(actor = null) {
   const stored = actor?.getFlag?.(SYSTEM_ID, KNOWN_CRAFT_ITEMS_FLAG);
   if (!actor) return new Set();
   const cached = knownCraftItemUuidCache.get(actor);
-  if (cached?.stored === stored) return cached.uuids;
+  if (cached && cached.stored === stored) return cached.uuids;
   const uuids = new Set((Array.isArray(stored) ? stored : [])
     .map(value => String(value ?? "").trim())
     .filter(Boolean));

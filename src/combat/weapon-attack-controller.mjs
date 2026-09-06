@@ -1,8 +1,5 @@
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
-// #region codex-runtime-debug H21 temporary numeric request composition
-import { captureDamageRequestProbe, recordDamageRequestProbe } from "../debug/damage-request-probe.mjs";
-// #endregion codex-runtime-debug
 import { mergeSkillCheckResultPolicies } from "../rolls/skill-check-result-policy.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
@@ -12,7 +9,7 @@ import {
   playWeaponAttackAnimations,
   playWeaponExplosionAnimation
 } from "./attack-animations.mjs";
-import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, getLimbHealingCap, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import {
   createPelletImpactProjectiles,
@@ -488,7 +485,13 @@ class WeaponActionModifierState {
 
   getResourceCostMultiplier(type = "") {
     const multiplier = Number(this.resourceCostMultipliers.get(String(type ?? "").trim()));
-    return Number.isFinite(multiplier) ? multiplier : 1;
+    const base = Number.isFinite(multiplier) ? multiplier : 1;
+    if (String(type ?? "").trim() !== "condition") return base;
+    const successMultiplier = Number(this.getOption("successfulConditionCostMultiplier"));
+    const attackSucceeded = Math.max(0, toInteger(this.context?.controller?.successfulAttackCheckCount)) > 0;
+    return attackSucceeded && Number.isFinite(successMultiplier)
+      ? base * Math.max(0, successMultiplier)
+      : base;
   }
 
   setOption(key = "", value = true) {
@@ -3987,7 +3990,9 @@ export async function executeWeaponAttackAgainstToken({
   strictTargetResolution = false,
   ignoreReactionLock = false,
   suspendActiveAttack = false,
-  suppressGenericEventReactions = false
+  suppressGenericEventReactions = false,
+  targetTokenUuidAllowlist = null,
+  returnOutcome = false
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return false;
   if (!attackerToken?.actor || !targetToken?.actor || !weapon || !isAttackSource(weapon, weaponFunctionId)) return false;
@@ -4013,7 +4018,8 @@ export async function executeWeaponAttackAgainstToken({
     additionalActorResourceCosts,
     ignoreReactionLock,
     finishAfterAttack: true,
-    suppressGenericEventReactions
+    suppressGenericEventReactions,
+    targetTokenUuidAllowlist
   });
   if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) {
     restoreWeaponAttackAfterNestedSelection(suspendedAttack);
@@ -4028,7 +4034,10 @@ export async function executeWeaponAttackAgainstToken({
       controller.attachPreview();
       executed = await controller.executeAgainstToken(targetToken);
     }
-    return Boolean(executed && (!requireResourceCommit || controller.attackCostsCommitted));
+    const succeeded = Boolean(executed && (!requireResourceCommit || controller.attackCostsCommitted));
+    return returnOutcome
+      ? { executed: succeeded, outcome: controller.lastResolvedAttackOutcome ?? null }
+      : succeeded;
   } finally {
     if (activeAttack === controller) activeAttack = null;
     controller.destroy();
@@ -4400,7 +4409,6 @@ export function buildWeaponExplosionDamageRequests({
   source = {},
   damageModifier = null
 } = {}) {
-  const __codexRequestProbe = captureDamageRequestProbe(); // codex-runtime-debug H21
   const actor = targetToken?.actor;
   if (!actor || !center) return [];
   const falloff = Number(radiusPixels) > 0
@@ -4450,11 +4458,6 @@ export function buildWeaponExplosionDamageRequests({
       });
     }
   }
-  // #region codex-runtime-debug H21 one numeric summary per generated target impact
-  recordDamageRequestProbe(__codexRequestProbe, "weapon.explosionDamageRequests", requests, {
-    configuredPellets: pelletDamages.length, configuredDamageTypes: normalizedTypes.length
-  });
-  // #endregion codex-runtime-debug
   return requests;
 }
 
@@ -4580,6 +4583,9 @@ export class WeaponAttackController {
     this.autoCoverActorUuids = new Set();
     this.lastAutoCoverSignature = "";
     this.pendingCriticalFailureResourceCosts = [];
+    this.duplicateCycleRule = null;
+    this.duplicateCycleSuccessBaseline = 0;
+    this.previousDuplicateCyclesSuccessful = true;
     this.weaponActionModifierState = null;
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
@@ -4842,6 +4848,7 @@ export class WeaponAttackController {
       attackId: this.attackId,
       selectedLimbKey: String(this.selectedLimbKey ?? ""),
       selectedTargetActorUuid: mechanicalSelectedTarget?.actor?.uuid ?? "",
+      selectedTargetTokenUuid: mechanicalSelectedTarget?.document?.uuid ?? "",
       preExistingUnconsciousTargetActorUuids: Array.from(this.preExistingUnconsciousTargetActorUuids),
       actionPointSpendReceipt: this.actionPointSpendReceipt,
       actionPointCost,
@@ -4896,8 +4903,8 @@ export class WeaponAttackController {
   }
 
   async notifyAttackCheckResolved(outcome = null, completionCollector = null, { recordAggregate = true } = {}) {
+    if (recordAggregate) this.recordAttackCheckOutcome(outcome);
     const notify = async () => {
-      if (recordAggregate) this.recordAttackCheckOutcome(outcome);
       const checkOccurrenceId = `${this.attackId}:${++this.attackCheckEventSequence}`;
       const context = {
         actor: this.token?.actor ?? null,
@@ -5066,11 +5073,22 @@ export class WeaponAttackController {
       weaponActionModifierState: modifierState,
       resultPolicy: mergeSkillCheckResultPolicies(
         this.attackModifier?.resultPolicy,
-        modifierState?.getOption("attackResultPolicy")
+        modifierState?.getOption("attackResultPolicy"),
+        this.duplicateCycleRule?.forceCriticalIfPreviousHits && this.previousDuplicateCyclesSuccessful
+          ? { forcedResult: "criticalSuccess" }
+          : null
       ),
       suppressGuardianAngelReaction: Boolean(this.attackModifier?.suppressGuardianAngelReaction),
       suppressGenericEventReactions: this.suppressGenericEventReactions,
-      ...mergeAttackEdgeModifiers(postureEdge, perceptionEdge),
+      ...mergeAttackEdgeModifiers(
+        mergeAttackEdgeModifiers(postureEdge, perceptionEdge),
+        mergeAttackEdgeModifiers(
+          modifierState?.getOption("attackEdge"),
+          this.duplicateCycleRule?.advantageCount > 0
+            ? { advantage: true, advantageCount: this.duplicateCycleRule.advantageCount }
+            : null
+        )
+      ),
       attackTargetVisible: targetToken ? !perceptionEdge.disadvantage : true,
       unaimedAttack: Boolean(perceptionEdge.disadvantage),
       ...extra
@@ -5214,6 +5232,11 @@ export class WeaponAttackController {
     if (this.attackCommitted || !target?.actor || !target?.document?.uuid) return;
     this.attackCommitted = true;
     const originalHitChance = this.getOriginalHitChance(target, options);
+    for (const handler of this.getWeaponActionModifierState().getOption("attackCommitHandlers") ?? []) {
+      if (typeof handler === "function") {
+        await handler({ controller: this, target, originalHitChance, options });
+      }
+    }
     const attackDistanceContext = this.createWeaponAttackReactionContext(target);
     const result = await this.requestReaction(REACTION_EVENT_KEYS.weaponAttackCommitted, {
       attackId: this.attackId,
@@ -5524,6 +5547,14 @@ export class WeaponAttackController {
       title: "Реакция на атаку",
       message: `${this.token.actor.name} атакует ${target.actor.name}: ${this.weapon.name}.`
     });
+    if (result?.disadvantageCount) {
+      const modifierState = this.getWeaponActionModifierState();
+      const current = modifierState.getOption("attackEdge") ?? {};
+      modifierState.setOption("attackEdge", mergeAttackEdgeModifiers(current, {
+        disadvantage: true,
+        disadvantageCount: result.disadvantageCount
+      }));
+    }
     if (result?.cancelCurrent || result?.cancelRemaining) {
       this.attackCanceledByReaction = true;
       return true;
@@ -5683,6 +5714,9 @@ export class WeaponAttackController {
     this.successfulAttackTargetActorUuids?.clear?.();
     this.attackCheckEventSequence = 0;
     this.pendingCriticalFailureResourceCosts = [];
+    this.duplicateCycleRule = null;
+    this.duplicateCycleSuccessBaseline = 0;
+    this.previousDuplicateCyclesSuccessful = true;
     this.reactionTargetKeys?.clear?.();
     this.attackedTargetActorUuids?.clear?.();
     this.attackedTargetTokenUuids?.clear?.();
@@ -5730,12 +5764,6 @@ export class WeaponAttackController {
   }
 
   async runInteractiveAttackOperation(operation) {
-    // codex-runtime-debug: actual user-confirmation operation, before the attack ID rotates.
-    const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("attack.interactive", "H5", {
-      sourceActorItemCount: this.token?.actor?.items?.size ?? 0,
-      targetCount: this.targets?.length ?? 0,
-      attackId: this.attackId ?? ""
-    });
     try {
       return await operation();
     } catch (error) {
@@ -5747,8 +5775,6 @@ export class WeaponAttackController {
         this.destroy();
       }
       return false;
-    } finally {
-      __codexFinish?.(); // codex-runtime-debug
     }
   }
 
@@ -5766,11 +5792,6 @@ export class WeaponAttackController {
   }
 
   async playAttemptWeaponAnimations(trajectories = [], { delayMs = null } = {}) {
-    // codex-runtime-debug: distinguish animation waits from computation.
-    const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("attack.animations", "H5", {
-      attackId: this.attackId ?? ""
-    });
-    try {
     await playWeaponAttackAnimations({
       weapon: this.weapon,
       weaponFunctionId: this.weaponFunctionId,
@@ -5778,9 +5799,6 @@ export class WeaponAttackController {
       trajectories,
       delayMs: delayMs ?? getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
     });
-    } finally {
-      __codexFinish?.(); // codex-runtime-debug
-    }
   }
 
   async spendCurrentAttackCosts({
@@ -5792,13 +5810,6 @@ export class WeaponAttackController {
     delayedThrownItemData = null,
     actionContext = null
   } = {}) {
-    // codex-runtime-debug: document/resource commits during an actual attack.
-    const __codexFinish = globalThis.__falloutMawGameplayProbe?.span("attack.costs", "H1", {
-      sourceActorItemCount: this.token?.actor?.items?.size ?? 0,
-      targetCount: this.targets?.length ?? 0,
-      attackId: this.attackId ?? ""
-    });
-    try {
     this.spentQuantityItemData = null;
     const resolvedActionContext = actionContext && typeof actionContext === "object"
       ? actionContext
@@ -5960,9 +5971,6 @@ export class WeaponAttackController {
     this.weaponNoiseAttempted = weaponAttempted;
     this.interruptForIncapacitation();
     return true;
-    } finally {
-      __codexFinish?.(); // codex-runtime-debug
-    }
   }
 
   async executeAgainstToken(targetToken) {
@@ -6014,6 +6022,28 @@ export class WeaponAttackController {
     this.selectedTarget = targetToken;
     this.lockedGeometry = serializeGeometry(this.geometry);
     this.selectedLimbKey = String(selectedLimbKey ?? "");
+    if (!this.usesAbilityTrialResolution()) {
+      if (!this.selectedLimbKey && this.requiresLimbSelection) {
+        this.selectedLimbKey = selectRandomWeightedLimbKey(targetToken.actor);
+      }
+      if (this.requiresDirectionSelection) {
+        this.aimedMode = "direction";
+        const directions = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId);
+        const direction = directions.find(entry => entry.mode === "thrust") ?? directions.at(0);
+        if (!direction) return false;
+        await this.performDirectedAttack(direction.key);
+        return true;
+      }
+      if (this.requiresLimbSelection) {
+        this.aimedMode = "limb";
+        if (!this.selectedLimbKey) return false;
+        await this.performAimedAttack(this.selectedLimbKey);
+        return true;
+      }
+      this.targetedAction = false;
+      await this.performCurrentAttack();
+      return true;
+    }
     return this.performStrictSelectedTargetAttack(targetToken, {
       selectedLimbKey: this.selectedLimbKey
     });
@@ -6155,7 +6185,9 @@ export class WeaponAttackController {
         baseAttackCount,
         duplicateCount: 0,
         cycles: 1,
-        totalAttackCount: baseAttackCount
+        totalAttackCount: baseAttackCount,
+        cycleRules: [null],
+        executedCycles: 0
       };
     }
     const requests = [];
@@ -6173,6 +6205,7 @@ export class WeaponAttackController {
     });
 
     let duplicateCount = 0;
+    const cycleRules = [null];
     for (const request of requests) {
       const count = Math.max(0, toInteger(request?.count ?? request?.duplicateCount ?? 1));
       if (!count) continue;
@@ -6199,14 +6232,44 @@ export class WeaponAttackController {
         totalAttackCount: nextTotalAttackCount
       })) === false) continue;
       duplicateCount += count;
+      for (let index = 0; index < count; index += 1) {
+        cycleRules.push({
+          onlyAfterMiss: request?.onlyAfterMiss === true,
+          advantageCount: Math.max(0, toInteger(request?.advantageCount)),
+          forceCriticalIfPreviousHits: request?.forceFinalCriticalAfterHits === true && index === count - 1
+        });
+      }
     }
 
     return {
       baseAttackCount,
       duplicateCount,
       cycles: 1 + duplicateCount,
-      totalAttackCount: baseAttackCount * (1 + duplicateCount)
+      totalAttackCount: baseAttackCount * (1 + duplicateCount),
+      cycleRules,
+      executedCycles: 0
     };
+  }
+
+  beginDuplicateAttackCycle(plan, cycleIndex = 0) {
+    const rule = plan?.cycleRules?.[cycleIndex] ?? null;
+    if (rule?.onlyAfterMiss && this.previousDuplicateCyclesSuccessful) return false;
+    this.duplicateCycleRule = rule;
+    this.duplicateCycleSuccessBaseline = this.successfulAttackCheckCount;
+    if (plan) plan.executedCycles = Math.max(0, toInteger(plan.executedCycles)) + 1;
+    return true;
+  }
+
+  finishDuplicateAttackCycle() {
+    const successful = this.successfulAttackCheckCount > this.duplicateCycleSuccessBaseline;
+    this.previousDuplicateCyclesSuccessful &&= successful;
+    this.duplicateCycleRule = null;
+    return successful;
+  }
+
+  getExecutedDuplicateAttackCount(plan) {
+    return Math.max(1, toInteger(plan?.baseAttackCount))
+      * Math.max(1, toInteger(plan?.executedCycles));
   }
 
   onMove(event) {
@@ -6520,7 +6583,10 @@ export class WeaponAttackController {
       return this.executeOrdinaryAttackViaGm({ mode: "current" });
     }
     const originalTarget = this.trajectoryAimTarget;
-    if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
+    if (
+      hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
+      || this.getWeaponActionModifierState().getOption("hitAllConeTargets") === true
+    ) {
       return this.performConeTargetsAttack({ attackCount, actionContext });
     }
     if (this.actionKey === "burst") {
@@ -6555,26 +6621,33 @@ export class WeaponAttackController {
       })
       : null;
     let attempted = false;
-    for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
-      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
-      const result = await this.resolveAttackPellets({
-        checkBatch,
-        attackIndex,
-        attackCount: totalAttackCount,
-        burstAttackIndex: attackIndex
-      });
-      await this.dodgeExposure.flush();
-      for (const trajectory of result.trajectories) {
-        trajectories.push({ ...trajectory, delayGroup: attackIndex });
+    let attackIndex = 0;
+    for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
+      if (!this.beginDuplicateAttackCycle(duplicatePlan, cycleIndex)) continue;
+      for (let baseIndex = 0; baseIndex < duplicatePlan.baseAttackCount; baseIndex += 1) {
+        this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
+        const result = await this.resolveAttackPellets({
+          checkBatch,
+          attackIndex,
+          attackCount: totalAttackCount,
+          burstAttackIndex: attackIndex
+        });
+        await this.dodgeExposure.flush();
+        for (const trajectory of result.trajectories) {
+          trajectories.push({ ...trajectory, delayGroup: attackIndex });
+        }
+        damageRequests.push(...result.damageRequests);
+        attempted ||= result.attempted;
+        attackIndex += 1;
+        if (this.attackCanceledByReaction) break;
       }
-      damageRequests.push(...result.damageRequests);
-      attempted ||= result.attempted;
+      this.finishDuplicateAttackCycle();
       if (this.attackCanceledByReaction) break;
     }
 
     if (attempted) {
       await this.spendCurrentAttackCosts({
-        attackCount: totalAttackCount,
+        attackCount: this.getExecutedDuplicateAttackCount(duplicatePlan),
         point: getAttackLandingPoint(trajectories, this.pointer),
         actionContext
       });
@@ -6649,24 +6722,31 @@ export class WeaponAttackController {
     let attemptedAttackCount = 0;
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
-    for (let cycleIndex = 0; cycleIndex < totalCycles; cycleIndex += 1) {
-      for (const target of targets) {
+    let cycleIndex = 0;
+    for (let duplicateCycleIndex = 0; duplicateCycleIndex < duplicatePlan.cycles; duplicateCycleIndex += 1) {
+      if (!this.beginDuplicateAttackCycle(duplicatePlan, duplicateCycleIndex)) continue;
+      const duplicateCycleEnd = Math.min(totalCycles, cycleIndex + attacksPerTarget);
+      for (; cycleIndex < totalCycles && cycleIndex < duplicateCycleEnd; cycleIndex += 1) {
+        for (const target of targets) {
+          if (this.attackCanceledByReaction) break;
+          attempted = true;
+          attemptedAttackCount += 1;
+          const trajectory = buildSwingAnimationTrajectory(this.token, [target], "rightToLeft", this.geometry);
+          if (trajectory) trajectories.push({ ...trajectory, delayGroup: cycleIndex });
+          const request = await this.resolveDirectedAttackAgainstTarget(target, {
+            mode: "swing",
+            damageAmount: baseDamage,
+            difficultyBonus: 0,
+            penetrationStep: 0,
+            checkBatch
+          });
+          if (this.attackCanceledByReaction) break;
+          if (!request?.length) continue;
+          damageRequests.push(...request);
+        }
         if (this.attackCanceledByReaction) break;
-        attempted = true;
-        attemptedAttackCount += 1;
-        const trajectory = buildSwingAnimationTrajectory(this.token, [target], "rightToLeft", this.geometry);
-        if (trajectory) trajectories.push({ ...trajectory, delayGroup: cycleIndex });
-        const request = await this.resolveDirectedAttackAgainstTarget(target, {
-          mode: "swing",
-          damageAmount: baseDamage,
-          difficultyBonus: 0,
-          penetrationStep: 0,
-          checkBatch
-        });
-        if (this.attackCanceledByReaction) break;
-        if (!request?.length) continue;
-        damageRequests.push(...request);
       }
+      this.finishDuplicateAttackCycle();
       if (this.attackCanceledByReaction) break;
     }
     await this.dodgeExposure.flush();
@@ -6720,53 +6800,60 @@ export class WeaponAttackController {
     let attempted = false;
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
-    for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
-      if (this.attackCanceledByReaction) break;
-      const projectiles = createWeaponPelletImpactProjectiles(
-        this.weapon,
-        this.weaponFunctionId,
-        this.getWeaponDamage()
-      );
-      const animationTrajectory = buildConeAnimationTrajectory(this.geometry);
-      if (animationTrajectory) trajectories.push({ ...animationTrajectory, delayGroup: attackIndex });
-      attempted = true;
-
-      for (const target of resolutionTargets) {
+    let attackIndex = 0;
+    for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
+      if (!this.beginDuplicateAttackCycle(duplicatePlan, cycleIndex)) continue;
+      for (let baseIndex = 0; baseIndex < duplicatePlan.baseAttackCount; baseIndex += 1) {
         if (this.attackCanceledByReaction) break;
-        for (const [projectileIndex, projectile] of projectiles.entries()) {
+        const projectiles = createWeaponPelletImpactProjectiles(
+          this.weapon,
+          this.weaponFunctionId,
+          this.getWeaponDamage()
+        );
+        const animationTrajectory = buildConeAnimationTrajectory(this.geometry);
+        if (animationTrajectory) trajectories.push({ ...animationTrajectory, delayGroup: attackIndex });
+        attempted = true;
+
+        for (const target of resolutionTargets) {
           if (this.attackCanceledByReaction) break;
-          if (projectile.damageAmount <= 0) continue;
-          const totalProjectileCount = totalAttackCount * projectiles.length;
-          const request = await this.resolveAttackAgainstTarget(target, {
-            damageAmount: projectile.damageAmount,
-            damageShareIndex: projectileIndex,
-            damageShareCount: projectiles.length,
-            pelletImpactCount: projectile.pelletImpactCount,
-            burstAttackIndex: attackIndex,
-            penetrationStep: 0,
-            checkBatch,
-            allOrNothingContext: this.createAllOrNothingAttackContext({
-              mode: projectiles.length > 1
-                ? "pellet"
-                : (
-                  totalAttackCount > 1
-                  && hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
-                    ? "burst"
-                    : ""
-                ),
-              index: (attackIndex * projectiles.length) + projectileIndex,
-              count: totalProjectileCount
-            })
-          });
-          if (request) damageRequests.push(...request);
+          for (const [projectileIndex, projectile] of projectiles.entries()) {
+            if (this.attackCanceledByReaction) break;
+            if (projectile.damageAmount <= 0) continue;
+            const totalProjectileCount = totalAttackCount * projectiles.length;
+            const request = await this.resolveAttackAgainstTarget(target, {
+              damageAmount: projectile.damageAmount,
+              damageShareIndex: projectileIndex,
+              damageShareCount: projectiles.length,
+              pelletImpactCount: projectile.pelletImpactCount,
+              burstAttackIndex: attackIndex,
+              penetrationStep: 0,
+              checkBatch,
+              allOrNothingContext: this.createAllOrNothingAttackContext({
+                mode: projectiles.length > 1
+                  ? "pellet"
+                  : (
+                    totalAttackCount > 1
+                    && hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
+                      ? "burst"
+                      : ""
+                  ),
+                index: (attackIndex * projectiles.length) + projectileIndex,
+                count: totalProjectileCount
+              })
+            });
+            if (request) damageRequests.push(...request);
+          }
         }
+        attackIndex += 1;
       }
+      this.finishDuplicateAttackCycle();
+      if (this.attackCanceledByReaction) break;
     }
     await this.dodgeExposure.flush();
 
     if (attempted) {
       await this.spendCurrentAttackCosts({
-        attackCount: totalAttackCount,
+        attackCount: this.getExecutedDuplicateAttackCount(duplicatePlan),
         point: getAttackLandingPoint(trajectories, this.pointer),
         actionContext
       });
@@ -7324,6 +7411,7 @@ export class WeaponAttackController {
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
+      if (!this.beginDuplicateAttackCycle(duplicatePlan, cycleIndex)) continue;
       for (const [index, trajectory] of trajectories.entries()) {
         if (this.attackCanceledByReaction) break;
         const projectile = projectiles[index];
@@ -7344,12 +7432,13 @@ export class WeaponAttackController {
         damageRequests.push(...result.damageRequests);
         if (this.attackCanceledByReaction) break;
       }
+      this.finishDuplicateAttackCycle();
       if (this.attackCanceledByReaction) break;
     }
     await this.dodgeExposure.flush();
 
     await this.spendCurrentAttackCosts({
-      attackCount: totalAttackCount,
+      attackCount: this.getExecutedDuplicateAttackCount(duplicatePlan),
       point: allTrajectories[0]?.end ?? trajectories[0]?.end ?? getTokenAimPoint(target),
       actionContext
     });
@@ -7480,6 +7569,7 @@ export class WeaponAttackController {
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
+      if (!this.beginDuplicateAttackCycle(duplicatePlan, cycleIndex)) continue;
       if (this.attackCanceledByReaction) break;
       if (direction.mode === "thrust") {
         const aimPoint = selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target);
@@ -7501,12 +7591,13 @@ export class WeaponAttackController {
         trajectories.push({ ...result.trajectory, delayGroup: cycleIndex });
         attempted ||= result.attempted;
       }
+      this.finishDuplicateAttackCycle();
     }
     await this.dodgeExposure.flush();
 
     if (attempted) {
       await this.spendCurrentAttackCosts({
-        attackCount: totalAttackCount,
+        attackCount: this.getExecutedDuplicateAttackCount(duplicatePlan),
         point: getAttackLandingPoint(trajectories, getTokenAimPoint(target)),
         actionContext
       });
@@ -7570,6 +7661,7 @@ export class WeaponAttackController {
       if (damageAmount <= 0) break;
 
       const request = await this.resolveDirectedAttackAgainstTarget(entry.target, {
+        limbKey: this.getWeaponActionModifierState().getOption("inheritAimedLimbOnPath") ? limbKey : "",
         mode: "thrust",
         damageAmount,
         difficultyBonus: passthroughStep * 20,
@@ -7618,7 +7710,7 @@ export class WeaponAttackController {
       const damageAmount = Math.max(0, Math.round(baseDamage * Math.max(0, 1 - (index * 0.2))));
       if (damageAmount <= 0) break;
       const request = await this.resolveDirectedAttackAgainstTarget(target, {
-        limbKey: index === 0 ? limbKey : "",
+        limbKey: index === 0 || this.getWeaponActionModifierState().getOption("inheritAimedLimbOnPath") ? limbKey : "",
         mode: "swing",
         damageAmount,
         difficultyBonus: index * 30,
@@ -7648,7 +7740,11 @@ export class WeaponAttackController {
     if (await this.resolveTargetReactions(target)) return null;
     const attackContext = this.createWeaponAttackSkillCheckContext(target);
     this.dodgeExposure.record(target.actor, attackContext);
-    const resolvedLimbKey = limbKey || selectRandomLimbKey(target.actor);
+    const targetLowestCriticalLimb = this.attackModifier?.targetLowestCriticalLimb === true
+      || this.getWeaponActionModifierState().getOption("targetLowestCriticalLimb") === true;
+    const resolvedLimbKey = limbKey
+      || (targetLowestCriticalLimb ? selectLowestHealthCriticalLimbKey(target.actor) : "")
+      || selectRandomLimbKey(target.actor);
     if (!resolvedLimbKey || isLimbDestroyed(target.actor, resolvedLimbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(
       this.weapon,
@@ -7690,9 +7786,11 @@ export class WeaponAttackController {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
-    const impactCount = hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
-      ? getWeaponPelletCount(this.weapon, this.weaponFunctionId)
-      : 1;
+    const impactCount = (
+      hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
+        ? getWeaponPelletCount(this.weapon, this.weaponFunctionId)
+        : 1
+    ) + Math.max(0, toInteger(this.getWeaponActionModifierState().getOption("fractionalImpactBonus")));
     const impactDamages = distributePelletImpactDamage(damageAmount, impactCount);
     const requests = [];
     for (const [impactIndex, impactDamage] of impactDamages.entries()) {
@@ -7827,7 +7925,22 @@ export class WeaponAttackController {
       const damageAmount = getPenetratedDamageAmount(baseDamage, passthroughStep);
       if (damageAmount <= 0) break;
 
-      const request = await this.resolveAttackAgainstTarget(entry.target, {
+      const inheritedLimbKey = this.getWeaponActionModifierState().getOption("inheritAimedLimbOnPath")
+        ? targetSelection?.limbKey ?? ""
+        : "";
+      const request = inheritedLimbKey
+        ? await this.resolveAimedAttackAgainstTarget(entry.target, {
+          limbKey: inheritedLimbKey,
+          damageAmount,
+          damageShareIndex,
+          damageShareCount,
+          pelletImpactCount,
+          difficultyBonus: passthroughStep * 20,
+          penetrationStep: passthroughStep,
+          checkBatch,
+          allOrNothingContext
+        })
+        : await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
         damageShareIndex,
         damageShareCount,
@@ -7836,7 +7949,7 @@ export class WeaponAttackController {
         penetrationStep: passthroughStep,
         checkBatch,
         allOrNothingContext
-      });
+        });
       if (!request) {
         finalAnimationPoint = hasSuccessfulHit
           ? selectPointOnTrajectoryPastTarget(entry.target, trajectory)
@@ -8109,7 +8222,6 @@ export class WeaponAttackController {
   }
 
   async performVolleyAttack() {
-    const __codexRequestProbe = captureDamageRequestProbe(); // codex-runtime-debug H21
     if (this.processing || !this.geometry) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
@@ -8188,11 +8300,6 @@ export class WeaponAttackController {
       }
       if (this.attackCanceledByReaction) break;
     }
-    // #region codex-runtime-debug H21 distinguish cycles, targets and generated components
-    recordDamageRequestProbe(__codexRequestProbe, "weapon.volleyDamageRequests", damageRequests, {
-      attackCycles: finalGeometries.length
-    });
-    // #endregion codex-runtime-debug
     if (!delayedExplosion) await this.dodgeExposure.flush();
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
@@ -14231,6 +14338,14 @@ function buildWeaponDamageRequests(weapon, {
     targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
     ...distanceContext,
     penetrationPower: resolvedPenetrationPower,
+    targetEquipmentConditionDamageMultiplier: Math.max(
+      0,
+      Number(modifierState?.getOption?.("targetEquipmentConditionDamageMultiplier")) || 1
+    ),
+    unconsciousnessDifficultyMultiplier: Math.max(
+      1,
+      Number(modifierState?.getOption?.("unconsciousnessDifficultyMultiplier")) || 1
+    ),
     targetDefenseIgnorePercent: Math.max(0, Math.min(100, Number(mitigationIgnore.defenseIgnorePercent) || 0)),
     targetResistanceIgnorePercent: Math.max(0, Math.min(100, Number(mitigationIgnore.resistanceIgnorePercent) || 0))
   };
@@ -16188,9 +16303,6 @@ async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionReq
 
 async function withWeaponDamagePreparedEvents(requests = [], operation) {
   const sourceRequests = (Array.isArray(requests) ? requests : [requests]).filter(Boolean);
-  // #region codex-runtime-debug H21 exactly one collection summary before per-request emits
-  recordDamageRequestProbe(captureDamageRequestProbe(), "weapon.damagePreparedRequests", sourceRequests);
-  // #endregion codex-runtime-debug
   if (!sourceRequests.length) return operation([]);
   const attackId = String(sourceRequests.find(request => request?.source?.attackId)?.source?.attackId ?? foundry.utils.randomID());
   const inheritedChainRef = sourceRequests.find(request => request?.source?.chainRef)?.source?.chainRef ?? null;
@@ -16341,6 +16453,22 @@ function getTokenCenter(token) {
 
 function selectRandomLimbKey(actor, { includeDestroyed = false } = {}) {
   return selectRandomWeightedLimbKey(actor, { includeDestroyed });
+}
+
+function selectLowestHealthCriticalLimbKey(actor) {
+  return Object.entries(actor?.system?.limbs ?? {})
+    .filter(([limbKey]) => isCriticalLimb(actor, limbKey) && !isLimbDestroyed(actor, limbKey))
+    .map(([limbKey, limb]) => ({
+      limbKey,
+      value: Math.max(0, Number(limb?.value) || 0),
+      max: Math.max(1, Number(limb?.max) || 1)
+    }))
+    .sort((left, right) => (
+      (left.value / left.max) - (right.value / right.max)
+      || left.value - right.value
+      || left.limbKey.localeCompare(right.limbKey)
+    ))
+    .at(0)?.limbKey ?? "";
 }
 
 function isAimedShotAction(weapon, actionKey, weaponFunctionId = "") {

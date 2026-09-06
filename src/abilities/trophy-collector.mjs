@@ -349,7 +349,8 @@ export function buildTrophyCollectorMarkEffectData({
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: normalized.markDurationSeconds, startTime: now },
+    start: { time: now },
+    duration: { value: normalized.markDurationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: buildTrophyCollectorMarkChanges(normalized, count) },
     flags: {
       [SYSTEM_ID]: {
@@ -582,7 +583,8 @@ export async function applyTrophyCollectorStun({
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: { seconds: normalized.stunDurationSeconds, startTime: now },
+    start: { time: now },
+    duration: { value: normalized.stunDurationSeconds, units: "seconds", expiry: null, expired: false },
     system: { changes: [createAddChange(STUN_EFFECT_KEY, normalized.stunPercent)] },
     flags: { [SYSTEM_ID]: { kind: "temporary", [TROPHY_COLLECTOR_STUN_FLAG_KEY]: flag } }
   };

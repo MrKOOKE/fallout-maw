@@ -22,8 +22,6 @@ test("Token source serialization matches Foundry without its discarded inventory
       trauma: models.TraumaDataModel, disease: models.DiseaseDataModel}},
     ActiveEffect: {documentClass: BaseActiveEffect, dataModels: {}}, Folder: {}};
   globalThis.getDocumentClass = name => CONFIG[name]?.documentClass ?? foundry.documents[`Base${name}`];
-  let copies = 0;
-  globalThis.__falloutMawGameplayProbe = {count: name => {if (name === "token.sourceSingleCopy") copies++;}};
   const source = {_id: "token00000000000", actorId: "actor00000000000", actorLink: false, x: 20, y: 30,
     flags: {"fallout-maw": {nested: {values: [1, 2]}}},
     delta: {_id: "token00000000000", name: null, system: {hp: 7}, items: [
@@ -37,9 +35,7 @@ test("Token source serialization matches Foundry without its discarded inventory
 
   await t.test("complete source, optional delta fields, tombstones, effects and independent copies", () => {
     const token = make(); token.delta;
-    copies = 0;
     const data = token.toObject(), reference = native(token);
-    assert.equal(copies, 1, "the optimized path actually ran");
     assert.deepEqual(data, reference);
     assert.equal(Object.hasOwn(data.delta, "name"), false);
     assert.equal(Object.hasOwn(data, "hexagonalShape"), Object.hasOwn(reference, "hexagonalShape"));
@@ -52,26 +48,24 @@ test("Token source serialization matches Foundry without its discarded inventory
     assert.equal(token.toObject().delta.system.hp, 4);
   });
   await t.test("prepared data and an unmaterialized delta keep native behavior", () => {
-    const token = make(); copies = 0;
+    const token = make();
     assert.equal(typeof Object.getOwnPropertyDescriptor(token, "delta").get, "function");
     assert.deepEqual(token.toObject(), native(token));
-    assert.equal(copies, 0, "lazy initialization retains native call order");
     assert.deepEqual(token.toObject(false), native(token, false));
-    assert.equal(copies, 0);
   });
   await t.test("linked or absent delta, other versions and custom serializers keep native behavior", () => {
     for (const data of [{...source, actorLink: true}, {...source, delta: null}]) {
-      const token = make(data); token.delta; copies = 0;
-      assert.deepEqual(token.toObject(), native(token)); assert.equal(copies, 0);
+      const token = make(data); token.delta;
+      assert.deepEqual(token.toObject(), native(token));
     }
     const token = make(); token.delta;
-    game.release.version = "14.999"; copies = 0;
-    try {assert.deepEqual(token.toObject(), native(token)); assert.equal(copies, 0);}
+    game.release.version = "14.999";
+    try {assert.deepEqual(token.toObject(), native(token));}
     finally {game.release.version = "14.361";}
     const original = BaseToken.prototype.toObject;
     try {
       BaseToken.prototype.toObject = function (...args) {return {...original.apply(this, args), extension: true};};
-      copies = 0; assert.equal(token.toObject().extension, true); assert.equal(copies, 0);
+      assert.equal(token.toObject().extension, true);
     } finally {BaseToken.prototype.toObject = original;}
   });
   await t.test("custom embedded compatibility shims and subclass shims retain their native calls", () => {
@@ -80,16 +74,16 @@ test("Token source serialization matches Foundry without its discarded inventory
     class CustomItem extends BaseItem {
       static shimData(...args) {shimCalls++; return super.shimData(...args);}
     }
-    CONFIG.Item.documentClass = CustomItem; copies = 0;
+    CONFIG.Item.documentClass = CustomItem;
     try {
       const data = token.toObject(), reference = native(token);
-      assert.deepEqual(data, reference); assert.ok(shimCalls > 0); assert.equal(copies, 0);
+      assert.deepEqual(data, reference); assert.ok(shimCalls > 0);
     } finally {CONFIG.Item.documentClass = BaseItem;}
     class CustomToken extends Token {
       static shimData(data, ...args) {super.shimData(data, ...args); data.x = 999; return data;}
     }
-    const customized = new CustomToken(foundry.utils.deepClone(source), {parent: scene}); customized.delta; copies = 0;
-    assert.deepEqual(customized.toObject(), native(customized)); assert.equal(customized.toObject().x, 999); assert.equal(copies, 0);
+    const customized = new CustomToken(foundry.utils.deepClone(source), {parent: scene}); customized.delta;
+    assert.deepEqual(customized.toObject(), native(customized)); assert.equal(customized.toObject().x, 999);
   });
   await t.test("800 Items serialize identically with bounded timing diagnostics", () => {
     const data = foundry.utils.deepClone(source);
@@ -103,5 +97,4 @@ test("Token source serialization matches Foundry without its discarded inventory
     }
     t.diagnostic(`Source serialization only, milliseconds: ${JSON.stringify(times)}`);
   });
-  delete globalThis.__falloutMawGameplayProbe;
 });

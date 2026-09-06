@@ -121,14 +121,21 @@ import {
   normalizeAtRandomSettings,
   normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
+  normalizeParrySettings,
+  normalizeCrowdCrusherSettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
   normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
+  normalizeDeepPenetrationSettings,
+  normalizeDeepPenetrationPiercingSettings,
+  normalizeToTheBoneSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeInsuranceAttackSettings,
+  normalizeTripleAttackSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeGoodEnoughSettings,
@@ -160,13 +167,21 @@ import {
   normalizeKnockOffBalanceSettings,
   normalizeLookSettings,
   normalizeLungeSettings,
+  normalizeCleaveSettings,
+  normalizeCleaveMasterySettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeReactiveSettings,
   normalizeRicochetSettings,
   normalizeToTheEndSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
+  normalizeHeadChopperSettings,
   normalizeWhereAreYouGoingSettings,
+  normalizeSpinalStrikeSettings,
+  normalizeConcussionSettings,
+  normalizeCleanStrikeSettings,
+  normalizeIdealStrikeSettings,
   normalizeReaperSettings,
   normalizeVersatileDevelopmentSettings,
   normalizeVirtuosoSettings,
@@ -7313,6 +7328,7 @@ const RANGED_EVOLUTION_FIXED_SETTINGS_DISPLAYS = Object.freeze({
   [ABILITY_FIXED_FUNCTION_KEYS.trophyCollector]: ["fixedTrophyCollectorSettings", normalizeTrophyCollectorSettings],
   [ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery]: ["fixedRicochetMasterySettings", normalizeRicochetMasterySettings],
   [ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse]: ["fixedCorpseAfterCorpseSettings", normalizeCorpseAfterCorpseSettings],
+  [ABILITY_FIXED_FUNCTION_KEYS.slaughter]: ["fixedSlaughterSettings", normalizeCorpseAfterCorpseSettings],
   [ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing]: ["fixedHawkEyePiercingSettings", normalizeHawkEyePiercingSettings],
   [ABILITY_FIXED_FUNCTION_KEYS.trueBullet]: ["fixedTrueBulletSettings", normalizeTrueBulletSettings]
 });
@@ -7352,6 +7368,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     : null;
   const fixedAllOrNothingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? prepareAllOrNothingSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedReactiveSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive
+    ? prepareReactiveSettingsForDisplay(entry?.fixedSettings)
     : null;
   const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
     ? prepareReaperSettingsForDisplay(entry?.fixedSettings)
@@ -7395,8 +7414,19 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(entry?.fixedSettings)
     : null;
-  const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
-    ? prepareWhirlwindSettingsForDisplay(entry?.fixedSettings)
+  const fixedWhirlwindSettings = [ABILITY_FIXED_FUNCTION_KEYS.whirlwind, ABILITY_FIXED_FUNCTION_KEYS.headChopper].includes(fixedKey)
+    ? {
+        ...prepareWhirlwindSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper
+            ? normalizeHeadChopperSettings(entry?.fixedSettings)
+            : entry?.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper ? "Головорезка" : "Вихрь"
+      }
+    : null;
+  const fixedCrowdCrusherSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher
+    ? normalizeCrowdCrusherSettings(entry?.fixedSettings)
     : null;
   const fixedHuntingGroundsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds
     ? prepareHuntingGroundsSettingsForDisplay(entry?.fixedSettings)
@@ -7407,14 +7437,65 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedFalseBreachSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.falseBreach
     ? prepareFalseBreachSettingsForDisplay(entry?.fixedSettings)
     : null;
-  const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
-    ? prepareLungeSettingsForDisplay(entry?.fixedSettings)
+  const fixedLungeSettings = [
+    ABILITY_FIXED_FUNCTION_KEYS.lunge,
+    ABILITY_FIXED_FUNCTION_KEYS.cleave,
+    ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+  ].includes(fixedKey)
+    ? {
+        ...prepareLungeSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave
+            ? normalizeCleaveSettings(entry?.fixedSettings)
+            : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+              ? normalizeCleaveMasterySettings(entry?.fixedSettings)
+              : entry?.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge ? "Выпад" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave ? "Рассечение" : "Рассечение II"
+      }
     : null;
-  const fixedDoubleAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
-    ? prepareDoubleAttackSettingsForDisplay(entry?.fixedSettings)
+  const fixedDeepPenetrationSettings = [
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
+    ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
+    ABILITY_FIXED_FUNCTION_KEYS.toTheBone
+  ].includes(fixedKey)
+    ? {
+        ...prepareDeepPenetrationSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing
+            ? normalizeDeepPenetrationPiercingSettings(entry?.fixedSettings)
+            : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheBone
+              ? normalizeToTheBoneSettings(entry?.fixedSettings)
+              : entry?.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetration ? "Глубокое проникновение" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing ? "Глубокое проникновение II" : "До кости"
+      }
+    : null;
+  const fixedDoubleAttackSettings = [
+    ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
+    ABILITY_FIXED_FUNCTION_KEYS.tripleAttack
+  ].includes(fixedKey)
+    ? {
+        ...prepareDoubleAttackSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack
+            ? normalizeInsuranceAttackSettings(entry?.fixedSettings)
+            : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.tripleAttack
+              ? normalizeTripleAttackSettings(entry?.fixedSettings)
+              : entry?.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack ? "Двоечка" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack ? "Страховочка" : "Троечка"
+      }
     : null;
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedParrySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.parry
+    ? {
+        ...normalizeParrySettings(entry?.fixedSettings),
+        skillChoices: buildSkillChoices(normalizeParrySettings(entry?.fixedSettings).requiredSkillKey, getSkillSettings())
+      }
     : null;
   const fixedOversightSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight
     ? prepareOversightSettingsForDisplay(entry?.fixedSettings)
@@ -7428,11 +7509,28 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
     ? normalizeCounterSniperSettings(entry?.fixedSettings)
     : null;
-  const fixedWhereAreYouGoingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
-    ? prepareWhereAreYouGoingSettingsForDisplay(entry?.fixedSettings)
+  const fixedWhereAreYouGoingSettings = [ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing, ABILITY_FIXED_FUNCTION_KEYS.spinalStrike].includes(fixedKey)
+    ? {
+        ...prepareWhereAreYouGoingSettingsForDisplay(
+          fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike
+            ? normalizeSpinalStrikeSettings(entry?.fixedSettings)
+            : entry?.fixedSettings
+        ),
+        fixedKey,
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike ? "Зашибу!" : "Ты куда собрался?"
+      }
     : null;
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ? prepareFullForceSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedConcussionSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.concussion
+    ? prepareConcussionSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedCleanStrikeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleanStrike
+    ? normalizeCleanStrikeSettings(entry?.fixedSettings)
+    : null;
+  const fixedIdealStrikeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.idealStrike
+    ? normalizeIdealStrikeSettings(entry?.fixedSettings)
     : null;
   const fixedTwoHandsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands
     ? normalizeTwoHandsSettings(entry?.fixedSettings)
@@ -7558,6 +7656,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
+    fixedReactiveSettings,
     fixedReaperSettings,
     fixedVirtuosoSettings,
     fixedVersatileDevelopmentSettings,
@@ -7573,18 +7672,24 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedDefensiveTacticsSettings,
     fixedRageSettings,
     fixedWhirlwindSettings,
+    fixedCrowdCrusherSettings,
     fixedHuntingGroundsSettings,
     fixedTempoSettings,
     fixedFalseBreachSettings,
     fixedLungeSettings,
+    fixedDeepPenetrationSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedParrySettings,
     fixedOversightSettings,
     fixedWatchOutSettings,
     fixedFullControlSettings,
     fixedCounterSniperSettings,
     fixedWhereAreYouGoingSettings,
     fixedFullForceSettings,
+    fixedConcussionSettings,
+    fixedCleanStrikeSettings,
+    fixedIdealStrikeSettings,
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
@@ -7967,6 +8072,19 @@ function prepareReaperSettingsForDisplay(settings = {}) {
   return normalizeReaperSettings(settings);
 }
 
+function prepareReactiveSettingsForDisplay(settings = {}) {
+  const normalized = normalizeReactiveSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
 function prepareVirtuosoSettingsForDisplay(settings = {}) {
   return normalizeVirtuosoSettings(settings);
 }
@@ -8063,6 +8181,14 @@ function prepareDoubleAttackSettingsForDisplay(settings = {}) {
   };
 }
 
+function prepareDeepPenetrationSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDeepPenetrationSettings(settings);
+  return {
+    ...normalized,
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
 function prepareCounterAttackSettingsForDisplay(settings = {}) {
   const normalized = normalizeCounterAttackSettings(settings);
   const overloadDuration = splitAbilityDurationSeconds(normalized.reactionOverloadDurationSeconds);
@@ -8137,6 +8263,16 @@ function prepareCommandBasicsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     dodgeDurationAmount: dodgeDuration.amount,
     dodgeDurationUnitChoices: buildAbilityDurationUnitChoices(dodgeDuration.unit)
+  };
+}
+
+function prepareConcussionSettingsForDisplay(settings = {}) {
+  const normalized = normalizeConcussionSettings(settings);
+  const skills = getSkillSettings();
+  return {
+    ...normalized,
+    sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
   };
 }
 
@@ -10356,6 +10492,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       continue;
     }
 
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-reactive-duration-amount]")?.value,
+        row.querySelector("[data-fixed-reactive-duration-unit]")?.value
+      );
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-reactive-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-reactive-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
     if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
       const durationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-anatomy-study-overload-duration-amount]")?.value,
@@ -10456,7 +10606,7 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       continue;
     }
 
-    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+    if ([ABILITY_FIXED_FUNCTION_KEYS.whirlwind, ABILITY_FIXED_FUNCTION_KEYS.headChopper].includes(fixedKey)) {
       const overloadDurationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-whirlwind-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-whirlwind-overload-duration-unit]")?.value
@@ -10498,7 +10648,11 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       continue;
     }
 
-    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+    if ([
+      ABILITY_FIXED_FUNCTION_KEYS.lunge,
+      ABILITY_FIXED_FUNCTION_KEYS.cleave,
+      ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery
+    ].includes(fixedKey)) {
       const overloadDurationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-lunge-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-lunge-overload-duration-unit]")?.value
@@ -10598,7 +10752,7 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       continue;
     }
 
-    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
+    if ([ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing, ABILITY_FIXED_FUNCTION_KEYS.spinalStrike].includes(fixedKey)) {
       const overloadDurationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-where-are-you-going-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-where-are-you-going-overload-duration-unit]")?.value

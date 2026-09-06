@@ -208,6 +208,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   lethalShot: "lethalShot",
   lethalStrike: "lethalStrike",
   corpseAfterCorpse: "corpseAfterCorpse",
+  slaughter: "slaughter",
   hawkEye: "hawkEye",
   hawkEyePiercing: "hawkEyePiercing",
   hunterRace: "hunterRace",
@@ -221,12 +222,22 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   defensiveTactics: "defensiveTactics",
   rage: "rage",
   whirlwind: "whirlwind",
+  headChopper: "headChopper",
+  crowdCrusher: "crowdCrusher",
   huntingGrounds: "huntingGrounds",
   tempo: "tempo",
   falseBreach: "falseBreach",
   lunge: "lunge",
+  cleave: "cleave",
+  cleaveMastery: "cleaveMastery",
+  deepPenetration: "deepPenetration",
+  deepPenetrationPiercing: "deepPenetrationPiercing",
+  toTheBone: "toTheBone",
   doubleAttack: "doubleAttack",
+  insuranceAttack: "insuranceAttack",
+  tripleAttack: "tripleAttack",
   counterAttack: "counterAttack",
+  parry: "parry",
   oversight: "oversight",
   watchOut: "watchOut",
   dangerSense: "dangerSense",
@@ -235,7 +246,11 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   counterSniperGuaranteed: "counterSniperGuaranteed",
   guardianAngel: "guardianAngel",
   whereAreYouGoing: "whereAreYouGoing",
+  spinalStrike: "spinalStrike",
   fullForce: "fullForce",
+  concussion: "concussion",
+  cleanStrike: "cleanStrike",
+  idealStrike: "idealStrike",
   twoHands: "twoHands",
   commandBasics: "commandBasics",
   knockOffBalance: "knockOffBalance",
@@ -2525,7 +2540,7 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(normalizedKey)) {
     return normalizeLethalAttackSettings(value);
   }
-  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse) {
+  if ([ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse, ABILITY_FIXED_FUNCTION_KEYS.slaughter].includes(normalizedKey)) {
     return normalizeCorpseAfterCorpseSettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing) {
@@ -2564,6 +2579,12 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     return normalizeWhirlwindSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper) {
+    return normalizeHeadChopperSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher) {
+    return normalizeCrowdCrusherSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
     return normalizeReactiveSettings(value);
   }
@@ -2579,11 +2600,35 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return normalizeLungeSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave) {
+    return normalizeCleaveSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery) {
+    return normalizeCleaveMasterySettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetration) {
+    return normalizeDeepPenetrationSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing) {
+    return normalizeDeepPenetrationPiercingSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheBone) {
+    return normalizeToTheBoneSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
     return normalizeDoubleAttackSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack) {
+    return normalizeInsuranceAttackSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.tripleAttack) {
+    return normalizeTripleAttackSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return normalizeCounterAttackSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.parry) {
+    return normalizeParrySettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight) {
     return normalizeOversightSettings(value);
@@ -2606,8 +2651,20 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
     return normalizeWhereAreYouGoingSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike) {
+    return normalizeSpinalStrikeSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
     return normalizeFullForceSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.concussion) {
+    return normalizeConcussionSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.cleanStrike) {
+    return normalizeCleanStrikeSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.idealStrike) {
+    return normalizeIdealStrikeSettings(value);
   }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands) {
     return normalizeTwoHandsSettings(value);
@@ -3206,9 +3263,31 @@ export function normalizeLethalAttackSettings(value = {}) {
 export function normalizeWhirlwindSettings(value = {}) {
   return {
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
-    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
-    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
-    accuracyModifier: toInteger(value?.accuracyModifier ?? -30)
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 80)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    accuracyModifier: toInteger(value?.accuracyModifier ?? 0)
+  };
+}
+
+export function normalizeHeadChopperSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 30)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 80)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 24)),
+    accuracyModifier: toInteger(value?.accuracyModifier ?? 0)
+  };
+}
+
+export function normalizeCrowdCrusherSettings(value = {}) {
+  return {
+    maximumCharges: Math.max(1, toInteger(value?.maximumCharges ?? 3)),
+    activationCharges: Math.max(1, toInteger(value?.activationCharges ?? 3)),
+    qualifyingTargets: Math.max(1, toInteger(value?.qualifyingTargets ?? 2)),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 12)),
+    movementPointBonus: toInteger(value?.movementPointBonus ?? 5),
+    inheritAimedLimbOnPath: value?.inheritAimedLimbOnPath !== false,
+    hitAllConeTargets: value?.hitAllConeTargets !== false,
+    extraAttackWhenMultipleTargets: value?.extraAttackWhenMultipleTargets !== false
   };
 }
 
@@ -3276,10 +3355,60 @@ export function normalizeLungeSettings(value = {}) {
   };
 }
 
+export function normalizeCleaveSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 80)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    maxCells: Math.max(1, toInteger(value?.maxCells ?? 6))
+  };
+}
+
+export function normalizeCleaveMasterySettings(value = {}) {
+  return normalizeCleaveSettings(value);
+}
+
+export function normalizeDeepPenetrationSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? value?.reactionEnergyCost ?? 10)),
+    conversionLimitPercent: Math.max(0, Math.min(100, Number(
+      value?.conversionLimitPercent ?? value?.blockedPercentThreshold ?? 40
+    ) || 0)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeDeepPenetrationPiercingSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? value?.reactionEnergyCost ?? 10)),
+    conversionLimitPercent: Math.max(0, Math.min(100, Number(
+      value?.conversionLimitPercent ?? value?.blockedPercentThreshold ?? 70
+    ) || 0)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeToTheBoneSettings(value = {}) {
+  return normalizeDeepPenetrationPiercingSettings(value);
+}
+
 export function normalizeDoubleAttackSettings(value = {}) {
   return {
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 40)),
-    duplicateCount: Math.max(1, toInteger(value?.duplicateCount ?? 1)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeInsuranceAttackSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 5)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeTripleAttackSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
   };
 }
@@ -3289,6 +3418,13 @@ export function normalizeCounterAttackSettings(value = {}) {
     reactionEnergyCost: Math.max(0, toInteger(value?.reactionEnergyCost ?? value?.energyCost ?? 20)),
     reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? value?.overloadEnergyCost ?? 20)),
     reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 18)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeParrySettings(value = {}) {
+  return {
+    reactionEnergyCost: Math.max(0, toInteger(value?.reactionEnergyCost ?? value?.energyCost ?? 20)),
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
   };
 }
@@ -3373,12 +3509,58 @@ export function normalizeWhereAreYouGoingSettings(value = {}) {
   };
 }
 
+export function normalizeSpinalStrikeSettings(value = {}) {
+  return normalizeWhereAreYouGoingSettings(value);
+}
+
 export function normalizeFullForceSettings(value = {}) {
   return {
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat",
     damagePercentBonus: Math.max(0, toInteger(value?.damagePercentBonus ?? 100)),
-    conditionCostMultiplier: Math.max(1, toInteger(value?.conditionCostMultiplier ?? 5))
+    conditionCostMultiplier: Math.max(1, toInteger(value?.conditionCostMultiplier ?? 5)),
+    fractionalImpactBonus: Math.max(0, toInteger(value?.fractionalImpactBonus ?? 1))
+  };
+}
+
+export function normalizeConcussionSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    advantageCount: Math.max(0, toInteger(value?.advantageCount ?? 1)),
+    targetSkillKey: String(value?.targetSkillKey ?? "resilience").trim() || "resilience",
+    difficultyBase: toInteger(value?.difficultyBase ?? 25),
+    sourceSkillKey: String(value?.sourceSkillKey ?? "meleeCombat").trim() || "meleeCombat",
+    normalStunPercent: Math.max(0, Number(value?.normalStunPercent ?? 25) || 0),
+    criticalLimbStunPercent: Math.max(0, Number(value?.criticalLimbStunPercent ?? 50) || 0),
+    stunDurationSeconds: Math.max(1, toInteger(value?.stunDurationSeconds ?? 12)),
+    highLimbDamagePercent: Math.max(0, Number(value?.highLimbDamagePercent ?? 50) || 0),
+    highDamageDifficultyMultiplier: Math.max(1, Number(value?.highDamageDifficultyMultiplier ?? 1.5) || 1),
+    unconsciousnessDifficultyMultiplier: Math.max(1, Number(value?.unconsciousnessDifficultyMultiplier ?? 1.3) || 1)
+  };
+}
+
+export function normalizeCleanStrikeSettings(value = {}) {
+  return {
+    maximumCharges: Math.max(1, toInteger(value?.maximumCharges ?? 1)),
+    rechargeSeconds: Math.max(1, toInteger(value?.rechargeSeconds ?? 6)),
+    hitChanceThreshold: Math.max(0, Math.min(100, Number(value?.hitChanceThreshold ?? 90) || 0)),
+    penetrationBonus: toInteger(value?.penetrationBonus ?? 20),
+    weaponConditionLossPercent: Math.max(0, Math.min(100, Number(value?.weaponConditionLossPercent ?? 50) || 0)),
+    targetEquipmentDamagePercent: Math.max(0, Number(value?.targetEquipmentDamagePercent ?? 25) || 0),
+    actionPointRestore: Math.max(0, toInteger(value?.actionPointRestore ?? 1))
+  };
+}
+
+export function normalizeIdealStrikeSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 80)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
+    guaranteedHitChanceThreshold: Math.max(0, Math.min(100, Number(value?.guaranteedHitChanceThreshold ?? 10) || 0)),
+    activeResistanceIgnorePercent: Math.max(0, Math.min(100, Number(value?.activeResistanceIgnorePercent ?? 100) || 0)),
+    killFollowUp: value?.killFollowUp !== false
   };
 }
 

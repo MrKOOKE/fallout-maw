@@ -66,8 +66,5 @@ export function getPreviewItemValidationOptions(model, options = {}) {
   const item = model.documentName === "Item" ? model : model.parent;
   if (!isInitializingValidatedPreviewItem(item)
     || model !== item && model._source !== item._source.system) return options;
-  // #region codex-runtime-debug H6a verify reuse in the actual preview construction
-  globalThis.__falloutMawGameplayProbe?.count(model === item ? "preview.item.fieldsAlreadyValidated" : "preview.model.fieldsAlreadyValidated", "H6a");
-  // #endregion codex-runtime-debug
   return { ...options, fields: false };
 }

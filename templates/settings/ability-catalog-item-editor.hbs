@@ -580,6 +580,18 @@
       </div></div>
     </div>
     {{/if}}
+    {{#if fixedSlaughterSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Резня</h3>
+      <div class="fallout-maw-fixed-settings"><div class="fallout-maw-fixed-settings-row">
+        <label><span>Стоимость активации, энергия</span><input type="number" data-field="fixed.slaughter.activationEnergyCost" value="{{fixedSlaughterSettings.activationEnergyCost}}" min="0" step="1"></label>
+        <label><span>Перегрузка, энергия</span><input type="number" data-field="fixed.slaughter.overloadEnergyCost" value="{{fixedSlaughterSettings.overloadEnergyCost}}" min="0" step="1"></label>
+        <label><span>Длительность перегрузки, сек.</span><input type="number" data-field="fixed.slaughter.overloadDurationSeconds" value="{{fixedSlaughterSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        <label><span>Бонус урона, %</span><input type="number" data-field="fixed.slaughter.damagePercentBonus" value="{{fixedSlaughterSettings.damagePercentBonus}}" step="1"></label>
+        <label><span>Ожидание после атаки, сек.</span><input type="number" data-field="fixed.slaughter.attackWaitDurationSeconds" value="{{fixedSlaughterSettings.attackWaitDurationSeconds}}" min="0" step="1"></label>
+      </div></div>
+    </div>
+    {{/if}}
     {{#if fixedHawkEyePiercingSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Соколиный глаз II</h3>
@@ -832,36 +844,57 @@
     {{/if}}
     {{#if fixedWhirlwindSettings}}
     <div class="fallout-maw-ability-subsection">
-      <h3>Настройки: Вихрь</h3>
+      <h3>Настройки: {{fixedWhirlwindSettings.label}}</h3>
       <div class="fallout-maw-fixed-settings">
         <div class="fallout-maw-fixed-settings-row">
           <strong>Активация</strong>
           <label>
             <span>Расход энергии</span>
-            <input type="number" data-field="fixed.whirlwind.energyCost" value="{{fixedWhirlwindSettings.energyCost}}" min="0" step="1">
+            <input type="number" data-field="fixed.{{fixedWhirlwindSettings.fixedKey}}.energyCost" value="{{fixedWhirlwindSettings.energyCost}}" min="0" step="1">
           </label>
           <label>
             <span>Изменение точности</span>
-            <input type="number" data-field="fixed.whirlwind.accuracyModifier" value="{{fixedWhirlwindSettings.accuracyModifier}}" step="1">
+            <input type="number" data-field="fixed.{{fixedWhirlwindSettings.fixedKey}}.accuracyModifier" value="{{fixedWhirlwindSettings.accuracyModifier}}" step="1">
           </label>
         </div>
         <div class="fallout-maw-fixed-settings-row">
           <strong>Перегрузка</strong>
           <label>
             <span>Доп. расход энергии</span>
-            <input type="number" data-field="fixed.whirlwind.overloadEnergyCost" value="{{fixedWhirlwindSettings.overloadEnergyCost}}" min="0" step="1">
+            <input type="number" data-field="fixed.{{fixedWhirlwindSettings.fixedKey}}.overloadEnergyCost" value="{{fixedWhirlwindSettings.overloadEnergyCost}}" min="0" step="1">
           </label>
           <label>
             <span>Длительность</span>
             <div class="fallout-maw-split-number-field-control">
-              <input type="number" data-field="fixed.whirlwind.overloadDurationAmount" value="{{fixedWhirlwindSettings.overloadDurationAmount}}" min="0" step="1">
-              <select data-field="fixed.whirlwind.overloadDurationUnit">
+              <input type="number" data-field="fixed.{{fixedWhirlwindSettings.fixedKey}}.overloadDurationAmount" value="{{fixedWhirlwindSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.{{fixedWhirlwindSettings.fixedKey}}.overloadDurationUnit">
                 {{#each fixedWhirlwindSettings.overloadDurationUnitChoices}}
                 <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                 {{/each}}
               </select>
             </div>
           </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedCrowdCrusherSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Сокрушитель толп</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Заряды</strong>
+          <label><span>Максимум</span><input type="number" data-field="fixed.crowdCrusher.maximumCharges" value="{{fixedCrowdCrusherSettings.maximumCharges}}" min="1" step="1"></label>
+          <label><span>Стоимость активации</span><input type="number" data-field="fixed.crowdCrusher.activationCharges" value="{{fixedCrowdCrusherSettings.activationCharges}}" min="1" step="1"></label>
+          <label><span>Целей для получения заряда</span><input type="number" data-field="fixed.crowdCrusher.qualifyingTargets" value="{{fixedCrowdCrusherSettings.qualifyingTargets}}" min="1" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активный эффект</strong>
+          <label><span>Длительность, сек.</span><input type="number" data-field="fixed.crowdCrusher.durationSeconds" value="{{fixedCrowdCrusherSettings.durationSeconds}}" min="1" step="1"></label>
+          <label><span>Бонус ОП</span><input type="number" data-field="fixed.crowdCrusher.movementPointBonus" value="{{fixedCrowdCrusherSettings.movementPointBonus}}" step="1"></label>
+          <label><span>Одна часть тела на пути</span><input type="checkbox" data-field="fixed.crowdCrusher.inheritAimedLimbOnPath" {{#if fixedCrowdCrusherSettings.inheritAimedLimbOnPath}}checked{{/if}}></label>
+          <label><span>Все цели конусной атаки</span><input type="checkbox" data-field="fixed.crowdCrusher.hitAllConeTargets" {{#if fixedCrowdCrusherSettings.hitAllConeTargets}}checked{{/if}}></label>
+          <label><span>Доп. атака при нескольких целях</span><input type="checkbox" data-field="fixed.crowdCrusher.extraAttackWhenMultipleTargets" {{#if fixedCrowdCrusherSettings.extraAttackWhenMultipleTargets}}checked{{/if}}></label>
         </div>
       </div>
     </div>
@@ -1054,30 +1087,30 @@
     {{/if}}
     {{#if fixedLungeSettings}}
     <div class="fallout-maw-ability-subsection">
-      <h3>Настройки: Выпад</h3>
+      <h3>Настройки: {{fixedLungeSettings.label}}</h3>
       <div class="fallout-maw-fixed-settings">
         <div class="fallout-maw-fixed-settings-row">
           <strong>Активация</strong>
           <label>
             <span>Расход энергии</span>
-            <input type="number" data-field="fixed.lunge.energyCost" value="{{fixedLungeSettings.energyCost}}" min="0" step="1">
+            <input type="number" data-field="fixed.{{fixedLungeSettings.fixedKey}}.energyCost" value="{{fixedLungeSettings.energyCost}}" min="0" step="1">
           </label>
           <label>
             <span>Дальность, клетки</span>
-            <input type="number" data-field="fixed.lunge.maxCells" value="{{fixedLungeSettings.maxCells}}" min="1" step="1">
+            <input type="number" data-field="fixed.{{fixedLungeSettings.fixedKey}}.maxCells" value="{{fixedLungeSettings.maxCells}}" min="1" step="1">
           </label>
         </div>
         <div class="fallout-maw-fixed-settings-row">
           <strong>Перегрузка</strong>
           <label>
             <span>Доп. расход энергии</span>
-            <input type="number" data-field="fixed.lunge.overloadEnergyCost" value="{{fixedLungeSettings.overloadEnergyCost}}" min="0" step="1">
+            <input type="number" data-field="fixed.{{fixedLungeSettings.fixedKey}}.overloadEnergyCost" value="{{fixedLungeSettings.overloadEnergyCost}}" min="0" step="1">
           </label>
           <label>
             <span>Длительность</span>
             <div class="fallout-maw-split-number-field-control">
-              <input type="number" data-field="fixed.lunge.overloadDurationAmount" value="{{fixedLungeSettings.overloadDurationAmount}}" min="0" step="1">
-              <select data-field="fixed.lunge.overloadDurationUnit">
+              <input type="number" data-field="fixed.{{fixedLungeSettings.fixedKey}}.overloadDurationAmount" value="{{fixedLungeSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.{{fixedLungeSettings.fixedKey}}.overloadDurationUnit">
                 {{#each fixedLungeSettings.overloadDurationUnitChoices}}
                 <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                 {{/each}}
@@ -1088,23 +1121,32 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedDeepPenetrationSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: {{fixedDeepPenetrationSettings.label}}</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активное состояние</strong>
+          <label><span>Расход энергии за атаку</span><input type="number" data-field="fixed.{{fixedDeepPenetrationSettings.fixedKey}}.energyCost" value="{{fixedDeepPenetrationSettings.energyCost}}" min="0" step="1"></label>
+          <label><span>Предел конвертации, %</span><input type="number" data-field="fixed.{{fixedDeepPenetrationSettings.fixedKey}}.conversionLimitPercent" value="{{fixedDeepPenetrationSettings.conversionLimitPercent}}" min="0" max="100" step="1"></label>
+          <label><span>Навык оружия</span><select data-field="fixed.{{fixedDeepPenetrationSettings.fixedKey}}.requiredSkillKey">{{#each fixedDeepPenetrationSettings.skillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedDoubleAttackSettings}}
     <div class="fallout-maw-ability-subsection">
-      <h3>Настройки: Двоечка</h3>
+      <h3>Настройки: {{fixedDoubleAttackSettings.label}}</h3>
       <div class="fallout-maw-fixed-settings">
         <div class="fallout-maw-fixed-settings-row">
           <strong>Активное состояние</strong>
           <label>
             <span>Расход энергии за дублирование</span>
-            <input type="number" data-field="fixed.doubleAttack.energyCost" value="{{fixedDoubleAttackSettings.energyCost}}" min="0" step="1">
-          </label>
-          <label>
-            <span>Дополнительные атаки</span>
-            <input type="number" data-field="fixed.doubleAttack.duplicateCount" value="{{fixedDoubleAttackSettings.duplicateCount}}" min="1" step="1">
+            <input type="number" data-field="fixed.{{fixedDoubleAttackSettings.fixedKey}}.energyCost" value="{{fixedDoubleAttackSettings.energyCost}}" min="0" step="1">
           </label>
           <label>
             <span>Требуемый навык оружия</span>
-            <select data-field="fixed.doubleAttack.requiredSkillKey">
+            <select data-field="fixed.{{fixedDoubleAttackSettings.fixedKey}}.requiredSkillKey">
               {{#each fixedDoubleAttackSettings.skillChoices}}
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
               {{/each}}
@@ -1143,6 +1185,63 @@
             <span>Множитель расхода состояния</span>
             <input type="number" data-field="fixed.fullForce.conditionCostMultiplier" value="{{fixedFullForceSettings.conditionCostMultiplier}}" min="1" step="1">
           </label>
+          <label><span>Доп. удар за дробную атаку</span><input type="number" data-field="fixed.fullForce.fractionalImpactBonus" value="{{fixedFullForceSettings.fractionalImpactBonus}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedConcussionSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Сострясение</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <label><span>Стоимость активации, энергия</span><input type="number" data-field="fixed.concussion.activationEnergyCost" value="{{fixedConcussionSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" data-field="fixed.concussion.overloadEnergyCost" value="{{fixedConcussionSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, сек.</span><input type="number" data-field="fixed.concussion.overloadDurationSeconds" value="{{fixedConcussionSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+          <label><span>Преимущество</span><input type="number" data-field="fixed.concussion.advantageCount" value="{{fixedConcussionSettings.advantageCount}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <label><span>Навык атаки</span><select data-field="fixed.concussion.sourceSkillKey">{{#each fixedConcussionSettings.sourceSkillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          <label><span>Навык цели</span><select data-field="fixed.concussion.targetSkillKey">{{#each fixedConcussionSettings.targetSkillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          <label><span>Базовая сложность</span><input type="number" data-field="fixed.concussion.difficultyBase" value="{{fixedConcussionSettings.difficultyBase}}" step="1"></label>
+          <label><span>Оглушение обычно, %</span><input type="number" data-field="fixed.concussion.normalStunPercent" value="{{fixedConcussionSettings.normalStunPercent}}" min="0" step="1"></label>
+          <label><span>Оглушение критической части, %</span><input type="number" data-field="fixed.concussion.criticalLimbStunPercent" value="{{fixedConcussionSettings.criticalLimbStunPercent}}" min="0" step="1"></label>
+          <label><span>Оглушение, сек.</span><input type="number" data-field="fixed.concussion.stunDurationSeconds" value="{{fixedConcussionSettings.stunDurationSeconds}}" min="1" step="1"></label>
+          <label><span>Порог урона части, %</span><input type="number" data-field="fixed.concussion.highLimbDamagePercent" value="{{fixedConcussionSettings.highLimbDamagePercent}}" min="0" step="1"></label>
+          <label><span>Множитель сложности при пороге</span><input type="number" data-field="fixed.concussion.highDamageDifficultyMultiplier" value="{{fixedConcussionSettings.highDamageDifficultyMultiplier}}" min="1" step="0.1"></label>
+          <label><span>Множитель сложности потери сознания</span><input type="number" data-field="fixed.concussion.unconsciousnessDifficultyMultiplier" value="{{fixedConcussionSettings.unconsciousnessDifficultyMultiplier}}" min="1" step="0.1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedCleanStrikeSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Чистый удар</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Пассивная часть</strong>
+          <label><span>Максимум зарядов</span><input type="number" data-field="fixed.cleanStrike.maximumCharges" value="{{fixedCleanStrikeSettings.maximumCharges}}" min="1" step="1"></label>
+          <label><span>Восстановление заряда, сек.</span><input type="number" data-field="fixed.cleanStrike.rechargeSeconds" value="{{fixedCleanStrikeSettings.rechargeSeconds}}" min="1" step="1"></label>
+          <label><span>Порог шанса попадания, %</span><input type="number" data-field="fixed.cleanStrike.hitChanceThreshold" value="{{fixedCleanStrikeSettings.hitChanceThreshold}}" min="0" max="100" step="1"></label>
+          <label><span>Пробивание</span><input type="number" data-field="fixed.cleanStrike.penetrationBonus" value="{{fixedCleanStrikeSettings.penetrationBonus}}" step="1"></label>
+          <label><span>Снижение износа оружия, %</span><input type="number" data-field="fixed.cleanStrike.weaponConditionLossPercent" value="{{fixedCleanStrikeSettings.weaponConditionLossPercent}}" min="0" max="100" step="1"></label>
+          <label><span>Урон снаряжению цели, %</span><input type="number" data-field="fixed.cleanStrike.targetEquipmentDamagePercent" value="{{fixedCleanStrikeSettings.targetEquipmentDamagePercent}}" min="0" step="1"></label>
+          <label><span>Восстановление ОД</span><input type="number" data-field="fixed.cleanStrike.actionPointRestore" value="{{fixedCleanStrikeSettings.actionPointRestore}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedIdealStrikeSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Идеальный удар</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <label><span>Стоимость, энергия</span><input type="number" data-field="fixed.idealStrike.activationEnergyCost" value="{{fixedIdealStrikeSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" data-field="fixed.idealStrike.overloadEnergyCost" value="{{fixedIdealStrikeSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, сек.</span><input type="number" data-field="fixed.idealStrike.overloadDurationSeconds" value="{{fixedIdealStrikeSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+          <label><span>Гарантия при шансе выше, %</span><input type="number" data-field="fixed.idealStrike.guaranteedHitChanceThreshold" value="{{fixedIdealStrikeSettings.guaranteedHitChanceThreshold}}" min="0" max="100" step="1"></label>
+          <label><span>Игнорирование сопротивления, %</span><input type="number" data-field="fixed.idealStrike.activeResistanceIgnorePercent" value="{{fixedIdealStrikeSettings.activeResistanceIgnorePercent}}" min="0" max="100" step="1"></label>
+          <label><span>Новая бесплатная атака после вырубания/убийства</span><input type="checkbox" data-field="fixed.idealStrike.killFollowUp" {{#if fixedIdealStrikeSettings.killFollowUp}}checked{{/if}}></label>
         </div>
       </div>
     </div>
@@ -1908,6 +2007,19 @@
     </div>
     {{/if}}
 
+    {{#if fixedParrySettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Парирование</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Реакция до атаки</strong>
+          <label><span>Расход энергии</span><input type="number" data-field="fixed.parry.reactionEnergyCost" value="{{fixedParrySettings.reactionEnergyCost}}" min="0" step="1"></label>
+          <label><span>Требуемый навык оружия</span><select data-field="fixed.parry.requiredSkillKey">{{#each fixedParrySettings.skillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+
     {{#if fixedOversightSettings}}
       <fieldset class="fallout-maw-ability-fixed-settings">
         <legend>Надзор</legend>
@@ -1958,26 +2070,26 @@
     {{/if}}
     {{#if fixedWhereAreYouGoingSettings}}
     <div class="fallout-maw-ability-subsection">
-      <h3>Настройки: Ты куда собрался?</h3>
+      <h3>Настройки: {{fixedWhereAreYouGoingSettings.label}}</h3>
       <div class="fallout-maw-fixed-settings">
         <div class="fallout-maw-fixed-settings-row">
           <strong>Реакция</strong>
           <label>
             <span>Расход энергии</span>
-            <input type="number" data-field="fixed.whereAreYouGoing.reactionEnergyCost" value="{{fixedWhereAreYouGoingSettings.reactionEnergyCost}}" min="0" step="1">
+            <input type="number" data-field="fixed.{{fixedWhereAreYouGoingSettings.fixedKey}}.reactionEnergyCost" value="{{fixedWhereAreYouGoingSettings.reactionEnergyCost}}" min="0" step="1">
           </label>
         </div>
         <div class="fallout-maw-fixed-settings-row">
           <strong>Перегрузка</strong>
           <label>
             <span>Доп. расход энергии</span>
-            <input type="number" data-field="fixed.whereAreYouGoing.reactionOverloadEnergyCost" value="{{fixedWhereAreYouGoingSettings.reactionOverloadEnergyCost}}" min="0" step="1">
+            <input type="number" data-field="fixed.{{fixedWhereAreYouGoingSettings.fixedKey}}.reactionOverloadEnergyCost" value="{{fixedWhereAreYouGoingSettings.reactionOverloadEnergyCost}}" min="0" step="1">
           </label>
           <label>
             <span>Длительность</span>
             <div class="fallout-maw-split-number-field-control">
-              <input type="number" data-field="fixed.whereAreYouGoing.reactionOverloadDurationAmount" value="{{fixedWhereAreYouGoingSettings.reactionOverloadDurationAmount}}" min="0" step="1">
-              <select data-field="fixed.whereAreYouGoing.reactionOverloadDurationUnit">
+              <input type="number" data-field="fixed.{{fixedWhereAreYouGoingSettings.fixedKey}}.reactionOverloadDurationAmount" value="{{fixedWhereAreYouGoingSettings.reactionOverloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.{{fixedWhereAreYouGoingSettings.fixedKey}}.reactionOverloadDurationUnit">
                 {{#each fixedWhereAreYouGoingSettings.reactionOverloadDurationUnitChoices}}
                 <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                 {{/each}}

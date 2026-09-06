@@ -51,10 +51,6 @@ export function buildActorFormulaData(actor = null, { stage = "prepared", cache 
   const cached = cache ? getCachedActorFormulaData(actor, normalizedStage) : null;
   if (cached) return cached;
 
-  // #region codex-runtime-debug H9a temporary formula context count
-  globalThis.__falloutMawGameplayProbe?.count?.("actor.formulaData.rebuild", "H9a");
-  // #endregion
-
   const {
     characteristicSettings,
     skillSettings,

@@ -33,9 +33,6 @@ export function createTokenSourceSerializer(NativeToken) {
     const data = foundry.utils.deepClone({ ...document._source, delta: null });
     document.constructor.shimData(data);
     data.delta = delta.toObject(true);
-    // #region codex-runtime-debug H7a verify the single delta copy in user gameplay
-    globalThis.__falloutMawGameplayProbe?.count("token.sourceSingleCopy", "H7a");
-    // #endregion codex-runtime-debug
     return data;
   };
 }

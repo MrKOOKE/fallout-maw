@@ -50,7 +50,7 @@ export function getUnchangedItemSystemField(item, field, supportedModels) {
             : item.parent?.items?._initialized !== false ? "outside-item-collection-initialization"
               : getModelMismatch(item, model, modelClass)
                 || (!cached || cached.model !== model ? "no-validated-snapshot"
-                  : !compareValidatedSource(value, cached.source, item) ? "changed-snapshot-source" : null);
+                  : !sameSourceData(value, cached.source) ? "changed-snapshot-source" : null);
       if (!reason) {
         try {
           model.reset();
@@ -81,9 +81,6 @@ export function getUnchangedItemSystemField(item, field, supportedModels) {
       // A transient visual preview doesn't need a second source copy solely to
       // accelerate a future reset. If it is later reset, the missing certificate
       // takes the native path, validates then caches the source normally.
-      // #region codex-runtime-debug H6a verify preview snapshot deferral
-      if (isInitializingValidatedPreviewItem(item)) globalThis.__falloutMawGameplayProbe?.count("preview.item.snapshotDeferred", "H6a");
-      // #endregion codex-runtime-debug
       return initialized;
     }
   };
@@ -97,14 +94,6 @@ function isNativeSystemField(field) {
     && field.getModelForType === FieldClass.prototype.getModelForType
     && field.persisted === true);
 }
-
-// #region codex-runtime-debug H6b source comparison within remaining Item reset cost
-function compareValidatedSource(value, snapshot, item) {
-  const finish = globalThis.__falloutMawGameplayProbe?.sampledSync?.("item.sourceComparisonSample", "H6b", item.parent);
-  try { return sameSourceData(value, snapshot); }
-  finally { finish?.(); }
-}
-// #endregion codex-runtime-debug
 
 function getModelMismatch(item, model, modelClass) {
   return !model ? "missing-model"

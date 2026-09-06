@@ -80,3 +80,21 @@ test("targeted-attack bridge preserves reaction recursion and delayed-impact gua
   });
   assert.equal(Object.hasOwn(context, "unrelatedGuard"), false);
 });
+
+test("movement reaction bridge preserves the adjacency transition mode", () => {
+  const context = serializeLegacyReactionContext("tokenLeavingAdjacency", {
+    movementId: "movement-approach",
+    moverActorUuid: "Actor.mover",
+    moverTokenUuid: "Scene.scene.Token.mover",
+    reactorTokenUuids: ["Scene.scene.Token.reactor"],
+    triggerMode: "approach"
+  });
+
+  assert.deepEqual(context, {
+    movementId: "movement-approach",
+    moverActorUuid: "Actor.mover",
+    moverTokenUuid: "Scene.scene.Token.mover",
+    triggerMode: "approach",
+    reactorTokenUuids: ["Scene.scene.Token.reactor"]
+  });
+});

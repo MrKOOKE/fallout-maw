@@ -3,7 +3,9 @@ import {
   registerReactionEventSemanticAdapter,
   registerReactionExecutionGuard,
   registerReactionProvider,
-  requestReactionEvent
+  requestReactionEvent,
+  createReactionHubResult as createReactionResult,
+  mergeReactionHubResults as mergeReactionResults
 } from "../combat/reaction-hub.mjs";
 import {
   SYSTEM_EVENT_CATALOG,
@@ -21,7 +23,10 @@ import {
   withSystemEventRoot
 } from "./dispatcher.mjs";
 import { createFoundryEventReactionRuntime } from "./foundry-event-reactions.mjs";
-import { serializeLegacyReactionContext } from "./legacy-reaction-context.mjs";
+import {
+  narrowLegacyReactionContextToTarget,
+  serializeLegacyReactionContext
+} from "./legacy-reaction-context.mjs";
 import {
   configureEventReactionSubscriptionItems,
   eventParticipantHasReactionKey,
@@ -231,7 +236,7 @@ async function buildLegacyReactionOccurrences(eventKey, semanticKey, rawContext)
     : [targetCandidates[0] ?? null];
   const normalizedTargets = targets.length ? targets : [null];
   return normalizedTargets.map((target, index) => {
-    const narrowedContext = narrowLegacyContextToTarget(eventKey, context, target);
+    const narrowedContext = narrowLegacyReactionContextToTarget(eventKey, context, target);
     return {
       context: narrowedContext,
       data: narrowedContext,
@@ -289,20 +294,6 @@ async function resolveTargetParticipants(eventKey, context) {
   return values;
 }
 
-function narrowLegacyContextToTarget(eventKey, context, target) {
-  if (!target) return { ...context };
-  const narrowed = { ...context };
-  if (eventKey === "tokenLeavingAdjacency") {
-    narrowed.reactorTokenUuids = target.tokenUuid ? [target.tokenUuid] : [];
-  } else {
-    if (target.actorUuid) narrowed.targetActorUuid = target.actorUuid;
-    if (target.tokenUuid) narrowed.targetTokenUuid = target.tokenUuid;
-    if (Array.isArray(narrowed.targetActorUuids)) narrowed.targetActorUuids = target.actorUuid ? [target.actorUuid] : [];
-    if (Array.isArray(narrowed.targetTokenUuids)) narrowed.targetTokenUuids = target.tokenUuid ? [target.tokenUuid] : [];
-  }
-  return narrowed;
-}
-
 function consumeReactionExecutionBudget({ context = {}, semanticEvent = null } = {}) {
   const envelope = semanticEvent ?? context.semanticEvent ?? context.envelope ?? null;
   const consumers = reactionBudgetConsumers.get(String(envelope?.rootId ?? ""));
@@ -345,31 +336,6 @@ function controlToReactionResult(control = {}) {
     cancelCurrent: Boolean(control?.current),
     cancelRemaining: Boolean(control?.remaining || control?.root),
     reason: String(control?.reasons?.at?.(-1)?.reason ?? "")
-  });
-}
-
-function createReactionResult(data = {}) {
-  return {
-    handled: Boolean(data.handled),
-    status: String(data.status ?? "declined"),
-    cancelCurrent: Boolean(data.cancelCurrent),
-    cancelRemaining: Boolean(data.cancelRemaining),
-    difficultyBonus: Number.isFinite(Number(data.difficultyBonus)) ? Math.trunc(Number(data.difficultyBonus)) : 0,
-    reason: String(data.reason ?? "")
-  };
-}
-
-function mergeReactionResults(left, right) {
-  const current = createReactionResult(left);
-  const next = createReactionResult(right);
-  const priority = { declined: 0, failed: 1, success: 2 };
-  return createReactionResult({
-    handled: current.handled || next.handled,
-    status: (priority[next.status] ?? 0) > (priority[current.status] ?? 0) ? next.status : current.status,
-    cancelCurrent: current.cancelCurrent || next.cancelCurrent,
-    cancelRemaining: current.cancelRemaining || next.cancelRemaining,
-    difficultyBonus: current.difficultyBonus + next.difficultyBonus,
-    reason: next.reason || current.reason
   });
 }
 
