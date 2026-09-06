@@ -182,6 +182,66 @@ test("remote smoke keeps the zero-trace radial path for an unaffected observer",
   }
 });
 
+test("movement uses the TokenLayer quadtree before exact stealth observer tests", () => {
+  configureStealthRuleSettingsProvider(() => SETTINGS);
+  const hidden = createToken("hidden-broadphase", createActor("Actor.hidden-broadphase", { hidden: true }), {
+    x: 0,
+    y: 0
+  });
+  const near = createToken("observer-near", createActor("Actor.observer-near"), { x: 100, y: 0 });
+  const remote = createToken("observer-remote", createActor("Actor.observer-remote"), { x: 10_000, y: 0 });
+  const tokens = [hidden, near, remote];
+  for (const token of tokens) {
+    token.bounds = { x: token.center.x - 50, y: token.center.y - 50, width: 100, height: 100 };
+  }
+  const scene = { id: "scene", uuid: "Scene.scene", grid: { size: 100, distance: 5 } };
+  for (const token of tokens) token.document.parent = scene;
+  const queryResults = [];
+  globalThis.canvas = {
+    ready: true,
+    scene,
+    dimensions: { maxR: 20_000 },
+    grid: { isGridless: true, size: 100, distance: 5 },
+    tokens: {
+      placeables: tokens,
+      get: id => tokens.find(token => token.id === id),
+      quadtree: {
+        getObjects(rectangle) {
+          const result = new Set(tokens.filter(token => rectangle.overlaps(token.bounds)));
+          queryResults.push(result);
+          return result;
+        }
+      }
+    },
+    environment: { darknessLevel: 0, globalLightSource: { active: false } },
+    effects: {
+      lightSources: new Map(),
+      getDarknessLevel: () => 0,
+      testInsideDarkness: () => false
+    }
+  };
+
+  const destination = movementWaypoint({ x: 100 });
+  const collection = collectStealthMovementInterruptions({
+    tokenDocument: hidden.document,
+    movement: {
+      id: "broadphase-movement",
+      origin: movementWaypoint({ x: 0 }),
+      destination,
+      passed: { waypoints: [destination] },
+      pending: { waypoints: [] }
+    }
+  });
+
+  assert.ok(queryResults.length >= 1);
+  assert.ok(queryResults.every(result => !result.has(remote)));
+  assert.equal(collection.events.length, 1);
+  assert.deepEqual(
+    collection.events[0].checks.map(check => check.observerTokenUuid),
+    [near.document.uuid]
+  );
+});
+
 test("one route sample aggregates simultaneous observer checks without mutating persistent state", () => {
   configureStealthRuleSettingsProvider(() => SETTINGS);
   const hiddenActor = createActor("Actor.hidden", { hidden: true });

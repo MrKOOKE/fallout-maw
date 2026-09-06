@@ -419,6 +419,74 @@ test("coordinator commits only the selected collection and skips cancelled selec
   assert.equal(controlledAtomicCalls.includes("commit"), false);
   assert.equal(controlledAtomicCalls.at(-1), "execute");
 
+  const nativePauseCalls = [];
+  interruptions.registerMovementInterruptionProvider({
+    id: "test-native-paused-route",
+    collect: ({ tokenDocument, movement }) => (
+      tokenDocument.id === "native-paused-route"
+      && movement.id === "movement-native-paused-route"
+    ) ? [{
+      eventId: "native-pause-event",
+      type: "test",
+      routeOrder: 1,
+      waypoint: movementWaypoint({ x: 100 }),
+      remainingWaypoints: [movementWaypoint({ x: 200, checkpoint: true })]
+    }] : [],
+    pauseNativeMovement: true,
+    execute: ({ nativeMovementPaused }) => {
+      nativePauseCalls.push(`execute:${nativeMovementPaused}`);
+      return true;
+    }
+  });
+  let releaseNativePause;
+  const nativePauseReleased = new Promise(resolve => { releaseNativePause = resolve; });
+  const nativePauseToken = makeMovableToken("native-paused-route", {
+    onMove: async ({ token, waypoints, options }) => {
+      nativePauseCalls.push(`move:${waypoints.map(waypoint => waypoint.x).join(",")}:${options.showRuler}`);
+      const interruption = waypoints[0];
+      const chunk = {
+        id: "native-paused-chunk",
+        chain: [],
+        origin: { ...token._source },
+        destination: interruption,
+        passed: { waypoints: [interruption] },
+        pending: { waypoints: waypoints.slice(1) },
+        animation: { ended: Promise.resolve() }
+      };
+      assert.equal(preMoveToken(token, chunk, options), true);
+      Object.assign(token._source, interruption);
+      moveToken(token, chunk, options);
+      await nativePauseReleased;
+      Object.assign(token._source, waypoints.at(-1));
+      return true;
+    }
+  });
+  nativePauseToken.pauseMovement = () => {
+    nativePauseCalls.push("pause");
+    return async () => {
+      nativePauseCalls.push("resume");
+      releaseNativePause();
+      return true;
+    };
+  };
+  nativePauseToken.stopMovement = () => nativePauseCalls.push("stop");
+  const nativePauseDestination = movementWaypoint({ x: 200 });
+  assert.equal(preMoveToken(nativePauseToken, {
+    id: "movement-native-paused-route",
+    origin: { ...nativePauseToken._source },
+    destination: nativePauseDestination,
+    passed: { waypoints: [nativePauseDestination] },
+    showRuler: true
+  }, {}), false);
+  assert.equal((await waitForSystemMovementSettlement(nativePauseToken)).settled, true);
+  assert.deepEqual(nativePauseCalls, [
+    "move:100,200:true",
+    "pause",
+    "execute:true",
+    "resume"
+  ]);
+  assert.equal(nativePauseToken._source.x, 200);
+
   const rejectedCalls = [];
   interruptions.registerMovementInterruptionProvider({
     id: "test-rejected-controlled-move",

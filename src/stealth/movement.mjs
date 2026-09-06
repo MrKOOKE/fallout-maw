@@ -22,6 +22,7 @@ import {
 } from "../canvas/smoke-vision.mjs";
 import {
   createStealthDetectionPointTester,
+  getStealthDetectionCacheStats,
   isPointInsideObserverZone
 } from "./detection.mjs";
 import { isValidStealthObserver } from "./observers.mjs";
@@ -31,7 +32,8 @@ import {
   getTokenCenter,
   isActorStealthed,
   normalizePoint,
-  pixelsToSceneDistance
+  pixelsToSceneDistance,
+  sceneDistanceToPixels
 } from "./rules.mjs";
 
 const STEALTH_DETECTION_PROVIDER_ID = "stealthDetection";
@@ -55,6 +57,7 @@ let rollStealthChecksCallback = null;
 let pauseGameCallback = () => undefined;
 let hasStealthedCanvasTokensCallback = null;
 let providerRegistered = false;
+let movementObserverRangeCache = null;
 
 export function registerStealthMovementProvider({
   rollStealthCheck,
@@ -76,6 +79,7 @@ export function registerStealthMovementProvider({
     buildAtomicMovementUpdate: buildStealthMovementAtomicUpdate,
     hasCommitWork: collection => Boolean(collection?.stateUpdates?.size),
     commitOnInterruption: true,
+    pauseNativeMovement: true,
     execute: executeStealthMovementInterruption
   });
   providerRegistered = true;
@@ -102,7 +106,7 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
 
   const samples = getMovementRouteSamples(tokenDocument, movement);
   if (samples.length < 2) return createEmptyMovementCollection();
-  const pairDescriptors = getMovementStealthPairDescriptors(tokenDocument);
+  const pairDescriptors = getMovementStealthPairDescriptors(tokenDocument, samples, settings);
   if (!pairDescriptors.length) return createEmptyMovementCollection();
   const pointTesters = [];
   const hiddenMovingDescriptors = pairDescriptors.filter(descriptor => descriptor.mode === "hiddenMoving");
@@ -110,7 +114,8 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
   const hiddenObserverBaseRanges = new Map();
   const hiddenSmokeConstraints = new Map();
   for (const descriptor of hiddenMovingDescriptors) {
-    const baseRange = evaluateStealthDetectionRange(descriptor.observerToken.actor, settings);
+    const baseRange = descriptor.preparedBaseRange
+      ?? evaluateStealthDetectionRange(descriptor.observerToken.actor, settings);
     hiddenObserverBaseRanges.set(descriptor, baseRange);
     if (!hasVisionSmoke || !(baseRange > 0)) continue;
     const constraint = getNativeObserverSmokeConstraint(descriptor.observerToken);
@@ -123,7 +128,8 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
     : [];
   const hasObserverMovingDescriptors = pairDescriptors.some(descriptor => descriptor.mode === "observerMoving");
   const movingObserverBaseRange = hasObserverMovingDescriptors
-    ? evaluateStealthDetectionRange(tokenDocument.actor, settings)
+    ? pairDescriptors.find(descriptor => descriptor.mode === "observerMoving")?.preparedBaseRange
+      ?? evaluateStealthDetectionRange(tokenDocument.actor, settings)
     : 0;
   for (const descriptor of pairDescriptors) {
     if (descriptor.mode !== "hiddenMoving") continue;
@@ -712,7 +718,8 @@ async function executeStealthMovementInterruption({
   event,
   options,
   chainRef = null,
-  isCurrent = null
+  isCurrent = null,
+  nativeMovementPaused = false
 } = {}) {
   let revealed = false;
   const checksByActor = new Map();
@@ -747,7 +754,12 @@ async function executeStealthMovementInterruption({
   }
 
   if (typeof isCurrent === "function" ? !isCurrent() : !isTokenAtWaypoint(tokenDocument, event.waypoint)) return false;
-  return resumeStealthInterruptedMovement(tokenDocument, movement, event, options, chainRef);
+  // Foundry's native paused movement already owns the pending route and its
+  // ruler. Returning true releases that same continuation instead of creating
+  // a second Token.move operation for the remaining waypoints.
+  if (nativeMovementPaused) return true;
+  const resumed = await resumeStealthInterruptedMovement(tokenDocument, movement, event, options, chainRef);
+  return resumed;
 }
 
 async function resumeStealthInterruptedMovement(
@@ -788,27 +800,55 @@ export function getOriginalMovementWaypoints(movement = {}) {
   return result;
 }
 
-function getMovementStealthPairDescriptors(tokenDocument) {
+function getMovementStealthPairDescriptors(tokenDocument, routeSamples = [], settings = getRuntimeStealthSettings()) {
   const movingToken = tokenDocument?.object;
   if (!movingToken?.actor) return [];
+  const routeBounds = getMovementRouteBounds(routeSamples);
+  if (!routeBounds) return [];
   const descriptors = [];
+  const gridMarginPixels = Math.max(1, Number(globalThis.canvas?.grid?.size) || 100);
 
   if (isActorStealthed(movingToken.actor)) {
-    for (const observerToken of globalThis.canvas?.tokens?.placeables ?? []) {
+    const maximumRangePixels = getMaximumMovementObserverRangePixels(settings);
+    const observerCandidates = maximumRangePixels > 0
+      ? queryMovementRouteTokens(routeBounds, maximumRangePixels + gridMarginPixels)
+      : [];
+    for (const observerToken of observerCandidates) {
       if (!isValidStealthObserver(movingToken, observerToken)) continue;
-      descriptors.push(createMovementPairDescriptor("hiddenMoving", movingToken, observerToken));
+      const preparedBaseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+      if (!(preparedBaseRange > 0)) continue;
+      const observerPadding = sceneDistanceToPixels(preparedBaseRange) + gridMarginPixels;
+      if (!isTokenCenterWithinMovementBounds(observerToken, routeBounds, observerPadding)) continue;
+      descriptors.push(createMovementPairDescriptor(
+        "hiddenMoving",
+        movingToken,
+        observerToken,
+        preparedBaseRange
+      ));
     }
   }
 
-  for (const hiddenToken of globalThis.canvas?.tokens?.placeables ?? []) {
-    if (hiddenToken.id === movingToken.id || !isActorStealthed(hiddenToken.actor)) continue;
-    if (!isValidStealthObserver(hiddenToken, movingToken)) continue;
-    descriptors.push(createMovementPairDescriptor("observerMoving", hiddenToken, movingToken));
+  const movingObserverBaseRange = evaluateStealthDetectionRange(movingToken.actor, settings);
+  if (movingObserverBaseRange > 0) {
+    const hiddenCandidates = queryMovementRouteTokens(
+      routeBounds,
+      sceneDistanceToPixels(movingObserverBaseRange) + gridMarginPixels
+    );
+    for (const hiddenToken of hiddenCandidates) {
+      if (hiddenToken.id === movingToken.id || !isActorStealthed(hiddenToken.actor)) continue;
+      if (!isValidStealthObserver(hiddenToken, movingToken)) continue;
+      descriptors.push(createMovementPairDescriptor(
+        "observerMoving",
+        hiddenToken,
+        movingToken,
+        movingObserverBaseRange
+      ));
+    }
   }
   return descriptors;
 }
 
-function createMovementPairDescriptor(mode, hiddenToken, observerToken) {
+function createMovementPairDescriptor(mode, hiddenToken, observerToken, preparedBaseRange = null) {
   const sessionId = getStealthSessionId(hiddenToken?.actor);
   return {
     mode,
@@ -823,8 +863,114 @@ function createMovementPairDescriptor(mode, hiddenToken, observerToken) {
     ].join(":"),
     hiddenPoint: mode === "observerMoving" ? getTokenCenter(hiddenToken) : null,
     observerOrigin: mode === "hiddenMoving" ? getTokenCenter(observerToken) : null,
+    preparedBaseRange,
     pointTester: null
   };
+}
+
+/**
+ * Use Foundry's TokenLayer quadtree as a conservative broad phase. The exact
+ * point tester remains authoritative; this only prevents remote tokens whose
+ * detection radius cannot touch the route from entering that expensive pass.
+ */
+function queryMovementRouteTokens(routeBounds, paddingPixels) {
+  const tokenLayer = globalThis.canvas?.tokens;
+  const placeables = tokenLayer?.placeables ?? [];
+  const queryBounds = createMovementQueryRectangle(routeBounds, paddingPixels);
+  const quadtree = tokenLayer?.quadtree;
+  if (typeof quadtree?.getObjects !== "function") return placeables;
+  try {
+    const candidates = quadtree.getObjects(queryBounds);
+    return candidates && typeof candidates[Symbol.iterator] === "function"
+      ? [...candidates]
+      : placeables;
+  } catch (_error) {
+    // Compatibility fallback for a third-party TokenLayer without Foundry's
+    // native Quadtree rectangle contract. Exact filtering still follows.
+    return placeables;
+  }
+}
+
+function getMovementRouteBounds(routeSamples = []) {
+  let minimumX = Infinity;
+  let minimumY = Infinity;
+  let maximumX = -Infinity;
+  let maximumY = -Infinity;
+  for (const sample of routeSamples) {
+    const point = sample?.point;
+    if (!point) continue;
+    const x = Number(point.x);
+    const y = Number(point.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    minimumX = Math.min(minimumX, x);
+    minimumY = Math.min(minimumY, y);
+    maximumX = Math.max(maximumX, x);
+    maximumY = Math.max(maximumY, y);
+  }
+  if (!Number.isFinite(minimumX) || !Number.isFinite(minimumY)) return null;
+  return { minimumX, minimumY, maximumX, maximumY };
+}
+
+function createMovementQueryRectangle(routeBounds, paddingPixels) {
+  const padding = Math.max(0, Number(paddingPixels) || 0);
+  const x = routeBounds.minimumX - padding;
+  const y = routeBounds.minimumY - padding;
+  const width = Math.max(1, routeBounds.maximumX - routeBounds.minimumX + (padding * 2));
+  const height = Math.max(1, routeBounds.maximumY - routeBounds.minimumY + (padding * 2));
+  const Rectangle = globalThis.PIXI?.Rectangle;
+  if (typeof Rectangle === "function") return new Rectangle(x, y, width, height);
+  return {
+    x,
+    y,
+    width,
+    height,
+    overlaps(other = {}) {
+      const otherRight = Number(other.x) + Number(other.width);
+      const otherBottom = Number(other.y) + Number(other.height);
+      return x < otherRight
+        && x + width > Number(other.x)
+        && y < otherBottom
+        && y + height > Number(other.y);
+    }
+  };
+}
+
+function isTokenCenterWithinMovementBounds(token, routeBounds, paddingPixels) {
+  const center = getTokenCenter(token);
+  const padding = Math.max(0, Number(paddingPixels) || 0);
+  return center.x >= routeBounds.minimumX - padding
+    && center.x <= routeBounds.maximumX + padding
+    && center.y >= routeBounds.minimumY - padding
+    && center.y <= routeBounds.maximumY + padding;
+}
+
+function getMaximumMovementObserverRangePixels(settings) {
+  const activeCanvas = globalThis.canvas;
+  const tokens = activeCanvas?.tokens?.placeables ?? [];
+  const revision = Number(getStealthDetectionCacheStats().revision) || 0;
+  const sceneId = activeCanvas?.scene?.id ?? "";
+  if (
+    movementObserverRangeCache?.revision === revision
+    && movementObserverRangeCache.sceneId === sceneId
+    && movementObserverRangeCache.settings === settings
+    && movementObserverRangeCache.tokenCollection === tokens
+    && movementObserverRangeCache.tokenCount === tokens.length
+  ) return movementObserverRangeCache.maximumPixels;
+
+  let maximumRange = 0;
+  for (const token of tokens) {
+    if (!token?.actor) continue;
+    maximumRange = Math.max(maximumRange, evaluateStealthDetectionRange(token.actor, settings));
+  }
+  movementObserverRangeCache = {
+    revision,
+    sceneId,
+    settings,
+    tokenCollection: tokens,
+    tokenCount: tokens.length,
+    maximumPixels: sceneDistanceToPixels(maximumRange)
+  };
+  return movementObserverRangeCache.maximumPixels;
 }
 
 function testMovementDescriptorPoint(descriptor, movingPoint, settings, observerMovingTester = null) {

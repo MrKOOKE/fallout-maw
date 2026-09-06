@@ -4,7 +4,6 @@ import { CalManager, SC } from "../index";
 import { GameSettings } from "./game-settings";
 import SCController from "../s-c-controller";
 import { GetThemeList } from "../utilities/visual";
-import MainAppConfigWrapper from "../applications/main-app-config-wrapper";
 
 export default class GameSettingsRegistration {
     /**
@@ -18,7 +17,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Theme.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Theme.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: String,
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -38,7 +37,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.OpenOnLoad.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.OpenOnLoad.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Boolean,
             default: true
         });
@@ -46,7 +45,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.OpenCompact.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.OpenCompact.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Boolean,
             default: false
         });
@@ -54,7 +53,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.RememberPosition.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.RememberPosition.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Boolean,
             default: true
         });
@@ -62,7 +61,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.RememberCompactPosition.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.RememberCompactPosition.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Boolean,
             default: false
         });
@@ -86,7 +85,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.NoteReminderNotification.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.NoteReminderNotification.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: String,
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -100,7 +99,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.NoteListOpenDirection.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.NoteListOpenDirection.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: String,
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -116,7 +115,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.AlwaysShowNoteList.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.AlwaysShowNoteList.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Boolean,
             default: false,
             onChange: SCController.AlwaysShowNoteListChange.bind(SCController)
@@ -125,7 +124,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.PersistentOpen.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.PersistentOpen.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Boolean,
             default: false,
             onChange: SC.PersistenceChange.bind(SC)
@@ -134,7 +133,7 @@ export default class GameSettingsRegistration {
             name: "FALLOUTMAW.Calendar.Configuration.Client.CompactViewScale.Title",
             hint: "FALLOUTMAW.Calendar.Configuration.Client.CompactViewScale.Description",
             scope: "client",
-            config: true,
+            config: false,
             type: Number,
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -148,21 +147,14 @@ export default class GameSettingsRegistration {
         });
 
         // -------------------
-        // Configuration Button
+        // Calendar settings button. All public calendar options live in this
+        // application instead of cluttering Foundry's system settings list.
         // -------------------
-        game.settings?.registerMenu(ModuleName, SettingNames.CalendarMainApp, {
-            name: "",
-            label: "FALLOUTMAW.Calendar.Title",
+        game.settings?.registerMenu(ModuleName, SettingNames.CalendarConfigurationMenu, {
+            name: "FALLOUTMAW.Calendar.Title",
+            label: "FALLOUTMAW.Calendar.Open",
             hint: "",
             icon: "fa fa-calendar",
-            restricted: false,
-            type: MainAppConfigWrapper
-        });
-        game.settings?.registerMenu(ModuleName, SettingNames.CalendarConfigurationMenu, {
-            name: "",
-            label: "FALLOUTMAW.Calendar.Configuration.Title",
-            hint: "",
-            icon: "fa fa-cog",
             restricted: false,
             type: ConfigurationApp
         });

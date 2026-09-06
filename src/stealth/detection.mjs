@@ -776,6 +776,7 @@ export function invalidateStealthDetectionObserver(observerToken) {
 
 export function getStealthDetectionCacheStats() {
   return Object.freeze({
+    revision: detectionCacheRevision,
     zones: detectionZoneCache.size,
     points: detectionPointCache.size,
     zoneCells: detectionZoneCachedCells,

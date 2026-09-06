@@ -1,6 +1,10 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { trackSystemMovementOperation } from "./movement-settlement.mjs";
+import {
+  INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+  withMovementResumeContext
+} from "./movement-resume-context.mjs";
 
 export const CONTROLLED_MOVEMENT_INTERRUPTION_OPTION = "falloutMawControlledMovementInterruption";
 export const SYSTEM_RELOCATION_OPTION = "falloutMawSystemRelocation";
@@ -462,6 +466,8 @@ function setPropertyPath(target, path, value) {
 function onMoveToken(tokenDocument, movement, options = {}) {
   if (options?.[SYSTEM_RELOCATION_OPTION]) return;
   const tokenKey = getTokenDocumentKey(tokenDocument);
+  const controlledContext = getControlledMovementContext(tokenDocument, movement, options);
+  pauseControlledMovementAtWaypoint(tokenDocument, movement, options, controlledContext);
   const pending = tokenKey ? pendingAcceptedCollections.get(tokenKey) : null;
   const committedProviderIds = new Set();
   if (pending && pending.movementId === String(movement?.id ?? "")) {
@@ -569,6 +575,56 @@ async function runMovementInterruption(
           });
         }
       };
+      if (
+        event.moveToWaypoint !== false
+        && provider?.pauseNativeMovement === true
+        && Array.isArray(event.remainingWaypoints)
+        && event.remainingWaypoints.length > 0
+        && typeof tokenDocument.pauseMovement === "function"
+      ) {
+        const nativeResult = await moveTokenThroughNativeInterruption(
+          tokenDocument,
+          event,
+          movement,
+          options,
+          scope.chainRef,
+          {
+            atomicProviders,
+            appliedProviderIds,
+            failedProviderIds,
+            pauseHandler: async () => {
+              if (!isMovementEpochCurrent(tokenDocument, movementEpoch)) return false;
+              await commit();
+              await scope.emit("fallout-maw.movement.token.interrupted", {
+                data: createMovementInterruptionData(movement, event),
+                outcome: { interrupted: true, providerId: event.providerId }
+              }, {
+                occurrenceKey: `${key}:interrupted`,
+                participants
+              });
+
+              if (!isMovementEpochCurrent(tokenDocument, movementEpoch)) return false;
+              const result = await provider.execute({
+                tokenDocument,
+                movement,
+                event,
+                options,
+                chainRef: scope.chainRef,
+                collection: event._collection,
+                commit,
+                nativeMovementPaused: true,
+                isCurrent: () => (
+                  isMovementEpochCurrent(tokenDocument, movementEpoch)
+                  && isAtDestination(tokenDocument, event.waypoint)
+                )
+              });
+              return result !== false;
+            }
+          }
+        );
+        if (nativeResult.handled) return;
+        if (!isMovementEpochCurrent(tokenDocument, movementEpoch)) return;
+      }
       if (event.moveToWaypoint !== false) {
         const reached = await moveTokenToInterruption(tokenDocument, event, movement, options, scope.chainRef, {
           atomicProviders,
@@ -668,7 +724,9 @@ function getControlledMovementContext(tokenDocument, movement = {}, operation = 
   let context = null;
   for (let index = contexts.length - 1; index >= 0; index -= 1) {
     const candidate = contexts[index];
-    if (chain.some(movementId => candidate.movementIds.has(String(movementId)))) {
+    const chained = chain.some(movementId => candidate.movementIds.has(String(movementId)));
+    if (chained && candidate.releaseContinuations) continue;
+    if (chained) {
       context = candidate;
       break;
     }
@@ -693,11 +751,28 @@ async function performControlledMovement(
   tokenDocument,
   waypoints,
   options = {},
-  { atomicProviders = [], appliedProviderIds = new Set(), failedProviderIds = new Set() } = {}
+  {
+    atomicProviders = [],
+    appliedProviderIds = new Set(),
+    failedProviderIds = new Set(),
+    pauseWaypoint = null,
+    pauseHandler = null,
+    pauseState = null
+  } = {}
 ) {
   const key = getTokenDocumentKey(tokenDocument);
   const contexts = controlledMovementContexts.get(key) ?? [];
-  const context = { movementIds: new Set(), atomicProviders, appliedProviderIds, failedProviderIds };
+  const context = {
+    movementIds: new Set(),
+    atomicProviders,
+    appliedProviderIds,
+    failedProviderIds,
+    pauseWaypoint,
+    pauseHandler,
+    pauseState,
+    pauseTriggered: false,
+    releaseContinuations: false
+  };
   contexts.push(context);
   controlledMovementContexts.set(key, contexts);
   try {
@@ -710,6 +785,58 @@ async function performControlledMovement(
     if (index >= 0) contexts.splice(index, 1);
     if (!contexts.length && controlledMovementContexts.get(key) === contexts) controlledMovementContexts.delete(key);
   }
+}
+
+function pauseControlledMovementAtWaypoint(tokenDocument, movement, operation, context) {
+  if (
+    !context
+    || context.pauseTriggered
+    || !context.pauseWaypoint
+    || typeof context.pauseHandler !== "function"
+    || !isAtDestination(tokenDocument, context.pauseWaypoint)
+  ) return false;
+
+  const resumeMovement = tokenDocument?.pauseMovement?.();
+  if (typeof resumeMovement !== "function") return false;
+
+  context.pauseTriggered = true;
+  const state = context.pauseState ?? {};
+  context.pauseState = state;
+  state.triggered = true;
+  const pausePromise = (async () => {
+    const animationEnded = tokenDocument?.rendered && tokenDocument?.object?.movementAnimationPromise
+      ? tokenDocument.object.movementAnimationPromise
+      : movement?.animation?.ended;
+    if (animationEnded?.then) {
+      if (typeof globalThis.game?.raceWithWindowHidden === "function") {
+        await globalThis.game.raceWithWindowHidden(animationEnded);
+      } else {
+        await animationEnded;
+      }
+    }
+
+    const shouldResume = await context.pauseHandler({ tokenDocument, movement, operation });
+    state.handled = true;
+    state.shouldResume = shouldResume !== false;
+    if (!state.shouldResume) {
+      tokenDocument?.stopMovement?.();
+      return false;
+    }
+
+    // Let the continuation pass through the ordinary interruption collector.
+    // If another event lies later on the route it will become the next native
+    // pause, instead of this controlled context blindly bypassing it.
+    context.releaseContinuations = true;
+    return resumeMovement();
+  })().catch(error => {
+    state.error = error;
+    state.handled = true;
+    tokenDocument?.stopMovement?.();
+    throw error;
+  });
+  state.promise = pausePromise;
+  void pausePromise.catch(() => undefined);
+  return true;
 }
 
 async function commitPhysicallyReachedPrefix(
@@ -859,6 +986,52 @@ export function createMovementOptions(
     options.falloutMawSystemEventChainRef = chainRef;
   }
   return options;
+}
+
+async function moveTokenThroughNativeInterruption(
+  tokenDocument,
+  event = {},
+  movement = {},
+  operation = {},
+  chainRef = null,
+  controlledOptions = {}
+) {
+  const waypoints = getMovementThroughInterruptionWaypoints(tokenDocument, movement, event);
+  if (!waypoints.length) return { completed: false, handled: false };
+  const pauseState = {};
+  const completed = await withMovementResumeContext(
+    tokenDocument,
+    INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+    { chainRef },
+    () => performControlledMovement(tokenDocument, waypoints, {
+      ...createMovementOptions(
+        movement,
+        operation,
+        { chainRef, showRuler: movement?.showRuler }
+      ),
+      [INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION]: true
+    }, {
+      ...controlledOptions,
+      pauseWaypoint: prepareMovementWaypoint(event.waypoint, tokenDocument),
+      pauseHandler: controlledOptions.pauseHandler,
+      pauseState
+    })
+  );
+  if (pauseState.promise) await pauseState.promise;
+  if (pauseState.error) throw pauseState.error;
+  return { completed: Boolean(completed), handled: Boolean(pauseState.handled) };
+}
+
+function getMovementThroughInterruptionWaypoints(tokenDocument, movement = {}, event = {}) {
+  const waypoints = [];
+  for (const waypoint of getMovementPrefixWaypoints(tokenDocument, movement, event)) {
+    appendRouteWaypoint(waypoints, waypoint);
+  }
+  for (const waypoint of event.remainingWaypoints ?? []) {
+    appendRouteWaypoint(waypoints, waypoint);
+  }
+  if (waypoints.length) waypoints.at(-1).checkpoint = true;
+  return waypoints;
 }
 
 async function moveTokenToInterruption(
