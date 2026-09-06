@@ -42,6 +42,8 @@ import {
   getWeaponFunctionById,
   hasItemFunction,
   hasWeaponSpecialPropertyData,
+  normalizeWeaponSpecialProperties,
+  normalizeWeaponSpecialProperty,
   parseModuleWeaponFunctionId
 } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
@@ -453,6 +455,16 @@ class WeaponActionModifierState {
     this.resourceCostMultipliers = new Map();
     this.spendRequirements = [];
     this.options = new Map();
+    this.baseWeaponSpecialPropertyList = [];
+    this.baseWeaponSpecialProperties = new Map();
+    this.addedWeaponSpecialProperties = new Map();
+    this.effectiveWeaponSpecialProperties = null;
+    this.effectiveWeaponData = null;
+    for (const property of normalizeWeaponSpecialProperties(context?.weaponData?.specialProperties)) {
+      if (property.type === WEAPON_SPECIAL_PROPERTIES.pending) continue;
+      this.baseWeaponSpecialPropertyList.push(property);
+      this.baseWeaponSpecialProperties.set(property.type, property);
+    }
   }
 
   addCombatValue(key = "", value = 0) {
@@ -501,6 +513,57 @@ class WeaponActionModifierState {
 
   getOption(key = "") {
     return this.options.get(String(key ?? "").trim());
+  }
+
+  addWeaponSpecialProperty(property = null) {
+    const normalized = normalizeWeaponSpecialProperty(property);
+    if (normalized.type === WEAPON_SPECIAL_PROPERTIES.pending) return false;
+    this.addedWeaponSpecialProperties.set(normalized.type, normalized);
+    this.effectiveWeaponSpecialProperties = null;
+    this.effectiveWeaponData = null;
+    return true;
+  }
+
+  hasWeaponSpecialProperty(propertyType = "") {
+    const type = String(propertyType ?? "").trim();
+    if (!type || type === WEAPON_SPECIAL_PROPERTIES.pending) return false;
+    return this.addedWeaponSpecialProperties.has(type) || this.baseWeaponSpecialProperties.has(type);
+  }
+
+  getWeaponSpecialProperty(propertyType = "") {
+    const type = String(propertyType ?? "").trim();
+    if (!type || type === WEAPON_SPECIAL_PROPERTIES.pending) return null;
+    return this.addedWeaponSpecialProperties.get(type)
+      ?? this.baseWeaponSpecialProperties.get(type)
+      ?? null;
+  }
+
+  getWeaponSpecialProperties() {
+    if (!this.addedWeaponSpecialProperties.size) return this.baseWeaponSpecialPropertyList;
+    this.effectiveWeaponSpecialProperties ??= [
+      ...this.baseWeaponSpecialPropertyList.filter(property => (
+        !this.addedWeaponSpecialProperties.has(property.type)
+      )),
+      ...this.addedWeaponSpecialProperties.values()
+    ];
+    return this.effectiveWeaponSpecialProperties;
+  }
+
+  getWeaponData(weaponData = this.context?.weaponData ?? {}) {
+    if (!this.addedWeaponSpecialProperties.size) return weaponData;
+    if (weaponData !== this.context?.weaponData) {
+      const properties = normalizeWeaponSpecialProperties(weaponData?.specialProperties).filter(property => (
+        property.type !== WEAPON_SPECIAL_PROPERTIES.pending
+        && !this.addedWeaponSpecialProperties.has(property.type)
+      ));
+      properties.push(...this.addedWeaponSpecialProperties.values());
+      return { ...weaponData, specialProperties: properties };
+    }
+    this.effectiveWeaponData ??= {
+      ...weaponData,
+      specialProperties: this.getWeaponSpecialProperties()
+    };
+    return this.effectiveWeaponData;
   }
 
   addSpendRequirement(requirement = {}) {
@@ -602,7 +665,8 @@ function collectWeaponActionModifierState(context = {}) {
     modifierState: state,
     addCombatValue: (key, value) => state.addCombatValue(key, value),
     multiplyResourceCost: (type, multiplier) => state.multiplyResourceCost(type, multiplier),
-    addSpendRequirement: requirement => state.addSpendRequirement(requirement)
+    addSpendRequirement: requirement => state.addSpendRequirement(requirement),
+    addWeaponSpecialProperty: property => state.addWeaponSpecialProperty(property)
   });
   return state;
 }
@@ -953,8 +1017,10 @@ export const WEAPON_CONDITION_WEAR_TESTING = Object.freeze({
 });
 
 export const WEAPON_ATTACK_LIFECYCLE_TESTING = Object.freeze({
+  collectModifierState: collectWeaponActionModifierState,
   collectResourceSpendTotals: collectWeaponResourceSpendTotals,
   createModifierState: context => new WeaponActionModifierState(context),
+  validateSelectionMode: validateCommandedAttackSelectionMode,
   publishResolved: publishWeaponAttackResolved,
   runTerminal: runWeaponAttackTerminalHandlers
 });
@@ -2106,6 +2172,7 @@ class CommandedWeaponAttackController {
       hoveredTarget: null,
       trajectoryAimTarget: null,
       burstRanges: new Map(),
+      weaponActionModifierState: null,
       shape,
       targetMarkers,
       focusedTargetMarker
@@ -2232,6 +2299,7 @@ class CommandedWeaponAttackController {
     if (this.processing || this.destroyed) return;
     for (const entry of this.entries) {
       if (item?.parent?.uuid !== entry.token?.actor?.uuid) continue;
+      entry.weaponActionModifierState = null;
       entry.noiseLevel = getWeaponNoiseLevel(getWeaponAttackData(entry.weapon, entry.weaponFunctionId));
       setWeaponNoisePreview(entry.token, entry.noisePreviewSourceId, entry.noiseLevel);
     }
@@ -2437,6 +2505,15 @@ class CommandedWeaponAttackController {
   getEntrySelection(entry) {
     if (!entry?.geometry) return null;
     if (MELEE_ACTION_KEYS.has(entry.actionKey)) {
+      if (this.hasEntryWeaponSpecialProperty(entry, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)) {
+        return {
+          mode: "current",
+          target: null,
+          targetUuid: "",
+          selectedLimbKey: "",
+          directionKey: ""
+        };
+      }
       const target = entry.hoveredTarget ?? entry.trajectoryAimTarget ?? entry.targets.find(target => target && target !== entry.token) ?? null;
       const directions = getEnabledMeleeDirections(entry.weapon, entry.actionKey, entry.weaponFunctionId);
       if (!target?.actor) {
@@ -2471,17 +2548,41 @@ class CommandedWeaponAttackController {
     };
   }
 
+  getEntryWeaponActionModifierState(entry) {
+    if (!entry?.token?.actor || !entry.weapon) return null;
+    entry.weaponActionModifierState ??= collectWeaponActionModifierState({
+      actor: entry.token.actor,
+      actorToken: entry.token,
+      token: entry.token,
+      weapon: entry.weapon,
+      actionKey: entry.actionKey,
+      weaponActionKey: entry.actionKey,
+      weaponFunctionId: entry.weaponFunctionId,
+      weaponData: getWeaponAttackData(entry.weapon, entry.weaponFunctionId),
+      controller: this
+    });
+    return entry.weaponActionModifierState;
+  }
+
+  hasEntryWeaponSpecialProperty(entry, propertyType = "") {
+    return this.getEntryWeaponActionModifierState(entry)?.hasWeaponSpecialProperty(propertyType) === true;
+  }
+
   getEntryBurstTargetRanges(entry) {
     if (
       entry.actionKey !== "burst"
       || isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)
       || !entry.geometry
-      || hasWeaponSpecialProperty(entry.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, entry.weaponFunctionId)
+      || this.hasEntryWeaponSpecialProperty(entry, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)
     ) return new Map();
     const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
     const projectileCount = getBurstProjectileCount(
       attackCount,
-      getWeaponProjectileCountPerAttack(entry.weapon, entry.weaponFunctionId)
+      getWeaponProjectileCountPerAttack(
+        entry.weapon,
+        entry.weaponFunctionId,
+        this.getEntryWeaponActionModifierState(entry)
+      )
     );
     return buildBurstTargetRanges(
       entry.token,
@@ -3147,7 +3248,11 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
     if (!hasRequiredWeaponResources(weapon, attackCount, selection.weaponFunctionId)) {
       return { ok: false, executed: false, reason: "weaponResources" };
     }
-    if (!validateCommandedAttackSelectionMode(selection, weapon)) {
+    if (!validateCommandedAttackSelectionMode(
+      selection,
+      weapon,
+      getSelectionWeaponActionModifierState(selection, token, weapon)
+    )) {
       return { ok: false, executed: false, reason: "invalidMode" };
     }
 
@@ -3415,7 +3520,11 @@ async function processCommandedWeaponAttackSelections(selections = [], {
         || !selection.targetTokenUuidAllowlist.has(selection.targetUuid)
       )
     ) return { ok: false, reason: "invalidTarget" };
-    if (!validateCommandedAttackSelectionMode(selection, selection.weapon)) {
+    if (!validateCommandedAttackSelectionMode(
+      selection,
+      selection.weapon,
+      getSelectionWeaponActionModifierState(selection, selection.token, selection.weapon)
+    )) {
       return { ok: false, reason: "invalidMode" };
     }
     const current = actionPointCosts.get(selection.token.actor.uuid) ?? { actor: selection.token.actor, amount: 0 };
@@ -3659,7 +3768,11 @@ async function validateCommandedAbilityAuthority({
     const tokenDocument = targetTokenDocuments.find(document => document?.uuid === String(selection?.tokenUuid ?? ""));
     const weapon = await fromUuid(String(selection?.weaponUuid ?? ""));
     if (!tokenDocument?.actor || weapon?.parent?.uuid !== tokenDocument.actor.uuid) return false;
-    if (!validateCommandedAttackSelectionMode(selection, weapon)) return false;
+    if (!validateCommandedAttackSelectionMode(
+      selection,
+      weapon,
+      getSelectionWeaponActionModifierState(selection, tokenDocument.object, weapon)
+    )) return false;
     let targetTokenUuidAllowlist = perceptionByExecutor.get(tokenDocument.uuid);
     if (!targetTokenUuidAllowlist) {
       targetTokenUuidAllowlist = getAuthoritativeAttackPerceptionUuids(tokenDocument.object);
@@ -3689,7 +3802,17 @@ async function validateCommandedAbilityAuthority({
   return true;
 }
 
-function validateCommandedAttackSelectionMode(selection = {}, weapon = null) {
+function getSelectionWeaponActionModifierState(selection = {}, token = null, weapon = null) {
+  return prepareWeaponActionResourcePreviewContext({
+    token,
+    actor: token?.actor ?? null,
+    weapon,
+    actionKey: String(selection?.actionKey ?? ""),
+    weaponFunctionId: String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
+  })?.modifierState ?? null;
+}
+
+function validateCommandedAttackSelectionMode(selection = {}, weapon = null, modifierState = null) {
   const actionKey = String(selection?.actionKey ?? "");
   const mode = String(selection?.mode ?? "current");
   const targetUuid = String(selection?.targetUuid ?? "");
@@ -3697,6 +3820,18 @@ function validateCommandedAttackSelectionMode(selection = {}, weapon = null) {
     return mode === "aimed" && Boolean(targetUuid) && Boolean(String(selection?.selectedLimbKey ?? ""));
   }
   if (MELEE_ACTION_KEYS.has(actionKey)) {
+    if (modifierState?.hasWeaponSpecialProperty(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)) {
+      if (actionKey === "aimedMeleeAttack") {
+        return mode === "aimed"
+          && Boolean(targetUuid)
+          && Boolean(String(selection?.selectedLimbKey ?? ""))
+          && !String(selection?.directionKey ?? "");
+      }
+      return mode === "current"
+        && !targetUuid
+        && !String(selection?.selectedLimbKey ?? "")
+        && !String(selection?.directionKey ?? "");
+    }
     const directions = getEnabledMeleeDirections(
       weapon,
       actionKey,
@@ -4622,6 +4757,13 @@ export class WeaponAttackController {
       tick: () => this.onTick(),
       itemUpdate: (item, changes, options) => this.onItemUpdate(item, changes, options)
     };
+    if (
+      this.meleeAction
+      && this.hasWeaponSpecialProperty(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)
+    ) {
+      this.requiresDirectionSelection = false;
+      if (!this.requiresLimbSelection) this.targetedAction = false;
+    }
   }
 
   activate() {
@@ -5035,7 +5177,7 @@ export class WeaponAttackController {
   }
 
   createWeaponAttackReactionContext(targetToken = null) {
-    const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
+    const weaponData = this.getEffectiveWeaponData();
     return {
       ...this.createWeaponAttackDistanceContext(targetToken, weaponData),
       weaponData: serializeWeaponContextData(weaponData)
@@ -5043,8 +5185,8 @@ export class WeaponAttackController {
   }
 
   createWeaponAttackSkillCheckContext(targetToken = null, extra = {}) {
-    const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
     const modifierState = this.getWeaponActionModifierState();
+    const weaponData = modifierState.getWeaponData();
     const postureEdge = getPostureAttackEdgeModifiers({
       attackerToken: this.token,
       targetToken,
@@ -5113,7 +5255,7 @@ export class WeaponAttackController {
 
   stampAttackDamageSources(requests = []) {
     const attackId = String(this.attackId ?? "").trim();
-    const weaponDataSnapshot = foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {});
+    const weaponDataSnapshot = foundry.utils.deepClone(this.getEffectiveWeaponData());
     const sourceRequests = (Array.isArray(requests) ? requests : [requests]).filter(Boolean).map(request => ({
       ...request,
       source: {
@@ -5159,6 +5301,14 @@ export class WeaponAttackController {
   getWeaponActionModifierState() {
     this.weaponActionModifierState ??= collectWeaponActionModifierState(this.createWeaponActionModifierContext());
     return this.weaponActionModifierState;
+  }
+
+  getEffectiveWeaponData() {
+    return this.getWeaponActionModifierState().getWeaponData();
+  }
+
+  hasWeaponSpecialProperty(propertyType = "") {
+    return this.getWeaponActionModifierState().hasWeaponSpecialProperty(propertyType);
   }
 
   getWatchOutDifficultyBonus() {
@@ -6495,7 +6645,8 @@ export class WeaponAttackController {
     const impactTargets = getPotentialTargets(this.token, geometry, {
       includeAttacker,
       includeDead,
-      purpose: "impact"
+      purpose: "impact",
+      targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
     });
     const impactSet = new Set(impactTargets);
     return Array.from(new Set([
@@ -6583,10 +6734,7 @@ export class WeaponAttackController {
       return this.executeOrdinaryAttackViaGm({ mode: "current" });
     }
     const originalTarget = this.trajectoryAimTarget;
-    if (
-      hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
-      || this.getWeaponActionModifierState().getOption("hitAllConeTargets") === true
-    ) {
+    if (this.hasWeaponSpecialProperty(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)) {
       return this.performConeTargetsAttack({ attackCount, actionContext });
     }
     if (this.actionKey === "burst") {
@@ -6608,7 +6756,11 @@ export class WeaponAttackController {
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1;
     const collectCheckMessages = forceBatchCheckMessage
-      || getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId) > 1
+      || getWeaponProjectileCountPerAttack(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponActionModifierState()
+      ) > 1
       || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext(),
       actor: this.token.actor,
@@ -6767,9 +6919,16 @@ export class WeaponAttackController {
     this.completeProcessingCycle();
   }
 
-  async performConeTargetsAttack({ attackCount = 1, actionContext = null } = {}) {
+  async performConeTargetsAttack({
+    attackCount = 1,
+    actionContext = null,
+    selectedTarget = null,
+    selectedLimbKey = ""
+  } = {}) {
     this.beginProcessingCycle();
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
+    if (selectedLimbKey) this.removeLimbMenu();
+    if (selectedTarget) await this.commitWeaponAttack(selectedTarget, { limbKey: selectedLimbKey });
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
@@ -6782,7 +6941,8 @@ export class WeaponAttackController {
     const damageResults = [];
     const projectileCountPerAttack = getWeaponProjectileCountPerAttack(
       this.weapon,
-      this.weaponFunctionId
+      this.weaponFunctionId,
+      this.getWeaponActionModifierState()
     );
     const forceBatchCheckMessage = totalAttackCount > 1
       || resolutionTargets.length > 1
@@ -6808,7 +6968,8 @@ export class WeaponAttackController {
         const projectiles = createWeaponPelletImpactProjectiles(
           this.weapon,
           this.weaponFunctionId,
-          this.getWeaponDamage()
+          this.getWeaponDamage(),
+          this.getWeaponActionModifierState()
         );
         const animationTrajectory = buildConeAnimationTrajectory(this.geometry);
         if (animationTrajectory) trajectories.push({ ...animationTrajectory, delayGroup: attackIndex });
@@ -6820,7 +6981,7 @@ export class WeaponAttackController {
             if (this.attackCanceledByReaction) break;
             if (projectile.damageAmount <= 0) continue;
             const totalProjectileCount = totalAttackCount * projectiles.length;
-            const request = await this.resolveAttackAgainstTarget(target, {
+            const attackOptions = {
               damageAmount: projectile.damageAmount,
               damageShareIndex: projectileIndex,
               damageShareCount: projectiles.length,
@@ -6833,14 +6994,24 @@ export class WeaponAttackController {
                   ? "pellet"
                   : (
                     totalAttackCount > 1
-                    && hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
+                    && hasConcentratedPelletImpact(
+                      this.weapon,
+                      this.weaponFunctionId,
+                      this.getWeaponActionModifierState()
+                    )
                       ? "burst"
                       : ""
                   ),
                 index: (attackIndex * projectiles.length) + projectileIndex,
                 count: totalProjectileCount
               })
-            });
+            };
+            const request = selectedLimbKey
+              ? await this.resolveAimedAttackAgainstTarget(target, {
+                limbKey: selectedLimbKey,
+                ...attackOptions
+              })
+              : await this.resolveAttackAgainstTarget(target, attackOptions);
             if (request) damageRequests.push(...request);
           }
         }
@@ -7043,7 +7214,11 @@ export class WeaponAttackController {
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1;
     const collectCheckMessages = forceBatchCheckMessage
-      || getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId) > 1
+      || getWeaponProjectileCountPerAttack(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponActionModifierState()
+      ) > 1
       || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext(),
       actor: this.token.actor,
@@ -7057,7 +7232,11 @@ export class WeaponAttackController {
       : null;
     const projectileCount = getBurstProjectileCount(
       totalAttackCount,
-      getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId)
+      getWeaponProjectileCountPerAttack(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponActionModifierState()
+      )
     );
     const exactDistribution = getBurstTargetHitDistribution(
       this.token,
@@ -7089,7 +7268,8 @@ export class WeaponAttackController {
       const projectiles = createWeaponPelletImpactProjectiles(
         this.weapon,
         this.weaponFunctionId,
-        this.getWeaponDamage()
+        this.getWeaponDamage(),
+        this.getWeaponActionModifierState()
       );
 
       for (let shotIndex = 0; shotIndex < projectiles.length; shotIndex += 1) {
@@ -7356,6 +7536,17 @@ export class WeaponAttackController {
         selectedLimbKey: limbKey
       });
     }
+    if (
+      this.meleeAction
+      && this.hasWeaponSpecialProperty(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)
+    ) {
+      return this.performConeTargetsAttack({
+        attackCount,
+        actionContext,
+        selectedTarget: target,
+        selectedLimbKey: targetSelection.limbKey
+      });
+    }
 
     this.beginProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
@@ -7385,7 +7576,8 @@ export class WeaponAttackController {
     const projectiles = createWeaponPelletImpactProjectiles(
       this.weapon,
       this.weaponFunctionId,
-      this.getWeaponDamage()
+      this.getWeaponDamage(),
+      this.getWeaponActionModifierState()
     );
     const trajectories = buildAimedAttackTrajectories(
       this.token,
@@ -7787,7 +7979,11 @@ export class WeaponAttackController {
       return null;
     }
     const impactCount = (
-      hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
+      hasConcentratedPelletImpact(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponActionModifierState()
+      )
         ? getWeaponPelletCount(this.weapon, this.weaponFunctionId)
         : 1
     ) + Math.max(0, toInteger(this.getWeaponActionModifierState().getOption("fractionalImpactBonus")));
@@ -7984,7 +8180,8 @@ export class WeaponAttackController {
     const projectiles = createWeaponPelletImpactProjectiles(
       this.weapon,
       this.weaponFunctionId,
-      this.getWeaponDamage()
+      this.getWeaponDamage(),
+      this.getWeaponActionModifierState()
     );
     const trajectories = buildAttackTrajectories(
       this.token,
@@ -8586,7 +8783,8 @@ export class WeaponAttackController {
       pelletCount: getWeaponPelletCount(this.weapon, this.weaponFunctionId),
       concentratedPelletImpact: hasConcentratedPelletImpact(
         this.weapon,
-        this.weaponFunctionId
+        this.weaponFunctionId,
+        this.getWeaponActionModifierState()
       ),
       damageTypes: getWeaponDamageTypeEntries(this.weapon, this.weaponFunctionId),
       penetrationPower: getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
@@ -9115,7 +9313,7 @@ export class WeaponAttackController {
       && !this.volleyAction
       && !this.processing
       && !this.targetedAction
-      && !hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
+      && !this.hasWeaponSpecialProperty(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)
     );
   }
 
@@ -9225,12 +9423,16 @@ export class WeaponAttackController {
       this.actionKey !== "burst"
       || this.volleyAction
       || !this.geometry
-      || hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
+      || this.hasWeaponSpecialProperty(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets)
     ) return new Map();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const projectileCount = getBurstProjectileCount(
       attackCount,
-      getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId)
+      getWeaponProjectileCountPerAttack(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponActionModifierState()
+      )
     );
     return buildBurstTargetRanges(
       this.token,
@@ -11332,25 +11534,32 @@ function getWeaponPelletCount(weapon, weaponFunctionId = "") {
   }) || 1);
 }
 
-function hasConcentratedPelletImpact(weapon, weaponFunctionId = "") {
-  return hasWeaponSpecialProperty(
+function hasConcentratedPelletImpact(weapon, weaponFunctionId = "", modifierState = null) {
+  return modifierState?.hasWeaponSpecialProperty?.(
+    WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact
+  ) ?? hasWeaponSpecialProperty(
     weapon,
     WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact,
     weaponFunctionId
   );
 }
 
-function getWeaponProjectileCountPerAttack(weapon, weaponFunctionId = "") {
+function getWeaponProjectileCountPerAttack(weapon, weaponFunctionId = "", modifierState = null) {
   return getPelletProjectileCount(getWeaponPelletCount(weapon, weaponFunctionId), {
-    concentrated: hasConcentratedPelletImpact(weapon, weaponFunctionId)
+    concentrated: hasConcentratedPelletImpact(weapon, weaponFunctionId, modifierState)
   });
 }
 
-function createWeaponPelletImpactProjectiles(weapon, weaponFunctionId = "", damageAmount = 0) {
+function createWeaponPelletImpactProjectiles(
+  weapon,
+  weaponFunctionId = "",
+  damageAmount = 0,
+  modifierState = null
+) {
   return createPelletImpactProjectiles({
     damageAmount,
     pelletCount: getWeaponPelletCount(weapon, weaponFunctionId),
-    concentrated: hasConcentratedPelletImpact(weapon, weaponFunctionId)
+    concentrated: hasConcentratedPelletImpact(weapon, weaponFunctionId, modifierState)
   });
 }
 
@@ -11388,7 +11597,8 @@ export function getMissingWeaponResourceCost(
     skipBaseCosts = false
   } = {}
 ) {
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const baseWeaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const weaponData = modifierState?.getWeaponData?.(baseWeaponData) ?? baseWeaponData;
   const costs = skipBaseCosts ? [] : getWeaponResourceCosts(weaponData, { modifierState });
   const defersConditionCost = hasWeaponSpecialPropertyData(
     weaponData,
@@ -11996,6 +12206,7 @@ function collectWeaponResourceSpendTotals(
     skipBaseCosts = false
   } = {}
 ) {
+  weaponData = modifierState?.getWeaponData?.(weaponData) ?? weaponData;
   const itemTotals = new Map();
   const actorCostRows = [];
   const baseMultiplier = Math.max(1, toInteger(multiplier));
@@ -14296,7 +14507,8 @@ function buildWeaponDamageRequests(weapon, {
   scope = "healthAndLimb",
   source = {}
 } = {}, weaponFunctionId = "") {
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const baseWeaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const weaponData = modifierState?.getWeaponData?.(baseWeaponData) ?? baseWeaponData;
   const distanceContext = getWeaponDamageDistanceContext({
     source,
     weaponData,
@@ -14374,7 +14586,8 @@ function buildWeaponConditionDamageRequests(weapon, {
   source = {}
 } = {}, weaponFunctionId = "") {
   if (!targetItem?.id || !hasItemFunction(targetItem, ITEM_FUNCTIONS.condition)) return [];
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const baseWeaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const weaponData = modifierState?.getWeaponData?.(baseWeaponData) ?? baseWeaponData;
   const distanceContext = getWeaponDamageDistanceContext({
     source,
     weaponData,

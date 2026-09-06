@@ -386,6 +386,7 @@ import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
 import {
   getDeployedWeaponSetKey,
   ITEM_FUNCTIONS,
+  WEAPON_SPECIAL_PROPERTIES,
   getEnabledWeaponFunctions,
   getFirstAidChargesData,
   hasItemFunction
@@ -11251,7 +11252,9 @@ function requestCrowdCrusherWeaponActionModifiers(context = {}) {
       context.modifierState.setOption("inheritAimedLimbOnPath", true);
     }
     if (!findCrowdCrusherEffect(actor, entry.abilityItem, entry.abilityFunction)) continue;
-    if (entry.settings.hitAllConeTargets) context.modifierState.setOption("hitAllConeTargets", true);
+    if (entry.settings.hitAllConeTargets) {
+      context.addWeaponSpecialProperty?.(WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets);
+    }
     return;
   }
 }

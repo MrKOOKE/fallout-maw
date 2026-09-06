@@ -181,6 +181,81 @@ test("modifier and base weapon power costs share one actor-resource vector", () 
   ]);
 });
 
+test("external weapon special properties are merged into one attack snapshot", () => {
+  const weaponData = {
+    skillKey: "meleeCombat",
+    specialProperties: [{ type: "impactConditionWear" }]
+  };
+  const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.createModifierState({ weaponData });
+
+  assert.equal(modifierState.hasWeaponSpecialProperty("impactConditionWear"), true);
+  assert.equal(modifierState.hasWeaponSpecialProperty("hitAllConeTargets"), false);
+  assert.equal(modifierState.addWeaponSpecialProperty("hitAllConeTargets"), true);
+  assert.equal(modifierState.hasWeaponSpecialProperty("hitAllConeTargets"), true);
+  assert.deepEqual(modifierState.getWeaponData().specialProperties, [
+    { type: "impactConditionWear" },
+    { type: "hitAllConeTargets" }
+  ]);
+  assert.deepEqual(weaponData.specialProperties, [{ type: "impactConditionWear" }]);
+});
+
+test("weapon modifier hooks can assign standard special properties", () => {
+  const previousCallAll = Hooks.callAll;
+  Hooks.callAll = (hook, context) => {
+    if (hook === "fallout-maw.weaponActionModifierRequests") {
+      context.addWeaponSpecialProperty("hitAllConeTargets");
+    }
+  };
+  try {
+    const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.collectModifierState({
+      weaponData: { specialProperties: [] }
+    });
+    assert.equal(modifierState.hasWeaponSpecialProperty("hitAllConeTargets"), true);
+  } finally {
+    Hooks.callAll = previousCallAll;
+  }
+});
+
+test("hit-all cone melee skips direction but keeps aimed limb selection", () => {
+  const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.createModifierState({ weaponData: {} });
+  modifierState.addWeaponSpecialProperty("hitAllConeTargets");
+
+  assert.equal(WEAPON_ATTACK_LIFECYCLE_TESTING.validateSelectionMode({
+    actionKey: "meleeAttack",
+    mode: "current",
+    targetUuid: "",
+    selectedLimbKey: "",
+    directionKey: ""
+  }, {}, modifierState), true);
+  assert.equal(WEAPON_ATTACK_LIFECYCLE_TESTING.validateSelectionMode({
+    actionKey: "meleeAttack",
+    mode: "directed",
+    targetUuid: "Token.target",
+    directionKey: "rightToLeft"
+  }, {}, modifierState), false);
+  assert.equal(WEAPON_ATTACK_LIFECYCLE_TESTING.validateSelectionMode({
+    actionKey: "aimedMeleeAttack",
+    mode: "current",
+    targetUuid: "",
+    selectedLimbKey: "",
+    directionKey: ""
+  }, {}, modifierState), false);
+  assert.equal(WEAPON_ATTACK_LIFECYCLE_TESTING.validateSelectionMode({
+    actionKey: "aimedMeleeAttack",
+    mode: "aimed",
+    targetUuid: "Token.target",
+    selectedLimbKey: "leftArm",
+    directionKey: ""
+  }, {}, modifierState), true);
+  assert.equal(WEAPON_ATTACK_LIFECYCLE_TESTING.validateSelectionMode({
+    actionKey: "aimedMeleeAttack",
+    mode: "directed",
+    targetUuid: "Token.target",
+    selectedLimbKey: "leftArm",
+    directionKey: "rightToLeft"
+  }, {}, modifierState), false);
+});
+
 test("reaction, modifier, and base weapon power costs share one preflight and payment vector", () => {
   const modifierState = WEAPON_ATTACK_LIFECYCLE_TESTING.createModifierState({});
   modifierState.addSpendRequirement({ energyCost: 10 });
