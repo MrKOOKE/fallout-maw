@@ -3100,10 +3100,37 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const evaluatingActorUuid = this.#isTradeMode()
       ? this.#getLocalTradeActorUuid()
       : (this.#searcherActor?.uuid ?? "");
-    const app = new FalloutMaWContainerSheet({ document: item, evaluatingActorUuid });
+    const app = new FalloutMaWContainerSheet({
+      document: item,
+      evaluatingActorUuid,
+      searchTransferHandler: payload => this.#executeContainerSheetTransfer(payload)
+    });
     app.render({ force: true });
     app.bringToFront();
     return app;
+  }
+
+  async #executeContainerSheetTransfer(payload = {}) {
+    const sourceActor = this.#getActorByUuid(String(payload.sourceActorUuid ?? ""));
+    const targetActor = this.#getActorByUuid(String(payload.targetActorUuid ?? ""));
+    const sourceItem = sourceActor?.items?.get(String(payload.itemId ?? ""));
+    if (!sourceActor || !targetActor || !sourceItem) return false;
+
+    let targetParentId = payload.targetParentId;
+    if (targetParentId === null || targetParentId === undefined) {
+      targetParentId = getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem });
+      if (targetParentId === null) {
+        ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+        return false;
+      }
+    }
+
+    return this.#executeSearchTransfer({
+      ...payload,
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      targetParentId
+    });
   }
 
   #resolveSearchItemRotation(actor, item) {

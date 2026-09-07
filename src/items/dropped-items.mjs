@@ -27,6 +27,9 @@ import { executeInventoryMutation } from "../inventory/mutation.mjs";
 
 export const DROPPED_ITEMS_FLAG = "droppedItems";
 export const DROPPED_ITEMS_ACTOR_FLAG = "droppedItemsActor";
+export const DROPPED_ITEMS_TESTING = Object.freeze({
+  buildDroppedContainerCreateData
+});
 const DROPPED_ITEMS_SOCKET = `system.${SYSTEM_ID}`;
 const DROPPED_ITEMS_SOCKET_SCOPE = "fallout-maw.droppedItems";
 const DROPPED_ITEMS_SOCKET_TIMEOUT = 10000;
@@ -409,18 +412,15 @@ function buildDroppedStackCreateData(actor, itemData, quantity = 1, reservedPlac
 }
 
 function buildDroppedContainerCreateData(actor, rootItemData, containedItems = [], reservedPlacements = []) {
-  const placement = getFirstAvailableActorRootPlacement(actor, rootItemData, reservedPlacements);
-  if (!placement) throw new Error("В инвентаре нет места для выброшенного контейнера.");
-  reservedPlacements.push(placement);
-
   const oldRootId = String(rootItemData?._id ?? rootItemData?.id ?? "");
-  const idMap = new Map([[oldRootId, foundry.utils.randomID()]]);
+  const rootId = foundry.utils.randomID();
+  const idMap = new Map(oldRootId ? [[oldRootId, rootId]] : []);
   for (const item of containedItems) {
     const oldId = String(item?._id ?? item?.id ?? "");
     if (oldId && !idMap.has(oldId)) idMap.set(oldId, foundry.utils.randomID());
   }
 
-  const rootData = createDroppedInventoryItemData(rootItemData, 1, placement, { id: idMap.get(oldRootId) });
+  const rootData = createDroppedInventoryItemData(rootItemData, 1, null, { id: rootId });
   const creates = [rootData];
   for (const item of containedItems) {
     const data = foundry.utils.deepClone(item);
@@ -434,6 +434,20 @@ function buildDroppedContainerCreateData(actor, rootItemData, containedItems = [
     foundry.utils.setProperty(data, "system.container.parentId", idMap.get(oldParentId) ?? ROOT_CONTAINER_ID);
     creates.push(data);
   }
+
+  const projectedItems = [
+    ...getActorItemArray(actor),
+    ...creates
+  ];
+  const placement = getFirstAvailableActorRootPlacement(
+    actor,
+    rootData,
+    reservedPlacements,
+    projectedItems
+  );
+  if (!placement) throw new Error("В инвентаре нет места для выброшенного контейнера.");
+  applyDroppedInventoryPlacement(rootData, placement);
+  reservedPlacements.push(placement);
   return creates;
 }
 
@@ -442,12 +456,18 @@ function createDroppedInventoryItemData(itemData, quantity = 1, placement = null
   const itemId = id || foundry.utils.randomID();
   data._id = itemId;
   data.id = itemId;
-  const storedPlacement = createStoredPlacement(placement, data);
   foundry.utils.setProperty(data, "system.quantity", Math.max(1, toInteger(quantity)));
   foundry.utils.setProperty(data, "system.equipped", false);
   foundry.utils.setProperty(data, "system.locked", false);
   foundry.utils.setProperty(data, "system.container.parentId", ROOT_CONTAINER_ID);
-  foundry.utils.setProperty(data, "system.placement", {
+  applyDroppedInventoryPlacement(data, placement);
+  foundry.utils.setProperty(data, "system.stackParts", usesVirtualInventoryStacks(data) ? stackParts : []);
+  return data;
+}
+
+function applyDroppedInventoryPlacement(itemData, placement = null) {
+  const storedPlacement = createStoredPlacement(placement, itemData);
+  foundry.utils.setProperty(itemData, "system.placement", {
     mode: storedPlacement.mode,
     equipmentSlot: storedPlacement.equipmentSlot,
     weaponSet: storedPlacement.weaponSet,
@@ -460,24 +480,28 @@ function createDroppedInventoryItemData(itemData, quantity = 1, placement = null
     height: storedPlacement.height,
     rotated: storedPlacement.rotated
   });
-  foundry.utils.setProperty(data, "system.stackParts", usesVirtualInventoryStacks(data) ? stackParts : []);
-  return data;
 }
 
-function getFirstAvailableActorRootPlacement(actor, itemData, reservedPlacements = []) {
+function getFirstAvailableActorRootPlacement(actor, itemData, reservedPlacements = [], allItems = null) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
   const dimensions = getActorInventoryGridDimensions(actor, race);
-  const contextItems = getContextInventoryItems(ROOT_CONTAINER_ID, actor.items);
+  const actorItems = getActorItemArray(actor);
+  const contextItems = getContextInventoryItems(ROOT_CONTAINER_ID, actorItems);
+  allItems ??= actorItems;
   return findFirstAvailableResolvedInventoryPlacement(
     contextItems,
     dimensions.columns,
     dimensions.rows,
     itemData,
-    actor.items,
+    allItems,
     [],
     reservedPlacements,
     getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   );
+}
+
+function getActorItemArray(actor) {
+  return Array.from(actor?.items?.contents ?? actor?.items ?? []);
 }
 
 function getResponsibleGM() {

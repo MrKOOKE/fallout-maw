@@ -353,7 +353,7 @@ import {
   resolveBaseWeaponEffectiveRange
 } from "../utils/weapon-range.mjs";
 import { getWeaponActionPointCostAttribution } from "../utils/weapon-tooltip-attribution.mjs";
-import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
+import { executeSearchContainerTransfer, FalloutMaWContainerSheet } from "./container-sheet.mjs";
 import {
   clearInventoryPlacementPreviews,
   clearInventoryVirtualCells,
@@ -864,6 +864,26 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       ? dropped.item.parent
       : null;
     if (externalSourceActor) {
+      const searchContainerTransferId = String(data.falloutMawSearchContainerTransferId ?? "");
+      if (searchContainerTransferId) {
+        return executeSearchContainerTransfer(searchContainerTransferId, {
+          sourceActorUuid: externalSourceActor.uuid,
+          targetActorUuid: this.actor.uuid,
+          itemId: dropped.item.id,
+          targetMode: placement.mode,
+          targetParentId: parentId,
+          targetEquipmentSlot: placement.equipmentSlot,
+          targetWeaponSet: placement.weaponSet,
+          targetWeaponSlot: placement.weaponSlot,
+          targetConstructPartSlot: placement.constructPartSlot ?? placement.limbKey,
+          targetX: placement.x,
+          targetY: placement.y,
+          targetRotated: placement.rotated,
+          targetItemId: targetItem?.id ?? "",
+          quantity: sourceStackQuantity || getItemQuantity(itemData),
+          sourceStackIndex
+        });
+      }
       const { transferItemBetweenActors } = await import("../apps/search-inventory.mjs");
       return transferItemBetweenActors({
         sourceActor: externalSourceActor,

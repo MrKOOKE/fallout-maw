@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
+import { getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
 import {
   buildInventoryCellStyle,
   createAnchoredItemStackPartsForQuantity,
@@ -65,6 +66,13 @@ const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
+const activeSearchContainerTransfers = new Map();
+
+export function executeSearchContainerTransfer(transferId, payload = {}) {
+  const handler = activeSearchContainerTransfers.get(String(transferId ?? ""));
+  return typeof handler === "function" ? handler(payload) : null;
+}
+
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #draggedItemData = null;
   #draggedItemId = "";
@@ -81,6 +89,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #itemTooltipListenerDocument = null;
   #itemTooltipOpenTimer = null;
   #itemTooltipPinned = false;
+  #foregroundListenerDocument = null;
+  #foregroundPointerDownHandler = null;
+  #searchTransferHandler = null;
+  #searchTransferId = "";
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-container-sheet", "sheet", "item"],
@@ -102,6 +114,19 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       template: TEMPLATES.containerSheet
     }
   };
+
+  constructor(options = {}) {
+    const {
+      searchTransferHandler = null,
+      ...sheetOptions
+    } = options;
+    super(sheetOptions);
+    this.#searchTransferHandler = typeof searchTransferHandler === "function" ? searchTransferHandler : null;
+    if (this.#searchTransferHandler) {
+      this.#searchTransferId = foundry.utils.randomID();
+      activeSearchContainerTransfers.set(this.#searchTransferId, this.#searchTransferHandler);
+    }
+  }
 
   get item() {
     return this.document;
@@ -166,6 +191,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     this.#hoverPreviewKey = "";
     this.#clearItemTooltip({ force: true });
     this.element?.querySelectorAll("[data-item-id]").forEach(element => {
+      element.addEventListener("click", event => this.#onItemClick(event));
       element.addEventListener("contextmenu", event => this.#onItemContextMenu(event));
     });
     this.element?.querySelectorAll("[data-tooltip-item]").forEach(element => {
@@ -179,15 +205,80 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
     if (this.actor) this.actor.apps[this.id] = this;
+    this.#bindForegroundPriority();
   }
 
   _onClose(options) {
     super._onClose(options);
     if (this.actor) delete this.actor.apps[this.id];
+    if (this.#searchTransferId) activeSearchContainerTransfers.delete(this.#searchTransferId);
+    this.#unbindForegroundPriority();
     this.#draggedItemData = null;
     this.#draggedItemId = "";
     this.#clearItemTooltip({ force: true });
     this.#clearInventoryDropPreview();
+  }
+
+  _canDragStart() {
+    return Boolean(this.#searchTransferHandler) || super._canDragStart();
+  }
+
+  _canDragDrop() {
+    return Boolean(this.#searchTransferHandler) || super._canDragDrop();
+  }
+
+  async #onItemClick(event) {
+    if (event.button !== 0 || !event.shiftKey || !this.#searchTransferHandler) return;
+    const itemElement = event.currentTarget?.closest?.("[data-item-id]");
+    const item = this.actor?.items?.get(String(itemElement?.dataset?.itemId ?? ""));
+    const targetActorUuid = String(this.options.evaluatingActorUuid ?? "");
+    if (!item || !targetActorUuid || targetActorUuid === this.actor?.uuid) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceStackIndex = Math.max(0, toInteger(itemElement?.dataset?.stackIndex));
+    const sourceStackQuantity = Math.max(0, toInteger(itemElement?.dataset?.stackQuantity));
+    await this.#searchTransferHandler({
+      sourceActorUuid: this.actor.uuid,
+      targetActorUuid,
+      itemId: item.id,
+      targetMode: "inventory",
+      targetParentId: null,
+      targetEquipmentSlot: "",
+      targetWeaponSet: "",
+      targetWeaponSlot: "",
+      targetX: null,
+      targetY: null,
+      targetItemId: "",
+      sourceStackIndex,
+      quantity: sourceStackQuantity || (usesVirtualInventoryStacks(item)
+        ? getItemStackPartQuantity(item, sourceStackIndex)
+        : getItemQuantity(item))
+    });
+  }
+
+  #bindForegroundPriority() {
+    const listenerDocument = this.element?.ownerDocument ?? document;
+    if (this.#foregroundListenerDocument === listenerDocument) return;
+    this.#unbindForegroundPriority();
+    this.#foregroundListenerDocument = listenerDocument;
+    this.#foregroundPointerDownHandler = event => {
+      if (this.element?.contains(event.target)) return;
+      if (!event.target?.closest?.(".fallout-maw-actor-sheet, .fallout-maw-search-inventory")) return;
+      const view = listenerDocument.defaultView ?? window;
+      view.requestAnimationFrame(() => {
+        if (this.element?.isConnected) this.bringToFront();
+      });
+    };
+    listenerDocument.addEventListener("pointerdown", this.#foregroundPointerDownHandler, true);
+  }
+
+  #unbindForegroundPriority() {
+    if (this.#foregroundListenerDocument && this.#foregroundPointerDownHandler) {
+      this.#foregroundListenerDocument.removeEventListener("pointerdown", this.#foregroundPointerDownHandler, true);
+    }
+    this.#foregroundListenerDocument = null;
+    this.#foregroundPointerDownHandler = null;
   }
 
   #onItemTooltipPointerEnter(event) {
@@ -449,8 +540,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     }
     const dragData = item.toDragData();
     dragData.itemId = item.id;
+    dragData.actorUuid = this.actor.uuid;
+    dragData.sourceActorUuid = this.actor.uuid;
     dragData.stackIndex = stackIndex;
     dragData.stackQuantity = stackQuantity || (usesVirtualInventoryStacks(item) ? getItemStackPartQuantity(item, stackIndex) : getItemQuantity(item));
+    if (this.#searchTransferId) dragData.falloutMawSearchContainerTransferId = this.#searchTransferId;
     event.dataTransfer?.setData("text/plain", JSON.stringify(dragData));
     event.currentTarget?.classList?.add("dragging");
   }
@@ -517,6 +611,20 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (this.#canStackDroppedItem(dropped.itemData, targetItem)) {
       const quantity = await this.#getDroppedStackQuantity(dropped, targetItem, event, { targetStackIndex });
       if (!quantity) return null;
+      if (this.#searchTransferHandler && dropped.item?.parent?.documentName === "Actor") {
+        return this.#searchTransferHandler({
+          sourceActorUuid: dropped.item.parent.uuid,
+          targetActorUuid: this.actor.uuid,
+          itemId: dropped.item.id,
+          targetMode: "inventory",
+          targetParentId: this.item.id,
+          targetX: targetItem.system?.placement?.x,
+          targetY: targetItem.system?.placement?.y,
+          targetItemId: targetItem.id,
+          quantity,
+          sourceStackIndex
+        });
+      }
       const externalSourceActor = (
         dropped.item?.parent?.documentName === "Actor"
         && dropped.item.parent.uuid !== this.actor?.uuid
@@ -548,6 +656,22 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         this.#warnValidation({ reason: "no-space" });
         return null;
       }
+    }
+
+    if (this.#searchTransferHandler && dropped.item?.parent?.documentName === "Actor") {
+      return this.#searchTransferHandler({
+        sourceActorUuid: dropped.item.parent.uuid,
+        targetActorUuid: this.actor.uuid,
+        itemId: dropped.item.id,
+        targetMode: "inventory",
+        targetParentId: this.item.id,
+        targetX: placement.x,
+        targetY: placement.y,
+        targetRotated: placement.rotated,
+        targetItemId: targetItem?.id ?? "",
+        quantity: Math.max(1, toInteger(data.stackQuantity) || getItemQuantity(dropped.itemData)),
+        sourceStackIndex
+      });
     }
 
     if (sourceOwned) {
@@ -1189,7 +1313,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
     const validation = validateInventoryTree(
       this.#projectInventoryState({ updates, deletes, creates }),
-      getRootInventoryDimensions(this.actor)
+      getRootInventoryDimensions(this.actor),
+      { rootOptions: getActorRootInventoryGridOptions(this.actor, "") }
     );
     if (validation.valid) return true;
     this.#warnValidation(validation);

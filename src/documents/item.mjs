@@ -195,10 +195,16 @@ export class FalloutMaWItem extends Item {
       });
     }
     if (this.parent?.documentName === "Actor" && usesVirtualInventoryStacks(this)) {
-      const stackParts = prepareUpdatedStackParts(this, this.toObject(), {
-        repack: true,
-        validatePositioned: options?.[INVENTORY_ATOMIC_OPTION] !== true
-      });
+      // Atomic inventory mutations validate the complete projected tree before
+      // Foundry starts the batch. Keep those canonical stack parts intact: a
+      // newly-created child may reference a container from the same batch,
+      // which is intentionally not present in actor.items during _preCreate.
+      const stackParts = options?.[INVENTORY_ATOMIC_OPTION] === true
+        ? getItemStackParts(this).map(part => ({ ...part }))
+        : prepareUpdatedStackParts(this, this.toObject(), {
+          repack: true,
+          validatePositioned: true
+        });
       if (!stackParts) {
         ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
         return cancelInventoryDocumentOperation(this, options, "create");
