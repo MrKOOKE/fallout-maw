@@ -9,7 +9,7 @@ import {
   playWeaponAttackAnimations,
   playWeaponExplosionAnimation
 } from "./attack-animations.mjs";
-import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, getLimbHealingCap, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, getLimbHealingCap, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation, serializeDamageCycleSocketResults } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import {
   createPelletImpactProjectiles,
@@ -1023,6 +1023,15 @@ export const WEAPON_ATTACK_LIFECYCLE_TESTING = Object.freeze({
   validateSelectionMode: validateCommandedAttackSelectionMode,
   publishResolved: publishWeaponAttackResolved,
   runTerminal: runWeaponAttackTerminalHandlers
+});
+
+export const WEAPON_DAMAGE_AUTHORITY_TESTING = Object.freeze({
+  requestBatch: requestApplyPreparedWeaponDamageBatch,
+  handleSocketMessage: handleWeaponAttackSocketMessage,
+  compactBatch: compactWeaponDamageBatch,
+  expandBatch: deserializeWeaponDamageBatch,
+  compactResults: compactDamageApplicationSources,
+  expandResults: expandDamageApplicationSharedSource
 });
 
 function suspendWeaponAttackForNestedSelection(controller = activeAttack) {
@@ -10123,8 +10132,12 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
     window.clearTimeout(pending.timeout);
     pendingRegionSocketRequests.delete(payload.requestId);
     if (payload.ok) {
+      const damageResults = expandDamageApplicationSharedSource(
+        payload.damageResults,
+        payload.damageApplicationSharedSource
+      );
       pending.resolve(Array.isArray(payload.damageResults)
-        ? { damage: payload.damageResults, regions: payload.results ?? [] }
+        ? { damage: damageResults, regions: payload.results ?? [] }
         : payload.results ?? []);
     }
     else pending.reject(new Error(payload.error || "Volley region socket request failed."));
@@ -10144,20 +10157,28 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
     });
     return;
   }
-  if (payload.action === "applyDamageAndCreateVolleyDamageRegions") {
+  if (payload.action === "applyPreparedWeaponDamageBatch") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
-    void applyDamageAndCreateVolleyDamageRegions(payload.damageRequests, payload.regionRequests).then(results => {
+    const damageRequests = deserializeWeaponDamageBatch(payload.damageBatch);
+    void applyPreparedWeaponDamageBatch(damageRequests, payload.regionRequests, {
+      senderUserId: authenticatedSenderUserId
+    }).then(results => {
+      const compactDamage = compactDamageApplicationSources(
+        serializeDamageCycleSocketResults(results.damage)
+      );
       respondVolleyRegionSocketRequest(payload, {
         ok: true,
         results: serializeRegionSocketResults(results.regions),
-        damageResults: serializeWeaponAttackTerminalDamageResults(results.damage)
+        damageResults: compactDamage.results,
+        damageApplicationSharedSource: compactDamage.sharedSource
       });
     }).catch(error => {
-      console.error("Fallout MaW | Volley damage and region socket request failed", error);
+      console.error("Fallout MaW | Prepared weapon damage batch socket request failed", error);
       respondVolleyRegionSocketRequest(payload, {
         ok: false,
-        error: String(error?.message ?? error ?? "Volley damage and region socket request failed."),
-        results: []
+        error: String(error?.message ?? error ?? "Prepared weapon damage batch socket request failed."),
+        results: [],
+        damageResults: []
       });
     });
     return;
@@ -10248,20 +10269,25 @@ function respondVolleyRegionSocketRequest(payload = {}, {
   ok = true,
   error = "",
   results = [],
-  damageResults = null
+  damageResults = null,
+  damageApplicationSharedSource = null
 } = {}) {
   if (!payload.requestId || !payload.senderUserId) return;
+  const targetUserId = String(payload.senderUserId ?? "").trim();
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
     action: "createVolleyDamageRegionsResult",
     senderUserId: game.user?.id ?? "",
-    targetUserId: payload.senderUserId,
+    targetUserId,
     requestId: payload.requestId,
     ok,
     error,
     results,
-    ...(Array.isArray(damageResults) ? { damageResults } : {})
-  });
+    ...(Array.isArray(damageResults) ? { damageResults } : {}),
+    ...(damageApplicationSharedSource && typeof damageApplicationSharedSource === "object"
+      ? { damageApplicationSharedSource }
+      : {})
+  }, { recipients: [targetUserId] });
 }
 
 function serializeRegionSocketResults(regions = []) {
@@ -10357,16 +10383,21 @@ async function requestCreateDelayedVolleyExplosionRegion(regionData = null) {
   }
 }
 
-async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [], regionRequests = []) {
+async function requestApplyPreparedWeaponDamageBatch(damageRequests = [], regionRequests = []) {
   const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
+  const damageBatch = compactWeaponDamageBatch(serializableDamageRequests);
   const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
     .filter(region => region?.sceneId);
   if (!serializableDamageRequests.length && !regions.length) return { damage: [], regions: [] };
-  if (game.user?.isGM) return applyDamageAndCreateVolleyDamageRegions(serializableDamageRequests, regions);
+  if (game.user?.isGM) {
+    return applyPreparedWeaponDamageBatch(serializableDamageRequests, regions, {
+      senderUserId: game.user.id
+    });
+  }
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для обработки урона и областей.");
+    ui.notifications.warn("Нет активного GM для обработки урона оружия.");
     return { damage: [], regions: [] };
   }
 
@@ -10374,20 +10405,20 @@ async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingRegionSocketRequests.delete(requestId);
-      reject(new Error("Volley damage and region socket request timed out."));
+      reject(new Error("Prepared weapon damage batch socket request timed out."));
     }, REGION_SOCKET_REQUEST_TIMEOUT_MS);
     pendingRegionSocketRequests.set(requestId, { resolve, reject, timeout });
   });
 
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
-    action: "applyDamageAndCreateVolleyDamageRegions",
+    action: "applyPreparedWeaponDamageBatch",
     gmUserId: gm.id,
     senderUserId: game.user?.id ?? "",
     requestId,
-    damageRequests: serializableDamageRequests,
+    damageBatch,
     regionRequests: regions
-  });
+  }, { recipients: [gm.id] });
 
   try {
     const results = await promise;
@@ -10395,8 +10426,8 @@ async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [
       ? { damage: [], regions: results }
       : { damage: results?.damage ?? [], regions: results?.regions ?? [] };
   } catch (error) {
-    console.error("Fallout MaW | Volley damage and region socket request failed", error);
-    ui.notifications.warn("Нет ответа GM на обработку урона и областей.");
+    console.error("Fallout MaW | Prepared weapon damage batch socket request failed", error);
+    ui.notifications.warn("Нет ответа GM на обработку урона оружия.");
     return { damage: [], regions: [] };
   }
 }
@@ -10406,7 +10437,7 @@ async function createVolleyDamageRegion(regionData = {}) {
   return results?.[0] ?? null;
 }
 
-async function applyDamageAndCreateVolleyDamageRegions(damageRequests = [], regionRequests = []) {
+async function applyPreparedDamageAndVolleyRegions(damageRequests = [], regionRequests = []) {
   const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
   const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
     .filter(region => region?.sceneId);
@@ -10422,6 +10453,20 @@ async function applyDamageAndCreateVolleyDamageRegions(damageRequests = [], regi
     const createdRegions = regions.length ? await createVolleyDamageRegionsNow(regions) : [];
     return { damage, regions: createdRegions };
   }, { operationRef });
+}
+
+async function applyPreparedWeaponDamageBatch(damageRequests = [], regionRequests = [], {
+  senderUserId = game.user?.id ?? ""
+} = {}) {
+  const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
+  const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
+    .filter(region => region?.sceneId);
+  return withWeaponDamagePreparedEvents(serializableDamageRequests, async prepared => {
+    notifyWeaponAttackDamageResolved(prepared, { senderUserId });
+    if (regions.length) return applyPreparedDamageAndVolleyRegions(prepared, regions);
+    const damage = prepared.length ? await requestDamageApplications(prepared) : [];
+    return { damage, regions: [] };
+  });
 }
 
 async function createVolleyDamageRegionsNow(regions = []) {
@@ -16496,22 +16541,14 @@ function addUniquePoint(points, point) {
 }
 
 async function applyQueuedDamageRequests(requests = []) {
-  return withWeaponDamagePreparedEvents(requests, async prepared => {
-    notifyWeaponAttackDamageResolved(prepared);
-    return requestDamageApplications(prepared);
-  });
+  const result = await requestApplyPreparedWeaponDamageBatch(requests);
+  return result?.damage ?? [];
 }
 
 async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionRequests = []) {
-  if (regionRequests.length) {
-    return withWeaponDamagePreparedEvents(damageRequests, async prepared => {
-      notifyWeaponAttackDamageResolved(prepared);
-      const result = await requestApplyDamageAndCreateVolleyDamageRegions(prepared, regionRequests);
-      return result?.damage ?? [];
-    });
-  }
-  if (damageRequests.length) return applyQueuedDamageRequests(damageRequests);
-  return [];
+  if (!damageRequests.length && !regionRequests.length) return [];
+  const result = await requestApplyPreparedWeaponDamageBatch(damageRequests, regionRequests);
+  return result?.damage ?? [];
 }
 
 async function withWeaponDamagePreparedEvents(requests = [], operation) {
@@ -16622,7 +16659,7 @@ function isKilledTargetActor(actor) {
   return Boolean(actor?.statuses?.has?.("dead"));
 }
 
-function notifyWeaponAttackDamageResolved(requests = []) {
+function notifyWeaponAttackDamageResolved(requests = [], { senderUserId = game.user?.id ?? "" } = {}) {
   const byAttacker = new Map();
   for (const request of (Array.isArray(requests) ? requests : [requests]).filter(Boolean)) {
     const attackerUuid = String(request?.source?.attackerUuid ?? "").trim();
@@ -16637,7 +16674,7 @@ function notifyWeaponAttackDamageResolved(requests = []) {
     Hooks.callAll(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, {
       attackerUuid,
       targetUuids: Array.from(targets),
-      senderUserId: game.user?.id ?? ""
+      senderUserId: String(senderUserId ?? "")
     });
   }
 }
@@ -16658,6 +16695,106 @@ function serializeWeaponDamageRequests(requests = []) {
         : {}
     }))
     .filter(request => request.actorUuid && request.amount > 0 && request.damageTypeKey);
+}
+
+function compactWeaponDamageBatch(requests = []) {
+  const serialized = serializeWeaponDamageRequests(requests);
+  const sharedSource = collectSharedSocketSource(serialized.map(request => request.source));
+  return {
+    sharedSource,
+    requests: serialized.map(request => ({
+      ...request,
+      source: omitSharedSocketSource(request.source, sharedSource)
+    }))
+  };
+}
+
+function deserializeWeaponDamageBatch(batch = {}) {
+  const sharedSource = batch?.sharedSource && typeof batch.sharedSource === "object"
+    ? batch.sharedSource
+    : {};
+  return serializeWeaponDamageRequests((Array.isArray(batch?.requests) ? batch.requests : [])
+    .map(request => ({
+      ...request,
+      source: {
+        ...foundry.utils.deepClone(sharedSource),
+        ...(request?.source && typeof request.source === "object"
+          ? foundry.utils.deepClone(request.source)
+          : {})
+      }
+    })));
+}
+
+function compactDamageApplicationSources(results = []) {
+  const sourceResults = Array.isArray(results) ? results : [];
+  const applications = sourceResults.flatMap(result => (
+    Array.isArray(result?.damageApplications) ? result.damageApplications : []
+  ));
+  const sharedSource = collectSharedSocketSource(applications.map(application => application?.source));
+  return {
+    sharedSource,
+    results: sourceResults.map(result => ({
+      ...result,
+      ...(Array.isArray(result?.damageApplications) ? {
+        damageApplications: result.damageApplications.map(application => ({
+          ...application,
+          source: omitSharedSocketSource(application?.source, sharedSource)
+        }))
+      } : {})
+    }))
+  };
+}
+
+function expandDamageApplicationSharedSource(results = [], sharedSource = {}) {
+  if (!Array.isArray(results)) return [];
+  const shared = sharedSource && typeof sharedSource === "object" ? sharedSource : {};
+  return results.map(result => ({
+    ...result,
+    ...(Array.isArray(result?.damageApplications) ? {
+      damageApplications: result.damageApplications.map(application => ({
+        ...application,
+        source: {
+          ...foundry.utils.deepClone(shared),
+          ...(application?.source && typeof application.source === "object"
+            ? foundry.utils.deepClone(application.source)
+            : {})
+        }
+      }))
+    } : {})
+  }));
+}
+
+function collectSharedSocketSource(sources = []) {
+  const normalized = sources.filter(source => source && typeof source === "object");
+  if (!normalized.length || normalized.length !== sources.length) return {};
+  const first = normalized[0];
+  const shared = {};
+  for (const [key, value] of Object.entries(first)) {
+    if (!normalized.every(source => (
+      Object.hasOwn(source, key) && socketPayloadValuesEqual(source[key], value)
+    ))) continue;
+    shared[key] = foundry.utils.deepClone(value);
+  }
+  return shared;
+}
+
+function omitSharedSocketSource(source = {}, sharedSource = {}) {
+  const result = {};
+  for (const [key, value] of Object.entries(source && typeof source === "object" ? source : {})) {
+    if (Object.hasOwn(sharedSource, key)) continue;
+    result[key] = foundry.utils.deepClone(value);
+  }
+  return result;
+}
+
+function socketPayloadValuesEqual(left, right) {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch (_error) {
+    return false;
+  }
 }
 
 function getTokenCenter(token) {

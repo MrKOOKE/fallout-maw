@@ -106,11 +106,105 @@ const {
   ORDINARY_WEAPON_ATTACK_TESTING,
   WEAPON_ATTACK_LIFECYCLE_TESTING,
   WEAPON_CONDITION_WEAR_TESTING,
+  WEAPON_DAMAGE_AUTHORITY_TESTING,
   WeaponAttackController,
   getWeaponActionResourcePreview,
   registerWeaponAttackResolvedHandler,
   registerWeaponAttackTerminalHandler
 } = await import("../src/combat/weapon-attack-controller.mjs");
+
+test("player weapon damage preparation and application use one targeted GM packet", async () => {
+  emitted.length = 0;
+  warnings.length = 0;
+  const previousWindow = globalThis.window;
+  const previousEmit = game.socket.emit;
+  const deliveryOptions = [];
+  globalThis.window = globalThis;
+  game.user = player;
+  game.socket.emit = (_channel, payload, options) => {
+    emitted.push(payload);
+    deliveryOptions.push(options);
+    if (payload.action !== "applyPreparedWeaponDamageBatch") return;
+    queueMicrotask(() => WEAPON_DAMAGE_AUTHORITY_TESTING.handleSocketMessage({
+      scope: "weaponAttackPreview",
+      action: "createVolleyDamageRegionsResult",
+      senderUserId: gm.id,
+      targetUserId: player.id,
+      requestId: payload.requestId,
+      ok: true,
+      damageResults: [{ actorUuid: "Actor.target", amount: 7, mode: "damage" }],
+      results: []
+    }, gm.id));
+  };
+
+  try {
+    const result = await WEAPON_DAMAGE_AUTHORITY_TESTING.requestBatch([{
+      actorUuid: "Actor.target",
+      limbKey: "torso",
+      amount: 7,
+      damageTypeKey: "physical",
+      source: { attackId: "one-packet-attack", attackerUuid: "Actor.attacker" }
+    }]);
+    assert.deepEqual(result.damage, [{ actorUuid: "Actor.target", amount: 7, mode: "damage" }]);
+    assert.deepEqual(result.regions, []);
+    assert.equal(emitted.filter(payload => payload.action === "applyPreparedWeaponDamageBatch").length, 1);
+    const request = emitted.find(payload => payload.action === "applyPreparedWeaponDamageBatch");
+    assert.ok(request.damageBatch);
+    assert.equal(Object.hasOwn(request, "damageRequests"), false);
+    assert.deepEqual(deliveryOptions.find(Boolean), { recipients: [gm.id] });
+    assert.equal(warnings.length, 0);
+  } finally {
+    game.socket.emit = previousEmit;
+    game.user = player;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("weapon damage wire compaction preserves shared and per-impact source data", () => {
+  const requests = [0, 1].map(index => ({
+    actorUuid: `Actor.target-${index}`,
+    limbKey: "torso",
+    amount: 7 + index,
+    damageTypeKey: "physical",
+    source: {
+      attackId: "compact-attack",
+      attackerUuid: "Actor.attacker",
+      weaponData: { name: "test", nested: { value: 3 } },
+      targetTokenUuid: `Scene.scene.Token.target-${index}`,
+      pelletImpactIndex: index
+    }
+  }));
+  const compact = WEAPON_DAMAGE_AUTHORITY_TESTING.compactBatch(requests);
+  assert.equal(compact.sharedSource.attackId, "compact-attack");
+  assert.deepEqual(compact.sharedSource.weaponData, { name: "test", nested: { value: 3 } });
+  assert.equal(Object.hasOwn(compact.requests[0].source, "weaponData"), false);
+  assert.equal(compact.requests[1].source.pelletImpactIndex, 1);
+  assert.deepEqual(WEAPON_DAMAGE_AUTHORITY_TESTING.expandBatch(compact), requests.map(request => ({
+    ...request,
+    itemId: "",
+    scope: "healthAndLimb",
+    applyMitigation: true,
+    processDamageTypeSettings: true
+  })));
+
+  const results = [{
+    actorUuid: "Actor.target-0",
+    amount: 4,
+    damageApplications: requests.map((request, index) => ({
+      damageEventIndex: index,
+      incomingAmount: request.amount,
+      source: request.source
+    }))
+  }];
+  const compactResults = WEAPON_DAMAGE_AUTHORITY_TESTING.compactResults(results);
+  assert.equal(compactResults.sharedSource.attackId, "compact-attack");
+  assert.equal(Object.hasOwn(compactResults.results[0].damageApplications[0].source, "weaponData"), false);
+  assert.deepEqual(
+    WEAPON_DAMAGE_AUTHORITY_TESTING.expandResults(compactResults.results, compactResults.sharedSource),
+    results
+  );
+});
 
 test("terminal attack handlers are outside the awaited resolved publication", async () => {
   const order = [];

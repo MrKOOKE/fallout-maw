@@ -1297,7 +1297,7 @@ export async function applyDamageRequestsInCurrentHubOperation(requests = [], lo
   }
 }
 
-function serializeDamageCycleSocketResults(results = []) {
+export function serializeDamageCycleSocketResults(results = []) {
   return results.flat(Infinity).filter(Boolean).map(result => {
     const phantomDestroyed = result.phantomDestroyed === true;
     return {
