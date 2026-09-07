@@ -1,4 +1,5 @@
 import { getPreviewActorContext } from "./token-clone-initialization.mjs";
+import { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION } from "../constants.mjs";
 
 const scalarUpdates = new WeakMap();
 const scalarCommits = new WeakMap();
@@ -9,9 +10,10 @@ const scalarCommits = new WeakMap();
  * updateSyntheticActor again, rebuilding the Actor and all of its Items even
  * when only an HP/AP counter changed. A regular scalar patch is already applied
  * and validated by the first update; only that redundant commit callback can be
- * omitted. System-field replacements additionally verify that merging the
- * committed delta with the base produces the already updated system source.
- * Other entry points still need the full base-Actor/delta merge.
+ * omitted. System-field replacements and the complete system/flags snapshot
+ * returned for a marked movement-resource update additionally verify that the
+ * committed delta merged with the base equals the already updated Actor. Other
+ * entry points still need the full base-Actor/delta merge.
  */
 export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
   apply(context = {}) {
@@ -34,10 +36,16 @@ export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
     const context = scalarUpdates.get(this);
     // Enter only after the native synthetic-Actor update and delta validation
     // succeeded. Recheck the cleaned diff because migrations can alter input.
-    const patch = inspectNonEmbeddedPatch(diff, this.id);
+    const patch = context?.movementResourceSnapshot
+      ? inspectMovementResourceSnapshot(diff, this.id)
+      : inspectNonEmbeddedPatch(diff, this.id);
     scalarCommits.set(this, context && patch ? {
       ...context,
-      requiresSystemMergeCheck: context.requiresSystemMergeCheck || patch.hasSystemReplacement
+      mergeCheckRoots: new Set([
+        ...context.mergeCheckRoots,
+        ...(patch.hasSystemReplacement ? ["system"] : []),
+        ...(patch.snapshotRoots ?? [])
+      ])
     } : null);
     try {
       return super._updateCommit(copy, diff, options, state);
@@ -49,7 +57,7 @@ export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
   updateSyntheticActor() {
     const context = scalarCommits.get(this);
     const current = context && isCurrentContext(this, context);
-    if (current && isEquivalentSystemMerge(this, context)) return;
+    if (current && areEquivalentMergedRoots(this, context)) return;
     return super.updateSyntheticActor();
   }
 }
@@ -57,13 +65,19 @@ export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
 function createScalarUpdateContext(delta, changes, options) {
   if (Number(globalThis.game?.release?.generation) !== 14) return null;
   if (options.recursive === false || options.dryRun || options.restoreDelta) return null;
-  const patch = inspectNonEmbeddedPatch(changes, delta.id);
+  const movementResourceSnapshot = Boolean(options[COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]);
+  const patch = inspectNonEmbeddedPatch(changes, delta.id)
+    ?? (movementResourceSnapshot ? inspectMovementResourceSnapshot(changes, delta.id, { requireComplete: true }) : null);
   if (!patch) return null;
   const context = {
     parent: delta.parent,
     actor: delta.syntheticActor,
     baseActor: delta.parent?.baseActor,
-    requiresSystemMergeCheck: patch.hasSystemReplacement
+    movementResourceSnapshot: Boolean(patch.snapshotRoots),
+    mergeCheckRoots: new Set([
+      ...(patch.hasSystemReplacement ? ["system"] : []),
+      ...(patch.snapshotRoots ?? [])
+    ])
   };
   return isCurrentContext(delta, context) ? context : null;
 }
@@ -102,6 +116,33 @@ function inspectNonEmbeddedPatch(changes, id) {
   return result;
 }
 
+function inspectMovementResourceSnapshot(changes, id, { requireComplete = false } = {}) {
+  if (!isPlainRecord(changes)) return null;
+  const roots = new Set();
+  for (const [path, value] of Object.entries(changes)) {
+    const [root, ...parts] = path.split(".");
+    if (root === "_id") {
+      if (parts.length || value !== id) return null;
+      continue;
+    }
+    if (root !== "system" && root !== "flags") return null;
+    if (parts.some(isSpecialKey) || !isSnapshotValue(value)) return null;
+    roots.add(root);
+  }
+  if (!roots.size) return null;
+  if (requireComplete && (!roots.has("system") || !roots.has("flags"))) return null;
+  return { hasSystemReplacement: false, snapshotRoots: roots };
+}
+
+function isSnapshotValue(value) {
+  if (value === null || ["string", "number", "boolean"].includes(typeof value)) return true;
+  if (Array.isArray(value)) return value.every(isSnapshotValue);
+  if (!isPlainRecord(value)) return false;
+  return Object.entries(value).every(([key, entry]) => (
+    !key.split(".").some(isSpecialKey) && isSnapshotValue(entry)
+  ));
+}
+
 function isSupportedValue(value, result = null) {
   if (value === null || ["string", "number", "boolean"].includes(typeof value)) return true;
   const Replacement = globalThis.foundry?.data?.operators?.ForcedReplacement;
@@ -119,21 +160,25 @@ function isSupportedValue(value, result = null) {
   ));
 }
 
-function isEquivalentSystemMerge(delta, context) {
-  if (!context.requiresSystemMergeCheck) return true;
+function areEquivalentMergedRoots(delta, context) {
+  if (!context.mergeCheckRoots.size) return true;
   const utils = globalThis.foundry?.utils;
-  const baseSystem = context.baseActor?._source?.system;
-  const deltaSystem = delta._source?.system;
-  const actorSystem = context.actor?._source?.system;
-  if (!utils?.deepClone || !utils?.mergeObject || !utils?.equals
-    || !isPlainRecord(baseSystem) || !isPlainRecord(deltaSystem) || !isPlainRecord(actorSystem)) return false;
+  if (!utils?.deepClone || !utils?.mergeObject || !utils?.equals) return false;
 
   // BaseActorDelta.applyDelta merges these exact sources after handling Items
   // and effects. A replacement can remove delta keys that the base supplies;
   // in that case native reapplication restores them and must still run. Compare
-  // only the system data, avoiding inventory serialization or reconstruction.
-  const merged = utils.mergeObject(utils.deepClone(baseSystem), utils.deepClone(deltaSystem));
-  return utils.equals(merged, actorSystem);
+  // only the non-embedded roots involved, avoiding inventory serialization or
+  // reconstruction.
+  for (const root of context.mergeCheckRoots) {
+    const baseValue = context.baseActor?._source?.[root];
+    const deltaValue = delta._source?.[root];
+    const actorValue = context.actor?._source?.[root];
+    if (!isPlainRecord(baseValue) || !isPlainRecord(deltaValue) || !isPlainRecord(actorValue)) return false;
+    const merged = utils.mergeObject(utils.deepClone(baseValue), utils.deepClone(deltaValue));
+    if (!utils.equals(merged, actorValue)) return false;
+  }
+  return true;
 }
 
 function isPlainRecord(value) {

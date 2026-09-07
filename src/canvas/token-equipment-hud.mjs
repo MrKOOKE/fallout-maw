@@ -28,7 +28,9 @@ let tokenEquipmentHudRefreshTimer = null;
 
 export function registerTokenEquipmentHudHooks() {
   Hooks.on("renderTokenHUD", decorateTokenHudEquipment);
-  Hooks.on("updateActor", refreshTokenEquipmentHudForActor);
+  Hooks.on("updateActor", (actor, _changes, options = {}) => {
+    if (!options?.falloutMawCombatMovementResourceUpdate) refreshTokenEquipmentHudForActor(actor);
+  });
   Hooks.on("createItem", refreshTokenEquipmentHudForItem);
   Hooks.on("updateItem", (item, changes = {}, options = {}) => {
     if (isDeusExMachinaProgressItemUpdate(changes, options)) return;

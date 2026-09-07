@@ -940,7 +940,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       void this.#renderPreservingWindowStack();
     }, 60);
     this.#hookIds = [
-      ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
+      ["updateActor", Hooks.on("updateActor", (actor, _changes, hookOptions = {}) => {
+        if (!hookOptions?.falloutMawCombatMovementResourceUpdate) this.#scheduleRefreshForActor(actor);
+      })],
       ["deleteActor", Hooks.on("deleteActor", actor => this.#scheduleRefreshForActor(actor))],
       ["createItem", Hooks.on("createItem", item => this.#scheduleRefreshForItem(item))],
       ["updateItem", Hooks.on("updateItem", (item, changes = {}, hookOptions = {}) => {

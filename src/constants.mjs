@@ -8,6 +8,7 @@ export const DISEASE_CREATE_OPTION = "falloutMawAllowDiseaseCreate";
 export const BLEEDING_DAMAGE_TYPE_KEY = "bleeding";
 export const GRAPPLE_FOLLOW_MOVEMENT_OPTION = "falloutMawGrappleFollowMovement";
 export const GRAPPLE_FOLLOW_ORCHESTRATION_OPTION = "falloutMawGrappleFollowOrchestration";
+export const COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION = "falloutMawCombatMovementResourceUpdate";
 export const COMBAT_DELETION_SETTLED_HOOK = "falloutMawCombatDeletionSettled";
 
 export const TEMPLATES = Object.freeze({
@@ -39,6 +40,7 @@ export const TEMPLATES = Object.freeze({
   skillCheckControl: `systems/${SYSTEM_ID}/templates/actor/skill-check-control.hbs`,
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
+  tokenActionHudResources: `systems/${SYSTEM_ID}/templates/actor/parts/token-action-hud-resources.hbs`,
   combatEndResolution: `systems/${SYSTEM_ID}/templates/actor/combat-end-resolution.hbs`,
   travelGroupHud: `systems/${SYSTEM_ID}/templates/actor/travel-group-hud.hbs`,
   tokenActionHudScaleSettings: `systems/${SYSTEM_ID}/templates/actor/token-action-hud-scale-settings.hbs`,

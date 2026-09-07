@@ -1,6 +1,6 @@
 ﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
-import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
   getActorNeedSettings,
@@ -327,8 +327,13 @@ function updateArmedExplosionTooltipCountdowns(worldTime = 0) {
   }
 }
 
-function scheduleTokenActionHudRefreshForActor(actor) {
+function scheduleTokenActionHudRefreshForActor(actor, _changes = {}, options = {}) {
   if (!isActiveHudActor(actor)) return;
+  if (options?.[COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]) {
+    if (!tokenActionHud?.rendered) return;
+    void tokenActionHud.render({ parts: ["resources"] });
+    return;
+  }
   scheduleTokenActionHudRefresh();
 }
 
@@ -579,6 +584,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     hud: {
       root: true,
       template: TEMPLATES.tokenActionHud
+    },
+    resources: {
+      template: TEMPLATES.tokenActionHudResources
     }
   };
 
@@ -715,6 +723,20 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const actor = this.actor;
+    const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
+    const gmControls = game.user?.isGM ? {
+      selectedCount: getSelectedHudActors().length
+    } : null;
+    if (options.parts?.length === 1 && options.parts[0] === "resources") {
+      return {
+        ...context,
+        actor,
+        token: this.#token,
+        resources: prepareResourceEntries(actor),
+        meterSections,
+        gmControls
+      };
+    }
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
     const requestIndex = createTokenActionHudRequestIndex(actor, {
       getWeaponSets: getHudWeaponSetsForActor,
@@ -751,7 +773,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers, {
       expandedAbilityCategoryKeys: this.#expandedAbilityCategoryKeys
     });
-    const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(
       actor.system?.limbSilhouetteOverride ? (actor.system?.limbSilhouette ?? null) : race?.limbSilhouette,
@@ -765,9 +786,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(displayLimbs),
       limbSilhouette,
       limbLayer: prepareLimbLayerContext(this.#limbDisplayLayer),
-      gmControls: game.user?.isGM ? {
-        selectedCount: getSelectedHudActors().length
-      } : null,
+      gmControls,
       resources: prepareResourceEntries(actor),
       needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,
@@ -785,6 +804,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onRender(context, options) {
     await super._onRender(context, options);
     setTokenActionHudInterfaceOpen(true);
+    if (options.parts?.length === 1 && options.parts[0] === "resources") {
+      this.applyMovementResourcePreview(tokenActionHudMovementPreview);
+      return;
+    }
     this.#clearDetachedHudTooltips();
     this.#activateLimbControlClicks();
     const silhouette = this.element?.querySelector("[data-limb-popover-root]");

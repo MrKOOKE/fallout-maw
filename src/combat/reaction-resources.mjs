@@ -548,10 +548,60 @@ export function canSpendCombatActionPoints(actor, amount = 0, { label = "" } = {
   return false;
 }
 
+/**
+ * Build the direct Actor fields for a dynamic action-point spend.
+ *
+ * One-time points live in separate effects or flags and therefore require
+ * their own document operation. Returning null for those cases keeps their
+ * established transaction intact. Ordinary ОД/ОР can be included in a
+ * caller's related Actor update so one logical action produces one write.
+ */
+export function prepareDirectCombatActionPointSpend(actor, amount = 0) {
+  if (!isActorInActiveCombat(actor)) return null;
+  const cost = Math.max(0, toInteger(amount));
+  if (!actor?.isOwner || cost <= 0) return null;
+
+  const state = getCombatActionPointState(actor);
+  if (!state || cost > state.value || state.once > 0) return null;
+
+  if (!state.ownTurn) {
+    const maximum = Math.max(0, toInteger(actor.system?.resources?.[REACTION_RESOURCE_KEY]?.max));
+    const next = Math.max(0, state.current - cost);
+    return Object.freeze({
+      amount: cost,
+      resourceKey: REACTION_RESOURCE_KEY,
+      updates: Object.freeze({
+        [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
+        [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+      }),
+      documentOptions: Object.freeze({ [REACTION_UPDATE_OPTION]: true })
+    });
+  }
+
+  return Object.freeze({
+    amount: cost,
+    resourceKey: ACTION_RESOURCE_KEY,
+    updates: Object.freeze({
+      [`system.resources.${ACTION_RESOURCE_KEY}.value`]: Math.max(0, state.normal - cost)
+    }),
+    documentOptions: Object.freeze({})
+  });
+}
+
 export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
   if (!isActorInActiveCombat(actor)) return [];
   const cost = Math.max(0, toInteger(amount));
   if (!actor?.isOwner || cost <= 0) return;
+
+  const directSpend = prepareDirectCombatActionPointSpend(actor, cost);
+  if (directSpend) {
+    await actor.update(directSpend.updates, {
+      ...context?.documentOptions,
+      ...directSpend.documentOptions
+    });
+    if (context?.suppressResourceNotification) return [];
+    return notifyCombatResourcesSpent(actor, { [directSpend.resourceKey]: cost }, context);
+  }
 
   const state = getCombatActionPointState(actor);
   if (!state || cost > state.value) return;
@@ -564,7 +614,10 @@ export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
       await actor.update({
         [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
         [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, toInteger(actor.system?.resources?.[REACTION_RESOURCE_KEY]?.max) - next)
-      }, { [REACTION_UPDATE_OPTION]: true });
+      }, {
+        ...context?.documentOptions,
+        [REACTION_UPDATE_OPTION]: true
+      });
     }
     if (context?.suppressResourceNotification) return [];
     return notifyCombatResourcesSpent(actor, { [REACTION_RESOURCE_KEY]: cost }, context);
@@ -575,7 +628,7 @@ export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
   const updates = {};
   if (normalSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.normal - normalSpend);
   if (onceSpend) await spendOneTimeActionPoints(actor, onceSpend);
-  if (Object.keys(updates).length) await actor.update(updates);
+  if (Object.keys(updates).length) await actor.update(updates, context?.documentOptions ?? {});
   if (context?.suppressResourceNotification) return [];
   return notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
 }

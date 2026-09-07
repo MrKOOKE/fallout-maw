@@ -67,6 +67,7 @@ globalThis.foundry = {
 };
 globalThis.game = { release: { generation: 14 } };
 const { FalloutMaWActorDelta } = await import("../src/documents/actor-delta.mjs");
+const { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION } = await import("../src/constants.mjs");
 const scalar = { "system.resources.health.spent": 8 };
 const rebuildCount = delta => delta.events.filter(event => event === "rebuild-actor-and-inventory").length;
 
@@ -255,4 +256,66 @@ test("missing replacement comparison APIs or sources falls back to native", () =
     other.updateSource(replacementPatch({}));
     assert.equal(rebuildCount(other), 1);
   } finally { foundry.utils = utils; }
+});
+
+function movementSnapshotFixture({ actorMovement = 11 } = {}) {
+  const delta = new FalloutMaWActorDelta();
+  const baseSystem = {
+    resources: { movement: { value: 12 }, actionPoints: { value: 6 } },
+    traits: ["base"]
+  };
+  const deltaSystem = {
+    resources: { movement: { value: 11 }, actionPoints: { value: 5 } },
+    traits: ["base"]
+  };
+  const baseFlags = { "fallout-maw": { persistent: true } };
+  const deltaFlags = {
+    "fallout-maw": {
+      persistent: true,
+      movementResourceSpending: [{ movement: 1, actionPoints: 1 }]
+    }
+  };
+  delta.parent.baseActor._source = { system: baseSystem, flags: baseFlags };
+  delta._source.system = structuredClone(deltaSystem);
+  delta._source.flags = structuredClone(deltaFlags);
+  delta.syntheticActor._source = {
+    system: { ...structuredClone(deltaSystem), resources: {
+      ...structuredClone(deltaSystem.resources),
+      movement: { value: actorMovement }
+    } },
+    flags: structuredClone(deltaFlags)
+  };
+  return {
+    delta,
+    changes: {
+      _id: delta.id,
+      system: structuredClone(deltaSystem),
+      flags: structuredClone(deltaFlags)
+    }
+  };
+}
+
+test("marked movement resource snapshots skip only the equivalent second Actor reconstruction", () => {
+  const { delta, changes } = movementSnapshotFixture();
+  delta.updateSource(changes, { [COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]: true });
+  assert.deepEqual(delta.events, [
+    "validate-and-update-actor", "commit-delta", "initialize-delta"
+  ]);
+  delta.updateSyntheticActor();
+  assert.equal(rebuildCount(delta), 1, "external reconstruction must remain native");
+});
+
+test("movement snapshot optimization falls back when roots differ or the operation is not exact", () => {
+  for (const mutate of [
+    ({ delta }) => { delta.syntheticActor._source.system.resources.movement.value = 10; },
+    ({ changes }) => { delete changes.flags; },
+    ({ changes }) => { changes.items = []; },
+    ({ options }) => { delete options[COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]; }
+  ]) {
+    const fixture = movementSnapshotFixture();
+    const options = { [COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]: true };
+    mutate({ ...fixture, options });
+    fixture.delta.updateSource(fixture.changes, options);
+    assert.equal(rebuildCount(fixture.delta), 1);
+  }
 });

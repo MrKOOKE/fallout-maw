@@ -1,4 +1,7 @@
-import { GRAPPLE_FOLLOW_MOVEMENT_OPTION } from "../constants.mjs";
+import {
+  COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION,
+  GRAPPLE_FOLLOW_MOVEMENT_OPTION
+} from "../constants.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   getActorPostureAction,
@@ -9,11 +12,17 @@ import {
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
 import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
-import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
+import {
+  REACTION_RESOURCE_KEY,
+  getCombatActionPointState,
+  prepareDirectCombatActionPointSpend,
+  spendCombatActionPoints
+} from "./reaction-resources.mjs";
 import { beginCombatResourceSpending, notifyCombatResourcesSpent } from "./resource-spending.mjs";
 import { ACTION_RESOURCE_KEY } from "./strict-action-points.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "./combat-membership.mjs";
 import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
+import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export { ACTION_RESOURCE_KEY };
@@ -352,7 +361,6 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
     await runMovementResourceSpendingSerially(actor, async () => {
       await waitForMovementAnimation(movement);
       if (!isCombatMovementTracked(tokenDocument)) return;
-
       const activeUseOperationId = getCombatMovementActiveUseOperationId(actor, tokenDocument, movement, operation);
       const actorToken = tokenDocument?.object ?? tokenDocument ?? null;
       const chanceContext = { actorToken, chanceOperationId: activeUseOperationId };
@@ -376,6 +384,10 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
       });
       const updates = {};
       if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
+      const directActionSpend = actionSpend
+        ? prepareDirectCombatActionPointSpend(actor, actionSpend)
+        : null;
+      if (directActionSpend) Object.assign(updates, directActionSpend.updates);
       updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
         ...getMovementResourceSpendingStack(actor),
         createMovementResourceSpendingEntry(tokenDocument, movement, {
@@ -383,8 +395,16 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
           [state.action.key]: actionSpend
         }, { adjustedCost: cost, costProfileKey: costProfile.key })
       ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
-      await actor.update(updates);
-      if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
+      await actor.update(updates, {
+        ...createMovementResourceDocumentOptions(),
+        ...directActionSpend?.documentOptions
+      });
+      if (actionSpend && !directActionSpend) {
+        await spendCombatActionPoints(actor, actionSpend, {
+          suppressResourceNotification: true,
+          documentOptions: createMovementResourceDocumentOptions()
+        });
+      }
       if (activeUsePreparation) {
         try {
           await commitPreparedActiveUseOperations([activeUsePreparation], {
@@ -402,6 +422,13 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
   } finally {
     finishSpending();
   }
+}
+
+function createMovementResourceDocumentOptions() {
+  return {
+    [COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]: true,
+    [INVENTORY_RENDER_PARTS_OPTION]: ["indicators"]
+  };
 }
 
 export async function runMovementResourceSpendingSerially(actor, operation) {
