@@ -46,25 +46,26 @@ export function openPresetMigrationForApplication(app) {
 
 export async function openSettingsPresetMigration(app, settingIds) {
   const api = CONFIG.FalloutMaW?.settingsPresets;
-  if (!api?.list || !api?.get || !api?.migrate) {
+  if (!api?.migrationSources || !api?.migrate || !api?.status) {
     ui.notifications.error("Менеджер пресетов ещё не готов.");
     return;
   }
-  const active = await api.active();
-  const target = active?.id ? await api.get(active.id) : null;
-  if (!target) throw new Error("Активный пресет не найден.");
-  const sources = await buildSources(api, target.id);
-  if (!sources.length) {
-    ui.notifications.warn("Нет другого пресета или сохранённой версии для миграции.");
-    return;
-  }
+  const activeId = String(api.status()?.activePresetId ?? "");
+  if (!activeId) throw new Error("Активный пресет не найден.");
+  const sourceDataPromise = buildSources(api, activeId, settingIds);
 
-  let sourceKey = sources[0].key;
-  while (sourceKey) {
-    const selected = await chooseSource(sources, sourceKey);
-    if (!selected) return;
+  let sourceKey = "";
+  while (true) {
+    const selected = await chooseSource(sourceDataPromise, sourceKey);
+    if (!selected) {
+      await sourceDataPromise;
+      return;
+    }
+    const { sources, target } = await sourceDataPromise;
+    if (!target) throw new Error("Активный пресет не найден.");
     sourceKey = selected;
     const source = sources.find(entry => entry.key === sourceKey);
+    if (!source) throw new Error("Выбранный пресет больше недоступен.");
     const result = await compareAndApply(api, target, source, settingIds);
     if (result === "change") continue;
     if (result === "applied") {
@@ -76,38 +77,52 @@ export async function openSettingsPresetMigration(app, settingIds) {
   }
 }
 
-async function buildSources(api, activeId) {
-  const listed = await api.list();
-  const result = [];
-  for (const row of listed) {
-    const preset = await api.get(row.id);
-    if (!preset) continue;
-    if (preset.id !== activeId) result.push({
+async function buildSources(api, activeId, settingIds) {
+  const listed = await api.migrationSources(settingIds);
+  const target = listed.find(preset => preset.id === activeId) ?? null;
+  const sources = listed
+    .filter(preset => preset.id !== activeId)
+    .map(preset => ({
       key: `preset:${preset.id}`,
       presetId: preset.id,
-      saveId: "",
-      name: `${preset.name} — текущая версия`,
+      name: preset.name,
       settings: preset.settings ?? []
-    });
-    for (const save of preset.saves ?? []) result.push({
-      key: `save:${preset.id}:${save.id}`,
-      presetId: preset.id,
-      saveId: save.id,
-      name: `${preset.name} / ${save.name} (${formatDate(save.createdAt)})`,
-      settings: save.settings ?? []
-    });
-  }
-  return result;
+    }));
+  return { sources, target };
 }
 
-async function chooseSource(sources, selected) {
-  const options = sources.map(source => `<option value="${escapeAttribute(source.key)}"${source.key === selected ? " selected" : ""}>${escapeHTML(source.name)}</option>`).join("");
-  return DialogV2.prompt({
+async function chooseSource(sourceDataPromise, selected) {
+  return DialogV2.wait({
     window: { title: "Источник миграции", icon: "fa-solid fa-code-compare" },
-    content: `<label class="form-group"><span>Пресет или его сохранение</span><select name="source">${options}</select></label><p class="hint">Сравнение использует сохранённые настройки. Несохранённые поля открытой формы в него не входят.</p>`,
-    ok: { label: "Сравнить", callback: (_event, button) => button.form.elements.source.value },
+    content: `<label class="form-group"><span>Пресет</span><select name="source" disabled><option value="">Загрузка пресетов…</option></select></label><p class="hint">Сравнение использует актуальные сохранённые настройки выбранного пресета. Несохранённые поля открытой формы в него не входят.</p>`,
+    buttons: [
+      { action: "compare", label: "Сравнить", default: true, callback: (_event, button) => button.form.elements.source.value },
+      { action: "cancel", label: "Отмена", callback: () => false }
+    ],
+    render: (_event, dialog) => {
+      const form = dialog.element.querySelector("form");
+      const select = form?.elements?.source;
+      const compare = dialog.element.querySelector('[data-action="compare"]');
+      if (compare) compare.disabled = true;
+      void sourceDataPromise.then(({ sources }) => {
+        if (!sources.length) {
+          ui.notifications.warn("Нет другого пресета для миграции.");
+          return dialog.close();
+        }
+        if (!select) return;
+        const nextSelected = sources.some(source => source.key === selected) ? selected : sources[0].key;
+        select.innerHTML = sources.map(source => `<option value="${escapeAttribute(source.key)}"${source.key === nextSelected ? " selected" : ""}>${escapeHTML(source.name)}</option>`).join("");
+        select.disabled = false;
+        if (compare) compare.disabled = false;
+      }).catch(error => {
+        console.error(`${SYSTEM_ID} | Failed to load migration presets`, error);
+        ui.notifications.error(`Не удалось загрузить пресеты: ${error?.message ?? error}`);
+        return dialog.close();
+      });
+    },
     rejectClose: false,
-    modal: true
+    modal: true,
+    position: { width: 520, height: "auto" }
   });
 }
 
@@ -433,4 +448,3 @@ function escapePointer(value) { return String(value).replaceAll("~", "~0").repla
 function unescapePointer(value) { return String(value).replaceAll("~1", "/").replaceAll("~0", "~"); }
 function escapeHTML(value) { return foundry.utils.escapeHTML(String(value ?? "")); }
 function escapeAttribute(value) { return escapeHTML(value).replaceAll('"', "&quot;"); }
-function formatDate(value) { try { return new Date(value).toLocaleString(); } catch (_error) { return String(value ?? ""); } }

@@ -64,6 +64,7 @@ const runtime = {
 
 const api = Object.freeze({
   list: listSettingsPresets,
+  migrationSources: listSettingsPresetMigrationSources,
   get: getSettingsPreset,
   active: getActiveSettingsPreset,
   status: getSettingsPresetStatus,
@@ -197,6 +198,27 @@ export async function listSettingsPresets() {
     .sort((left, right) => {
       if (left.isMain !== right.isMain) return left.isMain ? -1 : 1;
       return left.name.localeCompare(right.name, game.i18n?.lang ?? undefined) || left.id.localeCompare(right.id);
+    });
+}
+
+/** Return only current preset values needed by one settings migration UI. */
+export async function listSettingsPresetMigrationSources(settingIds = []) {
+  await ensureFullPresetSourcesLoaded();
+  const requested = new Set(Array.from(settingIds ?? [], id => String(id ?? "")).filter(Boolean));
+  return Array.from(runtime.descriptors.values())
+    .map(({ preset }) => ({
+      id: preset.id,
+      name: preset.name,
+      settings: (preset.settings ?? [])
+        .filter(entry => requested.has(entry.id))
+        .map(cloneValue)
+    }))
+    .sort((left, right) => {
+      const leftMain = left.id === MAIN_PRESET_ID;
+      const rightMain = right.id === MAIN_PRESET_ID;
+      if (leftMain !== rightMain) return leftMain ? -1 : 1;
+      return left.name.localeCompare(right.name, game.i18n?.lang ?? undefined)
+        || left.id.localeCompare(right.id);
     });
 }
 
@@ -403,7 +425,10 @@ export async function migrateSettingsPresetValues(entries = []) {
     }
     const next = validatePresetForStorage(await rebuildPreset(current, { settings }));
     await savePresetCopies(next);
-    const applied = await activatePresetLocal(next.id, { skipFlush: true });
+    const applied = await activatePresetLocal(next.id, {
+      skipFlush: true,
+      settingIds: Array.from(replacements.keys())
+    });
     broadcastPresetChange();
     return cloneValue(applied);
   });
@@ -921,10 +946,11 @@ async function requestActorPresetBootstrap() {
   else runtime.deferredApplyEffects = true;
 }
 
-async function activatePresetLocal(id, { skipFlush = false } = {}) {
+async function activatePresetLocal(id, { skipFlush = false, settingIds = null } = {}) {
   if (!skipFlush) await flushActivePresetLocal();
   const preset = requirePreset(id);
   return applyPresetAtomically(preset, {
+    settingIds,
     statePatch: {
       migrationVersion: MIGRATION_VERSION,
       activePresetId: preset.id,
@@ -1078,11 +1104,11 @@ function sanitizePresetSettings(rawPreset) {
   });
 }
 
-async function applyPresetAtomically(rawPreset, { statePatch = {} } = {}) {
+async function applyPresetAtomically(rawPreset, { statePatch = {}, settingIds = null } = {}) {
   const preset = normalizePresetDocument(rawPreset);
   if (preset.deleted) throw new Error(`Cannot activate deleted settings preset ${preset.id}.`);
   const packagedModulePreset = isModulePreset(preset.id);
-  const assignments = buildPresetAssignments(preset, { coerceLegacy: true });
+  const assignments = buildPresetAssignments(preset, { coerceLegacy: true, settingIds });
   const healedAssignments = assignments.filter(assignment => assignment.canonicalized);
   const appliedPreset = healedAssignments.length
     ? await makePreset({
@@ -1227,14 +1253,18 @@ async function materializeMissingSettingDocuments(values, storage) {
   return documentIds;
 }
 
-function buildPresetAssignments(preset, { coerceLegacy = false } = {}) {
+function buildPresetAssignments(preset, { coerceLegacy = false, settingIds = null } = {}) {
   const main = preset.id === MAIN_PRESET_ID ? preset : requirePreset(MAIN_PRESET_ID);
   const presetValues = new Map((preset.settings ?? []).map(entry => [entry.id, entry.value]));
   const mainValues = new Map((main.settings ?? []).map(entry => [entry.id, entry.value]));
   const assignments = [];
   const errors = [];
 
+  const requested = settingIds === null
+    ? null
+    : new Set(Array.from(settingIds, id => String(id ?? "")).filter(Boolean));
   for (const setting of getManagedPresetSettings()) {
+    if (requested && !requested.has(setting.id)) continue;
     const provided = presetValues.has(setting.id);
     if (!coerceLegacy && provided) {
       try {

@@ -11,7 +11,9 @@ import {
   importSettingsPreset,
   initializeSettingsPresets,
   isPresetManagedSetting,
+  listSettingsPresetMigrationSources,
   listSettingsPresets,
+  migrateSettingsPresetValues,
   removeSettingsPreset,
   removeSettingsPresetVersion,
   renameSettingsPreset,
@@ -1512,4 +1514,82 @@ test("a changed revision of the active preset is fully reapplied", async () => {
 
   assert.equal(await SETTINGS_PRESET_TESTING.applyActiveRevisionIfNeeded(), true);
   assert.equal(batchCalls, 1);
+});
+
+test("migration sources expose only current requested settings and never nested saves", async () => {
+  installFoundryMock();
+  const historical = createPresetSave({
+    id: "save-old",
+    name: "Old version",
+    settings: [entry("fallout-maw.alpha", false), entry("fallout-maw.beta", { code: "old" })],
+    systemVersion: "0.1.0"
+  });
+  const current = createPresetDocument({
+    id: "preset-current",
+    name: "Current Name",
+    settings: [entry("fallout-maw.alpha", true), entry("fallout-maw.beta", { code: "current" })],
+    saves: [historical],
+    systemVersion: "0.2.0"
+  });
+  SETTINGS_PRESET_TESTING.installPresets([
+    makePreset("fallout-maw", "Fallout-MaW", [
+      entry("fallout-maw.alpha", false),
+      entry("fallout-maw.beta", { code: "main" })
+    ]),
+    current
+  ]);
+
+  const sources = await listSettingsPresetMigrationSources(["fallout-maw.beta"]);
+  assert.equal(sources[0].id, "fallout-maw");
+  const source = sources.find(entry => entry.id === current.id);
+  assert.deepEqual(source, {
+    id: current.id,
+    name: "Current Name",
+    settings: [entry("fallout-maw.beta", { code: "current" })]
+  });
+  assert.equal(Object.hasOwn(source, "saves"), false);
+});
+
+test("migrating one managed setting applies only that setting plus preset state", async () => {
+  const operations = [];
+  const { state } = installFoundryMock({
+    storedIds: ["fallout-maw.alpha", "fallout-maw.beta", STATE_ID],
+    values: {
+      "fallout-maw.alpha": true,
+      "fallout-maw.beta": { code: "keep" }
+    },
+    modifyBatch: async batch => {
+      operations.push(...batch);
+      return batch.map(operation => (operation.data ?? operation.updates ?? []).map(() => ({})));
+    }
+  });
+  installPresetFileMock();
+  const main = makePreset("fallout-maw", "Fallout-MaW", [
+    entry("fallout-maw.alpha", false),
+    entry("fallout-maw.beta", { code: "main" })
+  ]);
+  const active = makePreset("personal-migrate", "Personal", [
+    entry("fallout-maw.alpha", true),
+    entry("fallout-maw.beta", { code: "keep" })
+  ]);
+  SETTINGS_PRESET_TESTING.installPresets([main, active]);
+  Object.assign(state, {
+    activePresetId: active.id,
+    appliedRevision: active.revision,
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
+    migrationVersion: 1
+  });
+
+  await migrateSettingsPresetValues([entry("fallout-maw.alpha", false)]);
+
+  const applied = operations.find(operation => operation.falloutMaWSettingsPresetApply === true);
+  assert.ok(applied);
+  assert.deepEqual(applied.updates.map(update => update._id).sort(), [
+    "doc-fallout-maw.alpha",
+    `doc-${STATE_ID}`
+  ].sort());
+  assert.equal(applied.falloutMaWSettingsPresetBatchSize, 2);
+  const stored = await getSettingsPreset(active.id);
+  assert.equal(stored.settings.find(setting => setting.id === "fallout-maw.alpha").value, false);
+  assert.deepEqual(stored.settings.find(setting => setting.id === "fallout-maw.beta").value, { code: "keep" });
 });

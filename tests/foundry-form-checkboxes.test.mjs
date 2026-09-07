@@ -136,6 +136,19 @@ test("ability preset migration starts collapsed and provides synchronized select
   assert.equal(activation.match(/form\.addEventListener/g)?.length, 2);
 });
 
+test("settings migration lists only current presets by their exact names", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/apps/settings-preset-migration.mjs"), "utf8");
+  const start = source.indexOf("async function buildSources");
+  const end = source.indexOf("async function compareAndApply", start);
+  const picker = source.slice(start, end);
+
+  assert.ok(start >= 0 && end > start);
+  assert.match(picker, /name:\s*preset\.name/);
+  assert.match(picker, /<span>Пресет<\/span>/);
+  assert.match(picker, /position:\s*\{\s*width:\s*520,\s*height:\s*"auto"\s*\}/);
+  assert.doesNotMatch(picker, /preset\.saves|save:|текущая версия|Пресет или его сохранение/iu);
+});
+
 test("both ability editors preserve target controls hidden by self mode", () => {
   const itemSheetSource = fs.readFileSync(path.join(ROOT, "src/sheets/item-sheet.mjs"), "utf8");
   const catalogSource = fs.readFileSync(path.join(ROOT, "src/apps/ability-catalog-item-editor.mjs"), "utf8");
