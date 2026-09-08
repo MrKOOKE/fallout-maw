@@ -95,7 +95,6 @@ function rawPreset(overrides = {}) {
     id: "example-preset",
     name: "Example preset",
     systemVersion: "0.2.0",
-    seedPending: false,
     deleted: false,
     settings: [setting()],
     ...overrides
@@ -108,11 +107,11 @@ test("preset schema constants are stable", () => {
   assert.equal(MAIN_PRESET_ID, "fallout-maw");
 });
 
-test("bundled main and migration seed preserve the managed settings contract", () => {
-  const documents = [
-    JSON.parse(fs.readFileSync(new URL("../storage/settings-presets/fallout-maw.json", import.meta.url), "utf8")),
-    JSON.parse(fs.readFileSync(new URL("../storage/settings-presets/fallout-maw-migration-seed.json", import.meta.url), "utf8"))
-  ];
+test("bundled main preset preserves the managed settings contract", () => {
+  const document = JSON.parse(fs.readFileSync(
+    new URL("../storage/settings-presets/fallout-maw.json", import.meta.url),
+    "utf8"
+  ));
   const expectedIds = [...BUNDLED_PRESET_SETTING_IDS].sort();
   const expectedShapeCounts = {
     object: 20,
@@ -121,53 +120,29 @@ test("bundled main and migration seed preserve the managed settings contract", (
     number: 4,
     boolean: 10
   };
-  const expectedMedicineModes = new Map([
-    ["fallout-maw", "skillThreshold"],
-    ["fallout-maw-migration-seed", "skillChecks"]
-  ]);
-  const documentIdSets = [];
+  assert.equal(document.settings.length, 60);
 
-  for (const document of documents) {
-    assert.equal(document.settings.length, 60);
+  const ids = document.settings.map(entry => entry.id);
+  assert.equal(new Set(ids).size, 60);
+  assert.deepEqual([...ids].sort(), expectedIds);
 
-    const ids = document.settings.map(entry => entry.id);
-    assert.equal(new Set(ids).size, 60);
-    assert.deepEqual([...ids].sort(), expectedIds);
-    documentIdSets.push([...ids].sort());
-
-    const shapeCounts = Object.fromEntries(Object.keys(expectedShapeCounts).map(shape => [shape, 0]));
-    for (const entry of document.settings) {
-      const shape = Array.isArray(entry.value) ? "array" : typeof entry.value;
-      assert.ok(Object.hasOwn(shapeCounts, shape), `${entry.id} has unsupported JSON shape ${shape}`);
-      shapeCounts[shape] += 1;
-    }
-    assert.deepEqual(shapeCounts, expectedShapeCounts);
-
-    const showSystemIcons = document.settings.find(entry => entry.id === "fallout-maw.showSystemIcons")?.value;
-    assert.equal(typeof showSystemIcons, "number");
-    assert.equal(Number.isFinite(showSystemIcons), true);
-    assert.equal(Number.isInteger(showSystemIcons), true);
-    assert.ok(showSystemIcons >= 0 && showSystemIcons <= 3);
-
-    const craftingSettings = document.settings.find(entry => (
-      entry.id === "fallout-maw.craftingSettings"
-    ))?.value;
-    assert.equal(craftingSettings?.medicine?.mode, expectedMedicineModes.get(document.id));
+  const shapeCounts = Object.fromEntries(Object.keys(expectedShapeCounts).map(shape => [shape, 0]));
+  for (const entry of document.settings) {
+    const shape = Array.isArray(entry.value) ? "array" : typeof entry.value;
+    assert.ok(Object.hasOwn(shapeCounts, shape), `${entry.id} has unsupported JSON shape ${shape}`);
+    shapeCounts[shape] += 1;
   }
+  assert.deepEqual(shapeCounts, expectedShapeCounts);
 
-  assert.deepEqual(documentIdSets[0], documentIdSets[1]);
-});
+  const showSystemIcons = document.settings.find(entry => entry.id === "fallout-maw.showSystemIcons")?.value;
+  assert.equal(typeof showSystemIcons, "number");
+  assert.equal(Number.isFinite(showSystemIcons), true);
+  assert.equal(Number.isInteger(showSystemIcons), true);
+  assert.ok(showSystemIcons >= 0 && showSystemIcons <= 3);
 
-test("bundled threshold preset keeps medicine in the same no-roll mode", () => {
-  const document = JSON.parse(fs.readFileSync(
-    new URL("../storage/settings-presets/preset-29RLMkIuBBuzp9eClV99Sxcj.json", import.meta.url),
-    "utf8"
-  ));
-  const normalized = normalizePresetDocument(document);
-  const craftingSettings = normalized.settings.find(entry => (
+  const craftingSettings = document.settings.find(entry => (
     entry.id === "fallout-maw.craftingSettings"
   ))?.value;
-
   assert.equal(craftingSettings?.craft?.mode, "skillThreshold");
   assert.equal(craftingSettings?.repair?.mode, "skillThreshold");
   assert.equal(craftingSettings?.medicine?.mode, "skillThreshold");
@@ -252,7 +227,6 @@ test("normalizePresetDocument accepts system alias and returns a sorted detached
     "revision",
     "updatedAt",
     "systemVersion",
-    "seedPending",
     "deleted",
     "settings"
   ]);
@@ -260,7 +234,6 @@ test("normalizePresetDocument accepts system alias and returns a sorted detached
   assert.equal(normalized.name, "Пользовательский");
   assert.equal(normalized.updatedAt, null);
   assert.equal(normalized.systemVersion, null);
-  assert.equal(normalized.seedPending, false);
   assert.equal(normalized.deleted, false);
   assert.match(normalized.revision, /^[a-f0-9]{64}$/);
   assert.deepEqual(normalized.settings.map(entry => entry.id), [
@@ -277,8 +250,7 @@ test("normalizePresetDocument verifies supplied revisions and survives a JSON ro
     id: "round-trip",
     name: "Round trip",
     settings: [setting(WORLD_SETTING, { nested: [true, null, "текст"] })],
-    systemVersion: "0.2.0",
-    seedPending: true
+    systemVersion: "0.2.0"
   });
   const parsed = JSON.parse(JSON.stringify(created));
   const normalized = normalizePresetDocument(parsed);
@@ -304,7 +276,6 @@ test("normalizePresetDocument rejects invalid document metadata", () => {
     [rawPreset({ name: "   " }), /printable/i],
     [rawPreset({ name: "bad\nname" }), /printable/i],
     [rawPreset({ systemVersion: 2 }), /systemVersion/i],
-    [rawPreset({ seedPending: "yes" }), /seedPending/i],
     [rawPreset({ deleted: 1 }), /deleted/i],
     [rawPreset({ updatedAt: "not-a-date" }), /updatedAt/i],
     [rawPreset({ revision: "ABC" }), /revision/i],
@@ -349,15 +320,13 @@ test("createPresetDocument produces a complete current document without retainin
     id: "created-preset",
     name: "Created preset",
     settings: [setting(WORLD_SETTING, value)],
-    systemVersion: " 0.3.0 ",
-    seedPending: true
+    systemVersion: " 0.3.0 "
   });
 
   assert.equal(preset.format, PRESET_FORMAT);
   assert.equal(preset.schemaVersion, 1);
   assert.equal(preset.systemId, "fallout-maw");
   assert.equal(preset.systemVersion, "0.3.0");
-  assert.equal(preset.seedPending, true);
   assert.equal(preset.deleted, false);
   assert.match(preset.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(await computePresetRevision(preset), preset.revision);
@@ -371,15 +340,13 @@ test("createPresetTombstone retains identity, removes settings, and protects the
     id: "delete-me",
     name: "Delete me",
     settings: [setting()],
-    systemVersion: "0.2.0",
-    seedPending: true
+    systemVersion: "0.2.0"
   });
   const tombstone = createPresetTombstone(source);
 
   assert.equal(tombstone.id, source.id);
   assert.equal(tombstone.name, source.name);
   assert.equal(tombstone.deleted, true);
-  assert.equal(tombstone.seedPending, false);
   assert.deepEqual(tombstone.settings, []);
   assert.equal(await computePresetRevision(tombstone), tombstone.revision);
 
@@ -397,10 +364,6 @@ test("createPresetTombstone retains identity, removes settings, and protects the
     () => normalizePresetDocument(rawPreset({ deleted: true, settings: [setting()] })),
     /cannot contain settings/i
   );
-  assert.throws(
-    () => normalizePresetDocument(rawPreset({ deleted: true, seedPending: true, settings: [] })),
-    /pending seed/i
-  );
 });
 
 test("clonePresetFromMain creates an independent live preset from the main settings", () => {
@@ -408,15 +371,13 @@ test("clonePresetFromMain creates an independent live preset from the main setti
     id: MAIN_PRESET_ID,
     name: "Renamed main",
     settings: [setting(WORLD_SETTING, { nested: { count: 2 } })],
-    systemVersion: "0.2.0",
-    seedPending: true
+    systemVersion: "0.2.0"
   });
   const clone = clonePresetFromMain(main, { id: "world-copy", name: "World copy" });
 
   assert.equal(clone.id, "world-copy");
   assert.equal(clone.name, "World copy");
   assert.equal(clone.systemVersion, main.systemVersion);
-  assert.equal(clone.seedPending, false);
   assert.equal(clone.deleted, false);
   assert.deepEqual(clone.settings, main.settings);
 

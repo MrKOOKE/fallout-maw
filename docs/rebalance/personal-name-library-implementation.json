@@ -46,14 +46,6 @@
   },
   "presets": [
     {
-      "id": "fallout-maw-migration-seed",
-      "revision": "87f94f455454bee3e31b2af3796d320709cb2a389affd03e4c18a811e26f6188",
-      "saves": 0,
-      "targets": [
-        "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\storage\\settings-presets\\fallout-maw-migration-seed.json"
-      ]
-    },
-    {
       "id": "fallout-maw",
       "revision": "ba5862c62689f37b60a36555a488eb6335744ea57509493567b8cf65a1053e0a",
       "saves": 2,

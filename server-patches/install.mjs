@@ -5,9 +5,13 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 
 const originals = {
   "dist/database/documents/token.mjs": "94962fa49bec2af05769677023fdc10a7a39598d801a0bff586455b2a043c3c0",
-  "dist/database/backend/server-backend.mjs": "7c5cd0e0525558039f2b28224e419797f8fb9a54fe07ebdc09b31e2a9a7c1f7f"
+  "dist/database/backend/server-backend.mjs": "7c5cd0e0525558039f2b28224e419797f8fb9a54fe07ebdc09b31e2a9a7c1f7f",
+  "dist/files/files.mjs": "e8ae47c6bda3341447adc9f8ad9da5bb08a1ab4dbfd2e0e3d51385ce7b6a5920"
 };
-const helperName = "dist/database/documents/fallout-maw-token-runtime.mjs";
+const helperSources = {
+  "dist/database/documents/fallout-maw-token-runtime.mjs": new URL("./token-related-documents.mjs", import.meta.url),
+  "dist/files/fallout-maw-settings-preset-files.mjs": new URL("./settings-preset-files.mjs", import.meta.url)
+};
 const sha = value => createHash("sha256").update(value).digest("hex");
 
 export function buildServerPatch(token, backend) {
@@ -25,6 +29,16 @@ export function buildServerPatch(token, backend) {
   };
 }
 
+export function buildPresetFileServerPatch(files) {
+  const socketSwitch = 'switch(e.action){case"browseFiles":Files.#a(o,e,s,r);break;case"createDirectory":Files.#i(o,e,s,r);break;case"configurePath":Files.#o(o,e,s,r)}';
+  if (files.split(socketSwitch).length !== 2) {
+    throw new Error("Native manageFiles action switch does not match the audited implementation");
+  }
+  const patchedSwitch = 'switch(e.action){case"deleteFalloutMaWSettingsPreset":mawDeletePresetFiles(t,e,r);break;case"browseFiles":Files.#a(o,e,s,r);break;case"createDirectory":Files.#i(o,e,s,r);break;case"configurePath":Files.#o(o,e,s,r)}';
+  return 'import{handleSettingsPresetFileDeletion as mawDeletePresetFiles}from"./fallout-maw-settings-preset-files.mjs";'
+    + files.replace(socketSwitch, patchedSwitch);
+}
+
 export async function install(core, mode = "check") {
   core = await fs.realpath(core);
   const pkg = JSON.parse(await fs.readFile(path.join(core, "package.json"), "utf8"));
@@ -39,27 +53,42 @@ export async function install(core, mode = "check") {
   const source = {}, current = {};
   for (const [file, expected] of Object.entries(originals)) {
     current[file] = await fs.readFile(path.join(core, file), "utf8");
-    source[file] = manifest ? await fs.readFile(path.join(backupDir, path.basename(file)), "utf8") : current[file];
+    const backedUp = manifest
+      ? await fs.readFile(path.join(backupDir, path.basename(file)), "utf8").catch(error => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      })
+      : null;
+    source[file] = backedUp ?? current[file];
     if (sha(source[file]) !== expected) throw new Error(`Unexpected original file: ${file}`);
     if (sha(current[file]) !== expected && sha(current[file]) !== manifest?.installedHashes[file]) {
       throw new Error(`Refusing to replace unrelated modifications in ${file}`);
     }
   }
-  const helperPath = path.join(core, helperName);
-  const oldHelper = await fs.readFile(helperPath, "utf8").catch(error => {
-    if (error.code === "ENOENT") return null; throw error;
-  });
-  if (oldHelper !== null && sha(oldHelper) !== manifest?.installedHashes[helperName]) {
-    throw new Error("Refusing to replace an unrecognized server helper");
+  const helpers = {}, oldHelpers = {};
+  for (const [file, sourceUrl] of Object.entries(helperSources)) {
+    helpers[file] = await fs.readFile(sourceUrl, "utf8");
+    oldHelpers[file] = await fs.readFile(path.join(core, file), "utf8").catch(error => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (oldHelpers[file] !== null
+        && sha(oldHelpers[file]) !== manifest?.installedHashes[file]
+        && sha(oldHelpers[file]) !== sha(helpers[file])) {
+      throw new Error(`Refusing to replace an unrecognized server helper: ${file}`);
+    }
   }
   if (mode === "uninstall") {
     if (!manifest) return {status:"not-installed"};
     for (const [file, text] of Object.entries(source)) await fs.writeFile(path.join(core,file),text,"utf8");
-    if (oldHelper !== null) await fs.unlink(helperPath);
+    for (const [file, text] of Object.entries(oldHelpers)) {
+      if (text !== null) await fs.unlink(path.join(core, file));
+    }
     return {status:"uninstalled",restartRequired:true,backupDir};
   }
   const result = buildServerPatch(source["dist/database/documents/token.mjs"],source["dist/database/backend/server-backend.mjs"]);
-  result[helperName] = await fs.readFile(new URL("./token-related-documents.mjs",import.meta.url),"utf8");
+  result["dist/files/files.mjs"] = buildPresetFileServerPatch(source["dist/files/files.mjs"]);
+  Object.assign(result, helpers);
   const installedHashes = Object.fromEntries(Object.entries(result).map(([file,text])=>[file,sha(text)]));
   if (mode === "check") return {status:"compatible",core,installedHashes};
   if (mode !== "install") throw new Error("Choose check, install or uninstall");
@@ -70,14 +99,17 @@ export async function install(core, mode = "check") {
     });
   }
   try {
-    // Install the dependency before either caller. Files already loaded by the
+    // Install dependencies before their callers. Files already loaded by the
     // running server remain unchanged until a complete application restart.
-    await fs.writeFile(helperPath,result[helperName],"utf8");
+    for (const file of Object.keys(helperSources)) await fs.writeFile(path.join(core,file),result[file],"utf8");
     for (const file of Object.keys(originals)) await fs.writeFile(path.join(core,file),result[file],"utf8");
-    await fs.writeFile(manifestPath,JSON.stringify({version:1,core,originalHashes:originals,installedHashes},null,2)+"\n","utf8");
+    await fs.writeFile(manifestPath,JSON.stringify({version:2,core,originalHashes:originals,installedHashes},null,2)+"\n","utf8");
   } catch(error) {
     for (const [file,text] of Object.entries(current)) await fs.writeFile(path.join(core,file),text,"utf8");
-    if(oldHelper===null)await fs.unlink(helperPath).catch(()=>{});else await fs.writeFile(helperPath,oldHelper,"utf8");
+    for (const [file,text] of Object.entries(oldHelpers)) {
+      const helperPath = path.join(core, file);
+      if(text===null)await fs.unlink(helperPath).catch(()=>{});else await fs.writeFile(helperPath,text,"utf8");
+    }
     throw error;
   }
   return {status:"installed",restartRequired:true,core,backupDir,installedHashes};

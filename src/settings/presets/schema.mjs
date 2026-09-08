@@ -19,7 +19,6 @@ const DOCUMENT_KEYS = new Set([
   "revision",
   "updatedAt",
   "systemVersion",
-  "seedPending",
   "deleted",
   "saves",
   "settings"
@@ -142,13 +141,9 @@ export function normalizePresetDocument(raw, { allowLegacy = false, name } = {})
   const id = normalizePresetId(raw.id);
   const normalizedName = normalizePresetName(raw.name ?? name);
   const deleted = normalizeOptionalBoolean(raw.deleted, "deleted", false);
-  const seedPending = normalizeOptionalBoolean(raw.seedPending, "seedPending", false);
 
   if (deleted && id === MAIN_PRESET_ID) {
     throw new TypeError("The main Fallout-MaW preset cannot be a tombstone.");
-  }
-  if (deleted && seedPending) {
-    throw new TypeError("A tombstone cannot be marked as a pending seed.");
   }
 
   const settings = normalizeSettings(raw.settings, { deleted });
@@ -166,7 +161,6 @@ export function normalizePresetDocument(raw, { allowLegacy = false, name } = {})
     revision: null,
     updatedAt,
     systemVersion,
-    seedPending,
     deleted,
     settings,
     ...(saves.length || Object.hasOwn(raw, "saves") ? { saves } : {})
@@ -186,8 +180,7 @@ export function createPresetDocument({
   name,
   settings,
   saves = [],
-  systemVersion = null,
-  seedPending = false
+  systemVersion = null
 }) {
   return normalizePresetDocument({
     format: PRESET_FORMAT,
@@ -197,7 +190,6 @@ export function createPresetDocument({
     name,
     updatedAt: new Date().toISOString(),
     systemVersion,
-    seedPending,
     deleted: false,
     settings,
     ...(saves.length ? { saves } : {})
@@ -219,7 +211,6 @@ export function createPresetTombstone(preset) {
     name: source.name,
     updatedAt: new Date().toISOString(),
     systemVersion: source.systemVersion,
-    seedPending: false,
     deleted: true,
     settings: []
   });
@@ -240,8 +231,7 @@ export function clonePresetFromMain(main, { id, name }) {
     id: cloneId,
     name,
     settings: source.settings,
-    systemVersion: source.systemVersion,
-    seedPending: false
+    systemVersion: source.systemVersion
   });
 }
 
@@ -304,8 +294,7 @@ export function convertLegacyBaseline(raw, { id, name }) {
     id,
     name,
     settings,
-    systemVersion: raw.systemVersion ?? null,
-    seedPending: false
+    systemVersion: raw.systemVersion ?? null
   });
 }
 

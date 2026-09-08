@@ -178,6 +178,34 @@ test("stun makes ОР and ОП unavailable through their normal spending states"
   assert.equal(movement.action.value, 5);
 });
 
+test("dynamic AP spending gives Foundry an extensible Actor update payload", async () => {
+  installFoundryImportGlobals();
+  const { spendCombatActionPoints } = await import("../src/combat/reaction-resources.mjs");
+  const actor = createActor("Actor.MutableUpdate", 7);
+  actor.effects = [];
+  actor.update = async changes => {
+    assert.equal(Object.isExtensible(changes), true);
+    changes._id = actor.uuid;
+    actor.updates.push(changes);
+    actor.system.resources.actionPoints.value = changes["system.resources.actionPoints.value"];
+  };
+  const combat = {
+    started: true,
+    combatants: [{ actor }],
+    combatant: { actor }
+  };
+  globalThis.game = {
+    combat,
+    combats: [combat],
+    settings: { get: () => ({ turnOrder: { scheme: "normal" } }) }
+  };
+
+  await spendCombatActionPoints(actor, 3, { suppressResourceNotification: true });
+
+  assert.equal(actor.system.resources.actionPoints.value, 4);
+  assert.equal(actor.updates[0]._id, actor.uuid);
+});
+
 test("cancelled dynamic AP update does not create a spend receipt", async () => {
   installFoundryImportGlobals();
   const { spendCombatActionPointsWithReceipt } = await import("../src/combat/reaction-resources.mjs");

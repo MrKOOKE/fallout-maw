@@ -595,7 +595,10 @@ export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
 
   const directSpend = prepareDirectCombatActionPointSpend(actor, cost);
   if (directSpend) {
-    await actor.update(directSpend.updates, {
+    // Foundry enriches update data with the Document id before dispatching it.
+    // The prepared spend is immutable calculation output, so hand Document.update
+    // a fresh payload which it is explicitly allowed to extend.
+    await actor.update({ ...directSpend.updates }, {
       ...context?.documentOptions,
       ...directSpend.documentOptions
     });

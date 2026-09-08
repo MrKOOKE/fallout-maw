@@ -5,6 +5,8 @@ This local engine adapter addresses two measured costs in fallout-maw:
 - `Token.loadRelatedDocuments` cleared and reconstructed the complete delta inventory, then constructed another complete inventory for a synthetic Actor on every request. The adapter retains certified unchanged delta documents, rebuilds changed documents through native initialization, and constructs the separate Actor when a consumer reads it. Load-time snapshots, native ownership checks, collection order, tombstones and source aliases are preserved.
 - The server backend assigned `false || undefined` to `writeEmbedded`. The downstream default treated this as `true`, rewriting unchanged embedded documents on coordinate/scalar updates. The patch supplies an actual boolean; embedded changes and adoption still request embedded writes.
 
+It also adds one deliberately narrow `manageFiles` action required by the settings-preset manager. Foundry 14.361 has upload and directory-creation APIs but no file-deletion API. The added action accepts only a validated Fallout-MaW preset id from a Gamemaster in an active Fallout-MaW world and deletes exactly its system copy plus the current world's backup. The main preset is protected; arbitrary paths are never accepted.
+
 The adapter applies only to fallout-maw on Foundry 14.361. The boolean correction applies to the audited native backend. This is a server installation change; reloading the game client alone does not load it. It does not change the world data format.
 
 Revision 2 additionally reuses the adapter's private Item source snapshots when constructing a load-time ActorDelta snapshot. Each unchanged source is still checked against its certificate. Native server Item resets without embedded effects preserve that source; custom reset/field initialization and effect-bearing Items retain fresh copying. New certificates are created after native initialization. Only internal immutable snapshots share objects: synthetic Actor construction still receives deep copies, and later live-source changes cannot alter an earlier unread Actor view.
@@ -26,11 +28,12 @@ To restore the original engine files, then fully restart Foundry:
 node server-patches/install.mjs uninstall 'D:\Foundary\Foundry Virtual Tabletop\resources\app'
 ```
 
-Native server equivalence tests use memory-only persistence substitutes; they do not open the user's world databases:
+Native server equivalence and preset-file tests use memory-only persistence substitutes or temporary directories; they do not open the user's world databases:
 
 ```powershell
 $env:FALLOUT_MAW_FOUNDRY_CORE = 'D:\Foundary\Foundry Virtual Tabletop\resources\app'
 node --test tests/foundry/server-token-runtime.test.mjs
+node --test tests/foundry/server-settings-preset-files.test.mjs
 ```
 
 These checks compare native versus adapted source/prepared data and permissions across coordinate updates, damage, Item/ActiveEffect changes, inheritance, tombstones, restoration, source replacement, linked actors and missing base actors. The actual native backend also verifies that scalar writes omit inventory while embedded changes still persist it. Tests use the original backups when run against a patched installation.

@@ -27,11 +27,8 @@ test("restored personal name library retains the complete legacy blocks", () => 
 
 test("system and world preset copies contain the restored library and valid revisions", async () => {
   const files = [
-    path.join(systemRoot, "storage", "settings-presets", "fallout-maw-migration-seed.json"),
     path.join(systemRoot, "storage", "settings-presets", "fallout-maw.json"),
-    path.join(systemRoot, "storage", "settings-presets", "preset-29RLMkIuBBuzp9eClV99Sxcj.json"),
-    path.join(dataRoot, "worlds", "fallout", "settings-presets", "fallout-maw.json"),
-    path.join(dataRoot, "worlds", "fallout", "settings-presets", "preset-29RLMkIuBBuzp9eClV99Sxcj.json")
+    path.join(dataRoot, "worlds", "fallout", "settings-presets", "fallout-maw.json")
   ];
   for (const file of files) {
     const preset = normalizePresetDocument(JSON.parse(await fs.readFile(file, "utf8")));

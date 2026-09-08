@@ -2173,7 +2173,7 @@
     "Settings": {
       "Open": "Open",
       "Presets": {
-        "Title": "Fallout-MaW: Settings Presets",
+        "Title": "Settings Presets",
         "Heading": "Settings Presets",
         "Description": "Select which portable set of world settings this world uses, or share a set as a JSON file.",
         "ActivePreset": "Active preset",
@@ -2182,7 +2182,6 @@
         "Main": "Main",
         "Active": "Active",
         "Deleted": "Deleted",
-        "SeedPending": "Initial seed",
         "MainCannotDelete": "The main Fallout-MaW preset cannot be deleted.",
         "Empty": "No settings presets are available.",
         "Unknown": "Unknown",

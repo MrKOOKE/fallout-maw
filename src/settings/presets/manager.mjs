@@ -14,6 +14,7 @@ import {
 const PRESET_SOCKET = `system.${SYSTEM_ID}`;
 const PRESET_QUERY = `${SYSTEM_ID}.settingsPresets`;
 const SOCKET_KIND = "settings-presets";
+const DELETE_PRESET_FILE_ACTION = "deleteFalloutMaWSettingsPreset";
 const SYSTEM_PRESET_DIRECTORY = `systems/${SYSTEM_ID}/storage/settings-presets`;
 const APPLY_MARKER = "falloutMaWSettingsPresetApply";
 const APPLY_BATCH_ID = "falloutMaWSettingsPresetBatchId";
@@ -24,8 +25,6 @@ const STATE_MARKER = "falloutMaWSettingsPresetState";
 const AUTOSAVE_DELAY = 300;
 const RPC_TIMEOUT = 30_000;
 const CLIENT_LEADER_RETRY_DELAY = 500;
-const MIGRATION_VERSION = 1;
-const MIGRATION_SEED_PRESET_ID = "fallout-maw-migration-seed";
 const CLIENT_INSTANCE_ID = globalThis.crypto?.randomUUID?.()
   ?? `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -43,8 +42,6 @@ const runtime = {
   sourceWorld: new Map(),
   fullSourcesLoaded: false,
   fullSourceLoadPromise: null,
-  migrationSeed: null,
-  legacyRemovedPresetIds: new Set(),
   lastError: "",
   autosaveTimer: null,
   autosaveDirty: false,
@@ -95,7 +92,7 @@ export function registerSettingsPresetTools() {
 }
 
 /**
- * Load, reconcile, migrate, and (when needed) apply settings presets.
+ * Load, reconcile, and (when needed) apply settings presets.
  * This must run before the rest of the system's ready-time initialization.
  */
 export async function initializeSettingsPresets() {
@@ -111,8 +108,8 @@ export async function initializeSettingsPresets() {
     }
     await initializePrimaryClientLeadership();
     const state = getPresetState();
-    if (Number(state.migrationVersion || 0) < MIGRATION_VERSION) {
-      await loadPresetSources();
+    if (!state.activePresetId) {
+      await loadPresetSources({ startupOnly: true });
       if (isPrimaryGM()) await enqueueMutation(initializePrimaryGM);
     } else if (isPrimaryGM()) await enqueueMutation(reconcileActiveModulePresetStartup);
     runtime.ready = true;
@@ -157,10 +154,6 @@ export function isPresetManagedSetting(setting) {
 
 export function createDefaultSettingsPresetState() {
   return {
-    migrationVersion: 0,
-    migrationPresetId: "",
-    migrationFinalizeMain: false,
-    removedPresetIds: [],
     activePresetId: "",
     activeModuleId: "",
     actorBootstrapRevision: "",
@@ -311,22 +304,17 @@ export async function removeSettingsPreset(id) {
     assertWritablePreset(current);
     if (getPresetState().activePresetId === presetId) await activatePresetLocal(MAIN_PRESET_ID, { skipFlush: true });
     const state = getPresetState();
-    const removedPresetIds = normalizeRemovedPresetIds([...state.removedPresetIds, presetId]);
     if (state.pendingPresetId === presetId) {
-      runtime.pendingDocument = null;
-      clearTimeout(runtime.retryTimer);
-      runtime.retryTimer = null;
-    }
-    await updatePresetState({
-      removedPresetIds,
-      ...(state.pendingPresetId === presetId ? {
+      clearPendingPresetRetry();
+      await updatePresetState({
         pendingPresetId: "",
         pendingRevision: "",
         pendingTarget: "",
         pendingDocument: null,
         lastError: ""
-      } : {})
-    });
+      });
+    }
+    await deletePresetCopies(presetId);
     removeRuntimePreset(presetId);
     broadcastPresetChange();
     return { id: current.id, name: current.name, removed: true };
@@ -459,9 +447,6 @@ export async function importSettingsPreset(input, options = {}) {
       systemVersion: game.system?.version ?? imported.systemVersion ?? null
     });
   }
-  if (imported.id === MIGRATION_SEED_PRESET_ID) {
-    throw new Error("The internal migration seed cannot be imported or replaced.");
-  }
   if (imported.deleted) {
     throw new Error("Portable preset deletion markers are no longer supported.");
   }
@@ -471,12 +456,6 @@ export async function importSettingsPreset(input, options = {}) {
     assertNoPresetIdCaseCollision(preset.id, runtime.descriptors.keys());
     preset = validatePresetForStorage(preset);
     await flushActivePresetLocal();
-    const state = getPresetState();
-    if (state.removedPresetIds.includes(preset.id)) {
-      await updatePresetState({
-        removedPresetIds: state.removedPresetIds.filter(id => id !== preset.id)
-      });
-    }
     const wasActive = getPresetState().activePresetId === preset.id;
     await savePresetCopies(preset);
     const result = activate || wasActive
@@ -535,23 +514,26 @@ export async function flushSettingsPreset() {
 }
 
 async function initializePrimaryGM() {
-  await adoptLegacyLocalRemovals();
   if (getPresetState().pendingPresetId) {
     await reconcilePendingWrite();
     if (getPresetState().pendingPresetId) {
       throw new Error("A pending settings preset file could not be recovered during startup.");
     }
   }
-  // A normal launch loads only the active startup set. Restoring or backing up
-  // the complete catalog is deliberately reserved for an explicit refresh.
-  if (runtime.fullSourcesLoaded) await restoreUniqueWorldPresets();
-  // World imprint is manual (preset save / refresh), not every world launch.
-
-  const state = getPresetState();
-  if (Number(state.migrationVersion || 0) < MIGRATION_VERSION) await migrateExistingWorld();
-
-  const nextState = getPresetState();
-  if (nextState.pendingPresetId) await reconcilePendingWrite();
+  if (getPresetState().activePresetId) return;
+  const main = requirePreset(MAIN_PRESET_ID);
+  const personal = clonePresetFromMain(main, {
+    id: randomPresetId(),
+    name: normalizeName(game.world?.title, game.world?.id || "World")
+  });
+  await savePresetCopies(personal);
+  await applyPresetAtomically(personal, {
+    statePatch: {
+      activePresetId: personal.id,
+      appliedRevision: personal.revision,
+      lastError: ""
+    }
+  });
 }
 
 async function loadPresetSources({ bustCache = false, startupOnly = false } = {}) {
@@ -581,22 +563,9 @@ async function loadPresetSources({ bustCache = false, startupOnly = false } = {}
     });
   const rawWorld = indexPresetDocuments(worldDocuments);
   assertNoPresetSourceCaseCollisions([...rawSystem.keys(), ...rawModules.keys(), ...rawWorld.keys()]);
-  runtime.legacyRemovedPresetIds = new Set(
-    [...rawWorld.values()]
-      .filter(preset => preset.deleted && preset.id !== MAIN_PRESET_ID)
-      .map(preset => preset.id)
-  );
-  const removedPresetIds = new Set([
-    ...getPresetState().removedPresetIds,
-    ...runtime.legacyRemovedPresetIds
-  ]);
-  const isVisibleSource = preset => preset.id === MIGRATION_SEED_PRESET_ID
-    || (!preset.deleted && !removedPresetIds.has(preset.id));
-  runtime.sourceSystem = new Map([...rawSystem].filter(([, preset]) => isVisibleSource(preset)));
-  runtime.sourceModules = new Map(
-    [...rawModules].filter(([, entry]) => !entry.preset.deleted)
-  );
-  runtime.sourceWorld = new Map([...rawWorld].filter(([, preset]) => isVisibleSource(preset)));
+  runtime.sourceSystem = rawSystem;
+  runtime.sourceModules = rawModules;
+  runtime.sourceWorld = rawWorld;
 
   const pending = getPresetState();
   if (pending.pendingPresetId && pending.pendingRevision && pending.pendingTarget !== "world") {
@@ -611,14 +580,8 @@ async function loadPresetSources({ bustCache = false, startupOnly = false } = {}
   );
   runtime.presets.clear();
   runtime.descriptors.clear();
-  runtime.migrationSeed = null;
   for (const descriptor of reconciled.presets ?? []) {
     const preset = descriptor.preset ?? descriptor;
-    if (preset.id === MIGRATION_SEED_PRESET_ID) {
-      if (preset.deleted) throw new Error("The internal settings migration seed cannot be deleted.");
-      runtime.migrationSeed = preset;
-      continue;
-    }
     const source = descriptor.source ?? "system";
     runtime.descriptors.set(preset.id, {
       preset,
@@ -633,26 +596,18 @@ async function loadPresetSources({ bustCache = false, startupOnly = false } = {}
   if (pending.pendingPresetId
       && pending.pendingRevision
       && pendingDocument?.id === pending.pendingPresetId
-      && pendingDocument.revision === pending.pendingRevision
-      && !pendingDocument.deleted
-      && !removedPresetIds.has(pendingDocument.id)) {
+      && pendingDocument.revision === pending.pendingRevision) {
     runtime.restoreToSystem = runtime.restoreToSystem.filter(preset => preset.id !== pendingDocument.id);
-    if (pendingDocument.id === MIGRATION_SEED_PRESET_ID) runtime.migrationSeed = pendingDocument;
-    else {
-      runtime.presets.set(pendingDocument.id, pendingDocument);
-      runtime.descriptors.set(pendingDocument.id, {
-        preset: pendingDocument,
-        source: "pending",
-        restoreToSystem: false,
-        syncState: "pending"
-      });
-    }
+    runtime.presets.set(pendingDocument.id, pendingDocument);
+    runtime.descriptors.set(pendingDocument.id, {
+      preset: pendingDocument,
+      source: "pending",
+      restoreToSystem: false,
+      syncState: "pending"
+    });
   }
   if (!runtime.presets.has(MAIN_PRESET_ID)) {
     throw new Error(`Required settings preset ${MAIN_PRESET_ID} was not found.`);
-  }
-  if (Number(getPresetState().migrationVersion || 0) < MIGRATION_VERSION && !runtime.migrationSeed) {
-    throw new Error("The immutable Fallout-MaW migration seed was not found.");
   }
   runtime.fullSourcesLoaded = !startupOnly;
 }
@@ -703,20 +658,6 @@ async function ensureActivePresetSourcesLoaded() {
   await loadPresetSources({ startupOnly: true });
 }
 
-async function adoptLegacyLocalRemovals() {
-  if (!runtime.legacyRemovedPresetIds.size) return false;
-  const state = getPresetState();
-  const removedPresetIds = normalizeRemovedPresetIds([
-    ...state.removedPresetIds,
-    ...runtime.legacyRemovedPresetIds
-  ]);
-  runtime.legacyRemovedPresetIds.clear();
-  if (removedPresetIds.length === state.removedPresetIds.length
-      && removedPresetIds.every((id, index) => id === state.removedPresetIds[index])) return false;
-  await updatePresetState({ removedPresetIds });
-  return true;
-}
-
 async function restoreUniqueWorldPresets() {
   for (const rawPreset of runtime.restoreToSystem ?? []) {
     const preset = sanitizePresetSettings(rawPreset);
@@ -737,7 +678,6 @@ async function restoreUniqueWorldPresets() {
 async function backupSystemPresetsToWorld() {
   for (const rawPreset of runtime.sourceSystem.values()) {
     const preset = sanitizePresetSettings(rawPreset);
-    if (preset.id === MIGRATION_SEED_PRESET_ID) continue;
     const backup = runtime.sourceWorld.get(preset.id);
     if (backup?.revision === preset.revision) {
       const descriptor = runtime.descriptors.get(preset.id);
@@ -827,62 +767,6 @@ async function reconcilePendingWrite() {
   }
 }
 
-async function migrateExistingWorld() {
-  const main = requirePreset(MAIN_PRESET_ID);
-  const migrationState = getPresetState();
-  const isExistingWorld = isExistingWorldForPresetMigration();
-  const worldName = normalizeName(game.world?.title, game.world?.id || "World");
-  const finalizeMainSeed = Boolean(main.seedPending || migrationState.migrationFinalizeMain);
-  const personalId = migrationState.migrationPresetId || randomPresetId();
-  if (!migrationState.migrationPresetId || migrationState.migrationFinalizeMain !== finalizeMainSeed) {
-    await updatePresetState({
-      migrationPresetId: personalId,
-      migrationFinalizeMain: finalizeMainSeed
-    });
-  }
-
-  let currentEntries = null;
-  let personal;
-  if (isExistingWorld) {
-    currentEntries = captureCurrentSettings({
-      useStoredOnly: true,
-      fallbackPreset: runtime.migrationSeed ?? main
-    });
-    personal = await makePreset({
-      id: personalId,
-      name: worldName,
-      settings: currentEntries
-    });
-  } else personal = clonePresetFromMain(main, { id: personalId, name: worldName });
-  await savePresetCopies(personal);
-
-  let activeId = personal.id;
-  let activePreset = personal;
-  if (finalizeMainSeed && isExistingWorld) {
-    activePreset = await makePreset({
-      ...main,
-      id: MAIN_PRESET_ID,
-      name: main.name || "Fallout-MaW",
-      seedPending: false,
-      deleted: false,
-      settings: currentEntries
-    });
-    await savePresetCopies(activePreset);
-    activeId = MAIN_PRESET_ID;
-  }
-
-  await applyPresetAtomically(activePreset, {
-    statePatch: {
-      migrationVersion: MIGRATION_VERSION,
-      migrationPresetId: "",
-      migrationFinalizeMain: false,
-      activePresetId: activeId,
-      appliedRevision: activePreset.revision,
-      ...(runtime.lastError ? {} : { lastError: "" })
-    }
-  });
-}
-
 async function applyActiveRevisionIfNeeded() {
   const state = getPresetState();
   let activeId = state.activePresetId || MAIN_PRESET_ID;
@@ -900,7 +784,6 @@ async function applyActiveRevisionIfNeeded() {
       && !needsKnownKeyFallback) return false;
   await applyPresetAtomically(preset, {
     statePatch: {
-      migrationVersion: Math.max(MIGRATION_VERSION, Number(state.migrationVersion || 0)),
       activePresetId: activeId,
       appliedRevision: preset.revision,
       lastError: ""
@@ -952,7 +835,6 @@ async function activatePresetLocal(id, { skipFlush = false, settingIds = null } 
   return applyPresetAtomically(preset, {
     settingIds,
     statePatch: {
-      migrationVersion: MIGRATION_VERSION,
       activePresetId: preset.id,
       appliedRevision: preset.revision,
       lastError: ""
@@ -981,9 +863,7 @@ async function flushActivePresetLocal() {
   const settings = mergeKnownSnapshotWithUnknown(current, captureCurrentSettings());
   const next = await makePreset({
     ...current,
-    settings,
-    seedPending: current.seedPending,
-    deleted: false
+    settings
   });
   if (next.revision === current.revision) {
     runtime.autosaveDirty = false;
@@ -998,33 +878,28 @@ async function flushActivePresetLocal() {
   return next;
 }
 
-function captureCurrentSettings({ useStoredOnly = false, fallbackPreset = null } = {}) {
-  const activeFallback = fallbackPreset ?? runtime.presets.get(getPresetState().activePresetId);
+function captureCurrentSettings() {
+  const activeFallback = runtime.presets.get(getPresetState().activePresetId);
   const fallback = new Map((activeFallback?.settings ?? []).map(entry => [entry.id, entry.value]));
   const main = runtime.presets.get(MAIN_PRESET_ID);
   const mainValues = new Map((main?.settings ?? []).map(entry => [entry.id, entry.value]));
-  const worldStorage = game.settings.storage.get("world");
   const entries = [];
   const errors = [];
   const recoveries = [];
 
   for (const setting of getManagedPresetSettings()) {
-    const stored = worldStorage.getSetting(setting.id, null);
-    const provided = Boolean(stored) || !useStoredOnly;
     let currentValue;
-    if (provided) {
-      try {
-        currentValue = game.settings.get(setting.namespace, setting.key);
-      } catch (_error) {
-        currentValue = undefined;
-      }
+    try {
+      currentValue = game.settings.get(setting.namespace, setting.key);
+    } catch (_error) {
+      currentValue = undefined;
     }
 
     try {
       const fallbacks = [];
       if (fallback.has(setting.id)) {
         fallbacks.push({
-          source: fallbackPreset ? "migration" : "active",
+          source: "active",
           provided: true,
           value: fallback.get(setting.id)
         });
@@ -1033,7 +908,7 @@ function captureCurrentSettings({ useStoredOnly = false, fallbackPreset = null }
         fallbacks.push({ source: "main", provided: true, value: mainValues.get(setting.id) });
       }
       const resolution = resolveStoredSettingValue(setting, {
-        provided,
+        provided: true,
         presetValue: currentValue,
         fallbacks
       });
@@ -1051,16 +926,6 @@ function captureCurrentSettings({ useStoredOnly = false, fallbackPreset = null }
     console.warn(`${SYSTEM_TITLE} | Recovered managed settings while capturing a preset:\n- ${recoveries.join("\n- ")}`);
   }
   return entries;
-}
-
-function isExistingWorldForPresetMigration() {
-  // The world-creation wizard may install folders, journals, messages, and
-  // other bootstrap Documents before the system's ready hook. Those records
-  // still belong to a brand-new world and must not select the legacy seed.
-  // Recorded playtime is the durable boundary: no playtime means first launch,
-  // while any played world must preserve its existing settings.
-  return [game.world?.playtime, game.world?._source?.playtime]
-    .some(value => Number(value) > 0);
 }
 
 function mergeKnownSnapshotWithUnknown(preset, knownEntries) {
@@ -1099,7 +964,6 @@ function sanitizePresetSettings(rawPreset) {
     name: preset.name,
     settings,
     systemVersion: preset.systemVersion,
-    seedPending: preset.seedPending,
     saves
   });
 }
@@ -1344,7 +1208,6 @@ function validatePresetForStorage(preset) {
       assignments.map(({ setting, value }) => ({ id: setting.id, scope: "world", value }))
     ),
     systemVersion: normalized.systemVersion,
-    seedPending: normalized.seedPending,
     saves: normalized.saves ?? []
   });
 }
@@ -1721,6 +1584,40 @@ async function writeWorldPreset(preset) {
   await ensureDirectory(directory);
   const response = await getFilePicker().upload("data", directory, presetFile(preset), {}, { notify: false });
   assertUploadResponse(response, preset.id, "world");
+  return response;
+}
+
+async function deletePresetCopies(presetId) {
+  if (!game.socket?.emit) throw new Error("Foundry game socket is unavailable.");
+  const response = await new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback(value);
+    };
+    const timeout = setTimeout(() => finish(
+      reject,
+      new Error("The Fallout-MaW server file-delete adapter did not respond. Fully restart Foundry after installing the current server patch.")
+    ), RPC_TIMEOUT);
+    try {
+      game.socket.emit("manageFiles", {
+        action: DELETE_PRESET_FILE_ACTION,
+        storage: "data",
+        systemId: SYSTEM_ID,
+        presetId
+      }, {}, result => {
+        if (result?.error) finish(reject, new Error(result.error));
+        else finish(resolve, result);
+      });
+    } catch (error) {
+      finish(reject, normalizeMutationError(error));
+    }
+  });
+  if (response?.status !== "success" || response.presetId !== presetId) {
+    throw new Error(`Foundry did not confirm physical deletion of settings preset ${presetId}.`);
+  }
   return response;
 }
 
@@ -2149,8 +2046,8 @@ function schedulePrimaryClientLeadershipRetry(locks = globalThis.navigator?.lock
 async function promotePrimaryClient() {
   if (!isPrimaryGM()) return;
   await enqueueMutation(async () => {
-    if (Number(getPresetState().migrationVersion || 0) < MIGRATION_VERSION) {
-      await loadPresetSources();
+    if (!getPresetState().activePresetId) {
+      await loadPresetSources({ startupOnly: true });
       await initializePrimaryGM();
       broadcastPresetChange();
       return;
@@ -2201,10 +2098,6 @@ function normalizePresetState(value = {}) {
     }
   }
   return {
-    migrationVersion: Math.max(0, Math.trunc(Number(source.migrationVersion) || 0)),
-    migrationPresetId: typeof source.migrationPresetId === "string" ? source.migrationPresetId : "",
-    migrationFinalizeMain: source.migrationFinalizeMain === true,
-    removedPresetIds: normalizeRemovedPresetIds(source.removedPresetIds),
     activePresetId: typeof source.activePresetId === "string" ? source.activePresetId : "",
     activeModuleId: typeof source.activeModuleId === "string" ? source.activeModuleId : "",
     actorBootstrapRevision: typeof source.actorBootstrapRevision === "string"
@@ -2228,7 +2121,6 @@ async function makePreset(source) {
     name: source.name,
     settings: source.settings ?? [],
     systemVersion: game.system?.version ?? source.systemVersion ?? null,
-    seedPending: Boolean(source.seedPending),
     saves: source.saves ?? []
   });
 }
@@ -2239,26 +2131,12 @@ async function rebuildPreset(source, changes = {}) {
     ...changes,
     id: source.id,
     settings: changes.settings ?? source.settings,
-    saves: changes.saves ?? source.saves ?? [],
-    seedPending: changes.seedPending ?? source.seedPending
+    saves: changes.saves ?? source.saves ?? []
   });
 }
 
 function setRuntimePreset(rawPreset, source = "system") {
   const preset = normalizePresetDocument(rawPreset);
-  if (preset.id === MIGRATION_SEED_PRESET_ID) {
-    if (preset.deleted) throw new Error("The internal settings migration seed cannot be deleted.");
-    runtime.migrationSeed = preset;
-    return preset;
-  }
-  if (getPresetState().removedPresetIds.includes(preset.id)) {
-    removeRuntimePreset(preset.id);
-    return preset;
-  }
-  if (preset.deleted) {
-    removeRuntimePreset(preset.id);
-    return preset;
-  }
   const previous = runtime.descriptors.get(preset.id);
   const syncState = source === "world" ? "world-only" : "synced";
   runtime.descriptors.set(preset.id, {
@@ -2278,7 +2156,6 @@ function removeRuntimePreset(id) {
   runtime.sourceSystem.delete(presetId);
   runtime.sourceModules.delete(presetId);
   runtime.sourceWorld.delete(presetId);
-  runtime.legacyRemovedPresetIds.delete(presetId);
   runtime.restoreToSystem = (runtime.restoreToSystem ?? []).filter(preset => preset.id !== presetId);
 }
 
@@ -2315,7 +2192,6 @@ function describePreset(preset) {
     source,
     isMain: preset.id === MAIN_PRESET_ID,
     active: state.activePresetId === preset.id,
-    seedPending: Boolean(preset.seedPending),
     canModify: !source.startsWith("module:"),
     canDelete: preset.id !== MAIN_PRESET_ID && !source.startsWith("module:"),
     saveCount: preset.saves?.length ?? 0,
@@ -2340,15 +2216,6 @@ function formatSaveName(iso) {
   } catch (_error) {
     return iso;
   }
-}
-
-function normalizeRemovedPresetIds(value) {
-  if (!Array.isArray(value)) return [];
-  return Array.from(new Set(value
-    .filter(id => typeof id === "string")
-    .map(id => id.trim())
-    .filter(id => id && id !== MAIN_PRESET_ID && id !== MIGRATION_SEED_PRESET_ID)))
-    .sort((left, right) => left.localeCompare(right));
 }
 
 function randomPresetId(prefix = "preset") {
@@ -2424,17 +2291,16 @@ function slugifyName(value) {
   return text.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-/** Narrow test seam for the Foundry-facing atomic and migration logic. */
+/** Narrow test seam for the Foundry-facing preset logic. */
 export const SETTINGS_PRESET_TESTING = Object.freeze({
   applyActiveRevisionIfNeeded,
   applyPresetAtomically,
   captureCurrentSettings,
   drainPresetApplyCallbacks,
   getManagedPresetSignature,
-  isExistingWorldForPresetMigration,
+  initializePrimaryGM,
   loadPresetSources,
   mergeKnownSnapshotWithUnknown,
-  migrateExistingWorld,
   persistPresetCopies: preset => persistPresetCopies(preset, { scheduleRetry: false }),
   readModulePresetDocuments,
   reconcilePendingWrite,
@@ -2472,8 +2338,6 @@ export const SETTINGS_PRESET_TESTING = Object.freeze({
     runtime.applyEffectsQueue = Promise.resolve();
     runtime.deferredApplyEffects = false;
     runtime.pendingDocument = null;
-    runtime.migrationSeed = null;
-    runtime.legacyRemovedPresetIds.clear();
     runtime.autosaveTimer = null;
     runtime.autosaveDirty = false;
     runtime.retryTimer = null;

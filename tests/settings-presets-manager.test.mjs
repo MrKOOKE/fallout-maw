@@ -59,6 +59,7 @@ function installFoundryMock({ storedIds = [], values = {}, modifyBatch } = {}) {
   ]);
   const documents = new Map(storedIds.map(id => [id, { id: `doc-${id}`, _id: `doc-${id}`, key: id }]));
   const state = createDefaultSettingsPresetState();
+  const fileDeletions = [];
 
   const user = { id: "gm", isGM: true, active: true };
   globalThis.game = {
@@ -71,7 +72,21 @@ function installFoundryMock({ storedIds = [], values = {}, modifyBatch } = {}) {
       contents: [user],
       get: id => id === user.id ? user : null
     },
-    socket: { emit: () => undefined },
+    socket: {
+      emit: (channel, data, _options, callback) => {
+        if (channel !== "manageFiles") return;
+        fileDeletions.push(structuredClone(data));
+        callback?.({
+          status: "success",
+          presetId: data.presetId,
+          deleted: [
+            `systems/fallout-maw/storage/settings-presets/${data.presetId}.json`,
+            `worlds/test-world/settings-presets/${data.presetId}.json`
+          ],
+          missing: []
+        });
+      }
+    },
     i18n: { lang: "en" },
     settings: {
       settings: configs,
@@ -111,7 +126,7 @@ function installFoundryMock({ storedIds = [], values = {}, modifyBatch } = {}) {
   };
   globalThis.Hooks = { callAll: () => undefined, on: () => undefined };
   globalThis.ui = { settings: { render: () => undefined } };
-  return { configs, documents, state };
+  return { configs, documents, fileDeletions, state };
 }
 
 function installPresetFileMock() {
@@ -235,25 +250,14 @@ test("active modules may declare lazily fetched settings presets in their manife
   assert.deepEqual(fetched, ["modules/example-module/presets/module-preset.json"]);
 });
 
-test("both bundled seeds are valid and initially carry the same portable snapshot", () => {
-  const seed = normalizePresetDocument(JSON.parse(
+test("the bundled main preset is a valid portable snapshot", () => {
+  const main = normalizePresetDocument(JSON.parse(
     fs.readFileSync(new URL("../storage/settings-presets/fallout-maw.json", import.meta.url), "utf8")
   ));
-  const migrationSeed = normalizePresetDocument(JSON.parse(
-    fs.readFileSync(new URL("../storage/settings-presets/fallout-maw-migration-seed.json", import.meta.url), "utf8")
-  ));
-  const ids = new Set(seed.settings.map(setting => setting.id));
-  assert.equal(seed.settings.length, migrationSeed.settings.length);
-  assert.ok(seed.settings.length > 0);
-  assert.equal(migrationSeed.id, "fallout-maw-migration-seed");
-  assert.equal(migrationSeed.seedPending, false);
-  assert.deepEqual(
-    migrationSeed.settings.map(setting => setting.id),
-    seed.settings.map(setting => setting.id)
-  );
-  if (seed.seedPending) assert.deepEqual(migrationSeed.settings, seed.settings);
-  assert.ok(seed.settings.every(setting => setting.scope === "world"));
-  assert.ok(migrationSeed.settings.every(setting => setting.scope === "world"));
+  const ids = new Set(main.settings.map(setting => setting.id));
+  assert.equal(main.id, "fallout-maw");
+  assert.ok(main.settings.length > 0);
+  assert.ok(main.settings.every(setting => setting.scope === "world"));
   for (const id of [
     "fallout-maw.migrationState",
     "fallout-maw.campState",
@@ -270,22 +274,6 @@ test("both bundled seeds are valid and initially carry the same portable snapsho
     "fallout-maw.lessButtons",
     "fallout-maw.overflowStyle"
   ]) assert.equal(ids.has(id), false, `${id} must not be portable`);
-});
-
-test("legacy-world capture overlays stored documents onto the main preset", () => {
-  installFoundryMock({
-    storedIds: ["fallout-maw.alpha", "fallout-maw.beta"],
-    values: { "fallout-maw.alpha": true, "fallout-maw.beta": "invalid-legacy-object" }
-  });
-  const main = makePreset("fallout-maw", "Fallout-MaW", [
-    entry("fallout-maw.alpha", false),
-    entry("fallout-maw.beta", { code: "seed" })
-  ]);
-  const snapshot = SETTINGS_PRESET_TESTING.captureCurrentSettings({ useStoredOnly: true, fallbackPreset: main });
-  assert.deepEqual(snapshot, [
-    entry("fallout-maw.alpha", true),
-    entry("fallout-maw.beta", { code: "seed" })
-  ]);
 });
 
 test("ordinary autosave capture recovers invalid runtime values from the active preset", () => {
@@ -404,8 +392,8 @@ test("invalid known setting types are rejected before preset persistence", async
   assert.equal(batchCalls, 0);
 });
 
-test("public CRUD clones main, preserves identity, and removes presets only from the local world", async () => {
-  const { state } = installFoundryMock();
+test("public CRUD clones main, preserves identity, and physically removes both preset files", async () => {
+  const { fileDeletions, state } = installFoundryMock();
   const uploads = installPresetFileMock();
   const main = makePreset("fallout-maw", "Fallout-MaW", [
     entry("fallout-maw.alpha", false),
@@ -434,9 +422,36 @@ test("public CRUD clones main, preserves identity, and removes presets only from
   assert.equal(await getSettingsPreset(created.id), null);
   const listed = (await listSettingsPresets()).find(preset => preset.id === created.id);
   assert.equal(listed, undefined);
-  assert.deepEqual(state.removedPresetIds, [created.id]);
+  assert.equal(Object.hasOwn(state, "removedPresetIds"), false);
+  assert.deepEqual(fileDeletions, [{
+    action: "deleteFalloutMaWSettingsPreset",
+    storage: "data",
+    systemId: "fallout-maw",
+    presetId: created.id
+  }]);
   assert.equal(uploads.length, 4);
   assert.equal(uploads.some(upload => upload.document.deleted), false);
+});
+
+test("legacy removal state and tombstone files no longer mask presets", async () => {
+  const { state } = installFoundryMock();
+  state.removedPresetIds = ["formerly-hidden"];
+  const main = makePreset("fallout-maw", "Fallout-MaW", [entry("fallout-maw.alpha", false)]);
+  const formerlyHidden = makePreset("formerly-hidden", "Formerly hidden", [entry("fallout-maw.alpha", true)]);
+  const legacyTombstone = normalizePresetDocument({
+    ...makePreset("legacy-tombstone", "Legacy tombstone", []),
+    revision: null,
+    deleted: true
+  });
+
+  SETTINGS_PRESET_TESTING.installPresets([main, formerlyHidden, legacyTombstone]);
+
+  assert.deepEqual((await listSettingsPresets()).map(preset => preset.id), [
+    "fallout-maw",
+    "formerly-hidden",
+    "legacy-tombstone"
+  ]);
+  assert.deepEqual(createDefaultSettingsPresetState().removedPresetIds, undefined);
 });
 
 test("a named nested save persists with its preset without becoming a separate preset", async () => {
@@ -547,8 +562,7 @@ test("importing a matching active id applies its new revision even with activate
   Object.assign(state, {
     activePresetId: active.id,
     appliedRevision: active.revision,
-    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
-    migrationVersion: 1
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature()
   });
 
   const result = await importSettingsPreset(imported, { activate: false });
@@ -628,29 +642,7 @@ test("a partial import is completed before its first write so pending and applie
   assert.deepEqual(state.pendingDocument, imported);
 });
 
-test("world migration classifier separates empty and existing worlds", () => {
-  const { documents } = installFoundryMock();
-  assert.equal(SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(), false);
-
-  game.world.systemVersion = "0.1.0";
-  documents.set("fallout-maw.alpha", {
-    id: "doc-fallout-maw.alpha",
-    _id: "doc-fallout-maw.alpha",
-    key: "fallout-maw.alpha"
-  });
-  game.actors = { size: 1 };
-  game.journal = { size: 5 };
-  assert.equal(
-    SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(),
-    false,
-    "wizard-created Documents must not turn an unplayed world into a legacy migration"
-  );
-
-  game.world._source = { playtime: 1 };
-  assert.equal(SETTINGS_PRESET_TESTING.isExistingWorldForPresetMigration(), true);
-});
-
-test("a new world is seeded from an exact clone of the packaged Fallout-MaW preset", async () => {
+test("a world without an active preset receives an exact clone of the packaged Fallout-MaW preset", async () => {
   let state;
   let applied;
   const installed = installFoundryMock({
@@ -680,7 +672,7 @@ test("a new world is seeded from an exact clone of the packaged Fallout-MaW pres
   ]);
   SETTINGS_PRESET_TESTING.installPresets([main]);
 
-  await SETTINGS_PRESET_TESTING.migrateExistingWorld();
+  await SETTINGS_PRESET_TESTING.initializePrimaryGM();
 
   assert.equal(uploads.length, 2);
   const seeded = uploads[0].document;
@@ -726,7 +718,6 @@ test("activating Fallout-MaW applies its current revision instead of a generated
   ]);
   SETTINGS_PRESET_TESTING.installPresets([main, generated]);
   Object.assign(state, {
-    migrationVersion: 1,
     activePresetId: generated.id,
     appliedRevision: generated.revision
   });
@@ -740,8 +731,9 @@ test("activating Fallout-MaW applies its current revision instead of a generated
   assert.deepEqual(byId.get("doc-fallout-maw.beta"), { code: "actual-fallout-maw" });
 });
 
-test("a legacy world with content still preserves its stored settings during preset migration", async () => {
+test("an older world without an active preset also receives the current packaged preset", async () => {
   let state;
+  let applied;
   const installed = installFoundryMock({
     storedIds: ["fallout-maw.alpha", "fallout-maw.beta", STATE_ID],
     values: {
@@ -749,6 +741,7 @@ test("a legacy world with content still preserves its stored settings during pre
       "fallout-maw.beta": { code: "legacy-world" }
     },
     modifyBatch: async operations => {
+      applied = operations.find(operation => operation.falloutMaWSettingsPresetApply === true) ?? applied;
       const stateUpdate = operations.flatMap(operation => operation.updates ?? [])
         .find(update => update._id === `doc-${STATE_ID}`);
       if (stateUpdate) Object.assign(state, JSON.parse(stateUpdate.value));
@@ -764,14 +757,14 @@ test("a legacy world with content still preserves its stored settings during pre
   ]);
   SETTINGS_PRESET_TESTING.installPresets([main]);
 
-  await SETTINGS_PRESET_TESTING.migrateExistingWorld();
+  await SETTINGS_PRESET_TESTING.initializePrimaryGM();
 
   assert.equal(uploads.length, 2);
-  assert.deepEqual(uploads[0].document.settings, [
-    entry("fallout-maw.alpha", true),
-    entry("fallout-maw.beta", { code: "legacy-world" })
-  ]);
+  assert.deepEqual(uploads[0].document.settings, main.settings);
   assert.equal(state.activePresetId, uploads[0].document.id);
+  const byId = new Map(applied.updates.map(update => [update._id, JSON.parse(update.value)]));
+  assert.equal(byId.get("doc-fallout-maw.alpha"), false);
+  assert.deepEqual(byId.get("doc-fallout-maw.beta"), { code: "actual-fallout-maw" });
 });
 
 test("atomic application fills missing keys from main and excludes client/runtime settings", async () => {
@@ -1223,7 +1216,6 @@ test("ordinary startup fetches only the active preset set and skips matching wor
   ]);
   const inactive = makePreset("inactive", "Inactive", [entry("fallout-maw.alpha", true)]);
   Object.assign(state, {
-    migrationVersion: 1,
     activePresetId: main.id,
     appliedRevision: main.revision
   });
@@ -1268,7 +1260,7 @@ test("ordinary startup fetches only the active preset set and skips matching wor
   assert.equal(fetched.length, 5);
 });
 
-test("ordinary migrated initialization performs zero preset file or Setting writes", async () => {
+test("ordinary configured initialization performs zero preset file or Setting writes", async () => {
   let fileCalls = 0;
   let batchCalls = 0;
   const { state } = installFoundryMock({
@@ -1278,7 +1270,6 @@ test("ordinary migrated initialization performs zero preset file or Setting writ
     }
   });
   Object.assign(state, {
-    migrationVersion: 1,
     activePresetId: "fallout-maw",
     appliedRevision: "existing"
   });
@@ -1309,7 +1300,6 @@ test("a corrupt pending file is ignored and rebuilt from the durable world-state
     entry("fallout-maw.beta", { code: "pending" })
   ]);
   Object.assign(state, {
-    migrationVersion: 1,
     activePresetId: pending.id,
     appliedRevision: pending.revision,
     pendingPresetId: pending.id,
@@ -1382,8 +1372,7 @@ test("an updated unrelated preset never reapplies the active personal preset", a
   Object.assign(state, {
     activePresetId: active.id,
     appliedRevision: active.revision,
-    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
-    migrationVersion: 1
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature()
   });
 
   assert.equal(await SETTINGS_PRESET_TESTING.applyActiveRevisionIfNeeded(), false);
@@ -1410,8 +1399,7 @@ test("a registration contract change forces startup validation even when ids and
   Object.assign(state, {
     activePresetId: main.id,
     appliedRevision: main.revision,
-    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
-    migrationVersion: 1
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature()
   });
 
   numeric.choices = { 0: "None", 1: "One", 2: "Two", 3: "Three" };
@@ -1439,8 +1427,7 @@ test("a same-shape registered default change invalidates the managed signature",
   Object.assign(state, {
     activePresetId: main.id,
     appliedRevision: main.revision,
-    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
-    migrationVersion: 1
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature()
   });
 
   numeric.default = 1;
@@ -1473,8 +1460,7 @@ test("a missing newly managed Setting document forces a full startup apply", asy
   Object.assign(state, {
     activePresetId: main.id,
     appliedRevision: main.revision,
-    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
-    migrationVersion: 1
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature()
   });
 
   assert.equal(await SETTINGS_PRESET_TESTING.applyActiveRevisionIfNeeded(), true);
@@ -1510,7 +1496,7 @@ test("a changed revision of the active preset is fully reapplied", async () => {
   const oldActive = makePreset("personal-updated", "Active", [entry("fallout-maw.alpha", false)]);
   const newActive = makePreset("personal-updated", "Active", [entry("fallout-maw.alpha", true)]);
   SETTINGS_PRESET_TESTING.installPresets([main, newActive]);
-  Object.assign(state, { activePresetId: newActive.id, appliedRevision: oldActive.revision, migrationVersion: 1 });
+  Object.assign(state, { activePresetId: newActive.id, appliedRevision: oldActive.revision });
 
   assert.equal(await SETTINGS_PRESET_TESTING.applyActiveRevisionIfNeeded(), true);
   assert.equal(batchCalls, 1);
@@ -1576,8 +1562,7 @@ test("migrating one managed setting applies only that setting plus preset state"
   Object.assign(state, {
     activePresetId: active.id,
     appliedRevision: active.revision,
-    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature(),
-    migrationVersion: 1
+    appliedManagedSignature: SETTINGS_PRESET_TESTING.getManagedPresetSignature()
   });
 
   await migrateSettingsPresetValues([entry("fallout-maw.alpha", false)]);

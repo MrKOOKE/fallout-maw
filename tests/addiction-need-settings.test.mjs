@@ -84,33 +84,6 @@ test("need normalization preserves custom negative hourly changes", () => {
   assert.equal(addiction.settings.accumulation.perHour, -7.5);
 });
 
-test("active Lost preset configures addiction for human and ghoul without rewriting its save", async () => {
-  const preset = JSON.parse(await readFile(
-    new URL("../storage/settings-presets/preset-29RLMkIuBBuzp9eClV99Sxcj.json", import.meta.url),
-    "utf8"
-  ));
-  const creatureOptions = preset.settings.find(entry => entry.id === "fallout-maw.creatureOptions")?.value;
-  const currentAddictions = creatureOptions.races
-    .filter(race => ["haGXisDaATsuiumk", "newRace2"].includes(race.id))
-    .flatMap(race => race.needSettings ?? [])
-    .filter(need => need.key === "addiction");
-  const savedAddictions = preset.saves
-    .flatMap(save => save.settings ?? [])
-    .filter(entry => entry.id === "fallout-maw.creatureOptions")
-    .flatMap(entry => entry.value.races ?? [])
-    .flatMap(race => race.needSettings ?? [])
-    .filter(need => need.key === "addiction");
-
-  assert.equal(currentAddictions.length, 2);
-  for (const addiction of currentAddictions) {
-    assert.equal(addiction.settings.accumulation.perHour, -10);
-    assert.deepEqual(summarizeThresholds(addiction.settings.thresholds), EXPECTED_THRESHOLDS);
-  }
-  assert.equal(savedAddictions.length, 2);
-  assert.equal(savedAddictions.every(need => need.settings.accumulation.perHour === 0), true);
-  assert.equal(savedAddictions.every(need => need.settings.thresholds.length === 0), true);
-});
-
 test("advanced need form labels an unrestricted signed hourly change", async () => {
   const template = await readFile(
     new URL("../templates/settings/need-advanced-settings-config.hbs", import.meta.url),

@@ -45,7 +45,7 @@ test("a real startup preset application still performs its deferred core refresh
   assert.doesNotMatch(finalizeBody, /skipCoreEffects:\s*true/);
 });
 
-test("ordinary migrated startup performs no preset file I/O or preset application", () => {
+test("ordinary configured startup performs no preset file I/O or preset application", () => {
   const initializeBody = presetManagerSource.match(
     /export async function initializeSettingsPresets\(\) \{([\s\S]*?)\n\}/
   )?.[1] ?? "";
@@ -54,8 +54,8 @@ test("ordinary migrated startup performs no preset file I/O or preset applicatio
   )?.[1] ?? "";
 
   assert.ok(initializeBody && primaryBody);
-  assert.match(initializeBody, /migrationVersion[\s\S]*?< MIGRATION_VERSION/);
-  assert.match(initializeBody, /await loadPresetSources\(\);/);
+  assert.match(initializeBody, /!state\.activePresetId/);
+  assert.match(initializeBody, /await loadPresetSources\(\{ startupOnly: true \}\);/);
   assert.doesNotMatch(primaryBody, /applyActiveRevisionIfNeeded/);
 });
 

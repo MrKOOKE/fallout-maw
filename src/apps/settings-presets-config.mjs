@@ -462,7 +462,6 @@ function preparePresetContext(preset, activePresetId) {
     syncClass: normalizeCssToken(syncState, "unknown"),
     active,
     isMain,
-    seedPending: Boolean(preset?.seedPending),
     canActivate: !active,
     canModify,
     canRename: canModify,
