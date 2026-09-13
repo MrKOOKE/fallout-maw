@@ -1106,6 +1106,83 @@ export function findFirstAvailableInventoryPlacement(
   );
 }
 
+/**
+ * Build a row-major placement planner for a sequence of Items targeting the
+ * same inventory context. Existing occupancy is resolved once; every accepted
+ * placement is then added to an occupied-cell set in constant time.
+ *
+ * This is intended for batch planners. Single-Item interactions should keep
+ * using findFirstAvailableInventoryPlacement so they always inspect the live
+ * collection directly.
+ */
+export function createInventoryPlacementPlanner(
+  contextItems,
+  columns,
+  rows,
+  allItems = contextItems,
+  reservedPlacements = [],
+  options = {}
+) {
+  columns = Math.max(1, toInteger(columns) || 1);
+  rows = Math.max(1, toInteger(rows) || 1);
+
+  const resolved = resolveInventoryGridPlacements(
+    getItemsArray(contextItems),
+    columns,
+    rows,
+    getItemsArray(allItems),
+    options
+  );
+  if (!resolved) return null;
+
+  const occupiedCells = new Set();
+  for (const entry of resolved.items) {
+    if (!entry.phantom) addInventoryPlacementCells(occupiedCells, entry.placement);
+  }
+  for (const placement of reservedPlacements ?? []) {
+    if (placement) addInventoryPlacementCells(occupiedCells, placement);
+  }
+
+  const reserve = placement => {
+    if (!placement) return false;
+    if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
+    if (!isInventoryPlacementCellSetAvailable(placement, occupiedCells)) return false;
+    addInventoryPlacementCells(occupiedCells, placement);
+    return true;
+  };
+
+  return {
+    findAndReserve(itemOrSystem = null, currentAllItems = allItems) {
+      const placement = findFirstAvailableInventoryPlacementFromOccupied(
+        occupiedCells,
+        columns,
+        rows,
+        itemOrSystem,
+        getItemsArray(currentAllItems),
+        options,
+        { x: 1, y: 1 }
+      );
+      if (!placement) return null;
+      addInventoryPlacementCells(occupiedCells, placement);
+      return placement;
+    },
+    reserve,
+    reserveAll(placements = []) {
+      const accepted = [];
+      for (const placement of placements) {
+        if (!reserve(placement)) {
+          for (const acceptedPlacement of accepted) {
+            removeInventoryPlacementCells(occupiedCells, acceptedPlacement);
+          }
+          return false;
+        }
+        accepted.push(placement);
+      }
+      return true;
+    }
+  };
+}
+
 function findFirstAvailableInventoryPlacementByZonePriority(
   contextItems,
   columns,
@@ -1352,6 +1429,15 @@ function addInventoryPlacementCells(cells, placement) {
   for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
     for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
       cells.add(getInventoryCellKey(x, y));
+    }
+  }
+}
+
+function removeInventoryPlacementCells(cells, placement) {
+  if (!cells || !placement) return;
+  for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+    for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+      cells.delete(getInventoryCellKey(x, y));
     }
   }
 }

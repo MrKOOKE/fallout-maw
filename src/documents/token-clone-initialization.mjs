@@ -1,5 +1,6 @@
 const previewSources = new Set();
 const constructingPreviews = [];
+const constructingActorDeltas = [];
 const validatedActorSources = new WeakMap();
 
 /** Keep the native canvas clone workflow, including its private preview state. */
@@ -36,6 +37,19 @@ export function getPreviewActorContext(delta, context) {
 }
 
 /**
+ * Construct an initial synthetic Actor from sources which Foundry has already
+ * cleaned. The merged Actor and every embedded document still pass native
+ * strict and joint validation; only duplicate source cleaning and duplicate
+ * child field validation are omitted.
+ */
+export function applyValidatedActorDelta(delta, context, apply) {
+  if (!canReuseValidatedActorDeltaSources(delta, context)) return apply(context);
+  constructingActorDeltas.push(delta);
+  try { return apply({ ...context, clean: false }); }
+  finally { constructingActorDeltas.pop(); }
+}
+
+/**
  * Native Actor construction validates its complete embedded schema before
  * initializing children. During this exact clone construction, child sources
  * are used unchanged (clean:false). Keep joint validation on each new child,
@@ -43,8 +57,14 @@ export function getPreviewActorContext(delta, context) {
  */
 export function initializeValidatedPreviewActor(actor, options, initialize) {
   const source = constructingPreviews.at(-1), token = actor.parent;
-  if (!source || !token || token === source || token.parent !== source.parent || token.id !== source.id
-    || token.actorId !== source.actorId || actor.invalid !== false || options.clean !== false || options.strict !== true
+  const delta = constructingActorDeltas.at(-1);
+  const previewConstruction = Boolean(
+    source && token && token !== source && token.parent === source.parent
+    && token.id === source.id && token.actorId === source.actorId
+  );
+  const deltaConstruction = Boolean(delta && token && delta.parent === token);
+  if ((!previewConstruction && !deltaConstruction)
+    || actor.invalid !== false || options.clean !== false || options.strict !== true
     || actor.validate !== foundry.abstract.DataModel.prototype.validate) return initialize();
   const previous = validatedActorSources.get(actor);
   validatedActorSources.set(actor, new Set(actor._source.items));
@@ -53,6 +73,23 @@ export function initializeValidatedPreviewActor(actor, options, initialize) {
     if (previous) validatedActorSources.set(actor, previous);
     else validatedActorSources.delete(actor);
   }
+}
+
+function canReuseValidatedActorDeltaSources(delta, context = {}) {
+  const token = delta?.parent;
+  const baseActor = token?.baseActor;
+  return Boolean(
+    game.release?.version === "14.361"
+    && token?.documentName === "Token"
+    && token.actorLink === false
+    && delta.invalid === false
+    && baseActor?.invalid === false
+    && context.strict === true
+    && context.dropInvalidEmbedded === true
+    && context.clean === undefined
+    && delta.validate === foundry.abstract.DataModel.prototype.validate
+    && baseActor.validate === foundry.abstract.DataModel.prototype.validate
+  );
 }
 
 export function isInitializingValidatedPreviewItem(item) {

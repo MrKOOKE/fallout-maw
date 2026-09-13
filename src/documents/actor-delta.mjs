@@ -1,4 +1,7 @@
-import { getPreviewActorContext } from "./token-clone-initialization.mjs";
+import {
+  applyValidatedActorDelta,
+  getPreviewActorContext
+} from "./token-clone-initialization.mjs";
 import { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION } from "../constants.mjs";
 
 const scalarUpdates = new WeakMap();
@@ -17,7 +20,8 @@ const scalarCommits = new WeakMap();
  */
 export class FalloutMaWActorDelta extends foundry.documents.ActorDelta {
   apply(context = {}) {
-    return super.apply(getPreviewActorContext(this, context));
+    const preparedContext = getPreviewActorContext(this, context);
+    return applyValidatedActorDelta(this, preparedContext, options => super.apply(options));
   }
 
   updateSource(changes = {}, options = {}) {

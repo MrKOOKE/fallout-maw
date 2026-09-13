@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { getCraftingSettings, getCreatureOptions, getCurrencySettings, getItemCategorySettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { isGuaranteedResolutionMode, isSkillThresholdMode } from "../settings/crafting.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
@@ -4240,7 +4241,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
       ...slot,
       item: decorateItem(slot.item)
     })),
-    weaponSets: (inventory.weaponSets ?? []).map(set => ({
+    weaponSets: (inventory.weaponSets ?? []).map(set => prepareWeaponSetDisplay({
       ...set,
       slots: (set.slots ?? []).map(slot => ({
         ...slot,

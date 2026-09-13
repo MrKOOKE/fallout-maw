@@ -1,4 +1,5 @@
 import { FalloutMaWTokenDocument } from "./token.mjs";
+import { markMovementSceneReset, withMovementTileReuse } from "./tile-reset-cache.mjs";
 
 const NativeScene = foundry.documents.Scene;
 const nativePreUpdateDescendants = NativeScene.prototype._preUpdateDescendantDocuments;
@@ -14,7 +15,12 @@ const movementFields = new Set(["x", "y", "elevation", "rotation"]);
  * updates can capture the same history directly from their scalar source fields.
  */
 export class FalloutMaWScene extends NativeScene {
+  reset() {
+    return withMovementTileReuse(this, () => super.reset());
+  }
+
   _preUpdateDescendantDocuments(parent, collection, changes, options, userId) {
+    markMovementSceneReset(this, parent, collection, changes);
     const originals = getMovementOriginals(this, parent, collection, changes, options, userId);
     if (!originals) return super._preUpdateDescendantDocuments(parent, collection, changes, options, userId);
 

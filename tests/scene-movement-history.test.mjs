@@ -30,6 +30,7 @@ class NativeToken {
 globalThis.foundry = {
   documents: {
     Scene: NativeScene,
+    TileDocument: class {},
     TokenDocument: NativeToken
   },
   utils: { deepClone: structuredClone }

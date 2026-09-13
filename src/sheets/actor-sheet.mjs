@@ -1,4 +1,6 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { InventoryBlockLayout } from "../utils/inventory-block-layout.mjs";
+import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { TRAVEL_GROUP_FLAG } from "../global-map/constants.mjs";
 import { moveTravelCarrierPassenger } from "../global-map/travel-groups.mjs";
@@ -410,6 +412,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #uiScale = 1;
   #viewportResizeHandler = null;
   #tabScrollPositions = new Map();
+  #inventoryBlockLayout = new InventoryBlockLayout();
   #worldSidebarPeek = false;
 
   static DEFAULT_OPTIONS = {
@@ -769,6 +772,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateActorNameInput();
     this.#activateInventoryInteractions();
     this.#activateWeaponSlotAspectSizing();
+    this.#inventoryBlockLayout.bind(this.element?.querySelector(".fallout-maw-inventory-tab"));
     this.#activateLimbControlClicks();
     this.#limbPopover.bind(
       this.element?.querySelector("[data-limb-popover-root]"),
@@ -785,6 +789,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   _onClose(options) {
     super._onClose(options);
     this.#unbindViewportResize();
+    this.#inventoryBlockLayout.destroy();
     this.#closeInventoryContextMenu();
     this.#clearInventoryTooltip({ force: true });
     this.#limbPopover.destroy();
@@ -4584,6 +4589,7 @@ function isTravelGroupCarrierActor(actor = null) {
 async function prepareActorSheetInventoryRenderContext(actor, race, sourceSystem = actor?.system) {
   const inventory = prepareDisplayInventoryContext(actor, race);
   markActiveHudWeaponSet(actor, inventory);
+  inventory.weaponSets = (inventory.weaponSets ?? []).map(prepareWeaponSetDisplay);
 
   const loadValue = Math.max(0, Number(actor?.system?.load?.value) || 0);
   const loadMax = Math.max(0, Number(actor?.system?.load?.max) || 0);

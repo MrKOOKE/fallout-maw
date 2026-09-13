@@ -1,4 +1,5 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
+import { FalloutMaWTileDocument } from "./documents/tile-reset-cache.mjs";
 import { FalloutMaWToken, initializeEffectTooltips } from "./canvas/token.mjs";
 import { FalloutMaWTokenLayer } from "./canvas/token-layer.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
@@ -165,6 +166,7 @@ Hooks.once("init", () => {
   CONFIG.Combatant.documentClass = FalloutMaWCombatant;
   CONFIG.Item.documentClass = FalloutMaWItem;
   CONFIG.Scene.documentClass = FalloutMaWScene;
+  if (CONFIG.Tile.documentClass === foundry.documents.TileDocument) CONFIG.Tile.documentClass = FalloutMaWTileDocument;
   CONFIG.Token.documentClass = FalloutMaWTokenDocument;
   CONFIG.Token.objectClass = FalloutMaWToken;
   CONFIG.Canvas.layers.tokens.layerClass = FalloutMaWTokenLayer;

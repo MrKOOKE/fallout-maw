@@ -78,14 +78,21 @@
               <section class="fallout-maw-weapon-set">
                 <h3>{{label}}</h3>
                 <div class="fallout-maw-weapon-slot-list">
-                  {{#each slots}}
-                  <div class="fallout-maw-slot-card">
-                    <div class="fallout-maw-slot-card-label">{{label}}</div>
-                    <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{key}}">
+                  {{#each displaySlots}}
+                  <div class="fallout-maw-slot-card {{#if shared}}fallout-maw-slot-card--shared{{/if}}">
+                    <div class="fallout-maw-slot-card-label" title="{{label}}">{{#if shared}}{{#each sharedSlots}}<span>{{label}}</span>{{/each}}{{else}}{{label}}{{/if}}</div>
+                    <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot {{#if shared}}fallout-maw-weapon-slot--shared{{/if}}" {{#unless shared}}data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{key}}"{{/unless}}>
                       {{#if item}}
                       <article class="{{#unless phantom}}{{item.draggableClass}}{{/unless}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                         <img src="{{item.img}}" alt="{{item.name}}">
                         {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                        {{#if shared}}
+                        <div class="fallout-maw-weapon-shared-drop-zones" style="--fallout-maw-shared-slot-count: {{sharedSlots.length}};">
+                          {{#each sharedSlots}}
+                          <span class="fallout-maw-weapon-shared-drop-zone" data-search-drop-zone data-search-actor-uuid="{{../actorUuid}}" data-weapon-set="{{../weaponSetKey}}" data-weapon-slot="{{key}}" aria-label="{{label}}"></span>
+                          {{/each}}
+                        </div>
+                        {{/if}}
                       </article>
                       {{/if}}
                     </div>

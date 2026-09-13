@@ -1,5 +1,6 @@
 ﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
+import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
@@ -3050,7 +3051,7 @@ function prepareHudWeaponSet(actor, weaponSets = [], activeSetKey = "", selected
 }
 
 function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}, requestIndex = null) {
-  return weaponSets.map(set => ({
+  return weaponSets.map(set => prepareWeaponSetDisplay({
     ...set,
     active: set.key === activeSetKey,
     slots: (set.slots ?? []).map(slot => ({

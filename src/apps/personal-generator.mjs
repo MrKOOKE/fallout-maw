@@ -32,9 +32,9 @@ import {
   ROOT_CONTAINER_ID,
   createAnchoredItemStackPartsForQuantity,
   createInventoryPlacement,
+  createInventoryPlacementPlanner,
   createItemStackPartAdditionUpdate,
   createStoredPlacement,
-  findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
   getContainerInventoryGridOptions,
   getContainerMaxLoad,
@@ -1504,7 +1504,10 @@ function planPersonalGeneratorItems(actor, itemsData) {
   const updates = [];
   const creates = [];
   const reservedPlacements = new Map();
+  const placementPlanners = new Map();
   const projected = createProjectedItemMap(actor);
+  const rootDimensions = getActorRootDimensions(actor);
+  const rootOptions = getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID);
   const { occupiedEquipmentSlots, occupiedWeaponSlots } = getOccupiedGeneratedEquipSlots(actor);
 
   for (const itemData of itemsData) {
@@ -1533,8 +1536,10 @@ function planPersonalGeneratorItems(actor, itemsData) {
 
     while (remainingQuantity > 0) {
       const quantity = maxStack > 1 ? remainingQuantity : Math.min(remainingQuantity, maxStack);
-      const stackData = foundry.utils.deepClone(itemData);
-      foundry.utils.setProperty(stackData, "system.quantity", quantity);
+      const stackData = quantity === getItemQuantity(itemData)
+        ? itemData
+        : foundry.utils.deepClone(itemData);
+      if (stackData !== itemData) foundry.utils.setProperty(stackData, "system.quantity", quantity);
       const equipPlacement = getGeneratedEquipRequest(stackData)
         ? findGeneratedEquipPlacement(actor, stackData, occupiedEquipmentSlots, occupiedWeaponSlots)
         : null;
@@ -1548,15 +1553,21 @@ function planPersonalGeneratorItems(actor, itemsData) {
         }
         creates.push(createData);
         const syntheticId = `personal-generator-${creates.length}`;
-        const projectedCreate = foundry.utils.deepClone(createData);
-        projectedCreate._id = syntheticId;
-        projectedCreate.id = syntheticId;
+        const projectedCreate = { ...createData, _id: syntheticId, id: syntheticId };
         projected.set(syntheticId, projectedCreate);
         remainingQuantity -= quantity;
         continue;
       }
 
-      const target = findFirstGeneratedItemPlacement(actor, projected, stackData, reservedPlacements);
+      const target = findFirstGeneratedItemPlacement(
+        actor,
+        projected,
+        stackData,
+        reservedPlacements,
+        placementPlanners,
+        rootDimensions,
+        rootOptions
+      );
       if (!target) break;
       const createData = createInventoryItemDataForPlacement(stackData, target);
       if (usesVirtualInventoryStacks(createData)) {
@@ -1564,9 +1575,7 @@ function planPersonalGeneratorItems(actor, itemsData) {
       }
       creates.push(createData);
       const syntheticId = `personal-generator-${creates.length}`;
-      const projectedCreate = foundry.utils.deepClone(createData);
-      projectedCreate._id = syntheticId;
-      projectedCreate.id = syntheticId;
+      const projectedCreate = { ...createData, _id: syntheticId, id: syntheticId };
       projected.set(syntheticId, projectedCreate);
       if (!reservedPlacements.has(target.parentId)) reservedPlacements.set(target.parentId, []);
       reservedPlacements.get(target.parentId).push(...(target.placements ?? [target.placement]));
@@ -1577,15 +1586,37 @@ function planPersonalGeneratorItems(actor, itemsData) {
   return { updates, creates };
 }
 
-function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reservedPlacements = new Map()) {
-  const rootDimensions = getActorRootDimensions(actor);
+function findFirstGeneratedItemPlacement(
+  actor,
+  projectedMap,
+  itemData,
+  reservedPlacements = new Map(),
+  placementPlanners = new Map(),
+  rootDimensions = getActorRootDimensions(actor),
+  rootOptions = getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+) {
   const projectedItems = Array.from(projectedMap.values());
-  for (const parentId of getGeneratedItemParentCandidates(actor, projectedItems, itemData)) {
+  const parentCandidates = getGeneratedItemParentCandidates(actor, projectedItems, itemData);
+  for (const parentId of parentCandidates) {
     const dimensions = parentId ? getContainerInventoryGridOptions(actor.items?.get(parentId)) : rootDimensions;
-    const options = parentId ? dimensions : getActorRootInventoryGridOptions(actor, parentId);
+    const options = parentId ? dimensions : rootOptions;
     if (parentId && !canProjectedContainerAcceptWeight(projectedMap, parentId, itemData)) continue;
-    const contextItems = getContextInventoryItems(parentId, projectedItems);
+    let placementPlanner = placementPlanners.get(parentId);
+    if (!placementPlanners.has(parentId)) {
+      const initialContextItems = getContextInventoryItems(parentId, projectedItems);
+      placementPlanner = createInventoryPlacementPlanner(
+        initialContextItems,
+        dimensions.columns,
+        dimensions.rows,
+        projectedItems,
+        reservedPlacements.get(parentId) ?? [],
+        options
+      );
+      placementPlanners.set(parentId, placementPlanner);
+    }
+    if (!placementPlanner) continue;
     if (usesVirtualInventoryStacks(itemData)) {
+      const contextItems = getContextInventoryItems(parentId, projectedItems);
       const stackParts = createAnchoredItemStackPartsForQuantity({
         itemData,
         quantity: getItemQuantity(itemData),
@@ -1598,17 +1629,7 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
       });
       if (!stackParts?.length) continue;
       const placements = stackParts.map(part => createInventoryPlacement(part.x, part.y, itemData, projectedItems));
-      const createData = createInventoryItemDataForPlacement(itemData, {
-        parentId,
-        placement: placements[0]
-      });
-      foundry.utils.setProperty(createData, "system.stackParts", stackParts);
-      const testProjected = cloneProjectedMap(projectedMap);
-      const syntheticId = `personal-generator-test-${foundry.utils.randomID()}`;
-      createData._id = syntheticId;
-      createData.id = syntheticId;
-      testProjected.set(syntheticId, createData);
-      if (validateProjectedItems(actor, testProjected)) return {
+      if (placementPlanner.reserveAll(placements)) return {
         parentId,
         placement: placements[0],
         placements,
@@ -1616,24 +1637,9 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
       };
       continue;
     }
-    const placement = findFirstAvailableInventoryPlacement(
-      contextItems,
-      dimensions.columns,
-      dimensions.rows,
-      itemData,
-      projectedItems,
-      [],
-      reservedPlacements.get(parentId) ?? [],
-      options
-    );
+    const placement = placementPlanner.findAndReserve(itemData, projectedItems);
     if (!placement) continue;
-    const createData = createInventoryItemDataForPlacement(itemData, { parentId, placement });
-    const testProjected = cloneProjectedMap(projectedMap);
-    const syntheticId = `personal-generator-test-${foundry.utils.randomID()}`;
-    createData._id = syntheticId;
-    createData.id = syntheticId;
-    testProjected.set(syntheticId, createData);
-    if (validateProjectedItems(actor, testProjected)) return { parentId, placement };
+    return { parentId, placement };
   }
   return null;
 }
@@ -2271,7 +2277,9 @@ function createStackPartsForGeneratedPlacement(itemData, placement) {
 }
 
 function createInventoryItemDataForPlacement(itemData, target) {
-  const data = foundry.utils.deepClone(itemData);
+  // Rolled generator sources are fresh, unshared plain objects. Transfer their
+  // ownership into the create plan instead of cloning every full Item again.
+  const data = itemData;
   delete data._id;
   delete data.id;
   delete data.folder;

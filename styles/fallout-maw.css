@@ -13668,7 +13668,7 @@ label.checkbox.fallout-maw-ability-change-choice {
 .fallout-maw-token-hud-weapon-slot:not(.empty),
 .fallout-maw-token-hud-set-slot-preview:not(.empty) {
   flex: 0 0 calc(var(--fallout-maw-token-hud-tile) * var(--fallout-maw-hud-image-aspect));
-  max-width: none;
+  max-width: calc(var(--fallout-maw-token-hud-tile) * 4);
   min-width: var(--fallout-maw-token-hud-tile);
   width: calc(var(--fallout-maw-token-hud-tile) * var(--fallout-maw-hud-image-aspect));
 }
@@ -16585,10 +16585,6 @@ label.checkbox.fallout-maw-ability-change-choice {
   border-color: var(--fallout-maw-terminal-border);
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-world-sidebar-peek .fallout-maw-inventory-layout {
-  grid-template-columns: 38rem minmax(0, 1fr);
-}
-
 .application.fallout-maw-actor-sheet .fallout-maw-equipment-pane {
   display: flex;
   flex-direction: column;
@@ -16798,6 +16794,7 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 .application.fallout-maw-actor-sheet .fallout-maw-weapon-slot {
   aspect-ratio: auto;
+  max-width: calc(var(--fallout-maw-actor-large-slot-size) * 4);
   min-width: var(--fallout-maw-actor-large-slot-size);
   width: calc(var(--fallout-maw-actor-large-slot-size) * var(--fallout-maw-weapon-slot-image-aspect, 1));
 }
@@ -16887,6 +16884,224 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 .application.fallout-maw-actor-sheet .fallout-maw-weapon-set-list {
   gap: 0.9rem;
+}
+
+/* Character inventory: one scroll surface, with whole blocks packed into rows.
+   Scoped to this tab so trade, search and crafting keep their own layouts. */
+.application.fallout-maw-actor-sheet .window-content > .tab.active.fallout-maw-inventory-tab,
+.application.fallout-maw-actor-sheet .fallout-maw-sheet-body > .tab.active.fallout-maw-inventory-tab {
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  row-gap: 0.9rem;
+  scrollbar-gutter: stable;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-summary {
+  flex: none;
+  grid-template-columns: var(--fallout-maw-inventory-summary-columns, repeat(auto-fit, minmax(min(100%, 24rem), 1fr)));
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-summary > .fallout-maw-panel {
+  align-items: center;
+  display: flex;
+  margin-bottom: 0;
+  padding-block: 0.8rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-summary > .fallout-maw-panel > div {
+  min-width: 0;
+  width: 100%;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-currency-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-layout {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab [data-inventory-pack] {
+  align-content: start;
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab [data-inventory-pack] > * {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 0;
+  width: max-content;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-pane {
+  flex: none;
+  overflow: visible;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-equipment-slot-list,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-weapon-slot-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-slot-card {
+  flex: 0 0 auto;
+  max-width: 100%;
+  width: max-content;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-slot-card-label {
+  max-width: calc(var(--fallout-maw-actor-large-slot-size) + 2rem);
+  overflow-wrap: anywhere;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-slot-card.fallout-maw-slot-card--shared {
+  flex: 0 0 auto;
+  max-width: min(100%, calc(var(--fallout-maw-actor-large-slot-size) * 4));
+  width: max-content;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-slot-card--shared > .fallout-maw-slot-card-label {
+  display: flex;
+  gap: 0.65rem;
+  max-width: none;
+  overflow-wrap: anywhere;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-slot-card--shared > .fallout-maw-slot-card-label > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-equipment-slot.fallout-maw-weapon-slot--shared {
+  min-width: 100%;
+  width: max(calc(var(--fallout-maw-actor-large-slot-size) * 2), calc(var(--fallout-maw-actor-large-slot-size) * var(--fallout-maw-weapon-slot-image-aspect, 1)));
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-weapon-shared-drop-zones {
+  display: grid;
+  grid-template-columns: repeat(var(--fallout-maw-shared-slot-count), minmax(0, 1fr));
+  inset: 0;
+  position: absolute;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-weapon-shared-drop-zone:is(.drop-preview, .drop-match-preview) {
+  background: rgba(132, 190, 105, 0.12);
+  box-shadow: inset 0 0 0 2px rgba(148, 177, 111, 0.82);
+}
+
+/* A fixed slot must size its image from the available content box. An implicit
+   grid row otherwise follows a wide image's intrinsic ratio and clips its foot. */
+.application.fallout-maw-actor-sheet .fallout-maw-equipment-slot > .fallout-maw-inventory-item {
+  display: block;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-equipment-slot > .fallout-maw-inventory-item > img {
+  min-height: 0;
+  min-width: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-equipment-pane h2 + .fallout-maw-weapon-set-list {
+  margin-top: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-equipment-slot-list,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-weapon-set {
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  padding: 0.35rem 0.45rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-weapon-set {
+  border-color: rgba(131, 119, 74, 0.46);
+  outline: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-weapon-set.active,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-weapon-set:hover,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-weapon-set:focus-visible {
+  border-color: rgba(255, 219, 105, 0.92);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-blocks > section {
+  border: 0;
+  margin: 0;
+  overflow-x: auto;
+  padding: 0 0 0.4rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-blocks > .fallout-maw-container-section {
+  min-width: min(100%, 12rem);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-blocks .fallout-maw-container-header {
+  align-items: stretch;
+  margin-bottom: 0.6rem;
+  min-width: 100%;
+  width: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-inventory-blocks .fallout-maw-root-inventory-header {
+  align-items: flex-start;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview-name {
+  flex: none;
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab h2.fallout-maw-container-overview-name {
+  display: block;
+  font-size: var(--fallout-maw-actor-section-title-size);
+  line-height: 1.15;
+  margin: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab h2.fallout-maw-container-overview-name::after {
+  content: none;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview .fallout-maw-load-meter {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview .fallout-maw-load-meter-track {
+  flex: 1 0 4rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-actor-container-group + .fallout-maw-actor-container-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-actor-container-group,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-passenger-grid-block,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-butchering-storage-section {
+  overflow-x: auto;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-weapon-set h3 {

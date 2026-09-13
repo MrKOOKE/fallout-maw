@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createInventoryPlacementPlanner,
   createItemStackPartAdditionUpdate,
   getContextInventoryItems,
   getItemDeletionClosureIds,
@@ -9,6 +10,62 @@ import {
   getItemStackParts,
   isContainerItem
 } from "../src/utils/inventory-containers.mjs";
+
+function createPlacedInventoryItem(id, x, y, { width = 1, height = 1 } = {}) {
+  return {
+    _id: id,
+    type: "gear",
+    system: {
+      container: { parentId: "" },
+      placement: {
+        mode: "inventory",
+        x,
+        y,
+        width,
+        height,
+        rotated: false
+      }
+    }
+  };
+}
+
+test("batch placement planner resolves existing occupancy once and reserves each accepted placement", () => {
+  const existing = [createPlacedInventoryItem("existing", 1, 1)];
+  const planner = createInventoryPlacementPlanner(existing, 2, 2, existing);
+  const item = createPlacedInventoryItem("candidate", 1, 1);
+
+  assert.deepEqual(planner.findAndReserve(item, existing), {
+    mode: "inventory",
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    limbKey: "",
+    x: 2,
+    y: 1,
+    width: 1,
+    height: 1,
+    rotated: false
+  });
+  assert.equal(planner.findAndReserve(item, existing)?.x, 1);
+  assert.equal(planner.findAndReserve(item, existing)?.x, 2);
+  assert.equal(planner.findAndReserve(item, existing), null);
+});
+
+test("batch placement planner handles hundreds of infinite-inventory placements without rebuilding the collection", () => {
+  const planner = createInventoryPlacementPlanner([], 8, 4, [], [], { allowOverflowRows: true });
+  const item = createPlacedInventoryItem("candidate", 1, 1);
+  let placement = null;
+
+  for (let index = 0; index < 802; index += 1) {
+    placement = planner.findAndReserve(item, []);
+    assert.ok(placement);
+  }
+
+  assert.deepEqual(
+    { x: placement.x, y: placement.y },
+    { x: 2, y: 101 }
+  );
+});
 
 test("locked-storage transitions lock on entry and unlock on exit without erasing manual locks", () => {
   const lockedStorageItem = {

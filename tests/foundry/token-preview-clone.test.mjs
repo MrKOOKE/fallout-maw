@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
-import {cloneTokenPreview, getPreviewActorContext, getPreviewItemValidationOptions, initializeValidatedPreviewActor, withTokenPreviewClone} from "../../src/documents/token-clone-initialization.mjs";
+import {applyValidatedActorDelta, cloneTokenPreview, getPreviewActorContext, getPreviewItemValidationOptions, initializeValidatedPreviewActor, withTokenPreviewClone} from "../../src/documents/token-clone-initialization.mjs";
 
 const core = process.env.FALLOUT_MAW_FOUNDRY_CORE;
 test("visual clone keeps native independent documents and validation without repeated source cleaning", {skip: !core}, async t => {
@@ -48,7 +48,12 @@ test("visual clone keeps native independent documents and validation without rep
       super._configure(options);
       Object.defineProperty(this, "syntheticActor", {value: this.apply({strict: true, dropInvalidEmbedded: true}), configurable: true});
     }
-    apply(context = {}) { return this.constructor.applyDelta(this, this.parent.baseActor, getPreviewActorContext(this, context)); }
+    apply(context = {}) {
+      const prepared = getPreviewActorContext(this, context);
+      return applyValidatedActorDelta(this, prepared, options => (
+        this.constructor.applyDelta(this, this.parent.baseActor, options)
+      ));
+    }
   }
   globalThis.CONFIG = {Actor: {documentClass: Actor, dataModels: {}}, Item: {documentClass: Item, dataModels: {
     gear: models.GearDataModel, ability: models.AbilityDataModel, trauma: models.TraumaDataModel, disease: models.DiseaseDataModel}},
@@ -91,6 +96,30 @@ test("visual clone keeps native independent documents and validation without rep
     candidate.actor.effects.contents[0].updateSource({disabled: true});
     assert.equal(source.actor.effects.contents[0].disabled, false);
   });
+  await t.test("initial ordinary ActorDelta materialization reuses cleaned sources", () => {
+    itemCleans = itemValidations = itemJointValidations = 0; actorContexts.length = 0;
+    const token = new Token(foundry.utils.deepClone(data), {parent: scene});
+    const actor = token.actor;
+    assert.equal(itemCleans, data.delta.items.length * 2, "merged synthetic Actor Items are not cleaned a third time");
+    assert.ok(itemJointValidations >= 3, "merged Item documents retain joint validation");
+    assert.equal(actorContexts.at(-1).clean, false);
+    assert.equal(actor.items.size, 3);
+    assert.notEqual(actor, base);
+    failJoint = true;
+    try {
+      Object.defineProperty(token.delta, "syntheticActor", {
+        value: token.delta.apply({strict: true, dropInvalidEmbedded: true}),
+        configurable: true
+      });
+      assert.equal(token.actor.items.invalidDocumentIds.size, 3, "merged Items retain joint validation");
+    } finally {
+      failJoint = false;
+      Object.defineProperty(token.delta, "syntheticActor", {
+        value: token.delta.apply({strict: true, dropInvalidEmbedded: true}),
+        configurable: true
+      });
+    }
+  });
   await t.test("ordinary clones, overrides and additional options retain native cleaning", () => {
     for (const clone of [() => source.clone({}, {keepId: true}),
       () => withTokenPreviewClone(source, () => source.clone({x: 10}, {keepId: true})),
@@ -101,7 +130,7 @@ test("visual clone keeps native independent documents and validation without rep
   await t.test("scope is restored after errors and normal later delta application", () => {
     assert.throws(() => withTokenPreviewClone(source, () => cloneTokenPreview(source, {}, {keepId: true}, () => {throw new Error("fixture");})), /fixture/);
     itemCleans = 0; nativeClone(); assert.ok(itemCleans > 0);
-    const clone = fastClone(); actorContexts.length = 0; clone.delta.apply({strict: true, dropInvalidEmbedded: true});
+    const clone = fastClone(); actorContexts.length = 0; clone.delta.apply();
     assert.notEqual(actorContexts.at(-1).clean, false);
   });
   await t.test("validation failures are retained and do not leave a trusted construction scope", () => {
@@ -161,5 +190,51 @@ test("visual clone keeps native independent documents and validation without rep
     assert.deepEqual(candidate.toObject(), reference.toObject());
     assert.deepEqual(candidate.actor.toObject(false), reference.actor.toObject(false));
     t.diagnostic(`Common document constructors only, milliseconds: ${JSON.stringify(timings)}`);
+  });
+  await t.test("large base Actor initial delta avoids duplicate Item cleaning", () => {
+    const previousBase = base;
+    const baseItem = foundry.utils.deepClone(data.delta.items[0]);
+    try {
+      base = new Actor({
+        _id: "heavyactor000000",
+        name: "Heavy Actor",
+        type: "character",
+        system: {hp: 10},
+        items: Array.from({length: 800}, (_, index) => ({
+          ...foundry.utils.deepClone(baseItem),
+          _id: String(index).padStart(16, "0")
+        }))
+      });
+      const token = new Token({
+        _id: "heavytoken000000",
+        actorId: base.id,
+        actorLink: false,
+        delta: {_id: "heavytoken000000"}
+      }, {parent: scene});
+      const delta = token.delta;
+      const timings = {native: [], candidate: []};
+      let reference, candidate;
+      for (let index = 0; index < 2; index++) {
+        let start = performance.now();
+        reference = foundry.documents.BaseActorDelta.applyDelta(
+          delta,
+          base,
+          {strict: true, dropInvalidEmbedded: true}
+        );
+        timings.native.push(performance.now() - start);
+        start = performance.now();
+        candidate = delta.apply({strict: true, dropInvalidEmbedded: true});
+        timings.candidate.push(performance.now() - start);
+      }
+      assert.equal(candidate.items.size, 800);
+      assert.deepEqual(candidate.toObject(false), reference.toObject(false));
+      assert.ok(
+        Math.min(...timings.candidate) < Math.min(...timings.native),
+        `expected optimized ActorDelta construction to be faster: ${JSON.stringify(timings)}`
+      );
+      t.diagnostic(`Large base ActorDelta construction, milliseconds: ${JSON.stringify(timings)}`);
+    } finally {
+      base = previousBase;
+    }
   });
 });
