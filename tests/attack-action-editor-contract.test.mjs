@@ -12,7 +12,7 @@ const [
   readFile(new URL("../src/sheets/item-sheet.mjs", import.meta.url), "utf8"),
   readFile(new URL("../src/apps/ability-catalog-item-editor.mjs", import.meta.url), "utf8"),
   readFile(new URL("../src/data/models/item-data-models.mjs", import.meta.url), "utf8"),
-  readFile(new URL("../templates/item/item-sheet.hbs", import.meta.url), "utf8"),
+  readFile(new URL("../templates/item/item-sheet.hbs", import.meta.url), "utf8").then(source => source.replaceAll("\r\n", "\n")),
   readFile(new URL("../templates/settings/ability-catalog-item-editor.hbs", import.meta.url), "utf8")
 ]);
 

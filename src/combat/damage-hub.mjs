@@ -29,10 +29,13 @@ import {
   getConditionWeakeningData,
   getConstructPartFunction,
   getDamageMitigationFunction,
+  getInstalledFunctionModuleItems,
+  resolveActorItemOrInstalledModule,
   getProsthesisFunction,
   getWeaponLimbDamageMultiplier,
   getWeaponFunctionById,
-  hasItemFunction
+  hasItemFunction,
+  isItemBrokenByCondition
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import {
@@ -2493,26 +2496,29 @@ export function buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey = ""
     if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
     if (isConstructPart && getConstructPartLimbKey(getConstructPartSlotId(item)) !== limbKey) continue;
 
-    const mitigation = getDamageMitigationFunction(item);
-    const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
-    const entryKey = isConstructPart ? CONSTRUCT_PART_MITIGATION_LIMB_KEY : limbKey;
-    const entry = mitigation.entries?.[entryKey]?.[damageTypeKey];
-    const baseValue = toInteger(entry?.value);
-    if (!baseValue) continue;
+    for (const sourceItem of [item, ...getInstalledFunctionModuleItems(item, ITEM_FUNCTIONS.damageMitigation, { actor })]) {
+      const mitigation = getDamageMitigationFunction(sourceItem);
+      const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
+      const entryKey = isConstructPart ? CONSTRUCT_PART_MITIGATION_LIMB_KEY : limbKey;
+      const entry = mitigation.entries?.[entryKey]?.[damageTypeKey]
+        ?? (isConstructPart ? mitigation.entries?.[limbKey]?.[damageTypeKey] : null);
+      const baseValue = toInteger(entry?.value);
+      if (!baseValue) continue;
 
-    const weakening = getConditionWeakeningData(item);
-    const value = baseValue > 0
-      ? Math.floor(baseValue * (weakening.active ? weakening.ratio : 1))
-      : baseValue;
-    if (!value) continue;
-    if (Object.hasOwn(totals, mode)) totals[mode] += value;
-    if (value < 0 || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
-    sources.push({
-      item,
-      itemId: item.id,
-      mode,
-      mitigation: value
-    });
+      const weakening = getConditionWeakeningData(sourceItem);
+      const value = baseValue > 0
+        ? Math.floor(baseValue * (weakening.active ? weakening.ratio : 1))
+        : baseValue;
+      if (!value) continue;
+      if (Object.hasOwn(totals, mode)) totals[mode] += value;
+      if (value < 0 || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.condition)) continue;
+      sources.push({
+        item: sourceItem,
+        itemId: sourceItem.id,
+        mode,
+        mitigation: value
+      });
+    }
   }
 
   return { totals, sources };
@@ -3111,6 +3117,14 @@ export function buildActorLimbHealthContext(actor) {
     prosthesesByLimb,
     activeTraumasByLimb
   };
+}
+
+/** A working prosthesis restores limb use even though it cannot receive organic healing. */
+export function isLimbUsable(actor, limbKey = "", context = null) {
+  if (!actor?.system?.limbs?.[limbKey]) return false;
+  const prosthesis = getInstalledProsthesis(actor, limbKey, context);
+  if (prosthesis) return !isItemBrokenByCondition(prosthesis);
+  return getLimbHealingCap(actor, limbKey, context) > 0;
 }
 
 export function getLimbHealingCap(actor, limbKey = "", context = null) {
@@ -5942,16 +5956,16 @@ async function processActorTimedDamageEffects(actor, now, elapsed, damageResults
 }
 
 async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
+  const scene = globalThis.canvas?.scene;
+  if (!scene) return;
   const batches = [];
   const previousTime = Math.max(0, (Number(now) || 0) - Math.max(0, Number(deltaTime) || 0));
-  for (const scene of getPeriodicDamageScenes()) {
-    for (const region of scene.regions?.contents ?? []) {
-      if (region.hidden) continue;
-      for (const behavior of region.behaviors?.contents ?? []) {
-        if (behavior.disabled || behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;
-        const batch = await collectRegionPeriodicDamageBehavior(region, behavior, Number(now) || 0, previousTime);
-        if (batch) batches.push(batch);
-      }
+  for (const region of scene.regions?.contents ?? []) {
+    if (region.hidden) continue;
+    for (const behavior of region.behaviors?.contents ?? []) {
+      if (behavior.disabled || behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;
+      const batch = await collectRegionPeriodicDamageBehavior(region, behavior, Number(now) || 0, previousTime);
+      if (batch) batches.push(batch);
     }
   }
   if (!batches.length) return;
@@ -9961,11 +9975,15 @@ export async function applyEquipmentConditionDamage(actor, entries = []) {
   const brokenProstheses = [];
   let prosthesisHealthChanged = false;
   for (const [itemId, amount] of totals) {
-    const item = actor.items?.get?.(itemId);
+    const item = resolveActorItemOrInstalledModule(actor, itemId);
     if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
     const current = Math.max(0, toInteger(getConditionFunction(item).value));
     const next = Math.max(0, current - amount);
     if (next === current) continue;
+    if (item.system?.placement?.mode === "module") {
+      await item.update({ "system.functions.condition.value": next });
+      continue;
+    }
     if (next <= 0 && isInstalledProsthesisItem(item)) {
       brokenProstheses.push(item);
       continue;

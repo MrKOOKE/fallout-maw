@@ -653,11 +653,11 @@ function onCreatePeriodicDamageToken(token) {
 }
 
 function onUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
-  if (isPhantomEntity(token)) return;
   if (!hasChangedPath(changes, TOKEN_EFFECT_PATHS)) return;
   const associationChanged = hasChangedPath(changes, ["actorId", "actorLink"]);
   const sceneIsPeriodic = sceneHasPeriodicDamageBehavior(token?.parent);
   if (!sceneIsPeriodic && !associationChanged) return;
+  if (isPhantomEntity(token)) return;
   const actors = [];
   if (token?.actor) actors.push(token.actor);
 

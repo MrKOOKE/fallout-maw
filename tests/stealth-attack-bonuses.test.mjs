@@ -8,7 +8,10 @@ globalThis.foundry = {
     ux: { FormDataExtended: class {} },
     handlebars: { renderTemplate: () => "" }
   },
-  utils: {}
+  utils: {
+    deepClone: structuredClone,
+    mergeObject: (original, other) => ({ ...original, ...other })
+  }
 };
 globalThis.game = {
   settings: {

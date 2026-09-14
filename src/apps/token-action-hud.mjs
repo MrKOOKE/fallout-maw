@@ -1,3 +1,4 @@
+import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction } from "../utils/function-module-tooltip.mjs";
 ﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
@@ -527,6 +528,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipCloseTimer = null;
   #itemTooltipPinned = false;
   #itemTooltipWeaponTabIndex = 0;
+  #moduleTooltipMutation = new ModuleTooltipMutation();
   #itemTooltipBaseMode = false;
   #itemTooltipPointerDownHandler = null;
   #itemTooltipKeyHandler = null;
@@ -1860,7 +1862,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  async #refreshHudItemTooltip() {
+  async #refreshHudItemTooltip({ afterRender = false } = {}) {
+    if (this.#moduleTooltipMutation.active && afterRender) return;
     if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
     const initialAnchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
     if (!initialAnchor && !this.#itemTooltipPinned) {
@@ -1952,9 +1955,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #toggleHudWeaponModulePicker(slotElement) {
-    const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
-    const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
-    const panelKey = `${weaponIndex}:${slotIndex}`;
+    const panelKey = getModuleTooltipPickerKey(slotElement?.dataset);
     const panel = this.#itemTooltipElement?.querySelector(`[data-tooltip-module-picker-panel="${CSS.escape(panelKey)}"]`);
     if (!panel) return;
     const wasActive = panel.classList.contains("active");
@@ -1976,10 +1977,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #installHudWeaponModuleFromTooltipChoice(choiceElement) {
-    const { weapon, entries, weaponIndex, slotIndex } = this.#getHudWeaponModuleSlotContext(choiceElement);
+    const { weapon, entry, slotIndex } = this.#getHudWeaponModuleSlotContext(choiceElement);
     const moduleItem = this.actor.items.get(String(choiceElement?.dataset?.tooltipModuleChoice ?? ""));
     if (!weapon || !moduleItem) return undefined;
-    return this.#installHudWeaponModule(weapon, entries[weaponIndex], slotIndex, moduleItem);
+    return this.#installHudWeaponModule(weapon, entry, slotIndex, moduleItem);
   }
 
   async #removeHudWeaponModule(slotElement) {
@@ -1991,20 +1992,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #getHudWeaponModuleSlotContext(slotElement) {
     const weapon = this.#itemTooltipItemId ? this.actor?.items.get(this.#itemTooltipItemId) : null;
-    const entries = weapon ? getEnabledWeaponFunctions(weapon) : [];
-    const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
-    const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
-    const entry = entries[weaponIndex] ?? null;
-    const slot = entry?.canHaveModuleSlots ? getWeaponModuleSlots(entry?.data ?? {})[slotIndex] ?? null : null;
-    return { weapon, entries, entry, weaponIndex, slotIndex, slot };
+    return { weapon, ...getModuleTooltipSlotContext(weapon, slotElement?.dataset) };
   }
 
   async #installHudWeaponModule(weapon, entry, slotIndex, moduleItem) {
-    const path = getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    if (this.#moduleTooltipMutation.active) return;
+    const targetFunction = getModuleTooltipTargetFunction(entry);
+    const path = targetFunction === ITEM_FUNCTIONS.damageMitigation
+      ? "system.functions.damageMitigation" : getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
     if (!path) return undefined;
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
-    if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return undefined;
+    if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot, targetFunction)) return undefined;
     const oldItemData = getWeaponModuleSlotItemData(slot);
 
     const itemData = createWeaponModuleSlotItemData(moduleItem);
@@ -2019,9 +2018,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         });
         if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       }
-      magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
-        reservedCreates: returnPlan.creates
-      });
+      if (targetFunction === ITEM_FUNCTIONS.weapon) {
+        magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+          reservedCreates: returnPlan.creates
+        });
+      }
     } catch (error) {
       ui.notifications.warn(error.message);
       return undefined;
@@ -2036,23 +2037,27 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       [`${path}.moduleSlots`]: slots
     };
     if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
-    await executeInventoryMutation({
-      actor: this.actor,
-      updates: [
-        weaponUpdate,
-        ...returnPlan.updates,
-        ...magazinePlan.updates,
-        ...consumptionPlan.updates
-      ],
-      deletes: consumptionPlan.deletes,
-      creates: [...returnPlan.creates, ...magazinePlan.creates]
-    }, { reason: "install-weapon-module" });
-    this.#restoreHudModuleSlotsTab(weapon.id);
-    return this.#refreshHudItemTooltip();
+    await this.#moduleTooltipMutation.run(async () => {
+      await executeInventoryMutation({
+        actor: this.actor,
+        updates: [
+          weaponUpdate,
+          ...returnPlan.updates,
+          ...magazinePlan.updates,
+          ...consumptionPlan.updates
+        ],
+        deletes: consumptionPlan.deletes,
+        creates: [...returnPlan.creates, ...magazinePlan.creates]
+      }, { reason: `install-${targetFunction}-module` });
+      if (targetFunction === ITEM_FUNCTIONS.weapon) this.#restoreHudModuleSlotsTab(weapon.id);
+    }, () => this.#refreshHudItemTooltip());
   }
 
   async #uninstallHudWeaponModule(weapon, entry, slotIndex, itemData) {
-    const path = getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    if (this.#moduleTooltipMutation.active) return;
+    const targetFunction = getModuleTooltipTargetFunction(entry);
+    const path = targetFunction === ITEM_FUNCTIONS.damageMitigation
+      ? "system.functions.damageMitigation" : getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
     if (!path) return undefined;
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
@@ -2066,9 +2071,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         merge: false
       });
       if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-      magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
-        reservedCreates: returnPlan.creates
-      });
+      if (targetFunction === ITEM_FUNCTIONS.weapon) {
+        magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+          reservedCreates: returnPlan.creates
+        });
+      }
     } catch (error) {
       ui.notifications.warn(error.message);
       return undefined;
@@ -2078,17 +2085,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       [`${path}.moduleSlots`]: slots
     };
     if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
-    await executeInventoryMutation({
-      actor: this.actor,
-      updates: [
-        weaponUpdate,
-        ...returnPlan.updates,
-        ...magazinePlan.updates
-      ],
-      creates: [...returnPlan.creates, ...magazinePlan.creates]
-    }, { reason: "uninstall-weapon-module" });
-    this.#restoreHudModuleSlotsTab(weapon.id);
-    return this.#refreshHudItemTooltip();
+    await this.#moduleTooltipMutation.run(async () => {
+      await executeInventoryMutation({
+        actor: this.actor,
+        updates: [
+          weaponUpdate,
+          ...returnPlan.updates,
+          ...magazinePlan.updates
+        ],
+        creates: [...returnPlan.creates, ...magazinePlan.creates]
+      }, { reason: `uninstall-${targetFunction}-module` });
+      if (targetFunction === ITEM_FUNCTIONS.weapon) this.#restoreHudModuleSlotsTab(weapon.id);
+    }, () => this.#refreshHudItemTooltip());
   }
 
   #restoreHudModuleSlotsTab(weaponId = "") {
@@ -2380,12 +2388,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#cancelHudItemTooltipClose();
         this.#syncHudItemTooltipLayer();
         this.#positionHudItemTooltip();
-        void this.#refreshHudItemTooltip();
+        void this.#refreshHudItemTooltip({ afterRender: true });
         if (!this.#itemTooltipPinned) this.#queueHudItemTooltipHoverValidation();
       } else if (this.#itemTooltipPinned) {
         this.#syncHudItemTooltipLayer();
         this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
-        void this.#refreshHudItemTooltip();
+        void this.#refreshHudItemTooltip({ afterRender: true });
       } else {
         this.#clearHudItemTooltip();
       }

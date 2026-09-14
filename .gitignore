@@ -8,7 +8,8 @@ assets/
 !/simple-quest/assets/
 !/simple-quest/assets/**
 packs/
-/scripts/
+/scripts/*
+!/scripts/run-tests.mjs
 /launcher/**/bin/
 /launcher/**/obj/
 /release/publisher.local.json

@@ -56,8 +56,15 @@ test("both ordinary Trial editors expose persistent branch panels without the fl
     assert.match(template, /typeChoices/);
     assert.match(template, /isPrimaryChangesPercent/);
     assert.match(template, /Процент основной длительности/);
-    assert.doesNotMatch(template, /Длительность эффекта, сек/);
-    assert.doesNotMatch(template, /Последствия при подходящем результате/);
+    const trialStarts = [...template.matchAll(/\{\{#if isTrial\}\}/g)];
+    assert.ok(trialStarts.length > 0);
+    for (const start of trialStarts) {
+      const end = template.indexOf("{{#if isAura}}", start.index);
+      assert.ok(end > start.index, "the Trial panel must have a known boundary");
+      const trialTemplate = template.slice(start.index, end);
+      assert.doesNotMatch(trialTemplate, /Длительность эффекта, сек/);
+      assert.doesNotMatch(trialTemplate, /Последствия при подходящем результате/);
+    }
   }
   assert.match(catalogTemplate, /data-field="conditionTrialBranchResultKey"/);
   assert.match(catalogTemplate, /data-field="constructDurationAmount"/);

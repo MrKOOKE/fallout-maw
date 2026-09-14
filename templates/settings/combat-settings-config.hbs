@@ -38,6 +38,14 @@
             <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
           </label>
           <label class="fallout-maw-combat-settings-field span-all">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.ActiveEffectDisplay"}}</span>
+            <select name="activeEffectDisplay">
+              {{#each activeEffectDisplayChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label class="fallout-maw-combat-settings-field span-all">
             <span>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutSeconds"}}</span>
             <input type="number" name="reactions.timeoutSeconds" value="{{settings.reactions.timeoutSeconds}}" min="1" max="600" step="1">
             <small>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutHint"}}</small>

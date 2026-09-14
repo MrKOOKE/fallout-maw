@@ -8,7 +8,7 @@ import {
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
 } from "./equipment-slots.mjs";
-import { getLimbHealingCap } from "../combat/damage-hub.mjs";
+import { isLimbUsable } from "../combat/damage-hub.mjs";
 import {
   getContainerContentsWeight,
   getContainerInventoryGridOptions,
@@ -614,7 +614,7 @@ function isWeaponSlotOccupantDisabled(actor, race, item = null) {
   if (!actor || !item || isContainerWeaponSetKey(item.placement?.weaponSet)) return false;
   const requiredSlots = getRequiredWeaponSlotsForItem(race, item, item.placement?.weaponSet, item.placement?.weaponSlot);
   if (getWeaponSlotRequirement(item).selectedKeys.size && !requiredSlots.length) return true;
-  return requiredSlots.some(slot => slot.limbKey && getLimbHealingCap(actor, slot.limbKey) <= 0);
+  return requiredSlots.some(slot => slot.limbKey && !isLimbUsable(actor, slot.limbKey));
 }
 
 function getConstructPartWeaponSetKey(slotId = "", setId = "") {

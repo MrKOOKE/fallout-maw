@@ -9,7 +9,7 @@ import {
   playWeaponAttackAnimations,
   playWeaponExplosionAnimation
 } from "./attack-animations.mjs";
-import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, getLimbHealingCap, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation, serializeDamageCycleSocketResults } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, isLimbUsable, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation, serializeDamageCycleSocketResults } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import {
   createPelletImpactProjectiles,
@@ -4612,7 +4612,7 @@ export function isWeaponPlacementDisabled(actor, weapon) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
   const requiredSlots = getRequiredWeaponSlotsForItem(race, weapon, placement.weaponSet, placement.weaponSlot);
   if (getWeaponSlotRequirement(weapon).selectedKeys.size && !requiredSlots.length) return true;
-  return requiredSlots.some(slot => slot.limbKey && getLimbHealingCap(actor, slot.limbKey) <= 0);
+  return requiredSlots.some(slot => slot.limbKey && !isLimbUsable(actor, slot.limbKey));
 }
 
 export class WeaponAttackController {

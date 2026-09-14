@@ -265,6 +265,9 @@ import {
 } from "../utils/duration-parts.mjs";
 import {
   getWeaponModuleSlots,
+  isFunctionModuleItem,
+  removeModuleOrSlot,
+  createWeaponModuleSlotItemData,
   getWeaponModuleSlotItemData,
   getWeaponModuleTechnicalName,
   isModuleItemCompatibleWithSlot,
@@ -350,6 +353,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #functionPickerActive = false;
   #fixedAbilityFunctionPickerActive = false;
   #mitigationFillDrag = null;
+  #activeModuleMitigationLimbSetId = "";
   #activeMitigationLimbSetId = "";
   #craftMode = CRAFT_MODE_CREATE;
   #craftRecipeId = DEFAULT_CRAFT_RECIPE_ID;
@@ -698,6 +702,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       canAddImplantLimb: canAddImplantLimb(item, creatureOptions),
       implantSkillChoices: buildSkillChoices(item.system?.functions?.implant?.skillKey, skillSettings),
       hasModuleFunction,
+      isProtectionModule: item.system?.functions?.module?.targetFunction === ITEM_FUNCTIONS.damageMitigation,
+      protectionModuleSlots: buildWeaponModuleSlotRows(item.system?.functions?.damageMitigation ?? {}, ITEM_FUNCTIONS.damageMitigation),
+      protectionModuleEditor: buildProtectionModuleEditor(item, creatureOptions, damageTypeSettings, skillSettings, characteristicSettings, this.#activeModuleMitigationLimbSetId),
       weaponModuleTargetChoices: buildWeaponModuleTargetChoices(item.system?.functions?.module?.targetFunction),
       hasProsthesisFunction,
       prosthesisLimbRows: buildProsthesisLimbRows(item, creatureOptions),
@@ -1551,8 +1558,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-weapon-requirement-type]").forEach(select => {
       this.#addHandledFormChangeListener(select, event => this.#onWeaponRequirementTypeChange(event));
     });
-    this.element?.querySelector("[data-add-item-requirement]")?.addEventListener("click", event => {
-      this.#onAddItemRequirement(event);
+    this.element?.querySelectorAll("[data-add-item-requirement]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddItemRequirement(event));
     });
     this.element?.querySelectorAll("[data-delete-item-requirement]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteItemRequirement(event));
@@ -1569,10 +1576,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-mitigation-fill-handle]").forEach(handle => {
       handle.addEventListener("pointerdown", event => this.#onMitigationFillStart(event));
     });
-    this.#addHandledFormChangeListener(
-      this.element?.querySelector("[data-mitigation-limb-set-select]"),
-      event => this.#onMitigationLimbSetSelect(event)
-    );
+    this.element?.querySelectorAll("[data-mitigation-limb-set-select]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onMitigationLimbSetSelect(event));
+    });
     this.#activateCraftEditor();
     this.#restoreScrollPositions();
   }
@@ -5028,7 +5034,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onAddWeaponModuleSlot(event) {
     event.preventDefault();
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const path = getModuleSlotFunctionPath(event.currentTarget);
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
     const slots = [...getWeaponModuleSlots(weaponData)];
     slots.push({
@@ -5047,7 +5053,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const index = Number(event.currentTarget?.dataset?.weaponModuleSlotKeySelect);
     const moduleKey = String(event.currentTarget?.value ?? "").trim();
     if (!Number.isInteger(index) || index < 0 || !moduleKey) return undefined;
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const path = getModuleSlotFunctionPath(event.currentTarget);
     const slots = [...getWeaponModuleSlots(foundry.utils.getProperty(this.item, path) ?? {})];
     const slot = slots[index];
     if (!slot) return undefined;
@@ -5064,10 +5070,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const index = Number(event.currentTarget?.dataset?.deleteWeaponModuleSlot);
     if (!Number.isInteger(index) || index < 0) return undefined;
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const path = getModuleSlotFunctionPath(event.currentTarget);
     const slots = [...getWeaponModuleSlots(foundry.utils.getProperty(this.item, path) ?? {})];
-    slots.splice(index, 1);
-    return this.item.update({ [`${path}.moduleSlots`]: slots });
+    return this.item.update({ [`${path}.moduleSlots`]: removeModuleOrSlot(slots, index) });
   }
 
   #onWeaponModuleSlotDragOver(event) {
@@ -5083,17 +5088,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return undefined;
     const droppedItem = data.uuid ? resolveWorldItemSync(data.uuid) : null;
-    if (!droppedItem || !isWeaponModuleItem(droppedItem)) return ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleDropInvalid"));
-
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(zone));
+    const path = getModuleSlotFunctionPath(zone);
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
     const slots = [...getWeaponModuleSlots(weaponData)];
     const slot = slots[index];
-    if (!slot || !isModuleItemCompatibleWithSlot(droppedItem, slot)) {
+    if (!slot || !isModuleItemCompatibleWithSlot(droppedItem, slot, path === "system.functions.damageMitigation" ? ITEM_FUNCTIONS.damageMitigation : ITEM_FUNCTIONS.weapon)) {
       return ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleDropInvalid"));
     }
-    const itemData = droppedItem.toObject();
-    foundry.utils.setProperty(itemData, "system.quantity", 1);
+    const itemData = createWeaponModuleSlotItemData(droppedItem);
     slots[index] = {
       ...slot,
       itemUuid: droppedItem.uuid,
@@ -5535,26 +5537,29 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onAddItemRequirement(event) {
     event.preventDefault();
-    const requirements = [...(this.item.system?.functions?.damageMitigation?.requirements ?? [])];
+    const path = getMitigationFunctionPath(event.currentTarget);
+    const requirements = [...(foundry.utils.getProperty(this.item, path)?.requirements ?? [])];
     requirements.push({
       type: "characteristic",
       key: getCharacteristicSettings().at(0)?.key ?? "",
       value: 0
     });
-    return this.item.update({ "system.functions.damageMitigation.requirements": requirements });
+    return this.item.update({ [`${path}.requirements`]: requirements });
   }
 
   #onDeleteItemRequirement(event) {
     event.preventDefault();
+    const path = getMitigationFunctionPath(event.currentTarget);
     const index = Number(event.currentTarget?.dataset?.deleteItemRequirement);
     if (!Number.isInteger(index) || index < 0) return undefined;
-    const requirements = [...(this.item.system?.functions?.damageMitigation?.requirements ?? [])];
+    const requirements = [...(foundry.utils.getProperty(this.item, path)?.requirements ?? [])];
     requirements.splice(index, 1);
-    return this.item.update({ "system.functions.damageMitigation.requirements": requirements });
+    return this.item.update({ [`${path}.requirements`]: requirements });
   }
 
   #onItemRequirementTypeChange(event) {
     event.preventDefault();
+    const path = getMitigationFunctionPath(event.currentTarget);
     event.stopPropagation();
     event.stopImmediatePropagation?.();
     const index = Number(event.currentTarget?.dataset?.itemRequirementType);
@@ -5564,8 +5569,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       ? getSkillSettings().at(0)?.key ?? ""
       : getCharacteristicSettings().at(0)?.key ?? "";
     return this.item.update({
-      [`system.functions.damageMitigation.requirements.${index}.type`]: type,
-      [`system.functions.damageMitigation.requirements.${index}.key`]: key
+      [`${path}.requirements.${index}.type`]: type,
+      [`${path}.requirements.${index}.key`]: key
     });
   }
 
@@ -6167,10 +6172,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onMitigationLimbSetSelect(event) {
     event.preventDefault();
-    const choices = buildDamageMitigationLimbSetChoices(this.item, getCreatureOptions());
+    const isModule = getMitigationFunctionPath(event.currentTarget) === "system.functions.module.damageMitigation";
+    const item = isModule ? getProtectionModuleEditorItem(this.item) : this.item;
+    const choices = buildDamageMitigationLimbSetChoices(item, getCreatureOptions());
     const limbSetId = resolveDamageMitigationEditorLimbSetId(event.currentTarget?.value, choices);
-    if (!limbSetId || limbSetId === this.#activeMitigationLimbSetId) return undefined;
-    this.#activeMitigationLimbSetId = limbSetId;
+    if (isModule) this.#activeModuleMitigationLimbSetId = limbSetId;
+    else this.#activeMitigationLimbSetId = limbSetId;
     return this.render({ force: true });
   }
 
@@ -10882,7 +10889,8 @@ function buildWeaponFunctionSections(
       index
     })));
   }
-  if (hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })) {
+  if (hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })
+    && String(item.system?.functions?.module?.targetFunction ?? "weapon") === ITEM_FUNCTIONS.weapon) {
     const moduleWeapons = getModuleWeaponFunctionEntries(item);
     const sourceModuleWeapons = getModuleWeaponFunctionEntries({ system: item.system?._source ?? {} });
     sections.push(...moduleWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
@@ -11387,10 +11395,10 @@ function getWeaponFormData(weaponData = {}, sourceWeaponData = {}) {
   return foundry.utils.mergeObject(formData, sourceWeaponData, { inplace: true });
 }
 
-function buildWeaponModuleChoices(excludeItem = null) {
+function buildWeaponModuleChoices(excludeItem = null, targetFunction = ITEM_FUNCTIONS.weapon) {
   const excludeUuid = String(excludeItem?.uuid ?? "");
   const choices = getAllWorldAndActorItems()
-    .filter(item => item?.uuid !== excludeUuid && isWeaponModuleItem(item))
+    .filter(item => item?.uuid !== excludeUuid && isFunctionModuleItem(item, targetFunction))
     .map(item => ({
       value: getWeaponModuleTechnicalName(item),
       label: getWeaponModuleTechnicalName(item),
@@ -11410,7 +11418,7 @@ function buildWeaponModuleChoices(excludeItem = null) {
   }];
 }
 
-function buildWeaponModuleSlotRows(weaponData = {}) {
+function buildWeaponModuleSlotRows(weaponData = {}, targetFunction = ITEM_FUNCTIONS.weapon) {
   const slots = getWeaponModuleSlots(weaponData);
   const usedModuleKeys = new Set(slots.map(slot => String(slot.moduleKey ?? "").trim()).filter(Boolean));
   return slots.map((slot, index) => {
@@ -11419,7 +11427,7 @@ function buildWeaponModuleSlotRows(weaponData = {}) {
       index,
       id: slot.id,
       moduleKey: slot.moduleKey,
-      choices: buildWeaponModuleSlotChoices(slot.moduleKey, usedModuleKeys),
+      choices: buildWeaponModuleSlotChoices(slot.moduleKey, usedModuleKeys, targetFunction),
       item: itemData ? {
         name: getWeaponModuleTechnicalName(itemData),
         img: normalizeImagePath(itemData.img, FALLBACK_ICON)
@@ -11428,9 +11436,9 @@ function buildWeaponModuleSlotRows(weaponData = {}) {
   });
 }
 
-function buildWeaponModuleSlotChoices(selected = "", excludedKeys = new Set()) {
+function buildWeaponModuleSlotChoices(selected = "", excludedKeys = new Set(), targetFunction = ITEM_FUNCTIONS.weapon) {
   const selectedKey = String(selected ?? "");
-  const availableChoices = buildWeaponModuleChoices()
+  const availableChoices = buildWeaponModuleChoices(null, targetFunction)
     .filter(choice => !excludedKeys.has(choice.value) || choice.value === selectedKey || !choice.value);
   const moduleChoices = availableChoices.some(choice => choice.value) ? availableChoices : [{
     value: "",
@@ -12190,12 +12198,45 @@ function buildWeaponSkillChoicesForData(weaponData, skillSettings) {
 }
 
 function buildWeaponModuleTargetChoices(selected = "weapon") {
-  const value = String(selected ?? "") === "weapon" ? "weapon" : "weapon";
-  return [{
-    value: "weapon",
-    label: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
-    selected: value === "weapon"
-  }];
+  return [
+    { value: "weapon", label: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon") },
+    { value: "damageMitigation", label: game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation") }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function getMitigationFunctionPath(element) {
+  return element?.closest?.("[data-mitigation-function-path]")?.dataset?.mitigationFunctionPath
+    || "system.functions.damageMitigation";
+}
+
+function getModuleSlotFunctionPath(element) {
+  return element?.closest?.("[data-module-function-path]")?.dataset?.moduleFunctionPath
+    || getWeaponFunctionPath(getWeaponFunctionSection(element));
+}
+
+function getProtectionModuleEditorItem(item) {
+  return { system: { ...item.system, functions: {
+    ...item.system?.functions,
+    damageMitigation: item.system?.functions?.module?.damageMitigation ?? {}
+  } } };
+}
+
+function buildProtectionModuleEditor(item, creatureOptions, damageTypes, skillSettings, characteristicSettings, activeLimbSetId) {
+  const editorItem = getProtectionModuleEditorItem(item);
+  const choices = buildDamageMitigationLimbSetChoices(editorItem, creatureOptions);
+  const limbSetId = resolveDamageMitigationEditorLimbSetId(activeLimbSetId, choices);
+  const data = editorItem.system.functions.damageMitigation;
+  return {
+    path: "system.functions.module.damageMitigation",
+    data,
+    itemRequirements: buildWeaponRequirementRowsForData(data, characteristicSettings, skillSettings),
+    damageMitigationModeChoices: buildDamageMitigationModeChoices(editorItem),
+    damageMitigationUsesConstructPart: hasItemFunction(editorItem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true }),
+    damageMitigationLimbSetChoices: choices,
+    damageMitigationLimbSetEditorChoices: choices.map(choice => ({ ...choice, active: choice.id === limbSetId })),
+    showDamageMitigationLimbSetSelector: choices.length > 0,
+    damageMitigationTables: buildDamageMitigationTables(editorItem, creatureOptions, damageTypes, { limbSetId })
+  };
 }
 
 function buildWeaponProficiencyChoicesForData(weaponData, proficiencySettings) {

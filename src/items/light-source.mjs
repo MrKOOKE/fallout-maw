@@ -8,7 +8,6 @@ import {
   getEnergyConsumerFunction,
   getEnergySourceFunction,
   getLightSourceFunction,
-  getWeaponFunction,
   hasItemFunction,
   isItemBrokenByCondition,
   createActorItemOrInstalledModuleUpdate,
@@ -46,6 +45,8 @@ const LIGHT_SOURCE_ITEM_RUNTIME_PATHS = Object.freeze([
   "system.functions.condition.value",
   "system.functions.condition.max",
   "system.functions.weapon.moduleSlots",
+  "system.functions.damageMitigation.moduleSlots",
+  "system.functions.damageMitigation.enabled",
   "system.functions.weapon.enabled",
   "system.equipped",
   "system.placement",
@@ -53,7 +54,8 @@ const LIGHT_SOURCE_ITEM_RUNTIME_PATHS = Object.freeze([
 ]);
 const LIGHT_SOURCE_CARRIER_REMOVAL_PATHS = Object.freeze([
   "system.functions.lightSource",
-  "system.functions.weapon.moduleSlots"
+  "system.functions.weapon.moduleSlots",
+  "system.functions.damageMitigation.moduleSlots"
 ]);
 const lightSourceResourceRemainderCache = new Map();
 const lightSourceEnergyReserveCache = new Map();
@@ -133,20 +135,22 @@ export function createLightSourceItemRuntimeSignature(item = null) {
   });
   if (direct) carriers.push(direct);
 
-  const hostAvailable = isRuntimeInstalledModuleHost(item);
-  const slots = Array.isArray(getWeaponFunction(item)?.moduleSlots)
-    ? getWeaponFunction(item).moduleSlots
-    : [];
-  slots.forEach((slot, index) => {
-    const moduleData = getWeaponModuleSlotItemData(slot);
-    if (!moduleData?.system) return;
-    const slotId = String(slot?.id ?? "") || `slot-${index + 1}`;
-    const state = createLightSourceCarrierRuntimeState(moduleData, {
-      identity: `module:${slotId}`,
-      available: hostAvailable && hasItemFunction(moduleData, ITEM_FUNCTIONS.module)
+  for (const targetFunction of [ITEM_FUNCTIONS.weapon, ITEM_FUNCTIONS.damageMitigation]) {
+    const hostAvailable = isRuntimeInstalledModuleHost(item, targetFunction);
+    const slots = Array.isArray(item.system?.functions?.[targetFunction]?.moduleSlots)
+      ? item.system.functions[targetFunction].moduleSlots
+      : [];
+    slots.forEach((slot, index) => {
+      const moduleData = getWeaponModuleSlotItemData(slot);
+      if (!moduleData?.system) return;
+      const slotId = String(slot?.id ?? "") || `slot-${index + 1}`;
+      const state = createLightSourceCarrierRuntimeState(moduleData, {
+        identity: `module:${targetFunction}:${slotId}`,
+        available: hostAvailable && hasItemFunction(moduleData, ITEM_FUNCTIONS.module)
+      });
+      if (state) carriers.push(state);
     });
-    if (state) carriers.push(state);
-  });
+  }
   if (!carriers.length) return "";
   carriers.sort((left, right) => left.identity.localeCompare(right.identity));
   return JSON.stringify(carriers);
@@ -169,8 +173,8 @@ function createLightSourceCarrierRuntimeState(itemOrData = null, { identity = ""
   };
 }
 
-function isRuntimeInstalledModuleHost(item = null) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return false;
+function isRuntimeInstalledModuleHost(item = null, targetFunction = ITEM_FUNCTIONS.weapon) {
+  if (!hasItemFunction(item, targetFunction)) return false;
   const mode = String(item.system?.placement?.mode ?? "").trim();
   return Boolean(item.system?.equipped)
     || ["equipment", "weapon", "constructPart"].includes(mode)
@@ -281,7 +285,7 @@ function isAutomaticLightSourceSyncAuthority() {
 }
 
 function invalidateChangedLightSourceCaches(item = null, changes = {}) {
-  if (changedDataIntersectsPaths(changes, ["system.functions.weapon.moduleSlots"])) {
+  if (changedDataIntersectsPaths(changes, ["system.functions.weapon.moduleSlots", "system.functions.damageMitigation.moduleSlots"])) {
     clearCacheEntriesWithPrefix(lightSourceResourceRemainderCache, `${getDocumentCacheKey(item)}.Module.`);
     clearCacheEntriesWithPrefix(lightSourceEnergyReserveCache, `${getDocumentCacheKey(item)}.Module.`);
   }

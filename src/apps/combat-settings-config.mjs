@@ -4,6 +4,7 @@ import {
   setCombatSettings
 } from "../settings/accessors.mjs";
 import {
+  ACTIVE_EFFECT_DISPLAY_MODES,
   ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES,
   LIMB_DESTRUCTION_MODES
 } from "../settings/combat.mjs";
@@ -83,6 +84,18 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
     return {
       ...(await super._prepareContext(options)),
       settings: this.settings,
+      activeEffectDisplayChoices: [
+        {
+          value: ACTIVE_EFFECT_DISPLAY_MODES.always,
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.ActiveEffectDisplayAlways"),
+          selected: this.settings.activeEffectDisplay === ACTIVE_EFFECT_DISPLAY_MODES.always
+        },
+        {
+          value: ACTIVE_EFFECT_DISPLAY_MODES.hover,
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.ActiveEffectDisplayHover"),
+          selected: this.settings.activeEffectDisplay === ACTIVE_EFFECT_DISPLAY_MODES.hover
+        }
+      ],
       nonPlayerLimbDestructionChoices: buildLimbDestructionChoices(
         this.settings.limbDestruction?.nonPlayerMode
       ),

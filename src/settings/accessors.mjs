@@ -50,7 +50,7 @@ import {
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING
 } from "./constants.mjs";
 import { createDefaultCampSettings, createEmptyCampState, normalizeCampSettings, normalizeCampState } from "./camp.mjs";
-import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.mjs";
+import { createDefaultCombatSettings, normalizeActiveEffectDisplayMode, normalizeCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings, normalizeCoverSettings } from "./cover.mjs";
 import { createDefaultCraftingSettings, normalizeCraftingSettings } from "./crafting.mjs";
 import { createDefaultHackingSettings, normalizeHackingSettings } from "./hacking.mjs";
@@ -692,6 +692,17 @@ export function getCombatSettings() {
     return normalizeCombatSettings(game.settings.get(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING));
   } catch (_error) {
     return createDefaultCombatSettings();
+  }
+}
+
+/** Read the display mode without cloning all combat rules on every token refresh. */
+export function getActiveEffectDisplayMode() {
+  try {
+    return normalizeActiveEffectDisplayMode(
+      game.settings.get(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING)?.activeEffectDisplay
+    );
+  } catch (_error) {
+    return normalizeActiveEffectDisplayMode();
   }
 }
 

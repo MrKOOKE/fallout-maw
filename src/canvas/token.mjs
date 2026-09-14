@@ -14,7 +14,8 @@ import { parseDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { usesIndependentHealthModel } from "../combat/independent-health.mjs";
-import { getDamageTypeSettings, getPreparedRuntimeSettings, getResourceSettings } from "../settings/accessors.mjs";
+import { getActiveEffectDisplayMode, getDamageTypeSettings, getPreparedRuntimeSettings, getResourceSettings } from "../settings/accessors.mjs";
+import { ACTIVE_EFFECT_DISPLAY_MODES } from "../settings/combat.mjs";
 import {
   ABILITY_AURA_MODES,
   ABILITY_CONDITION_TYPES,
@@ -47,6 +48,11 @@ import { resolveTokenTargetAlpha } from "./token-target-alpha.mjs";
 import { localViewReceivesPhantomVision } from "./phantom-vision.mjs";
 import { getLivingSteelEffectTooltipRows } from "../abilities/living-steel.mjs";
 import { EffectTooltipController } from "./effect-tooltip-controller.mjs";
+import {
+  destroyTokenPeriodicDamageMask,
+  refreshTokenPeriodicDamageMask,
+  refreshTokenPeriodicDamageMaskVisibility
+} from "./periodic-damage-mask.mjs";
 import { withTokenPreviewClone } from "../documents/token-clone-initialization.mjs";
 
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
@@ -58,6 +64,7 @@ const NATIVE_DRAG_START_TIMEOUT_MS = 250;
 const NATIVE_DRAG_START_POLL_MS = 5;
 
 const effectTooltipController = new EffectTooltipController({ renderHTML: buildEffectTooltipHTML });
+const alwaysVisibleEffectIcons = new WeakSet();
 let effectKeyTokenMapCache = null;
 let effectKeyTokenMapSettings = null;
 let effectKeyTokenMapLanguage = "";
@@ -194,6 +201,36 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
   /** Apply client-local appearance through Foundry's native Token state refresh. */
   _getTargetAlpha() {
     return resolveTokenTargetAlpha(this, super._getTargetAlpha());
+  }
+
+  /** Keep incapacitating statuses visible while ordinary effects follow the setting. */
+  _refreshState() {
+    super._refreshState();
+    refreshTokenPeriodicDamageMaskVisibility(this);
+    this._refreshEffectVisibility();
+  }
+
+  _refreshEffectVisibility(force = false) {
+    if (!this.effects) return;
+    const displayAll = Boolean(this.hover || getActiveEffectDisplayMode() === ACTIVE_EFFECT_DISPLAY_MODES.always);
+    // Hover/state refreshes do not rescan Actor effects or relayout unchanged icons.
+    if (force || this._displayAllEffects !== displayAll) {
+      this._displayAllEffects = displayAll;
+      this._hasAlwaysVisibleEffects = false;
+      for (const icon of this.effects.children) {
+        if (icon === this.effects.bg) continue;
+        const alwaysVisible = alwaysVisibleEffectIcons.has(icon);
+        this._hasAlwaysVisibleEffects ||= alwaysVisible;
+        icon.visible = displayAll || alwaysVisible;
+      }
+      effectTooltipController.deactivateForToken(this);
+      // A flag queued during refreshState may run after the next frame. Lay out
+      // newly visible icons now so their full texture size can never flash.
+      // An asynchronous redraw stays non-renderable until its final forced pass.
+      if (this.effects.bg && (force || this.effects.renderable)) this._refreshEffects();
+    }
+    this.effects.visible = !this.document.isSecret && (displayAll || this._hasAlwaysVisibleEffects);
+    if (!this.effects.visible) effectTooltipController.deactivateForToken(this);
   }
 
   /**
@@ -602,6 +639,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   async _drawEffects() {
+    refreshTokenPeriodicDamageMask(this);
     effectTooltipController.deactivateForToken(this);
     this.effects.renderable = false;
 
@@ -614,7 +652,8 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     const activeEffects = this.actor?.appliedEffects.filter(effect => (
       isPostureEffectApplicableToActor(effect, this.actor)
       && (
-        (effect.showIcon === SHOW_ICON.ALWAYS)
+        isAlwaysVisibleTokenEffect(effect)
+        || (effect.showIcon === SHOW_ICON.ALWAYS)
         || ((effect.showIcon === SHOW_ICON.CONDITIONAL) && effect.isTemporary)
       )
     )) ?? [];
@@ -632,8 +671,8 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     await Promise.allSettled(promises);
 
     this.effects.sortChildren();
+    this._refreshEffectVisibility(true);
     this.effects.renderable = true;
-    this.renderFlags.set({ refreshEffects: true });
   }
 
   async _drawEffectIcon(effect) {
@@ -671,7 +710,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   _refreshEffects() {
-    if (!canvas.grid.isHexagonal) return super._refreshEffects();
+    if (!canvas.grid.isHexagonal && this._displayAllEffects) return super._refreshEffects();
 
     const scale = canvas.dimensions.uiScale;
     const { width, height } = this.document.getSize();
@@ -680,7 +719,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     const statusIcons = [];
 
     for (const effect of this.effects.children) {
-      if (effect === background) continue;
+      if (effect === background || !effect.visible) continue;
       if (effect === this.effects.overlay) {
         const overlaySize = Math.min(width * 0.6, height * 0.6);
         effect.width = effect.height = overlaySize;
@@ -691,6 +730,18 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
       statusIcons.push(effect);
     }
     if (!statusIcons.length) {
+      background.endFill();
+      return;
+    }
+
+    if (!canvas.grid.isHexagonal) {
+      const size = 20 * scale;
+      const rows = Math.max(1, Math.floor((height / size) + 1e-6));
+      for (const [index, icon] of statusIcons.entries()) {
+        icon.width = icon.height = size;
+        icon.position.set(Math.floor(index / rows) * size, (index % rows) * size);
+        background.drawRoundedRect(icon.x + scale, icon.y + scale, size - (2 * scale), size - (2 * scale), 2 * scale);
+      }
       background.endFill();
       return;
     }
@@ -726,14 +777,20 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
   }
 
   _activateEffectIconInteraction(icon, effect) {
+    if (isAlwaysVisibleTokenEffect(effect)) alwaysVisibleEffectIcons.add(icon);
     effectTooltipController.bindCanvasIcon(icon, { token: this, effect });
   }
 
   /** @override */
   destroy(options) {
+    destroyTokenPeriodicDamageMask(this);
     effectTooltipController.deactivateForToken(this);
     return super.destroy(options);
   }
+}
+
+function isAlwaysVisibleTokenEffect(effect) {
+  return Boolean(effect.statuses?.has?.("dead") || effect.statuses?.has?.("unconscious"));
 }
 
 function getDragInteractionContext(event, tokenId) {

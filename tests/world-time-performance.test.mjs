@@ -73,6 +73,50 @@ test("world-time side paths retain the same active-Scene boundary", () => {
   assert.match(sources.eventIndex, /getReactors = \(\) => getActiveSceneWorldTimeActors\(\)/);
 });
 
+test("region damage ticks touch only the active Scene and preserve the damage batch", async () => {
+  const body = functionBody(sources.damage,
+    "async function processRegionPeriodicDamage", "async function collectRegionPeriodicDamageBehavior");
+  const calls = [];
+  const request = { actor: { uuid: "Actor.active" }, amount: 5 };
+  const behavior = {
+    type: "periodic",
+    async setFlag(scope, key, state) { calls.push(["clock", state.nextTickTime]); }
+  };
+  const region = { behaviors: { contents: [behavior, { type: "unrelated" }, { ...behavior, disabled: true }] } };
+  const scene = { regions: { contents: [region, { ...region, hidden: true }] } };
+  const runtime = { canvas: { scene } };
+  const environment = {
+    globalThis: runtime,
+    REGION_DAMAGE_BEHAVIOR_TYPE: "periodic",
+    SYSTEM_ID: "fallout-maw", REGION_DAMAGE_FLAG_KEY: "periodicDamage",
+    getPeriodicDamageScenes() { throw new Error("world-time ticks must not scan other Scenes"); },
+    async collectRegionPeriodicDamageBehavior(actualRegion, actualBehavior, now, previousTime) {
+      assert.equal(actualRegion, region);
+      assert.equal(actualBehavior, behavior);
+      assert.deepEqual([now, previousTime], [30, 24]);
+      calls.push(["collect"]);
+      return { region, behavior, system: {}, state: {}, dueTicks: 1, nextTickTime: 36, requests: [request] };
+    },
+    async updateRegionPeriodicDamageRadius() { calls.push(["radius"]); },
+    async expireRegionPeriodicDamage() { throw new Error("this region has not expired"); },
+    async spendDodgeForAreaDamageRequests(requests) {
+      assert.deepEqual(requests, [request]);
+      calls.push(["dodge"]);
+    },
+    async applyDamageCycleNow(requests) {
+      assert.deepEqual(requests, [request]);
+      calls.push(["damage"]);
+    }
+  };
+  const run = new Function(...Object.keys(environment), `${body}; return processRegionPeriodicDamage;`)(...Object.values(environment));
+  await run(30, 6);
+  assert.deepEqual(calls, [["collect"], ["radius"], ["clock", 36], ["dodge"], ["damage"]]);
+  runtime.canvas.scene = null;
+  calls.length = 0;
+  await run(36, 6);
+  assert.deepEqual(calls, [], "no active Scene means no periodic region work");
+});
+
 test("empty time work exits before allocating per-Actor and per-Token operation queues", () => {
   const damageEntryBody = functionBody(
     sources.damage,

@@ -10,12 +10,18 @@ export const ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES = Object.freeze({
   fullLoss: "fullLoss"
 });
 
+export const ACTIVE_EFFECT_DISPLAY_MODES = Object.freeze({
+  always: "always",
+  hover: "hover"
+});
+
 const LIMB_DESTRUCTION_MODE_VALUES = new Set(Object.values(LIMB_DESTRUCTION_MODES));
 const ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODE_VALUES = new Set(
   Object.values(ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES)
 );
 
 export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
+  activeEffectDisplay: ACTIVE_EFFECT_DISPLAY_MODES.hover,
   turnOrder: Object.freeze({
     scheme: "block"
   }),
@@ -87,6 +93,7 @@ export function normalizeCombatSettings(value = {}) {
   );
 
   return {
+    activeEffectDisplay: normalizeActiveEffectDisplayMode(source.activeEffectDisplay),
     turnOrder: {
       scheme: TURN_ORDER_SCHEMES.has(source.turnOrder?.scheme)
         ? source.turnOrder.scheme
@@ -151,6 +158,12 @@ export function normalizeCombatSettings(value = {}) {
       ])
     )
   };
+}
+
+export function normalizeActiveEffectDisplayMode(value) {
+  return String(value ?? "").trim() === ACTIVE_EFFECT_DISPLAY_MODES.always
+    ? ACTIVE_EFFECT_DISPLAY_MODES.always
+    : DEFAULT_COMBAT_SETTINGS.activeEffectDisplay;
 }
 
 export function getActorLimbDestructionMode(actor = null, settings = DEFAULT_COMBAT_SETTINGS) {

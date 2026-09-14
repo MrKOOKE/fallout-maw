@@ -23,9 +23,10 @@ function restoreItemData(data, ancestors) {
   }
 
   const weapon = functions.weapon;
-  if (weapon?.enabled) {
+  for (const hostFunction of [weapon, functions.damageMitigation]) {
+    if (!hostFunction?.enabled) continue;
     // Repair modules first: a broken capacity upgrade becomes effective again.
-    for (const slot of weapon.moduleSlots ?? []) {
+    for (const slot of hostFunction.moduleSlots ?? []) {
       const uuid = String(slot.itemUuid ?? "");
       if (uuid && ancestors.has(uuid)) continue;
       const source = getWeaponModuleSlotItemData(slot);
@@ -34,6 +35,8 @@ function restoreItemData(data, ancestors) {
       restoreItemData(restored, new Set([...ancestors, uuid].filter(Boolean)));
       if (Object.keys(foundry.utils.diffObject(source, restored)).length) slot.itemData = restored;
     }
+  }
+  if (weapon?.enabled) {
     fillMagazine(weapon, applyWeaponModuleModifiers(weapon));
     for (const additional of Object.values(functions.additionalWeapons ?? {})) {
       if (additional?.enabled) fillMagazine(additional);

@@ -11,6 +11,7 @@ const [template, styles, applicationSource, ru, en] = await Promise.all([
 ]);
 
 const EXPECTED_FIELDS = [
+  "activeEffectDisplay",
   "turnOrder.scheme",
   "weaponSwitch.actionPointCost",
   "reactions.timeoutSeconds",

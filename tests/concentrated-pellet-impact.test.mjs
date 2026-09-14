@@ -105,7 +105,7 @@ test("weapon runtime collapses trajectories and burst bullets before expanding o
     "async performBurstAttack",
     "onAimedConfirm"
   );
-  assert.match(burst, /getWeaponProjectileCountPerAttack\(this\.weapon, this\.weaponFunctionId\)/);
+  assert.match(burst, /getWeaponProjectileCountPerAttack\(\s*this\.weapon,\s*this\.weaponFunctionId,\s*this\.getWeaponActionModifierState\(\)\s*\)/);
   assert.match(burst, /createWeaponPelletImpactProjectiles\(/);
   assert.match(burst, /pelletImpactCount:\s*projectile\?\.pelletImpactCount/);
 
@@ -198,7 +198,7 @@ test("directed melee expands one successful impact before damage mitigation", ()
 
   assert.match(
     directed,
-    /hasConcentratedPelletImpact\(this\.weapon,\s*this\.weaponFunctionId\)[\s\S]*?getWeaponPelletCount\(this\.weapon,\s*this\.weaponFunctionId\)/
+    /hasConcentratedPelletImpact\(\s*this\.weapon,\s*this\.weaponFunctionId,\s*this\.getWeaponActionModifierState\(\)\s*\)[\s\S]*?getWeaponPelletCount\(this\.weapon,\s*this\.weaponFunctionId\)/
   );
   assert.match(directed, /distributePelletImpactDamage\(damageAmount,\s*impactCount\)/);
   assert.match(directed, /limbKey:\s*resolvedLimbKey/);

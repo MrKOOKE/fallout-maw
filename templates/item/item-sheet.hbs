@@ -1,3 +1,135 @@
+{{#*inline "damageMitigationEditor"}}
+<div data-mitigation-function-path="{{path}}">
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.EquipmentRequirements"}}</h3>
+      <button type="button" data-add-item-requirement><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddRequirement"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-requirements">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.WeaponRequirementTarget"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each itemRequirements}}
+      <div class="fallout-maw-settings-row">
+        <select name="{{../path}}.requirements.{{index}}.type" data-item-requirement-type="{{index}}">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <select name="{{../path}}.requirements.{{index}}.key">
+          {{#each keyChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="{{../path}}.requirements.{{index}}.value" value="{{value}}" min="0" step="1">
+        <button type="button" data-delete-item-requirement="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoRequirements"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-mitigation-controls">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MitigationMode"}}</span>
+        <select name="{{path}}.mode">
+          {{#each damageMitigationModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MitigationWearResistance"}}</span>
+        <input type="number" name="{{path}}.wearResistance" value="{{data.wearResistance}}" min="0" step="1">
+      </label>
+      {{#if showDamageMitigationLimbSetSelector}}
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MitigationLimbSet"}}</span>
+        <select data-mitigation-limb-set-select>
+          {{#each damageMitigationLimbSetEditorChoices}}
+          <option value="{{id}}" {{#if active}}selected{{/if}}>{{limbsShortLabel}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{/if}}
+    </div>
+    {{#unless damageMitigationUsesConstructPart}}
+    <div class="fallout-maw-hidden-controls">
+      {{#each damageMitigationLimbSetChoices}}
+      <input type="hidden" name="{{../path}}.limbSetIds.{{@index}}" value="{{id}}">
+      {{/each}}
+    </div>
+    {{/unless}}
+    <div class="fallout-maw-mitigation-table-list">
+      {{#each damageMitigationTables}}
+      <section class="fallout-maw-mitigation-table">
+        <h3>{{limbSetLabel}}</h3>
+        <div class="fallout-maw-mitigation-matrix" style="--fallout-maw-mitigation-columns: {{columns}};">
+          <div class="fallout-maw-mitigation-cell fallout-maw-grid-header"></div>
+          {{#each limbs}}
+          <div class="fallout-maw-mitigation-cell fallout-maw-grid-header" title="{{label}}">{{shortLabel}}</div>
+          {{/each}}
+          {{#each rows}}
+          <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type" title="{{damageTypeLabel}}">
+            <span class="{{damageTypeIconClass}}" style="{{damageTypeIconStyle}}">
+              <img src="{{damageTypeImg}}" alt="{{damageTypeLabel}}">
+            </span>
+          </div>
+          {{#each cells}}
+          <label class="fallout-maw-mitigation-cell" data-mitigation-cell data-mitigation-group="{{../../../path}}:{{../../id}}" data-mitigation-row="{{rowIndex}}" data-mitigation-column="{{columnIndex}}">
+            <input class="mitigation-value-{{valueClass}}" type="number" name="{{../../../path}}.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" step="1">
+            <button type="button" class="fallout-maw-mitigation-fill-handle" data-mitigation-fill-handle title="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}" aria-label="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}"><i class="fa-solid fa-grip"></i></button>
+          </label>
+          {{/each}}
+          {{/each}}
+        </div>
+      </section>
+      {{/each}}
+    </div>
+</div>
+{{/inline}}
+{{#*inline "functionModuleSlots"}}
+<div data-module-function-path="{{path}}">
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponModuleSlots"}}</h3>
+      <button type="button" data-add-weapon-module-slot><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddModuleSlot"}}</button>
+    </div>
+    <div class="fallout-maw-weapon-module-pending-list">
+      {{#each moduleSlots}}
+      {{#unless moduleKey}}
+      <div class="fallout-maw-weapon-module-slot-pending">
+        <select data-weapon-module-slot-key-select="{{index}}">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-delete-weapon-module-slot="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/unless}}
+      {{/each}}
+    </div>
+    <div class="fallout-maw-weapon-module-slots">
+      {{#each moduleSlots}}
+      {{#if moduleKey}}
+      <div class="fallout-maw-weapon-module-slot-card">
+        <div class="fallout-maw-weapon-module-drop {{#unless item}}empty{{/unless}}" data-weapon-module-slot-drop="{{index}}" {{#if item}}title="{{item.name}}"{{/if}}>
+          {{#if item}}
+          <img src="{{item.img}}" alt="">
+          {{else}}
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          {{/if}}
+        </div>
+        <strong class="fallout-maw-weapon-module-slot-label">{{moduleKey}}</strong>
+        <button type="button" class="fallout-maw-weapon-module-slot-delete" data-delete-weapon-module-slot="{{index}}" title="{{#if item}}{{localize 'FALLOUTMAW.Item.ModuleRemove'}}{{else}}{{localize 'FALLOUTMAW.Item.ModuleSlotDelete'}}{{/if}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/if}}
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponModuleNoSlots"}}</p>
+      {{/each}}
+    </div>
+</div>
+{{/inline}}
 <div class="fallout-maw-sheet-body">
 <header class="sheet-header fallout-maw-sheet-header">
   <img class="profile-img" src="{{item.img}}" {{#unless isTrauma}}data-action="editImage" data-edit="img"{{/unless}} title="{{item.name}}" height="80">
@@ -5598,93 +5730,8 @@
       <h2>{{localize "FALLOUTMAW.Item.FunctionDamageMitigation"}}</h2>
       <button type="button" data-remove-item-function="damageMitigation" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
     </div>
-    <div class="fallout-maw-panel-header">
-      <h3>{{localize "FALLOUTMAW.Item.EquipmentRequirements"}}</h3>
-      <button type="button" data-add-item-requirement><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddRequirement"}}</button>
-    </div>
-    <div class="fallout-maw-settings-table fallout-maw-weapon-requirements">
-      <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
-        <span>{{localize "FALLOUTMAW.Item.WeaponRequirementTarget"}}</span>
-        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
-        <span></span>
-      </div>
-      {{#each itemRequirements}}
-      <div class="fallout-maw-settings-row">
-        <select name="system.functions.damageMitigation.requirements.{{index}}.type" data-item-requirement-type="{{index}}">
-          {{#each typeChoices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-        <select name="system.functions.damageMitigation.requirements.{{index}}.key">
-          {{#each keyChoices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-        <input type="number" name="system.functions.damageMitigation.requirements.{{index}}.value" value="{{value}}" min="0" step="1">
-        <button type="button" data-delete-item-requirement="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-      </div>
-      {{else}}
-      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoRequirements"}}</p>
-      {{/each}}
-    </div>
-    <div class="fallout-maw-mitigation-controls">
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.MitigationMode"}}</span>
-        <select name="system.functions.damageMitigation.mode">
-          {{#each damageMitigationModeChoices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.MitigationWearResistance"}}</span>
-        <input type="number" name="system.functions.damageMitigation.wearResistance" value="{{system.functions.damageMitigation.wearResistance}}" min="0" step="1">
-      </label>
-      {{#if showDamageMitigationLimbSetSelector}}
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.MitigationLimbSet"}}</span>
-        <select data-mitigation-limb-set-select>
-          {{#each damageMitigationLimbSetEditorChoices}}
-          <option value="{{id}}" {{#if active}}selected{{/if}}>{{limbsShortLabel}}</option>
-          {{/each}}
-        </select>
-      </label>
-      {{/if}}
-    </div>
-    {{#unless damageMitigationUsesConstructPart}}
-    <div class="fallout-maw-hidden-controls">
-      {{#each damageMitigationLimbSetChoices}}
-      <input type="hidden" name="system.functions.damageMitigation.limbSetIds.{{@index}}" value="{{id}}">
-      {{/each}}
-    </div>
-    {{/unless}}
-    <div class="fallout-maw-mitigation-table-list">
-      {{#each damageMitigationTables}}
-      <section class="fallout-maw-mitigation-table">
-        <h3>{{limbSetLabel}}</h3>
-        <div class="fallout-maw-mitigation-matrix" style="--fallout-maw-mitigation-columns: {{columns}};">
-          <div class="fallout-maw-mitigation-cell fallout-maw-grid-header"></div>
-          {{#each limbs}}
-          <div class="fallout-maw-mitigation-cell fallout-maw-grid-header" title="{{label}}">{{shortLabel}}</div>
-          {{/each}}
-          {{#each rows}}
-          <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type" title="{{damageTypeLabel}}">
-            <span class="{{damageTypeIconClass}}" style="{{damageTypeIconStyle}}">
-              <img src="{{damageTypeImg}}" alt="{{damageTypeLabel}}">
-            </span>
-          </div>
-          {{#each cells}}
-          <label class="fallout-maw-mitigation-cell" data-mitigation-cell data-mitigation-group="{{../../id}}" data-mitigation-row="{{rowIndex}}" data-mitigation-column="{{columnIndex}}">
-            <input class="mitigation-value-{{valueClass}}" type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" step="1">
-            <button type="button" class="fallout-maw-mitigation-fill-handle" data-mitigation-fill-handle title="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}" aria-label="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}"><i class="fa-solid fa-grip"></i></button>
-          </label>
-          {{/each}}
-          {{/each}}
-        </div>
-      </section>
-      {{/each}}
-    </div>
+    {{> damageMitigationEditor path="system.functions.damageMitigation" data=system.functions.damageMitigation}}
+    {{> functionModuleSlots path="system.functions.damageMitigation" moduleSlots=protectionModuleSlots}}
   </section>
   {{/if}}
 
@@ -6601,6 +6648,11 @@
         </select>
       </label>
     </div>
+    {{#if isProtectionModule}}
+    {{#with protectionModuleEditor}}
+    {{> damageMitigationEditor}}
+    {{/with}}
+    {{else}}
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponCombatStats"}}</h3>
     </div>
@@ -6635,6 +6687,7 @@
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.aimedMeleeAttack" value="{{system.functions.module.weapon.actionPointCosts.aimedMeleeAttack}}" step="1"></label>
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionReload"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.reload" value="{{system.functions.module.weapon.actionPointCosts.reload}}" step="1"></label>
     </div>
+    {{/if}}
   </section>
   {{/if}}
 
@@ -7482,42 +7535,7 @@
     </div>
 
     {{#if canHaveModuleSlots}}
-    <div class="fallout-maw-panel-header">
-      <h3>{{localize "FALLOUTMAW.Item.WeaponModuleSlots"}}</h3>
-      <button type="button" data-add-weapon-module-slot><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddModuleSlot"}}</button>
-    </div>
-    <div class="fallout-maw-weapon-module-pending-list">
-      {{#each moduleSlots}}
-      {{#unless moduleKey}}
-      <div class="fallout-maw-weapon-module-slot-pending">
-        <select data-weapon-module-slot-key-select="{{index}}">
-          {{#each choices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </div>
-      {{/unless}}
-      {{/each}}
-    </div>
-    <div class="fallout-maw-weapon-module-slots">
-      {{#each moduleSlots}}
-      {{#if moduleKey}}
-      <div class="fallout-maw-weapon-module-slot-card">
-        <div class="fallout-maw-weapon-module-drop {{#unless item}}empty{{/unless}}" data-weapon-module-slot-drop="{{index}}" {{#if item}}title="{{item.name}}"{{/if}}>
-          {{#if item}}
-          <img src="{{item.img}}" alt="">
-          {{else}}
-          <i class="fa-solid fa-plus" aria-hidden="true"></i>
-          {{/if}}
-        </div>
-        <strong class="fallout-maw-weapon-module-slot-label">{{moduleKey}}</strong>
-        <button type="button" class="fallout-maw-weapon-module-slot-delete" data-delete-weapon-module-slot="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-      </div>
-      {{/if}}
-      {{else}}
-      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponModuleNoSlots"}}</p>
-      {{/each}}
-    </div>
+    {{> functionModuleSlots}}
     {{/if}}
 
     <div class="fallout-maw-panel-header">

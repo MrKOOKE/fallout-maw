@@ -225,12 +225,13 @@ test("manual medicine healing consumption skips both generic limited-use lanes",
 test("blocked healing exits before checks and is revalidated before the atomic commit callback", () => {
   const treatmentOperation = sliceFunction(medicineFunctions, "resolveTreatmentOnAuthorityOperation");
   const initialGate = treatmentOperation.indexOf("!canActorReceiveHealing(targetActor)");
-  const checks = treatmentOperation.indexOf("await runTreatmentChecks(");
+  const checks = treatmentOperation.indexOf("await executeMedicineCombatOperation(");
   const adapterCall = treatmentOperation.indexOf("runExternalHealingSystemEventWorkflow(");
   const commitCall = treatmentOperation.indexOf("await commitTreatmentToActors(");
 
   assert.ok(initialGate >= 0, "authority must reject an actor that cannot receive healing");
   assert.ok(checks >= 0 && initialGate < checks, "the healing gate must run before any treatment check");
+  assert.match(treatmentOperation.slice(checks), /operation:\s*\(\) => runTreatmentChecks\(/);
   assert.match(
     treatmentOperation.slice(initialGate, checks),
     /return\s*\{[\s\S]*?status:\s*["']failed["'][\s\S]*?\}/,

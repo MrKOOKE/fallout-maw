@@ -725,6 +725,7 @@ function onCreatureOptionsChanged() {
 }
 
 function refreshCombatUi() {
+  if (globalThis.canvas?.ready) canvas.tokens?.setAllRenderFlags({ refreshState: true });
   ui.combat?.render?.(false);
   ui.combatDock?.refresh?.();
   game.combat?._updateTurnMarkers?.();

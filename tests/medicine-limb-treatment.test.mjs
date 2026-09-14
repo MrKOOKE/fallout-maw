@@ -77,7 +77,7 @@ test("limb treatment availability is bounded by the authoritative trauma healing
   );
 });
 
-test("limb health and medical-tool supply commit as one optimistic inventory mutation", () => {
+test("limb health and medical-tool supply commit atomically before surgery complications", () => {
   const perform = sliceFunction(medicineSource, "performTreatment");
   const commit = sliceFunction(medicineSource, "commitTreatmentToActors");
   const limbAdapter = sliceFunction(medicineSource, "prepareLimbTreatmentCommit");
@@ -102,12 +102,19 @@ test("limb health and medical-tool supply commit as one optimistic inventory mut
   assert.match(healingUpdate, /mergeConsciousnessRecoveryUpdate\(/);
   assert.match(commit, /currentSupply\s*!==\s*expected/);
   assert.match(commit, /createToolResourceValueUpdate\(instrument, tool, remaining\)/);
+  assert.match(commit, /if \(treatmentType === "limb"\)\s*\{\s*await executeAtomicActorItemUpdates\(\[/);
+  assert.match(commit, /reason: "medicine-limb-treatment-with-tool"/);
   assert.equal((commit.match(/executeInventoryMutation\(/g) ?? []).length, 1);
   assert.match(commit, /falloutMawSkipDamageStatusSync:\s*true/);
   assert.match(commit, /falloutMawLimbCapSync:\s*true/);
 
   assert.doesNotMatch(perform, /requestDamageApplication\(/);
-  assert.doesNotMatch(commit, /requestDamageApplication\(/);
+  const complicationStart = commit.indexOf("if (currentExperimentalSurgery && experimentalSurgery?.patientDamageTriggered)");
+  assert.ok(complicationStart > commit.indexOf("executeAtomicActorItemUpdates("));
+  assert.doesNotMatch(commit.slice(0, complicationStart), /requestDamageApplication\(/);
+  assert.match(commit.slice(complicationStart), /mode: "damage"[\s\S]*?requester: "experimentalSurgery"/);
+  const surgeryContext = sliceFunction(medicineSource, "getActorExperimentalSurgeryContext");
+  assert.match(surgeryContext, /if \(!isExperimentalSurgeryTreatmentType\(treatmentType\)\) return null/);
   assert.match(commit, /synchronizeActorDamageStatusesAfterInventoryMutation\(targetActor\)/);
 });
 

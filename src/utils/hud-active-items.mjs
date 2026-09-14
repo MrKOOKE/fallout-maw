@@ -3,7 +3,7 @@ import { getPreparedRuntimeSettings } from "../settings/accessors.mjs";
 import { prepareHudWeaponSetsContext } from "./actor-display-data.mjs";
 import { isTraumaDiseaseSuppressionEffectKey } from "./active-effect-changes.mjs";
 import { getItemContainerParentId } from "./inventory-containers.mjs";
-import { getActorInstalledModuleItems } from "./item-functions.mjs";
+import { getActorInstalledModuleItems, isItemBrokenByCondition } from "./item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { getActorApplicableEffects } from "../documents/actor-effect-preparation-index.mjs";
 
@@ -20,9 +20,9 @@ export function getActorItemsWithActiveHudModules(actor = null, options = {}) {
 
 export function getActorActiveHudInstalledModuleItems(actor = null, options = {}) {
   const activeHostIds = getActiveHudWeaponHostItemIds(actor, options);
-  if (!activeHostIds.size) return [];
   return getActorInstalledModuleItems(actor)
-    .filter(item => activeHostIds.has(String(item.system?.placement?.parentItemId ?? "")));
+    .filter(item => item.system?.placement?.moduleHostFunction === "damageMitigation"
+      || activeHostIds.has(String(item.system?.placement?.parentItemId ?? "")));
 }
 
 export function getActiveHudWeaponHostItemIds(actor = null, { weaponSet = null, weaponSets = null } = {}) {
@@ -107,6 +107,7 @@ function getHudWeaponSetsCacheSignature(actor) {
       placement.constructPartOrder,
       system.equipped ? 1 : 0,
       container.extraWeaponSlots ?? 0,
+      placement.mode === "prosthesis" ? (isItemBrokenByCondition(item) ? 1 : 0) : "",
       integratedBodyWeapon ? (system.functions?.[placement.mode]?.enabled ? 1 : 0) : "",
       integratedBodyWeapon ? (system.functions?.weapon?.enabled ? 1 : 0) : ""
     ].join(":"));

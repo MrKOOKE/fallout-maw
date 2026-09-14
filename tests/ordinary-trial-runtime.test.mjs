@@ -10,7 +10,8 @@ globalThis.foundry = {
   },
   utils: {
     randomID: () => `generated-${++generatedId}`,
-    deepClone: value => structuredClone(value)
+    deepClone: value => structuredClone(value),
+    mergeObject: (original, other) => ({ ...original, ...other })
   }
 };
 globalThis.game = {

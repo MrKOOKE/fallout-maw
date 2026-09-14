@@ -1,3 +1,4 @@
+import { getInstalledFunctionModuleItems, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { getAdjustedEquipmentRequirement } from "./requirement-modifiers.mjs";
 
 export const EQUIPMENT_REQUIREMENT_MOVEMENT_POINT_RESOURCE_KEY = "movementPoints";
@@ -7,7 +8,11 @@ export function getDamageMitigationRequirements(itemOrSystem = null) {
   const system = itemOrSystem?.system ?? itemOrSystem ?? {};
   const mitigation = system?.functions?.damageMitigation;
   if (!mitigation?.enabled) return [];
-  return Array.isArray(mitigation.requirements) ? mitigation.requirements : [];
+  return [
+    ...(Array.isArray(mitigation.requirements) ? mitigation.requirements : []),
+    ...getInstalledFunctionModuleItems(itemOrSystem, ITEM_FUNCTIONS.damageMitigation)
+      .flatMap(item => item.system.functions.module.damageMitigation?.requirements ?? [])
+  ];
 }
 
 export function hasDamageMitigationRequirements(itemOrSystem = null) {

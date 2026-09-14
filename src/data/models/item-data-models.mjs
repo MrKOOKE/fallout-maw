@@ -98,17 +98,7 @@ export class GearDataModel extends BaseItemDataModel {
         trap: trapFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
         weapon: weaponFunctionField({ fieldOptions: OPTIONAL_FUNCTION_FIELD_OPTIONS }),
         additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: false }),
-        damageMitigation: new SchemaField({
-          enabled: new BooleanField({ required: true, initial: false }),
-          mode: new StringField({ required: true, blank: false, choices: ["defense", "resistance"], initial: "defense" }),
-          wearResistance: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-          requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
-          limbSetIds: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
-          entries: new TypedObjectField(
-            new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),
-            { required: true, initial: {} }
-          )
-        }, OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        damageMitigation: damageMitigationFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
         firstAid: firstAidFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
         needChange: needChangeFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
         oneTimeUse: oneTimeUseFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
@@ -123,6 +113,21 @@ export class GearDataModel extends BaseItemDataModel {
       craft: craftRecipeField()
     };
   }
+}
+
+function damageMitigationFunctionField(options = {}, { module = false } = {}) {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    mode: new StringField({ required: true, blank: false, choices: ["defense", "resistance"], initial: "defense" }),
+    wearResistance: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
+    limbSetIds: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
+    entries: new TypedObjectField(
+      new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),
+      { required: true, initial: {} }
+    ),
+    ...(!module ? { moduleSlots: new ArrayField(weaponModuleSlotField(), { required: true, initial: [] }) } : {})
+  }, options);
 }
 
 export class AbilityDataModel extends BaseItemDataModel {
@@ -979,8 +984,9 @@ function moduleFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
-    targetFunction: new StringField({ required: true, blank: false, choices: ["weapon"], initial: "weapon" }),
+    targetFunction: new StringField({ required: true, blank: false, choices: ["weapon", "damageMitigation"], initial: "weapon" }),
     weapon: weaponModuleModifiersField(),
+    damageMitigation: damageMitigationFunctionField({}, { module: true }),
     additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: false })
   }, options);
 }

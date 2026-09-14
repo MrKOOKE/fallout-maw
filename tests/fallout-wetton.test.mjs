@@ -84,18 +84,13 @@ test("Fallout-Wetton preset keeps its race and independent-health resource profi
     new URL("../storage/settings-presets/fallout-maw.json", import.meta.url),
     "utf8"
   ));
-  const raceSource = JSON.parse(fs.readFileSync(
-    new URL("../../../worlds/fallout/settings-presets/fallout-wetton.json", import.meta.url),
-    "utf8"
-  ));
   const wetton = normalizePresetDocument(JSON.parse(fs.readFileSync(
     new URL("../../../modules/fallout-wetton/presets/fallout-wetton.json", import.meta.url),
     "utf8"
   )));
   const mainSettings = new Map(main.settings.map(entry => [entry.id, entry.value]));
-  const raceSourceSettings = new Map(raceSource.settings.map(entry => [entry.id, entry.value]));
   const settings = new Map(wetton.settings.map(entry => [entry.id, entry.value]));
-  const sourceRaces = raceSourceSettings.get("fallout-maw.creatureOptions").races;
+  const sourceRaces = mainSettings.get("fallout-maw.creatureOptions").races;
   const races = settings.get("fallout-maw.creatureOptions").races;
   const resources = settings.get("fallout-maw.resourceSettings");
   const combat = settings.get("fallout-maw.combatSettings");

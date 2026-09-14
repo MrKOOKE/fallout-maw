@@ -13,7 +13,14 @@ function setProperty(object, path, value) {
   target[final] = value;
 }
 
-globalThis.foundry = { utils: { getProperty, setProperty } };
+globalThis.foundry = {
+  applications: {
+    api: { DialogV2: class {} },
+    ux: { FormDataExtended: class {} },
+    handlebars: { renderTemplate: async () => "" }
+  },
+  utils: { getProperty, setProperty }
+};
 globalThis.ActiveEffect = class ActiveEffect {
   static applyChange(target, change) {
     const current = getProperty(target, change.key);

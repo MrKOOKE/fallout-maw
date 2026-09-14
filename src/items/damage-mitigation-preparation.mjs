@@ -4,6 +4,7 @@ import {
   ITEM_FUNCTIONS,
   getConditionWeakeningData,
   getDamageMitigationFunction,
+  getInstalledFunctionModuleItems,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/construct-parts.mjs";
@@ -34,41 +35,47 @@ export function buildEquippedItemDamageMitigation(
     const canDescribeSuppressedMitigation = includeSources
       && hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation, { ignoreBroken: true });
     if (!mitigationActive && !canDescribeSuppressedMitigation) continue;
-    const mitigation = getDamageMitigationFunction(item);
-    const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
-    const weakening = getConditionWeakeningData(item);
-    const constructPartLimbKey = isConstructPart
-      ? getConstructPartLimbKey(getConstructPartSlotId(item))
-      : "";
+    const sourceItems = [item, ...getInstalledFunctionModuleItems(item, ITEM_FUNCTIONS.damageMitigation, {
+      actor, ignoreBroken: includeSources
+    })];
+    for (const sourceItem of sourceItems) {
+      const mitigation = getDamageMitigationFunction(sourceItem);
+      const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
+      const weakening = getConditionWeakeningData(sourceItem);
+      const constructPartLimbKey = isConstructPart
+        ? getConstructPartLimbKey(getConstructPartSlotId(item))
+        : "";
 
-    for (const [rawLimbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
-      const limbKey = rawLimbKey === CONSTRUCT_PART_MITIGATION_LIMB_KEY && constructPartLimbKey
-        ? constructPartLimbKey
-        : rawLimbKey;
-      if (!limbKeys.has(limbKey)) continue;
-      for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
-        if (!damageTypeKeys.has(damageTypeKey)) continue;
-        const prepared = prepareEquipmentDamageMitigationValue(item, actor, entry?.value, {
-          mitigationActive,
-          weakening
-        });
-        const { baseValue, weakenedValue, value } = prepared;
-        if (!value && (!includeSources || !baseValue)) continue;
+      for (const [rawLimbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
+        const limbKey = rawLimbKey === CONSTRUCT_PART_MITIGATION_LIMB_KEY && constructPartLimbKey
+          ? constructPartLimbKey
+          : rawLimbKey;
+        if (isConstructPart && limbKey !== constructPartLimbKey) continue;
+        if (!limbKeys.has(limbKey)) continue;
+        for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
+          if (!damageTypeKeys.has(damageTypeKey)) continue;
+          const prepared = prepareEquipmentDamageMitigationValue(sourceItem, actor, entry?.value, {
+            mitigationActive: mitigationActive && hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageMitigation),
+            weakening
+          });
+          const { baseValue, weakenedValue, value } = prepared;
+          if (!value && (!includeSources || !baseValue)) continue;
 
-        const isResistance = mode === DAMAGE_MITIGATION_MODES.resistance;
-        const values = isResistance ? resistances : defenses;
-        values[limbKey][damageTypeKey] += value;
-        if (!includeSources) continue;
-        const sources = isResistance ? resistanceSources : defenseSources;
-        sources[limbKey][damageTypeKey].push({
-          itemId: String(item.id ?? ""),
-          name: String(item.name ?? "Снаряжение"),
-          img: String(item.img ?? "") || "icons/svg/item-bag.svg",
-          baseValue,
-          weakenedValue,
-          value,
-          protectionPercent: prepared.protectionPercent
-        });
+          const isResistance = mode === DAMAGE_MITIGATION_MODES.resistance;
+          const values = isResistance ? resistances : defenses;
+          values[limbKey][damageTypeKey] += value;
+          if (!includeSources) continue;
+          const sources = isResistance ? resistanceSources : defenseSources;
+          sources[limbKey][damageTypeKey].push({
+            itemId: String(sourceItem.id ?? ""),
+            name: String(sourceItem.name ?? "Снаряжение"),
+            img: String(sourceItem.img ?? "") || "icons/svg/item-bag.svg",
+            baseValue,
+            weakenedValue,
+            value,
+            protectionPercent: prepared.protectionPercent
+          });
+        }
       }
     }
   }
@@ -92,6 +99,24 @@ export function prepareEquipmentDamageMitigationValue(item, actor, rawValue = 0,
     value: mitigationActive ? scaleEquipmentProtectionValue(actor, weakenedValue) : 0,
     protectionPercent: Number(actor?.system?.equipmentEffectiveness?.protectionPercent) || 0
   };
+}
+
+/** Item tooltips use the same per-source rounding as equipped Actor protection. */
+export function prepareItemDamageMitigationCell(item, actor, limbKey, damageTypeKey, {
+  sourceItems = [item, ...getInstalledFunctionModuleItems(item, ITEM_FUNCTIONS.damageMitigation, { actor, ignoreBroken: true })]
+} = {}) {
+  const result = { defense: { value: 0, sources: [] }, resistance: { value: 0, sources: [] } };
+  const hostActive = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
+  for (const sourceItem of sourceItems) {
+    const mitigation = getDamageMitigationFunction(sourceItem);
+    const mode = mitigation.mode === DAMAGE_MITIGATION_MODES.resistance ? "resistance" : "defense";
+    const prepared = prepareEquipmentDamageMitigationValue(sourceItem, actor, mitigation.entries?.[limbKey]?.[damageTypeKey]?.value, {
+      mitigationActive: hostActive && hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageMitigation)
+    });
+    result[mode].value += prepared.value;
+    result[mode].sources.push({ item: sourceItem, ...prepared });
+  }
+  return result;
 }
 
 export function buildEmptyLimbDamageMap(limbs = {}, damageTypeSettings = []) {

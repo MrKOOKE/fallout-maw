@@ -87,6 +87,9 @@ export function hasItemFunction(itemOrSystem = null, functionKey = "", { ignoreB
   if (functionKey === ITEM_FUNCTIONS.tool) return hasUnifiedToolFunction(system) || hasLegacyToolFunction(system);
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return hasToolFunction(system, toolKey);
+  if (functionKey === ITEM_FUNCTIONS.damageMitigation && isInstalledProtectionModule(system)) {
+    return Boolean(system.functions?.module?.enabled);
+  }
   return Boolean(system.functions?.[functionKey]?.enabled);
 }
 
@@ -107,7 +110,15 @@ function isItemFunctionSuppressedByBrokenCondition(itemOrSystem = null, function
 }
 
 export function getDamageMitigationFunction(itemOrSystem = null) {
-  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.damageMitigation] ?? {};
+  const system = getItemSystem(itemOrSystem);
+  return isInstalledProtectionModule(system)
+    ? system.functions?.module?.damageMitigation ?? {}
+    : system.functions?.[ITEM_FUNCTIONS.damageMitigation] ?? {};
+}
+
+function isInstalledProtectionModule(system = {}) {
+  return system.placement?.mode === "module"
+    && system.functions?.module?.targetFunction === ITEM_FUNCTIONS.damageMitigation;
 }
 
 export function getConditionFunction(itemOrSystem = null) {
@@ -620,10 +631,11 @@ export function createActorItemOrInstalledModuleUpdate(actor = null, item = null
   const hostItem = actor?.items?.get?.(parentItemId);
   if (!hostItem || !moduleSlotId) return null;
 
-  const slots = foundry.utils.deepClone(Array.isArray(getWeaponFunction(hostItem)?.moduleSlots)
-    ? getWeaponFunction(hostItem).moduleSlots
+  const targetFunction = item.system?.placement?.moduleHostFunction || ITEM_FUNCTIONS.weapon;
+  const slots = foundry.utils.deepClone(Array.isArray(getItemSystem(hostItem).functions?.[targetFunction]?.moduleSlots)
+    ? getItemSystem(hostItem).functions?.[targetFunction].moduleSlots
     : []);
-  const slotIndex = slots.findIndex(slot => String(slot?.id ?? "") === moduleSlotId);
+  const slotIndex = slots.findIndex((slot, index) => (String(slot?.id ?? "") || `slot-${index + 1}`) === moduleSlotId);
   if (slotIndex < 0) return null;
 
   const currentData = foundry.utils.deepClone(getWeaponModuleSlotItemData(slots[slotIndex]) ?? item?.toObject?.() ?? item);
@@ -634,24 +646,36 @@ export function createActorItemOrInstalledModuleUpdate(actor = null, item = null
   };
   return {
     _id: hostItem.id,
-    "system.functions.weapon.moduleSlots": slots
+    [`system.functions.${targetFunction}.moduleSlots`]: slots
   };
 }
 
-export function getActorInstalledModuleItems(actor = null) {
+export function getActorInstalledModuleItems(actor = null, { ignoreBroken = false } = {}) {
   const modules = [];
   for (const hostItem of getActorItemDocuments(actor)) {
-    if (!isActiveModuleHostItem(hostItem)) continue;
-    const slots = Array.isArray(getWeaponFunction(hostItem)?.moduleSlots)
-      ? getWeaponFunction(hostItem).moduleSlots
-      : [];
-    slots.forEach((slot, slotIndex) => {
-      const itemData = getWeaponModuleSlotItemData(slot);
-      if (!itemData?.system || !hasItemFunction(itemData, ITEM_FUNCTIONS.module)) return;
-      modules.push(createInstalledModuleItem(actor, hostItem, slot, slotIndex, itemData));
-    });
+    if (!isActiveModuleHostItem(hostItem, { ignoreBroken })) continue;
+    for (const targetFunction of [ITEM_FUNCTIONS.weapon, ITEM_FUNCTIONS.damageMitigation]) {
+      if (!hasItemFunction(hostItem, targetFunction, { ignoreBroken })) continue;
+      modules.push(...getInstalledFunctionModuleItems(hostItem, targetFunction, { actor, ignoreBroken }));
+    }
   }
   return modules;
+}
+
+/** Virtual items retain their own condition and write through to the owning slot. */
+export function getInstalledFunctionModuleItems(hostItem, targetFunction = ITEM_FUNCTIONS.weapon, {
+  actor = hostItem?.actor ?? null, ignoreBroken = false
+} = {}) {
+  const slots = getItemSystem(hostItem).functions?.[targetFunction]?.moduleSlots ?? [];
+  return slots.flatMap((slot, slotIndex) => {
+    const itemData = getWeaponModuleSlotItemData(slot);
+    if (!itemData?.system || !hasItemFunction(itemData, ITEM_FUNCTIONS.module, { ignoreBroken })) return [];
+    const module = getModuleFunction(itemData);
+    if (String(module.targetFunction ?? "weapon") !== targetFunction) return [];
+    const key = String(slot.moduleKey ?? "").trim();
+    if (key && key !== String(module.name || itemData.name || "").trim()) return [];
+    return [createInstalledModuleItem(actor, hostItem, slot, slotIndex, itemData, targetFunction)];
+  });
 }
 
 export function getWeaponFunctionUpdatePath(itemOrSystem = null, functionId = "") {
@@ -827,25 +851,26 @@ function getActorItemDocuments(actor = null) {
   return Array.from(actor?.items ?? []);
 }
 
-function isActiveModuleHostItem(item = null) {
-  if (!item?.system || !hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return false;
+function isActiveModuleHostItem(item = null, { ignoreBroken = false } = {}) {
+  if (!item?.system || ![ITEM_FUNCTIONS.weapon, ITEM_FUNCTIONS.damageMitigation]
+    .some(key => hasItemFunction(item, key, { ignoreBroken }))) return false;
   const mode = String(item.system?.placement?.mode ?? "").trim();
   return Boolean(item.system?.equipped)
     || ["equipment", "weapon", "constructPart"].includes(mode)
     || Object.values(item.system?.occupiedSlots ?? {}).some(Boolean);
 }
 
-function createInstalledModuleItem(actor, hostItem, slot = {}, slotIndex = 0, sourceItemData = {}) {
+function createInstalledModuleItem(actor, hostItem, slot = {}, slotIndex = 0, sourceItemData = {}, targetFunction = ITEM_FUNCTIONS.weapon) {
   const slotId = String(slot?.id ?? "") || `slot-${slotIndex + 1}`;
-  const id = createInstalledModuleItemId(hostItem, slotId);
-  const data = prepareInstalledModuleItemData(sourceItemData, id, hostItem, slotId);
+  const id = createInstalledModuleItemId(hostItem, targetFunction === ITEM_FUNCTIONS.weapon ? slotId : `${targetFunction}:${slotId}`);
+  const data = prepareInstalledModuleItemData(sourceItemData, id, hostItem, slotId, targetFunction);
   const item = {
     ...data,
     id,
     _id: id,
     actor,
     parent: actor,
-    uuid: `${hostItem.uuid}.Module.${slotId}`,
+    uuid: `${hostItem.uuid}.Module.${targetFunction === ITEM_FUNCTIONS.weapon ? slotId : `${targetFunction}:${slotId}`}`,
     sheet: hostItem.sheet,
     getFlag(scope, key) {
       return foundry.utils.getProperty(this.flags ?? {}, `${scope}.${key}`);
@@ -854,19 +879,19 @@ function createInstalledModuleItem(actor, hostItem, slot = {}, slotIndex = 0, so
       return this.update({ [`flags.${scope}.${key}`]: value });
     },
     async unsetFlag(scope, key) {
-      const nextData = foundry.utils.deepClone(getWeaponModuleSlotItemData(getCurrentHostModuleSlot(actor, hostItem, slotIndex)) ?? data);
+      const nextData = foundry.utils.deepClone(getWeaponModuleSlotItemData(getCurrentHostModuleSlot(actor, hostItem, slotIndex, targetFunction)) ?? data);
       deleteNestedProperty(nextData, `flags.${scope}.${key}`);
-      await updateInstalledModuleItemData(actor, hostItem, slotIndex, nextData);
+      await updateInstalledModuleItemData(actor, hostItem, slotIndex, nextData, {}, targetFunction);
       return undefined;
     },
     toObject() {
       return foundry.utils.deepClone({ ...data, _id: id });
     },
     async update(updateData = {}, options = {}) {
-      const currentSlot = getCurrentHostModuleSlot(actor, hostItem, slotIndex);
+      const currentSlot = getCurrentHostModuleSlot(actor, hostItem, slotIndex, targetFunction);
       const currentData = foundry.utils.deepClone(getWeaponModuleSlotItemData(currentSlot) ?? data);
       foundry.utils.mergeObject(currentData, foundry.utils.expandObject(updateData ?? {}), { inplace: true });
-      await updateInstalledModuleItemData(actor, hostItem, slotIndex, currentData, options);
+      await updateInstalledModuleItemData(actor, hostItem, slotIndex, currentData, options, targetFunction);
       return resolveActorItemOrInstalledModule(actor, id);
     }
   };
@@ -877,7 +902,7 @@ function createInstalledModuleItemId(hostItem = null, slotId = "") {
   return `${INSTALLED_MODULE_ITEM_ID_PREFIX}${hostItem?.id ?? ""}:${String(slotId ?? "")}`;
 }
 
-function prepareInstalledModuleItemData(sourceItemData = {}, id = "", hostItem = null, slotId = "") {
+function prepareInstalledModuleItemData(sourceItemData = {}, id = "", hostItem = null, slotId = "", targetFunction = ITEM_FUNCTIONS.weapon) {
   const data = foundry.utils.deepClone(sourceItemData);
   data.type ||= "gear";
   data.name ||= "Module";
@@ -889,32 +914,33 @@ function prepareInstalledModuleItemData(sourceItemData = {}, id = "", hostItem =
     ...(data.system.placement ?? {}),
     mode: "module",
     parentItemId: hostItem?.id ?? "",
-    moduleSlotId: slotId
+    moduleSlotId: slotId,
+    moduleHostFunction: targetFunction
   };
   data._id = id;
   return data;
 }
 
-function getCurrentHostModuleSlot(actor = null, hostItem = null, slotIndex = 0) {
+function getCurrentHostModuleSlot(actor = null, hostItem = null, slotIndex = 0, targetFunction = ITEM_FUNCTIONS.weapon) {
   const currentHost = actor?.items?.get?.(hostItem?.id ?? "") ?? hostItem;
-  const slots = Array.isArray(getWeaponFunction(currentHost)?.moduleSlots)
-    ? getWeaponFunction(currentHost).moduleSlots
+  const slots = Array.isArray(getItemSystem(currentHost).functions?.[targetFunction]?.moduleSlots)
+    ? getItemSystem(currentHost).functions?.[targetFunction].moduleSlots
     : [];
   return slots[slotIndex] ?? null;
 }
 
-async function updateInstalledModuleItemData(actor = null, hostItem = null, slotIndex = 0, itemData = {}, options = {}) {
+async function updateInstalledModuleItemData(actor = null, hostItem = null, slotIndex = 0, itemData = {}, options = {}, targetFunction = ITEM_FUNCTIONS.weapon) {
   const currentHost = actor?.items?.get?.(hostItem?.id ?? "") ?? hostItem;
   if (!currentHost?.update) return false;
-  const slots = foundry.utils.deepClone(Array.isArray(getWeaponFunction(currentHost)?.moduleSlots)
-    ? getWeaponFunction(currentHost).moduleSlots
+  const slots = foundry.utils.deepClone(Array.isArray(getItemSystem(currentHost).functions?.[targetFunction]?.moduleSlots)
+    ? getItemSystem(currentHost).functions?.[targetFunction].moduleSlots
     : []);
   if (!slots[slotIndex]) return false;
   slots[slotIndex] = {
     ...slots[slotIndex],
     itemData: foundry.utils.deepClone(itemData)
   };
-  await currentHost.update({ "system.functions.weapon.moduleSlots": slots }, options);
+  await currentHost.update({ [`system.functions.${targetFunction}.moduleSlots`]: slots }, options);
   return true;
 }
 

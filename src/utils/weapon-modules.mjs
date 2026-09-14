@@ -22,7 +22,24 @@ export const WEAPON_MODULE_ACTION_KEYS = Object.freeze([
 
 export function isWeaponModuleItem(itemOrData = null) {
   return hasItemFunction(itemOrData, ITEM_FUNCTIONS.module)
-    && String(getModuleFunction(itemOrData).targetFunction ?? "weapon") === "weapon";
+    && isFunctionModuleItem(itemOrData, ITEM_FUNCTIONS.weapon);
+}
+
+export function isFunctionModuleItem(itemOrData = null, targetFunction = ITEM_FUNCTIONS.weapon) {
+  return hasItemFunction(itemOrData, ITEM_FUNCTIONS.module, { ignoreBroken: true })
+    && String(getModuleFunction(itemOrData).targetFunction ?? "weapon") === targetFunction;
+}
+
+/** Occupied slots are emptied before an empty slot can be removed. */
+export function removeModuleOrSlot(slots = [], index = -1) {
+  const result = foundry.utils.deepClone(slots);
+  const slot = result[index];
+  if (!slot) return result;
+  if (slot.itemData?.system || slot.itemUuid) {
+    slot.itemUuid = "";
+    slot.itemData = {};
+  } else result.splice(index, 1);
+  return result;
 }
 
 export function getWeaponModuleTechnicalName(itemOrData = null) {
@@ -84,8 +101,8 @@ export function getWeaponModuleSlotItem(slot = {}) {
   return resolveWorldItemSync(uuid);
 }
 
-export function isModuleItemCompatibleWithSlot(itemOrData = null, slot = {}) {
-  if (!isWeaponModuleItem(itemOrData)) return false;
+export function isModuleItemCompatibleWithSlot(itemOrData = null, slot = {}, targetFunction = ITEM_FUNCTIONS.weapon) {
+  if (!isFunctionModuleItem(itemOrData, targetFunction)) return false;
   const slotKey = String(slot?.moduleKey ?? "").trim();
   if (!slotKey) return true;
   return getWeaponModuleTechnicalName(itemOrData) === slotKey;
