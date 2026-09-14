@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { getCraftItemSourceUuid } from "../utils/craft-item-source.mjs";
 
 export const KNOWN_CRAFT_ITEMS_FLAG = "knownCraftItems";
 export const DEFAULT_CRAFT_RECIPE_ID = "recipe1";
@@ -61,17 +62,8 @@ export function getCraftKnowledgeItemUuid(itemOrUuid = null) {
   if (!itemOrUuid || itemOrUuid.documentName !== "Item") return "";
   if (!itemOrUuid.parent) return String(itemOrUuid.uuid ?? "").trim();
 
-  const sourceIds = [
-    itemOrUuid.getFlag?.("core", "sourceId"),
-    itemOrUuid.getFlag?.(SYSTEM_ID, "sourceId"),
-    foundry.utils.getProperty(itemOrUuid, "_source.flags.core.sourceId"),
-    foundry.utils.getProperty(itemOrUuid, `_source.flags.${SYSTEM_ID}.sourceId`)
-  ];
-  for (const sourceId of sourceIds) {
-    const source = resolveWorldItemSync(sourceId);
-    if (source && !source.parent) return source.uuid;
-  }
-  return "";
+  const source = resolveWorldItemSync(getCraftItemSourceUuid(itemOrUuid));
+  return source && !source.parent ? source.uuid : "";
 }
 
 export function resolveCraftKnowledgeItem(itemOrUuid = null) {

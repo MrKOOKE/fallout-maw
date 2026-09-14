@@ -76,6 +76,7 @@ import {
   startActorContainerPassengerExitPlacement
 } from "../canvas/actor-containers.mjs";
 import { useActiveItem } from "../items/active-item-use.mjs";
+import { createFullItemRestorationUpdate } from "../items/full-restoration.mjs";
 import {
   canActivateLightSource,
   getLightSourceDisplayName,
@@ -976,7 +977,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         <p>Полностью вылечить выбранных актеров: ${actors.length}?</p>
         <label class="fallout-maw-gm-heal-repair-option">
           <input type="checkbox" name="repairItems" value="true">
-          <span>Починить все предметы?</span>
+          <span>Починить предметы, заполнить магазины и зарядить источники энергии</span>
         </label>
       `,
       ok: {
@@ -5062,18 +5063,7 @@ async function deleteActorOverloadEffects(actor) {
 }
 
 async function fullyRepairActorItems(actor) {
-  const itemUpdates = [];
-  for (const item of actor.items ?? []) {
-    if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
-    const condition = getConditionFunction(item);
-    const max = Math.max(0, toInteger(condition.max));
-    const current = Math.max(0, toInteger(condition.value));
-    if (current === max) continue;
-    itemUpdates.push({
-      _id: item.id,
-      "system.functions.condition.value": max
-    });
-  }
+  const itemUpdates = Array.from(actor.items ?? [], createFullItemRestorationUpdate).filter(Boolean);
   if (itemUpdates.length) await actor.updateEmbeddedDocuments("Item", itemUpdates);
 }
 

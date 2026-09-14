@@ -52,7 +52,7 @@ test("final first-aid work completes before Foundry's registry performs deletion
     "async function refreshManagedTimedEffectExpiration",
     "async function updatePeriodicEffect"
   );
-  assert.match(refresh, /ActiveEffectClass\.registry\.refresh\(MANAGED_TIMED_DAMAGE_EXPIRY/);
+  assert.match(refresh, /refreshActorEffectExpiration\(MANAGED_TIMED_DAMAGE_EXPIRY/);
 });
 
 test("first-aid expiry does not install a ready-time actor migration", () => {

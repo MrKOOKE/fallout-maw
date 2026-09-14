@@ -28,6 +28,8 @@ globalThis.foundry = {
 };
 
 const { planOwnedInventoryItemInInventoryFast } = await import("../src/inventory/movement.mjs");
+const { planActorInventoryGrant } = await import("../src/utils/inventory-grants.mjs");
+const { findFirstAvailableResolvedInventoryPlacement, normalizeInventoryPlacement } = await import("../src/utils/inventory-containers.mjs");
 
 test("a simple owned Item reposition produces exactly one placement update", () => {
   const actor = createActor([createItem({ id: "moving", x: 1 })]);
@@ -46,6 +48,38 @@ test("a simple owned Item reposition produces exactly one placement update", () 
   assert.equal(update["system.placement.y"], 2);
   assert.equal(update["system.container.parentId"], "");
   assert.equal(update["system.placement.mode"], "inventory");
+});
+
+test("a quick move validates the automatically chosen rotation and commits it in the same placement update", () => {
+  const rifle = createItem({ id: "rifle" });
+  rifle.system.placement.width = 4;
+  rifle.system.placement.height = 2;
+  const actor = createActor([rifle]);
+  actor.system.inventory = { columns: 2, rows: 4 };
+  const placement = findFirstAvailableResolvedInventoryPlacement([], 2, 4, rifle);
+  const update = planOwnedInventoryItemInInventoryFast(actor, rifle, placement);
+  assert.equal(update["system.placement.rotated"], true);
+  assert.equal(update["system.placement.width"], 4);
+  assert.equal(update["system.placement.height"], 2);
+  assert.equal(rifle.system.placement.rotated, false);
+});
+
+test("ordinary grants persist the chosen rotation for individual items and virtual stacks", () => {
+  for (const maxStack of [1, 10]) {
+    const rifle = createItem({ id: "rifle", maxStack });
+    rifle.system.placement.width = 4;
+    rifle.system.placement.height = 2;
+    const actor = createActor([]);
+    actor.createEmbeddedDocuments = () => { throw new Error("planning must not write"); };
+    actor.system.inventory = { columns: 2, rows: maxStack === 1 ? 4 : 8 };
+    const plan = planActorInventoryGrant(actor, rifle, { quantity: maxStack === 1 ? 1 : 20, merge: false });
+    const created = plan.creates[0];
+    assert.deepEqual([created.system.placement.width, created.system.placement.height, created.system.placement.rotated], [4, 2, true]);
+    const displayed = normalizeInventoryPlacement(created.system.placement, created);
+    assert.deepEqual([displayed.width, displayed.height], [2, 4]);
+    if (maxStack === 10) assert.deepEqual(created.system.stackParts.map(p => p.rotated), [true, true]);
+    assert.equal(rifle.system.placement.rotated, false);
+  }
 });
 
 test("the fast path refuses an occupied destination and leaves it to the generic planner", () => {

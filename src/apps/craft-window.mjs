@@ -1,4 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
+import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { getCraftingSettings, getCreatureOptions, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import {
@@ -97,6 +99,7 @@ import {
   isInstalledConstructPartItem
 } from "../utils/construct-parts.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
+import { createSourcedInventoryItemData, getCraftItemSourceKeys } from "../utils/craft-item-source.mjs";
 import { actorKnowsCraftItem, getKnownCraftItemUuids, hasCraftKnowledgeLayoutData } from "../items/recipe-knowledge.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
@@ -486,6 +489,7 @@ export async function getCraftWindowOpenOptionsForItem(item, actor = item?.paren
 }
 
 class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
+  #contentsTransfer = new InventoryTransferMode();
   #actorUuid = "";
   #actor = null;
   #selectedRecipeUuid = "";
@@ -934,7 +938,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
     this.#renderRefresh = foundry.utils.debounce(() => {
-      if (!this.rendered) return;
+      if (!this.rendered || this.#contentsTransfer.renderBatch.active) return;
       this.#captureScrollPositions();
       this.#clearInventoryTooltip({ force: true });
       void this.#renderPreservingWindowStack();
@@ -954,6 +958,16 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     ];
   }
 
+  render(...args) {
+    if (this.#contentsTransfer.renderBatch.defer(args)) return Promise.resolve(this);
+    return super.render(...args);
+  }
+
+  async _preRender(context, options) {
+    if (this.element?.isConnected) this.#captureScrollPositions();
+    await super._preRender(context, options);
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#hoverPreviewInputKey = "";
@@ -962,6 +976,19 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#bindViewportResize();
     this._dragDrop.bind(this.element);
     this.#bindInventoryListeners();
+    this.#contentsTransfer.bind(this.element, {
+      application: this,
+      getActor: () => this.#actor,
+      beforeTransfer: () => {
+        this.#renderRefresh?.cancel?.();
+        this.#captureScrollPositions();
+        this.#saveActiveCraftTabState();
+      },
+      afterTransfer: () => this.#renderRefresh?.cancel?.(),
+      canUse: () => this._canDragDrop(),
+      canTransfer: canTransferOwnedContents,
+      onSelect: () => this.#clearInventoryTooltip({ force: true })
+    });
     this.#activateWeaponSlotAspectSizing();
     this.#restoreScrollPositions();
     this.#activateCraftTabs();
@@ -978,6 +1005,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onClose(options) {
     await super._onClose(options);
+    this.#contentsTransfer.destroy();
     this.#craftBatchSummaryClose?.();
     if (this.#recipeListRenderFrame) cancelAnimationFrame(this.#recipeListRenderFrame);
     this.#recipeListRenderFrame = 0;
@@ -2535,6 +2563,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #scheduleRefreshForActor(actor) {
     if (!actor || actor.uuid !== this.#actorUuid) return;
     invalidateCraftRecipeAvailabilityCaches();
+    if (this.#contentsTransfer.renderBatch.active) return;
     this.#renderRefresh?.();
   }
 
@@ -2542,13 +2571,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item) return;
     if (item.parent?.uuid === this.#actorUuid) {
       invalidateCraftRecipeAvailabilityCaches();
-      if (!this.#busy) this.#renderRefresh?.();
+      if (!this.#busy && !this.#contentsTransfer.renderBatch.active) this.#renderRefresh?.();
       return;
     }
     if (!item.parent) {
       invalidateWorldRecipeLayoutCache();
       invalidateCraftRecipeAvailabilityCaches();
-      if (!this.#busy) this.#renderRefresh?.();
+      if (!this.#busy && !this.#contentsTransfer.renderBatch.active) this.#renderRefresh?.();
     }
   }
 
@@ -3523,7 +3552,7 @@ function getCraftRecipeOutputQuantity(recipe, recipeId = DEFAULT_CRAFT_RECIPE_ID
 }
 
 function createCraftOutputItemData(source, { mode = CRAFT_MODE_CREATE } = {}) {
-  const data = source.toObject();
+  const data = createSourcedInventoryItemData(source);
   delete data._id;
   delete data.id;
   delete data.folder;
@@ -4740,36 +4769,6 @@ function getIndexedActorCraftToolCandidates(index = null, requirement = {}, supp
 function getCraftRequirementKey({ sourceKeys = new Set(), sourceUuid = "" } = {}) {
   const normalizedKeys = Array.from(sourceKeys).map(key => String(key ?? "").trim()).filter(Boolean).sort();
   return JSON.stringify(normalizedKeys.length ? normalizedKeys : [String(sourceUuid ?? "").trim()].filter(Boolean));
-}
-
-function getCraftItemSourceKeys(itemOrDocument = null, fallbackUuid = "") {
-  const keys = new Set();
-  collectCraftItemSourceKeys(keys, itemOrDocument, fallbackUuid);
-  return keys;
-}
-
-function collectCraftItemSourceKeys(keys, itemOrDocument = null, fallbackUuid = "", depth = 0) {
-  if (depth > 4) return;
-  const document = typeof itemOrDocument === "string" ? resolveWorldItemSync(itemOrDocument) : itemOrDocument;
-  for (const key of [
-    fallbackUuid,
-    document?.uuid,
-    document?._stats?.duplicateSource,
-    document?._source?._stats?.duplicateSource,
-    foundry.utils.getProperty(document, "flags.core.sourceId"),
-    foundry.utils.getProperty(document, "_source.flags.core.sourceId"),
-    foundry.utils.getProperty(document, "flags.fallout-maw.sourceId"),
-    foundry.utils.getProperty(document, "_source.flags.fallout-maw.sourceId")
-  ]) {
-    const normalized = String(key ?? "").trim();
-    if (normalized && !isCompendiumUuid(normalized)) keys.add(normalized);
-  }
-
-  for (const key of Array.from(keys)) {
-    if (key === fallbackUuid || key === document?.uuid) continue;
-    const sourceDocument = resolveWorldItemSync(key);
-    if (sourceDocument) collectCraftItemSourceKeys(keys, sourceDocument, "", depth + 1);
-  }
 }
 
 function getCraftItemFingerprint(itemOrNode = null) {

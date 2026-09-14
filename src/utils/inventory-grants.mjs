@@ -1,4 +1,5 @@
 import { getCreatureOptions } from "../settings/accessors.mjs";
+import { createSourcedInventoryItemData } from "./craft-item-source.mjs";
 import {
   getActorInventoryGridDimensions,
   getActorRootInventoryGridOptions
@@ -202,7 +203,7 @@ export function areInventoryItemsStackCompatible(sourceData, targetItem) {
 }
 
 function prepareGrantItemData(itemOrData, quantity, parentId) {
-  const source = itemOrData?.toObject?.() ?? itemOrData;
+  const source = typeof itemOrData?.toObject === "function" ? createSourcedInventoryItemData(itemOrData) : itemOrData;
   const itemData = foundry.utils.deepClone(source);
   delete itemData._id;
   delete itemData.id;

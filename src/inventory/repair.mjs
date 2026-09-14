@@ -1,3 +1,4 @@
+import { createRectanglePacker } from "./packing.mjs";
 import {
   BUTCHERING_STORAGE_PARENT_ID,
   BUTCHERING_STORAGE_PLACEMENT_MODE,
@@ -815,44 +816,13 @@ function findAvailablePlacement(
   preferredRotated
 ) {
   const rotations = getRotationPreference(item, preferredRotated);
-  const occupiedBottom = getOccupiedRows(occupied);
-
-  for (const rotated of rotations) {
-    const footprint = getFootprintForRotation(item, allItems, rotated);
-    if (footprint.width > dimensions.columns) continue;
-    const maxX = dimensions.columns - footprint.width + 1;
-    const maxY = options.allowOverflowRows
-      ? Math.max(dimensions.rows, occupiedBottom) + Math.max(64, footprint.height + occupied.length + 1)
-      : dimensions.rows - footprint.height + 1;
-    if (maxX < 1 || maxY < 1) continue;
-
-    for (let y = 1; y <= maxY; y += 1) {
-      for (let x = 1; x <= maxX; x += 1) {
-        const placement = {
-          mode,
-          equipmentSlot: "",
-          weaponSet: "",
-          weaponSlot: "",
-          limbKey: "",
-          constructPartOrder: 0,
-          x,
-          y,
-          width: footprint.width,
-          height: footprint.height,
-          rotated
-        };
-        if (!isInventoryPlacementWithinBounds(
-          placement,
-          dimensions.columns,
-          dimensions.rows,
-          options
-        )) continue;
-        if (occupied.some(existing => inventoryPlacementsOverlap(placement, existing))) continue;
-        return placement;
-      }
-    }
-  }
-  return null;
+  const packer = createRectanglePacker({ ...dimensions, ...options, occupied });
+  const orientations = rotations.map(rotated => ({ ...getFootprintForRotation(item, allItems, rotated), rotated }));
+  const rectangle = packer.find({ ...orientations[0], orientations });
+  return rectangle ? {
+    mode, equipmentSlot: "", weaponSet: "", weaponSlot: "", limbKey: "",
+    constructPartOrder: 0, ...rectangle
+  } : null;
 }
 
 function createEmergencyLockedStoragePlacements(item, allItems, occupied, mode) {

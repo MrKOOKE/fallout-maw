@@ -1,5 +1,7 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { InventoryBlockLayout } from "../utils/inventory-block-layout.mjs";
+import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
+import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { TRAVEL_GROUP_FLAG } from "../global-map/constants.mjs";
@@ -227,6 +229,7 @@ import {
   getWeaponProficiencyInfluenceLayers
 } from "../utils/weapon-proficiencies.mjs";
 import { grantActorInventoryItem, planActorInventoryGrant } from "../utils/inventory-grants.mjs";
+import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import {
   getWeaponDamageSourceTooltipDirection,
@@ -413,6 +416,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #viewportResizeHandler = null;
   #tabScrollPositions = new Map();
   #inventoryBlockLayout = new InventoryBlockLayout();
+  #contentsTransfer = new InventoryTransferMode();
   #worldSidebarPeek = false;
 
   static DEFAULT_OPTIONS = {
@@ -761,6 +765,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return _mergedContext;
   }
 
+  render(...args) {
+    if (this.#contentsTransfer.renderBatch.defer(args)) return Promise.resolve(this);
+    return super.render(...args);
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.element?.classList.toggle("fallout-maw-travel-carrier-sheet", isTravelGroupCarrierActor(this.actor));
@@ -773,6 +782,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateInventoryInteractions();
     this.#activateWeaponSlotAspectSizing();
     this.#inventoryBlockLayout.bind(this.element?.querySelector(".fallout-maw-inventory-tab"));
+    this.#contentsTransfer.bind(this.element, {
+      application: this,
+      getActor: () => this.actor,
+      canUse: () => Boolean(this.isEditable && this.actor?.isOwner),
+      canTransfer: canTransferOwnedContents,
+      onSelect: () => { this.#closeInventoryContextMenu(); this.#clearInventoryTooltip({ force: true }); }
+    });
     this.#activateLimbControlClicks();
     this.#limbPopover.bind(
       this.element?.querySelector("[data-limb-popover-root]"),
@@ -790,6 +806,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     super._onClose(options);
     this.#unbindViewportResize();
     this.#inventoryBlockLayout.destroy();
+    this.#contentsTransfer.destroy();
     this.#closeInventoryContextMenu();
     this.#clearInventoryTooltip({ force: true });
     this.#limbPopover.destroy();
@@ -1766,11 +1783,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #onTabScroll(event) {
     const tab = event.target?.closest?.(".tab[data-tab]");
     if (!tab) return;
-    const scrollContainer = event.target?.closest?.("[data-scroll-key]");
+    const scrollContainer = event.target?.matches?.("[data-scroll-key]") ? event.target : null;
+    if (!scrollContainer && event.target !== tab) return;
     const key = scrollContainer
       ? `${tab.dataset.tab}:${scrollContainer.dataset.scrollKey}`
       : tab.dataset.tab;
-    this.#tabScrollPositions.set(key, event.target?.scrollTop ?? tab.scrollTop ?? 0);
+    this.#tabScrollPositions.set(key, { top: event.target.scrollTop ?? 0, left: event.target.scrollLeft ?? 0 });
   }
 
   #restoreActiveTabScroll() {
@@ -1782,10 +1800,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (!this.element?.isConnected) return;
       const nextActiveTab = this.element.querySelector(".tab.active[data-tab]");
       if (!nextActiveTab || (nextActiveTab.dataset.tab !== activeTab.dataset.tab)) return;
-      nextActiveTab.scrollTop = this.#tabScrollPositions.get(nextActiveTab.dataset.tab) ?? 0;
+      const tabPosition = this.#tabScrollPositions.get(nextActiveTab.dataset.tab);
+      nextActiveTab.scrollTop = tabPosition?.top ?? 0;
+      nextActiveTab.scrollLeft = tabPosition?.left ?? 0;
       for (const container of nextActiveTab.querySelectorAll("[data-scroll-key]")) {
         const key = `${nextActiveTab.dataset.tab}:${container.dataset.scrollKey}`;
-        container.scrollTop = this.#tabScrollPositions.get(key) ?? 0;
+        const position = this.#tabScrollPositions.get(key);
+        container.scrollTop = position?.top ?? 0;
+        container.scrollLeft = position?.left ?? 0;
       }
     });
   }
@@ -2415,7 +2437,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const item = await Item.implementation.fromDropData(data).catch(() => null);
     if (item instanceof Item) {
-      return { item, itemData: applyInventoryDragRotation(item.toObject(), data) };
+      return { item, itemData: applyInventoryDragRotation(createSourcedInventoryItemData(item), data) };
     }
 
     const ownedItem = (
@@ -6952,8 +6974,11 @@ function renderItemValueBreakdownSource(source = {}, formatter = formatNumber) {
   const img = String(source.img ?? "").trim() || "icons/svg/item-bag.svg";
   const operation = source.valueLabel || formatItemValueBreakdownOperation(source, formatter);
   const hasTransition = Number.isFinite(Number(source.before)) && Number.isFinite(Number(source.after));
+  const transitionDelta = hasTransition && source.operation !== "override"
+    ? `${formatSignedBreakdownValue(Number(source.after) - Number(source.before), formatter)} · `
+    : "";
   const transition = hasTransition
-    ? `${formatSignedBreakdownValue(Number(source.after) - Number(source.before), formatter)} · ${formatter(Number(source.before))} → ${formatter(Number(source.after))}`
+    ? `${transitionDelta}${formatter(Number(source.before))} → ${formatter(Number(source.after))}`
     : "";
   const details = [
     ...(Array.isArray(source.detailLabels) ? source.detailLabels : []),
@@ -7337,7 +7362,7 @@ function buildWeaponTooltipValueBreakdowns({
     minimum: 0,
     formatValue: value => `${formatNumber(value)} м`
   });
-  appendAttributionDeltaSources(maxRangeMeters, attackRangeAttribution?.sources, { suffix: " м" });
+  appendAttributionDeltaSources(maxRangeMeters, attackRangeAttribution?.sources, { suffix: " м", minimum: 0 });
   reconcileBreakdownTotal(maxRangeMeters, result.maxRangeMeters, item);
   const baseResolvedEffectiveRange = resolveBaseWeaponEffectiveRange(
     data?.effectiveRange,
@@ -7361,8 +7386,8 @@ function buildWeaponTooltipValueBreakdowns({
       formatValue: value => `${formatNumber(value)} м`
     })
   };
-  appendAttributionDeltaSources(effectiveRange.value, effectiveRangeNearAttribution?.sources, { suffix: " м" });
-  appendAttributionDeltaSources(effectiveRange.max, effectiveRangeFarAttribution?.sources, { suffix: " м" });
+  appendAttributionDeltaSources(effectiveRange.value, effectiveRangeNearAttribution?.sources, { suffix: " м", minimum: 0 });
+  appendAttributionDeltaSources(effectiveRange.max, effectiveRangeFarAttribution?.sources, { suffix: " м", minimum: 0 });
   reconcileBreakdownTotal(effectiveRange.value, result.effectiveRange?.value, item);
   reconcileBreakdownTotal(effectiveRange.max, result.effectiveRange?.max, item);
   const recoil = buildWeaponRecoilAttribution(item, actor, baseData, data);
@@ -7803,15 +7828,28 @@ function appendFixedCombatAttribution(breakdown, fixedModifiers = {}, key = "") 
   }
 }
 
-function appendAttributionDeltaSources(breakdown, sources = [], { suffix = "" } = {}) {
+function appendAttributionDeltaSources(breakdown, sources = [], {
+  suffix = "",
+  minimum = Number.NEGATIVE_INFINITY
+} = {}) {
+  if (!breakdown) return;
+  // Keep the raw sum across effects; only the displayed transition is bounded.
+  // Otherwise 15 - 999 + 10 would incorrectly become 10 instead of zero.
+  let running = Number(breakdown.total) || 0;
   for (const source of sources ?? []) {
-    const value = Number(source?.value) || 0;
-    if (!value) continue;
+    const value = Number(source?.value);
+    if (!Number.isFinite(value) || !value) continue;
+    const before = running;
+    running += value;
+    const after = Math.max(minimum, running);
+    const bounded = before !== breakdown.total || after !== running;
     appendBreakdownStep(breakdown, {
       ...source,
-      operation: "add",
-      value,
-      valueLabel: source.valueLabel ?? `${formatSignedNumber(value)}${suffix}`
+      operation: bounded ? "override" : "add",
+      value: bounded ? after : value,
+      valueLabel: bounded
+        ? `→ ${formatNumber(after)}${suffix}`
+        : source.valueLabel ?? `${formatSignedNumber(value)}${suffix}`
     });
   }
 }

@@ -1,4 +1,5 @@
 import { TEMPLATES, SYSTEM_ID } from "../constants.mjs";
+import { beginInventoryContentsRender } from "../utils/inventory-render-batch.mjs";
 import { DROPPED_ITEMS_ACTOR_FLAG } from "../items/dropped-items.mjs";
 import { cloneActorDevelopment, normalizeActorDevelopment } from "../advancement/index.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
@@ -157,6 +158,7 @@ export class FalloutMaWActor extends Actor {
   }
 
   _preCreateDescendantDocuments(parent, collection, data, options, userId) {
+    if (isActorItemCollection(this, parent, collection)) beginInventoryContentsRender(options);
     super._preCreateDescendantDocuments(parent, collection, data, options, userId);
     if (isActorItemCollection(this, parent, collection)) {
       invalidateActorLoadPreparation(this);
@@ -164,6 +166,7 @@ export class FalloutMaWActor extends Actor {
   }
 
   _preUpdateDescendantDocuments(parent, collection, changes, options, userId) {
+    if (isActorItemCollection(this, parent, collection)) beginInventoryContentsRender(options);
     super._preUpdateDescendantDocuments(parent, collection, changes, options, userId);
     if (
       isActorItemCollection(this, parent, collection)
@@ -174,6 +177,7 @@ export class FalloutMaWActor extends Actor {
   }
 
   _preDeleteDescendantDocuments(parent, collection, ids, options, userId) {
+    if (isActorItemCollection(this, parent, collection)) beginInventoryContentsRender(options);
     super._preDeleteDescendantDocuments(parent, collection, ids, options, userId);
     if (isActorItemCollection(this, parent, collection)) {
       invalidateActorLoadPreparation(this);

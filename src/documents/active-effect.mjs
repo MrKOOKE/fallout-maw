@@ -4,6 +4,7 @@ import {
   getDetectionModeRangeEffectKey
 } from "../canvas/vision-effect-keys.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { unregisterDeletedActiveEffect } from "../effects/registry.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
   EFFECT_EXPIRATION_ACTIONS,
@@ -19,6 +20,7 @@ const pendingExpirationActions = new Set();
  */
 export class FalloutMaWActiveEffect extends ActiveEffect {
   _onDelete(options, userId) {
+    unregisterDeletedActiveEffect(this);
     super._onDelete(options, userId);
     if (!game.user?.isActiveGM) return;
     void this.executeExpirationAction();

@@ -17,6 +17,7 @@ import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skil
 import { withQueuedReactionOpportunityWave } from "./reaction-hub.mjs";
 import { advanceWorldTime, registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
+import { refreshActorEffectExpiration } from "../effects/registry.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import { regionBehaviorTargetsActor } from "../canvas/region-targeting.mjs";
 import { getPeriodicDamageScenes } from "../canvas/periodic-region-index.mjs";
@@ -5362,6 +5363,10 @@ async function createFirstAidWithdrawalEffect(actor, request = {}) {
   const startTime = Number.isFinite(Number(data.source?.worldTime))
     ? Number(data.source.worldTime)
     : (Number(game.time?.worldTime) || 0);
+  const now = Number(game.time?.worldTime) || 0;
+  if (data.durationSeconds > 0 && startTime + data.durationSeconds <= now && data.healingPerTick <= 0) {
+    return [];
+  }
   const tickCount = data.healingPerTick > 0 && data.durationSeconds > 0
     ? Math.max(1, Math.ceil(data.durationSeconds / data.intervalSeconds))
     : 0;
@@ -5470,7 +5475,33 @@ async function applyStoredFirstAidWithdrawalOnDelete(effect) {
   if (!payload) return;
   const actor = effect.parent;
   if (!actor) return;
-  await createFirstAidWithdrawalEffect(actor, payload);
+  const now = Number(game.time?.worldTime) || 0;
+  const startTime = getFirstAidWithdrawalStartTime(effect, now);
+  const created = await createFirstAidWithdrawalEffect(actor, {
+    ...payload,
+    source: { ...(payload.source ?? {}), worldTime: startTime }
+  });
+  if (!getTimeMechanicsIgnored() && created.some(withdrawal => (
+    hasTimedEffectReachedEnd(withdrawal, withdrawal.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY), now)
+  ))) {
+    // Deletion hooks are asynchronous: finish newly created periodic work after the parent mutation releases.
+    await runDamageHubOperation(async () => {
+      const damageResults = [];
+      await processActorTimedDamageEffects(actor, Number(game.time?.worldTime) || now, 0, damageResults);
+      await publishDamageSummaryMessage(damageResults);
+      await notifyDamageApplied(damageResults);
+    });
+  }
+}
+
+function getFirstAidWithdrawalStartTime(effect, now) {
+  const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+  const endTime = data?.endTime == null ? NaN : Number(data.endTime);
+  if (Number.isFinite(endTime) && now >= endTime) return endTime;
+  const startTime = effect.start?.time == null ? NaN : Number(effect.start.time);
+  const seconds = Number(effect.duration?.seconds);
+  if (Number.isFinite(startTime) && seconds > 0 && now >= startTime + seconds) return startTime + seconds;
+  return now;
 }
 
 function normalizeNeedChangesRequest(request = {}) {
@@ -5757,7 +5788,9 @@ function registerDamageTimeHooks() {
   Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
   Hooks.on("preUpdateActiveEffect", preventManagedTimedDamageEffectExpiration);
   Hooks.on("deleteActiveEffect", effect => {
-    void applyStoredFirstAidWithdrawalOnDelete(effect);
+    void applyStoredFirstAidWithdrawalOnDelete(effect).catch(error => {
+      console.error(`${SYSTEM_ID} | Failed to apply first-aid withdrawal for ${effect.uuid}`, error);
+    });
   });
   damageTimeHooksRegistered = true;
 }
@@ -5816,14 +5849,22 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
   const damageResults = [];
   for (const actor of await timedDamageActorIndex.values()) {
     if (!actor?.isOwner) continue;
-    await queueActorDamageMutation(actor.uuid, async freshActor => {
-      if (!freshActor?.isOwner) return;
-      const entries = [];
-      const effectUpdates = [];
-      const effectDeleteIds = new Set();
-      const lockedEffectUuids = new Set();
-      let refreshManagedExpiry = false;
+    await processActorTimedDamageEffects(actor, now, elapsed, damageResults);
+  }
+  await publishDamageSummaryMessage(damageResults);
+  await notifyDamageApplied(damageResults);
+}
 
+async function processActorTimedDamageEffects(actor, now, elapsed, damageResults) {
+  await queueActorDamageMutation(actor.uuid, async freshActor => {
+    if (!freshActor?.isOwner) return;
+    const entries = [];
+    const effectUpdates = [];
+    const effectDeleteIds = new Set();
+    const lockedEffectUuids = new Set();
+    let refreshManagedExpiry = false;
+
+    try {
       for (const effect of Array.from(freshActor.effects ?? [])) {
         const damageChanges = getDamageEffectChanges(effect).filter(isDamageHubManagedTimedEffect);
         const periodicHealingChanges = getPeriodicHealingEffectChanges(effect);
@@ -5859,47 +5900,45 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
         }
       }
 
-      try {
-        for (const update of effectUpdates) {
-          if (effectDeleteIds.has(update.effectId)) continue;
-          const effect = freshActor.effects?.get(update.effectId);
-          if (!effect) continue;
-          await updatePeriodicEffect(effect, update.data);
-        }
-        await deletePeriodicEffects(freshActor, Array.from(effectDeleteIds));
-        const damageEntries = entries.filter(entry => entry.mode !== MODE_HEALING);
-        const healingEntries = entries.filter(entry => entry.mode === MODE_HEALING);
-        if (damageEntries.length) damageResults.push(await applyPeriodicDamageBatch(freshActor, damageEntries));
-        if (healingEntries.length) {
-          const healingRequests = healingEntries.map(entry => ({
-            actorUuid: freshActor.uuid,
-            amount: entry.amount,
-            damageTypeKey: entry.damageTypeKey || HEALING_DAMAGE_TYPE_KEY,
-            mode: MODE_HEALING,
-            scope: SCOPE_HEALTH,
-            applyMitigation: false,
-            processDamageTypeSettings: false,
-            source: {
-              ...(entry.source ?? {})
-            }
-          }));
-          await executeDamageSystemEventWorkflow(
-            healingRequests,
-            allowedRequests => applyDamageApplicationsNow({
-              actorUuid: freshActor.uuid,
-              requests: allowedRequests
-            }, { createSummary: false }),
-            { batch: healingRequests.length > 1 }
-          );
-        }
-        if (refreshManagedExpiry) await refreshManagedTimedEffectExpiration(freshActor);
-      } finally {
-        for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
+      for (const update of effectUpdates) {
+        if (effectDeleteIds.has(update.effectId)) continue;
+        const effect = freshActor.effects?.get(update.effectId);
+        if (!effect) continue;
+        await updatePeriodicEffect(effect, update.data);
       }
-    });
-  }
-  await publishDamageSummaryMessage(damageResults);
-  await notifyDamageApplied(damageResults);
+      await deletePeriodicEffects(freshActor, Array.from(effectDeleteIds));
+      const damageEntries = entries.filter(entry => entry.mode !== MODE_HEALING);
+      const healingEntries = entries.filter(entry => entry.mode === MODE_HEALING);
+      if (damageEntries.length) damageResults.push(await applyPeriodicDamageBatch(freshActor, damageEntries));
+      if (healingEntries.length) {
+        const healingRequests = healingEntries.map(entry => ({
+          actorUuid: freshActor.uuid,
+          amount: entry.amount,
+          damageTypeKey: entry.damageTypeKey || HEALING_DAMAGE_TYPE_KEY,
+          mode: MODE_HEALING,
+          scope: SCOPE_HEALTH,
+          applyMitigation: false,
+          processDamageTypeSettings: false,
+          source: {
+            ...(entry.source ?? {})
+          }
+        }));
+        await executeDamageSystemEventWorkflow(
+          healingRequests,
+          allowedRequests => applyDamageApplicationsNow({
+            actorUuid: freshActor.uuid,
+            requests: allowedRequests
+          }, { createSummary: false }),
+          { batch: healingRequests.length > 1 }
+        );
+      }
+      if (refreshManagedExpiry) await refreshManagedTimedEffectExpiration(freshActor);
+    } finally {
+      for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
+    }
+  }).catch(error => {
+    console.error(`${SYSTEM_ID} | Failed to process timed effects for ${actor.uuid}`, error);
+  });
 }
 
 async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
@@ -6546,9 +6585,8 @@ function collectFirstAidTemporaryEffectTicks(effect, data, now) {
 }
 
 async function refreshManagedTimedEffectExpiration(actor) {
-  const ActiveEffectClass = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
-  if (!ActiveEffectClass?.registry?.refresh || !actor) return;
-  await ActiveEffectClass.registry.refresh(MANAGED_TIMED_DAMAGE_EXPIRY, {
+  if (!actor) return;
+  await refreshActorEffectExpiration(MANAGED_TIMED_DAMAGE_EXPIRY, {
     actors: new Set([actor])
   });
 }

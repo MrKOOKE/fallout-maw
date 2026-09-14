@@ -13663,6 +13663,122 @@ label.checkbox.fallout-maw-ability-change-choice {
   min-width: calc(var(--fallout-maw-token-hud-tile) * 0.32);
 }
 
+.application .fallout-maw-contents-transfer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1 1 auto;
+  gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] .fallout-maw-contents-transfer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 6;
+  flex: 0 0 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  margin-left: auto;
+  order: 1;
+  line-height: 1;
+  font-size: 1rem;
+  font-weight: 700;
+  border: 1px solid #938655;
+  border-radius: 2px;
+  color: #ddcc84;
+  background: linear-gradient(#303322, #14170f);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease, transform 80ms ease;
+  cursor: pointer;
+}
+
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] .fallout-maw-contents-transfer-button:hover:not(:disabled) {
+  color: #fff1b2;
+  border-color: #ead681;
+  background: linear-gradient(#56583a, #2b3020);
+  box-shadow: inset 0 0 0 1px rgba(238, 219, 137, 0.18), 0 0 5px rgba(225, 204, 119, 0.35);
+}
+
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] .fallout-maw-contents-transfer-button[aria-pressed="true"]:not(:disabled) {
+  color: #fff5c4;
+  border-color: #f1dc81;
+  background: linear-gradient(#70633a, #3b3721);
+  box-shadow: inset 0 0 0 1px rgba(242, 219, 126, 0.3), 0 0 5px rgba(225, 204, 119, 0.3);
+}
+
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] .fallout-maw-contents-transfer-button:active:not(:disabled) {
+  transform: translateY(1px);
+  background: #222619;
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.75);
+}
+
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] .fallout-maw-contents-transfer-button:focus-visible {
+  outline: 2px solid #fff1b2;
+  outline-offset: 2px;
+}
+
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] .fallout-maw-contents-transfer-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.application [data-contents-transfer-zone] { position: relative; }
+.application .fallout-maw-contents-transfer-grid-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.application.fallout-maw-actor-sheet [data-contents-transfer-zone] .fallout-maw-container-overview {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.application.fallout-maw-actor-sheet [data-contents-transfer-zone] .fallout-maw-container-overview-name {
+  flex: none;
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone]:not(.fallout-maw-panel) {
+  box-sizing: border-box;
+  padding: 0.45rem;
+}
+.application .fallout-maw-contents-transfer-highlight { display: none; }
+.application:is(.fallout-maw-actor-sheet, .fallout-maw-container-sheet) [data-contents-transfer-zone] > .fallout-maw-contents-transfer-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.application .contents-transfer-target > .fallout-maw-contents-transfer-highlight {
+  display: block;
+  border: 2px solid #99c879;
+  background: rgba(122, 171, 86, 0.13);
+}
+.application .contents-transfer-source > .fallout-maw-contents-transfer-highlight {
+  display: block;
+  border: 2px solid #dcca74;
+  background: rgba(220, 202, 116, 0.06);
+}
+.application .contents-transfer-target { cursor: pointer; }
+
+.application .contents-transfer-pending { cursor: progress; }
+.fallout-maw-contents-transfer-catalog {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.fallout-maw-contents-transfer-catalog > div { padding: 0.25rem 0.5rem; }
+
 .fallout-maw-token-hud-main-action.variable-width,
 .fallout-maw-token-hud-weapon-pick-tile.variable-width,
 .fallout-maw-token-hud-weapon-slot:not(.empty),
@@ -17038,7 +17154,7 @@ label.checkbox.fallout-maw-ability-change-choice {
   border: 0;
   margin: 0;
   overflow-x: auto;
-  padding: 0 0 0.4rem;
+  padding: 0.45rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview {
@@ -17081,6 +17197,11 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-tab h2.fallout-maw-container-overview-name::after {
   content: none;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab h2.fallout-maw-contents-transfer-heading {
+  display: flex;
+  flex: 1 1 auto;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview .fallout-maw-load-meter {
@@ -17730,7 +17851,7 @@ label.checkbox.fallout-maw-ability-change-choice {
   max-height: none;
   min-height: 0;
   min-width: 0;
-  overflow: visible;
+  overflow-x: auto;
   padding-right: 0;
   scrollbar-gutter: auto;
 }

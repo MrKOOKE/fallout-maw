@@ -45,11 +45,27 @@ import {
 } from "../data/models/item-data-models.mjs";
 import { getUnchangedItemSystemField } from "./item-model-initialization.mjs";
 import { getPreviewItemValidationOptions } from "./token-clone-initialization.mjs";
+import { completeInventoryContentsRender } from "../utils/inventory-render-batch.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 const REUSABLE_ITEM_MODELS = new Set([AbilityDataModel, DiseaseDataModel, GearDataModel, TraumaDataModel]);
 
 export class FalloutMaWItem extends Item {
+  static async _onCreateOperation(documents, operation, user) {
+    try { return await super._onCreateOperation(documents, operation, user); }
+    finally { completeInventoryContentsRender(operation); }
+  }
+
+  static async _onUpdateOperation(documents, operation, user) {
+    try { return await super._onUpdateOperation(documents, operation, user); }
+    finally { completeInventoryContentsRender(operation); }
+  }
+
+  static async _onDeleteOperation(documents, operation, user) {
+    try { return await super._onDeleteOperation(documents, operation, user); }
+    finally { completeInventoryContentsRender(operation); }
+  }
+
   static TRAUMA_CREATE_OPTION = TRAUMA_CREATE_OPTION;
   static DISEASE_CREATE_OPTION = DISEASE_CREATE_OPTION;
 

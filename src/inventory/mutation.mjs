@@ -68,12 +68,12 @@ export async function executeInventoryMutation(input, {
  * Normalize and combine plans which target the same Actor. Exported so tests
  * can assert that every UI surface produces the same domain mutation.
  */
-export function normalizeInventoryMutationPlans(input) {
+export function normalizeInventoryMutationPlans(input, { resolveActors = true } = {}) {
   const rawPlans = Array.isArray(input) ? input : [input];
   const grouped = new Map();
 
   for (const rawPlan of rawPlans.filter(Boolean)) {
-    const actor = resolveInventoryActor(rawPlan.actor);
+    const actor = resolveActors ? resolveInventoryActor(rawPlan.actor) : rawPlan.actor;
     const actorKey = getActorKey(actor);
     if (!actor || actor?.documentName !== "Actor" || !actorKey) {
       throw new TypeError("An Actor-owned inventory mutation requires a valid Actor.");
@@ -462,6 +462,12 @@ function createFoundryBatchOperations(plans, {
         expectedIds,
         strictIds
       });
+    }
+  }
+  if (forwardedOptions.falloutMawContentsActorUuids?.length) {
+    for (const [index, operation] of operations.entries()) {
+      operation.falloutMawContentsOperationIndex = index;
+      operation.falloutMawContentsOperationCount = operations.length;
     }
   }
   return { operations, operationMeta };

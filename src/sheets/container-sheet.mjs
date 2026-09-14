@@ -1,4 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
+import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
+import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
@@ -74,6 +76,8 @@ export function executeSearchContainerTransfer(transferId, payload = {}) {
 }
 
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
+  #contentsTransfer = new InventoryTransferMode();
+  #contentsTransferOptions = null;
   #draggedItemData = null;
   #draggedItemId = "";
   #hoverPreviewInputKey = "";
@@ -118,9 +122,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   constructor(options = {}) {
     const {
       searchTransferHandler = null,
+      contentsTransferOptions = null,
       ...sheetOptions
     } = options;
     super(sheetOptions);
+    this.#contentsTransferOptions = contentsTransferOptions;
     this.#searchTransferHandler = typeof searchTransferHandler === "function" ? searchTransferHandler : null;
     if (this.#searchTransferHandler) {
       this.#searchTransferId = foundry.utils.randomID();
@@ -186,8 +192,21 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     }, { inplace: false });
   }
 
+  render(...args) {
+    if (this.#contentsTransfer.renderBatch.defer(args)) return Promise.resolve(this);
+    return super.render(...args);
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#contentsTransfer.bind(this.element, {
+      getActor: () => this.actor,
+      canUse: () => Boolean(this.actor?.isOwner && this.isEditable),
+      canTransfer: canTransferOwnedContents,
+      ...this.#contentsTransferOptions,
+      application: this,
+      onSelect: () => this.#clearItemTooltip({ force: true })
+    });
     this.#hoverPreviewKey = "";
     this.#clearItemTooltip({ force: true });
     this.element?.querySelectorAll("[data-item-id]").forEach(element => {
@@ -210,6 +229,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   _onClose(options) {
     super._onClose(options);
+    this.#contentsTransfer.destroy();
     if (this.actor) delete this.actor.apps[this.id];
     if (this.#searchTransferId) activeSearchContainerTransfers.delete(this.#searchTransferId);
     this.#unbindForegroundPriority();

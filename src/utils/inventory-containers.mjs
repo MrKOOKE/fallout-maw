@@ -1,3 +1,4 @@
+import { createRectanglePacker, packInventoryRectangles } from "../inventory/packing.mjs";
 import { toInteger } from "./numbers.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "./item-functions.mjs";
 
@@ -321,11 +322,10 @@ export function createAnchoredItemStackPartsForQuantity({
     : contextPlacementItems
       .filter(item => item._stackHasStoredPlacement !== false)
       .map(item => normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems));
-  const occupiedCells = createOccupiedInventoryCellSet([
-    ...occupiedPlacements,
-    ...reserved
-  ]);
-  const cursor = { x: 1, y: 1 };
+  const packer = createRectanglePacker({
+    columns, rows, occupied: [...occupiedPlacements, ...reserved],
+    zones: options.zones, allowOverflowRows: options.allowOverflowRows
+  });
   const anchored = [];
 
   for (let index = 0; index < parts.length; index += 1) {
@@ -340,23 +340,14 @@ export function createAnchoredItemStackPartsForQuantity({
     ) {
       placement = preferredPlacement;
     } else {
-      placement = findFirstAvailableInventoryPlacementFromOccupied(
-        occupiedCells,
-        columns,
-        rows,
-        partData,
-        allItems,
-        options,
-        cursor
-      );
+      const candidate = createInventoryPackingCandidate(partData, allItems);
+      const rectangle = packer.find(candidate);
+      placement = applyPackedInventoryRectangle(candidate, rectangle);
     }
-    if (!placement) return null;
+    if (!placement || !packer.reserve(placement)) return null;
     applyStackPartPlacement(part, placement);
     anchored.push(part);
     reserved.push(placement);
-    addInventoryPlacementCells(occupiedCells, placement);
-    cursor.x = placement.x;
-    cursor.y = placement.y;
   }
 
   return anchored;
@@ -855,6 +846,30 @@ export function createInventoryPlacement(x = 1, y = 1, itemOrSystem = null, item
   };
 }
 
+function getInventoryItemForRotation(itemOrSystem, rotated) {
+  const system = getItemSystem(itemOrSystem);
+  if (!itemOrSystem || Boolean(system.placement?.rotated) === Boolean(rotated)) return itemOrSystem;
+  return {
+    id: getItemId(itemOrSystem), _id: getItemId(itemOrSystem), type: getItemType(itemOrSystem),
+    system: { ...system, placement: { ...system.placement, rotated: Boolean(rotated) } }
+  };
+}
+
+/** Both legal orientations, without changing source data or rotating container contents. */
+export function createInventoryPackingCandidate(itemOrSystem = null, items = null) {
+  const current = createInventoryPlacement(1, 1, itemOrSystem, items);
+  const turned = createInventoryPlacement(1, 1, getInventoryItemForRotation(itemOrSystem, !current.rotated), items);
+  const orientations = [current];
+  if (turned.width !== current.width || turned.height !== current.height) orientations.push(turned);
+  return { ...current, orientations };
+}
+
+function applyPackedInventoryRectangle(candidate, rectangle) {
+  if (!rectangle) return null;
+  const { orientations, ...placement } = candidate;
+  return { ...placement, ...rectangle };
+}
+
 export function normalizeInventoryPlacement(
   placement = {},
   itemOrSystem = null,
@@ -862,10 +877,11 @@ export function normalizeInventoryPlacement(
   memo = new Map(),
   visiting = new Set()
 ) {
-  const basePlacement = createInventoryPlacement(placement?.x, placement?.y, itemOrSystem, null);
+  const rotatedItem = getInventoryItemForRotation(itemOrSystem, placement?.rotated ?? getItemSystem(itemOrSystem)?.placement?.rotated);
+  const basePlacement = createInventoryPlacement(placement?.x, placement?.y, rotatedItem, null);
   const effectiveFootprint = items
-    ? getItemFootprint(itemOrSystem, items, memo, visiting)
-    : getItemEffectiveBaseFootprint(itemOrSystem);
+    ? getItemFootprint(rotatedItem, items, rotatedItem === itemOrSystem ? memo : new Map(), visiting)
+    : getItemEffectiveBaseFootprint(rotatedItem);
   const hasItem = Boolean(itemOrSystem);
 
   return {
@@ -923,30 +939,6 @@ function placementFitsInventoryZone(placement, zone) {
     && (placement.x + placement.width - 1) <= (zone.x + zone.width - 1)
     && (placement.y + placement.height - 1) <= (zone.y + zone.height - 1)
   );
-}
-
-function getInventoryPlacementPriorityZones(zones = [], itemOrSystem = null, allItems = []) {
-  if (!Array.isArray(zones) || !zones.length) return [];
-  const footprint = getItemFootprint(itemOrSystem, allItems);
-  return zones
-    .map(zone => ({
-      id: String(zone.id ?? ""),
-      x: Math.max(1, toInteger(zone.x) || 1),
-      y: Math.max(1, toInteger(zone.y) || 1),
-      width: Math.max(1, toInteger(zone.width) || 1),
-      height: Math.max(1, toInteger(zone.height) || 1),
-      base: Boolean(zone.base)
-    }))
-    .filter(zone => footprint.width <= zone.width && footprint.height <= zone.height)
-    .sort((left, right) => {
-      const areaDifference = (left.width * left.height) - (right.width * right.height);
-      if (areaDifference !== 0) return areaDifference;
-      const baseDifference = Number(left.base) - Number(right.base);
-      if (baseDifference !== 0) return baseDifference;
-      const yDifference = left.y - right.y;
-      if (yDifference !== 0) return yDifference;
-      return left.x - right.x;
-    });
 }
 
 export function placementContainsInventoryCell(placement, x, y) {
@@ -1107,114 +1099,58 @@ export function findFirstAvailableInventoryPlacement(
 }
 
 /**
- * Build a row-major placement planner for a sequence of Items targeting the
- * same inventory context. Existing occupancy is resolved once; every accepted
- * placement is then added to an occupied-cell set in constant time.
- *
- * This is intended for batch planners. Single-Item interactions should keep
- * using findFirstAvailableInventoryPlacement so they always inspect the live
- * collection directly.
+ * Resolve existing occupancy once. Single additions fill compact free space;
+ * known batches compare whole-group packings without moving existing items.
  */
 export function createInventoryPlacementPlanner(
-  contextItems,
-  columns,
-  rows,
-  allItems = contextItems,
-  reservedPlacements = [],
-  options = {}
+  contextItems, columns, rows, allItems = contextItems, reservedPlacements = [], options = {}
 ) {
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
-
   const resolved = resolveInventoryGridPlacements(
-    getItemsArray(contextItems),
-    columns,
-    rows,
-    getItemsArray(allItems),
-    options
+    getItemsArray(contextItems), columns, rows, getItemsArray(allItems), options
   );
   if (!resolved) return null;
-
-  const occupiedCells = new Set();
-  for (const entry of resolved.items) {
-    if (!entry.phantom) addInventoryPlacementCells(occupiedCells, entry.placement);
-  }
-  for (const placement of reservedPlacements ?? []) {
-    if (placement) addInventoryPlacementCells(occupiedCells, placement);
-  }
-
+  const occupied = [
+    ...resolved.items.filter(entry => !entry.phantom).map(entry => entry.placement),
+    ...(reservedPlacements ?? []).filter(Boolean)
+  ];
+  const context = () => ({ columns, rows, occupied, zones: options.zones, allowOverflowRows: options.allowOverflowRows });
+  let packer = createRectanglePacker(context());
   const reserve = placement => {
-    if (!placement) return false;
-    if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
-    if (!isInventoryPlacementCellSetAvailable(placement, occupiedCells)) return false;
-    addInventoryPlacementCells(occupiedCells, placement);
+    if (!packer.reserve(placement)) return false;
+    occupied.push(placement);
     return true;
   };
-
   return {
     findAndReserve(itemOrSystem = null, currentAllItems = allItems) {
-      const placement = findFirstAvailableInventoryPlacementFromOccupied(
-        occupiedCells,
-        columns,
-        rows,
-        itemOrSystem,
-        getItemsArray(currentAllItems),
-        options,
-        { x: 1, y: 1 }
-      );
+      const candidate = createInventoryPackingCandidate(itemOrSystem, getItemsArray(currentAllItems));
+      const rectangle = packer.find(candidate);
+      const placement = applyPackedInventoryRectangle(candidate, rectangle);
       if (!placement) return null;
-      addInventoryPlacementCells(occupiedCells, placement);
-      return placement;
+      return reserve(placement) ? placement : null;
+    },
+    packAndReserve(items, currentAllItems = allItems) {
+      const candidates = items.map(item => createInventoryPackingCandidate(item, getItemsArray(currentAllItems)));
+      const rectangles = packInventoryRectangles(candidates, context());
+      return rectangles.map((rectangle, index) => {
+        if (!rectangle) return null;
+        const placement = applyPackedInventoryRectangle(candidates[index], rectangle);
+        return reserve(placement) ? placement : null;
+      });
     },
     reserve,
     reserveAll(placements = []) {
-      const accepted = [];
+      const count = occupied.length;
       for (const placement of placements) {
-        if (!reserve(placement)) {
-          for (const acceptedPlacement of accepted) {
-            removeInventoryPlacementCells(occupiedCells, acceptedPlacement);
-          }
-          return false;
-        }
-        accepted.push(placement);
+        if (reserve(placement)) continue;
+        occupied.length = count;
+        packer = createRectanglePacker(context());
+        return false;
       }
       return true;
     }
   };
-}
-
-function findFirstAvailableInventoryPlacementByZonePriority(
-  contextItems,
-  columns,
-  rows,
-  itemOrSystem = null,
-  allItems = contextItems,
-  excludeItemIds = [],
-  reservedPlacements = [],
-  options = {}
-) {
-  const zones = getInventoryPlacementPriorityZones(options.zones, itemOrSystem, allItems);
-  if (!zones.length) return null;
-
-  const seen = new Set();
-  for (const zone of zones) {
-    const maxX = zone.x + zone.width - Math.max(1, toInteger(getItemFootprint(itemOrSystem, allItems).width) || 1);
-    const maxY = zone.y + zone.height - Math.max(1, toInteger(getItemFootprint(itemOrSystem, allItems).height) || 1);
-    for (let y = zone.y; y <= maxY; y += 1) {
-      for (let x = zone.x; x <= maxX; x += 1) {
-        const key = getInventoryCellKey(x, y);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
-        if (!placementFitsInventoryZone(candidate, zone)) continue;
-        if (isInventoryPlacementAvailable(candidate, contextItems, columns, rows, allItems, excludeItemIds, reservedPlacements, options)) {
-          return candidate;
-        }
-      }
-    }
-  }
-
-  return null;
 }
 
 export function findFirstAvailableResolvedInventoryPlacement(
@@ -1239,64 +1175,12 @@ export function findFirstAvailableResolvedInventoryPlacement(
     .filter(entry => !entry.phantom)
     .map(entry => entry.placement);
 
-  const prioritizedPlacement = findFirstAvailableResolvedInventoryPlacementByZonePriority(
-    occupiedPlacements,
-    columns,
-    rows,
-    itemOrSystem,
-    allItems,
-    reservedPlacements,
-    options
-  );
-  if (prioritizedPlacement) return prioritizedPlacement;
-
-  const searchRows = getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextItems, reservedPlacements, options);
-  for (let y = 1; y <= searchRows; y += 1) {
-    for (let x = 1; x <= columns; x += 1) {
-      const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
-      if (!isInventoryPlacementWithinBounds(candidate, columns, rows, options)) continue;
-      if (reservedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
-      if (occupiedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function findFirstAvailableResolvedInventoryPlacementByZonePriority(
-  occupiedPlacements,
-  columns,
-  rows,
-  itemOrSystem = null,
-  allItems = [],
-  reservedPlacements = [],
-  options = {}
-) {
-  const zones = getInventoryPlacementPriorityZones(options.zones, itemOrSystem, allItems);
-  if (!zones.length) return null;
-
-  const seen = new Set();
-  for (const zone of zones) {
-    const footprint = getItemFootprint(itemOrSystem, allItems);
-    const maxX = zone.x + zone.width - footprint.width;
-    const maxY = zone.y + zone.height - footprint.height;
-    for (let y = zone.y; y <= maxY; y += 1) {
-      for (let x = zone.x; x <= maxX; x += 1) {
-        const key = getInventoryCellKey(x, y);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
-        if (!placementFitsInventoryZone(candidate, zone)) continue;
-        if (!isInventoryPlacementWithinBounds(candidate, columns, rows, options)) continue;
-        if (reservedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
-        if (occupiedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
-        return candidate;
-      }
-    }
-  }
-
-  return null;
+  const candidate = createInventoryPackingCandidate(itemOrSystem, options.itemItems ?? allItems);
+  const rectangle = createRectanglePacker({
+    columns, rows, occupied: [...occupiedPlacements, ...reservedPlacements],
+    zones: options.zones, allowOverflowRows: options.allowOverflowRows
+  }).find(candidate);
+  return applyPackedInventoryRectangle(candidate, rectangle);
 }
 
 export function buildInventoryCellStyle(x, y, placement = null) {
@@ -1431,25 +1315,6 @@ function addInventoryPlacementCells(cells, placement) {
       cells.add(getInventoryCellKey(x, y));
     }
   }
-}
-
-function removeInventoryPlacementCells(cells, placement) {
-  if (!cells || !placement) return;
-  for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-    for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-      cells.delete(getInventoryCellKey(x, y));
-    }
-  }
-}
-
-function isInventoryPlacementCellSetAvailable(placement, occupiedCells) {
-  if (!placement || !occupiedCells) return false;
-  for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-    for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-      if (occupiedCells.has(getInventoryCellKey(x, y))) return false;
-    }
-  }
-  return true;
 }
 
 function getInventoryCellKey(x, y) {
@@ -1722,13 +1587,11 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
 
   const items = createInventoryPlacementItems(getItemsArray(contextItems), allItems);
   const reservedPlacements = [];
-  const occupiedCells = new Set();
   const resolvedItems = [];
   let visualColumns = columns;
   let visualRows = rows;
   const reservePlacement = (item, placement, phantom = false) => {
     reservedPlacements.push(placement);
-    addInventoryPlacementCells(occupiedCells, placement);
     resolvedItems.push({ item, placement, phantom });
     visualColumns = Math.max(visualColumns, placement.x + placement.width - 1);
     visualRows = Math.max(visualRows, placement.y + placement.height - 1);
@@ -1746,7 +1609,6 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
   const preferredItemSet = new Set(preferredItems);
   const deferredItems = items.filter(item => !preferredItemSet.has(item));
   const unresolvedItems = [];
-  const autoPlacementCursor = { x: 1, y: 1 };
 
   for (const item of preferredItems) {
     const preferredPlacement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
@@ -1757,25 +1619,21 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
     unresolvedItems.push(item);
   }
 
-  for (const item of [...unresolvedItems, ...deferredItems]) {
-    let phantom = false;
-    let placement = findFirstAvailableInventoryPlacementFromOccupied(
-      occupiedCells,
-      columns,
-      rows,
-      item,
-      allItems,
-      options,
-      autoPlacementCursor
-    );
-    if (!placement) {
-      placement = findFirstPhantomInventoryPlacement(item, allItems, columns, rows, reservedPlacements);
-      phantom = true;
-    }
+  const pending = [...unresolvedItems, ...deferredItems];
+  const candidates = pending.map(item => createInventoryPackingCandidate(item, allItems));
+  const packed = packInventoryRectangles(candidates, {
+    columns, rows, occupied: reservedPlacements, zones: options.zones,
+    allowOverflowRows: options.allowOverflowRows
+  });
+  const overflow = [];
+  for (let index = 0; index < pending.length; index++) {
+    if (packed[index]) reservePlacement(pending[index], applyPackedInventoryRectangle(candidates[index], packed[index]));
+    else overflow.push(pending[index]);
+  }
+  for (const item of overflow) {
+    const placement = findFirstPhantomInventoryPlacement(item, allItems, columns, rows, reservedPlacements);
     if (!placement) return null;
-    autoPlacementCursor.x = placement.x;
-    autoPlacementCursor.y = placement.y;
-    reservePlacement(item, placement, phantom);
+    reservePlacement(item, placement, true);
   }
 
   if (options.compactVerticalOffset && resolvedItems.length) {
@@ -1798,77 +1656,6 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
     placements: reservedPlacements,
     items: resolvedItems
   };
-}
-
-function getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextItems = [], reservedPlacements = [], options = {}) {
-  rows = Math.max(1, toInteger(rows) || 1);
-  if (!options.allowOverflowRows) return rows;
-  const footprint = getItemFootprint(itemOrSystem, allItems);
-  const existingRows = [
-    ...createInventoryPlacementItems(getItemsArray(contextItems), allItems)
-      .filter(item => item._stackHasStoredPlacement !== false)
-      .map(item => normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems)),
-    ...reservedPlacements
-  ].reduce((max, placement) => Math.max(max, toInteger(placement?.y) + Math.max(1, toInteger(placement?.height)) - 1), rows);
-  const growthRows = Math.max(64, (getItemsArray(contextItems).length + reservedPlacements.length + 1) * Math.max(1, footprint.height + 1));
-  return Math.max(rows, existingRows) + growthRows;
-}
-
-function findFirstAvailableInventoryPlacementFromOccupied(
-  occupiedCells,
-  columns,
-  rows,
-  itemOrSystem = null,
-  allItems = [],
-  options = {},
-  cursor = { x: 1, y: 1 }
-) {
-  columns = Math.max(1, toInteger(columns) || 1);
-  rows = Math.max(1, toInteger(rows) || 1);
-  const footprint = getItemFootprint(itemOrSystem, allItems);
-  const maxX = Math.max(1, columns - footprint.width + 1);
-  const searchRows = options.allowOverflowRows
-    ? rows + Math.max(64, (occupiedCells?.size ?? 0) + footprint.height + 1)
-    : rows;
-  let startY = Math.max(1, toInteger(cursor?.y) || 1);
-  let startX = Math.max(1, Math.min(maxX, toInteger(cursor?.x) || 1));
-
-  const zones = getInventoryPlacementPriorityZones(options.zones, itemOrSystem, allItems);
-  if (zones.length) {
-    const seen = new Set();
-    for (const zone of zones) {
-      const zoneMaxX = zone.x + zone.width - footprint.width;
-      const zoneMaxY = zone.y + zone.height - footprint.height;
-      for (let y = zone.y; y <= zoneMaxY; y += 1) {
-        for (let x = zone.x; x <= zoneMaxX; x += 1) {
-          const key = getInventoryCellKey(x, y);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const placement = createInventoryPlacement(x, y, itemOrSystem, allItems);
-          if (!placementFitsInventoryZone(placement, zone)) continue;
-          if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) continue;
-          if (!isInventoryPlacementCellSetAvailable(placement, occupiedCells)) continue;
-          return placement;
-        }
-      }
-    }
-  }
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    const fromY = pass === 0 ? startY : 1;
-    const toY = pass === 0 ? searchRows : Math.max(0, startY - 1);
-    for (let y = fromY; y <= toY; y += 1) {
-      const fromX = pass === 0 && y === startY ? startX : 1;
-      for (let x = fromX; x <= maxX; x += 1) {
-        const placement = createInventoryPlacement(x, y, itemOrSystem, allItems);
-        if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) continue;
-        if (!isInventoryPlacementCellSetAvailable(placement, occupiedCells)) continue;
-        return placement;
-      }
-    }
-  }
-
-  return null;
 }
 
 function createInventoryPlacementItems(items = [], allItems = items) {

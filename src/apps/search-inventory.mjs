@@ -1,4 +1,10 @@
+import { createRectanglePacker, packInventoryRectangles } from "../inventory/packing.mjs";
+import { transferInventoryContentsBatch } from "../inventory/contents-batch.mjs";
+import { transferInventoryContents } from "../inventory/contents-transfer.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
+import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
+import { planEquippedItemSwap } from "../inventory/equipment-swap.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { getCraftingSettings, getCreatureOptions, getCurrencySettings, getItemCategorySettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { isGuaranteedResolutionMode, isSkillThresholdMode } from "../settings/crafting.mjs";
@@ -18,6 +24,7 @@ import {
   INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
+  BUTCHERING_STORAGE_PARENT_ID,
   BUTCHERING_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle,
   buildInventoryGridStyle,
@@ -30,6 +37,7 @@ import {
   createItemStackPartsForQuantity,
   createInventoryHoverPlacementChecker,
   createInventoryPlacement,
+  createInventoryPackingCandidate,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   findFirstAvailableResolvedInventoryPlacement,
@@ -48,6 +56,7 @@ import {
   getItemQuantity,
   getItemStackAdditionOverflowQuantity,
   getItemStackParts,
+  getItemStackAvailableSpace,
   getItemStackPartQuantity,
   getItemTotalWeight,
   hasContainerCycle,
@@ -406,6 +415,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #draggedTradeOfferKey = "";
   #dragDrop = null;
   #bulkTransferInProgress = false;
+  #contentsTransfer = new InventoryTransferMode();
   #butcheringInProgress = false;
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
@@ -691,7 +701,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
     this.#renderRefresh = foundry.utils.debounce(() => {
-      if (!this.rendered) return;
+      if (!this.rendered || this.#contentsTransfer.renderBatch.active) return;
       this.#captureScrollPositions();
       void this.#renderPreservingWindowStack();
     }, 60);
@@ -710,6 +720,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     ];
   }
 
+  render(...args) {
+    if (this.#contentsTransfer.renderBatch.defer(args)) return Promise.resolve(this);
+    return super.render(...args);
+  }
+
+  async _preRender(context, options) {
+    if (this.element?.isConnected) this.#captureScrollPositions();
+    await super._preRender(context, options);
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#hoverPreviewInputKey = "";
@@ -718,6 +738,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#bindViewportResize();
     this._dragDrop.bind(this.element);
     this.#bindInventoryTooltipListeners();
+    this.#contentsTransfer.bind(this.element, this.#getContentsTransferOptions());
     this.#activateWeaponSlotAspectSizing();
     this.#cancelInventoryTooltipClose();
     this.#restoreScrollPositions(() => this.#restoreInventoryTooltipAfterRender());
@@ -732,6 +753,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async _onClose(options) {
+    this.#contentsTransfer.destroy();
     const searchAuditPayload = !this.#isTradeMode() && this.#searchAuditSessionId
       ? {
         searchAuditSessionId: this.#searchAuditSessionId,
@@ -1376,7 +1398,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     zone = null,
     sourceStackIndex = null,
     sourceStackQuantity = null,
-    sourceWholeStack = false
+    sourceWholeStack = false,
+    promptQuantity = true
   } = {}) {
     if (!this.#isTradeMode() || !sourceActor || !item) return null;
     if (sourceActor.uuid !== offerActorUuid) {
@@ -1408,7 +1431,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ui.notifications.info("Вся штучность предмета уже в предложении.");
       return null;
     }
-    const quantity = event?.type === "drop" || remaining <= 1 || isContainerItem(item)
+    const quantity = !promptQuantity || event?.type === "drop" || remaining <= 1 || isContainerItem(item)
       ? remaining
       : await promptSearchItemStackQuantity({
         item,
@@ -1798,7 +1821,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const grid = this.#getTradeOfferGridElement(zone)
       ?? (actor ? this.element?.querySelector(`[data-trade-offer-grid][data-trade-offer-actor-uuid="${CSS.escape(actor.uuid)}"]`) : null);
     const columns = getFixedTradeOfferGridColumns();
-    const footprint = entryKind === "currency" ? { width: 1, height: 1 } : getItemFootprint(item, this.#getActorForTradeSide(side)?.items);
+    const footprint = entryKind === "currency" ? { width: 1, height: 1 } : createInventoryPackingCandidate(item, this.#getActorForTradeSide(side)?.items);
     const width = Math.max(1, Math.min(columns, toInteger(footprint?.width) || 1));
     const height = Math.max(1, toInteger(footprint?.height) || 1);
     const rotated = entryKind !== "currency" && Boolean(item?.system?.placement?.rotated);
@@ -1810,8 +1833,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, rotated };
     const placement = pointer
       ? findNearestAvailableTradeOfferPlacement(occupied, columns, rows, { width, height }, pointer)
-      : findFirstAvailableTradeOfferPlacement(occupied, columns, rows, { width, height });
-    return placement ? { ...placement, rotated } : null;
+      : findFirstAvailableTradeOfferPlacement(occupied, columns, rows, { ...footprint, width, height, rotated });
+    return placement ? { ...placement, rotated: placement.rotated ?? rotated } : null;
   }
 
   #getTradeOfferGridElement(zone = null) {
@@ -2134,6 +2157,18 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
       const placementRequest = getDropZonePlacementRequest(zone);
       const excludeItemIds = actor.uuid === this.#draggedActorUuid && this.#draggedItemId ? [this.#draggedItemId] : [];
+      if (!this.#isTradeMode() && actor.uuid !== this.#draggedActorUuid && placementRequest.mode === "equipment") {
+        const sourceActor = this.#getActorByUuid(this.#draggedActorUuid);
+        const sourceItem = sourceActor?.items?.get(this.#draggedItemId);
+        const conflicts = getActorPlacementConflictingItems(actor, this.#draggedItemData, placementRequest);
+        if (sourceItem?.system?.placement?.mode === "equipment" && conflicts.length === 1
+          && isSearchTransferableItem(conflicts[0])
+          && resolveActorPlacement(actor, this.#draggedItemData, placementRequest, [conflicts[0].id])
+          && resolveActorPlacement(sourceActor, conflicts[0].toObject(), sourceItem.system.placement, [sourceItem.id])) {
+          this.#applySingleZonePreview(zone, inputKey);
+          return;
+        }
+      }
       if (resolveActorPlacement(actor, this.#draggedItemData, {
         mode: placementRequest.mode,
         equipmentSlot: placementRequest.equipmentSlot,
@@ -3106,7 +3141,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const app = new FalloutMaWContainerSheet({
       document: item,
       evaluatingActorUuid,
-      searchTransferHandler: payload => this.#executeContainerSheetTransfer(payload)
+      searchTransferHandler: payload => this.#executeContainerSheetTransfer(payload),
+      contentsTransferOptions: this.#getContentsTransferOptions(item.parent)
     });
     app.render({ force: true });
     app.bringToFront();
@@ -3134,6 +3170,62 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       searchedActorUuid: this.#searchedActorUuid,
       targetParentId
     });
+  }
+
+  #getContentsTransferOptions(containerActor = null) {
+    const canUse = zone => {
+      if (!this.rendered || !this.#canInteract() || this.#bulkTransferInProgress) return false;
+      if (!this.#getActorByUuid(zone.actor?.uuid)) return false;
+      if (zone.parentId === BUTCHERING_STORAGE_PARENT_ID || zone.parentId === LOCKED_STORAGE_PARENT_ID) return false;
+      if (!this.#isTradeMode()) return true;
+      if (zone.kind === "offer" && this.#tradeOffers.completed) return false;
+      return this.#canManageTradeOfferSide(this.#getTradeSideForActor(zone.actor.uuid));
+    };
+    return {
+      application: this,
+      beforeTransfer: () => {
+        this.#renderRefresh?.cancel?.();
+        this.#captureScrollPositions();
+        this.#beginInventoryMutation();
+      },
+      afterTransfer: () => {
+        this.#renderRefresh?.cancel?.();
+        this.#endInventoryMutation();
+      },
+      getActor: uuid => containerActor ?? this.#getActorByUuid(uuid),
+      canUse,
+      canTransfer: (source, target) => canUse(source) && canUse(target)
+        && (!this.#isTradeMode() ? target.kind !== "offer" : source.actor.uuid === target.actor.uuid),
+      onSelect: () => this.#clearInventoryTooltip({ force: true }),
+      transfer: async ({ source, target }) => {
+        if (target.kind === "offer") {
+          const side = this.#getTradeSideForActor(source.actor.uuid);
+          if (source.actor.uuid !== target.actor.uuid || !this.#canManageTradeOfferSide(side)) {
+            throw new Error("Нет прав на изменение предложения.");
+          }
+          if (this.#tradeSessionSnapshot) {
+            const response = await requestTradeSessionAction("addTradeOfferContents", this.#prepareTradeSessionActionPayload({
+              side, sourceActorUuid: source.actor.uuid, sourceParentId: source.parentId
+            }));
+            if (response?.snapshot) this.#applyTradeSessionSnapshot(response.snapshot, { render: true });
+            return response.contentsResult;
+          }
+          const { offers, result } = await addContentsToTradeOffer(this.#tradeOffers, side, source.actor, source.parentId);
+          this.#tradeOffers = offers;
+          this.#resetTradeReady();
+          this.#broadcastTradeOffers();
+          await this.#renderPreservingWindowStack();
+          return result;
+        }
+        const result = await requestInventoryContentsTransfer(this.#prepareSearchOperationPayload({
+          sourceActorUuid: source.actor.uuid, targetActorUuid: target.actor.uuid,
+          sourceParentId: source.parentId, targetParentId: target.parentId,
+          searcherActorUuid: this.#searcherActorUuid, searchedActorUuid: this.#searchedActorUuid
+        }));
+        await this.#finalizeDroppedItemsSearchAfterTransfer(source.actor);
+        return result;
+      }
+    };
   }
 
   #resolveSearchItemRotation(actor, item) {
@@ -4567,74 +4659,18 @@ function createTradeCatalogGrouping() {
 }
 
 function placeTradeCatalogItems(items = [], { columns = TRADE_OFFER_DEFAULT_COLUMNS, startY = 1 } = {}) {
-  const occupied = new Set();
-  const placed = [];
+  const footprints = items.map(item => getTradeCatalogItemFootprint(item, columns));
+  const rectangles = packInventoryRectangles(footprints, {
+    columns, rows: 1, allowOverflowRows: true
+  });
   let maxY = startY - 1;
-  for (const item of getTradeCatalogPackingOrder(items, columns)) {
-    const footprint = getTradeCatalogItemFootprint(item, columns);
-    const placement = {
-      ...findTradeCatalogPlacement(occupied, footprint, columns, startY),
-      rotated: Boolean(item?.placement?.rotated)
-    };
-    markTradeCatalogPlacement(occupied, placement);
+  const placed = items.map((item, index) => {
+    const rectangle = rectangles[index];
+    const placement = { ...rectangle, y: rectangle.y + startY - 1, rotated: rectangle.rotated ?? Boolean(item?.placement?.rotated) };
     maxY = Math.max(maxY, placement.y + placement.height - 1);
-    placed.push({ item, placement });
-  }
-  return {
-    items: placed,
-    nextY: Math.max(startY, maxY + 1)
-  };
-}
-
-function getTradeCatalogPackingOrder(items = [], columns = TRADE_OFFER_DEFAULT_COLUMNS) {
-  return items
-    .map((item, index) => {
-      const footprint = getTradeCatalogItemFootprint(item, columns);
-      return {
-        item,
-        index,
-        area: footprint.width * footprint.height,
-        width: footprint.width,
-        height: footprint.height
-      };
-    })
-    .sort((left, right) => {
-      if (right.area !== left.area) return right.area - left.area;
-      if (right.height !== left.height) return right.height - left.height;
-      if (right.width !== left.width) return right.width - left.width;
-      return left.index - right.index;
-    })
-    .map(entry => entry.item);
-}
-
-function findTradeCatalogPlacement(occupied, footprint = {}, columns = TRADE_OFFER_DEFAULT_COLUMNS, startY = 1) {
-  const gridColumns = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
-  const width = Math.max(1, Math.min(gridColumns, toInteger(footprint.width) || 1));
-  const height = Math.max(1, toInteger(footprint.height) || 1);
-  const maxX = Math.max(1, gridColumns - width + 1);
-  for (let y = Math.max(1, toInteger(startY) || 1); ; y += 1) {
-    for (let x = 1; x <= maxX; x += 1) {
-      const placement = { x, y, width, height, rotated: Boolean(footprint.rotated) };
-      if (isTradeCatalogPlacementFree(occupied, placement)) return placement;
-    }
-  }
-}
-
-function isTradeCatalogPlacementFree(occupied, placement = {}) {
-  for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-    for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-      if (occupied.has(`${x}:${y}`)) return false;
-    }
-  }
-  return true;
-}
-
-function markTradeCatalogPlacement(occupied, placement = {}) {
-  for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-    for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-      occupied.add(`${x}:${y}`);
-    }
-  }
+    return { item, placement };
+  });
+  return { items: placed, nextY: Math.max(startY, maxY + 1) };
 }
 
 function getTradeCatalogCategoryLabels(items = [], configuredLabels = []) {
@@ -4666,10 +4702,17 @@ function getTradeCatalogItemSourceQuantity(item = null) {
 
 function getTradeCatalogItemFootprint(item = null, columns = TRADE_OFFER_DEFAULT_COLUMNS) {
   const placement = item?.placement ?? {};
-  return {
-    width: Math.max(1, Math.min(Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS), toInteger(placement.width) || 1)),
-    height: Math.max(1, toInteger(placement.height) || 1)
+  const gridColumns = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  const width = Math.max(1, toInteger(placement.width) || 1);
+  const height = Math.max(1, toInteger(placement.height) || 1);
+  const current = {
+    width: width > gridColumns && height > gridColumns ? gridColumns : width,
+    height,
+    rotated: Boolean(placement.rotated)
   };
+  return { ...current, orientations: [
+    current, { width: current.height, height: current.width, rotated: !current.rotated }
+  ] };
 }
 
 async function performActorButchering(payload = {}, requesterUserId = "") {
@@ -4703,7 +4746,7 @@ async function performActorButchering(payload = {}, requesterUserId = "") {
       const document = rewardDocuments.get(reward.uuid);
       if (!document) throw new Error(`Предмет награды «${reward.name}» недоступен.`);
       rewards.push({
-        itemData: document.toObject(),
+        itemData: createSourcedInventoryItemData(document),
         quantity: randomButcheringRewardQuantity(reward)
       });
     }
@@ -5598,6 +5641,61 @@ async function applyButcheringInventoryPlan({
   ], { reason: "butchering-complete", render: false });
 }
 
+export async function requestInventoryContentsTransfer(payload = {}) {
+  const gm = getResponsibleGM();
+  if (gm && gm.id !== game.user?.id) return requestSearchInventorySocket("transferContents", payload, gm);
+  return enqueueSearchInventoryOperation(() => performInventoryContentsTransfer(payload, game.user?.id ?? ""));
+}
+
+async function performInventoryContentsTransfer(payload = {}, requesterUserId = "") {
+  const sourceActor = await resolveActor(payload.sourceActorUuid);
+  const targetActor = await resolveActor(payload.targetActorUuid);
+  const requester = game.users?.get(requesterUserId);
+  if (!sourceActor || !targetActor || !requester) throw new Error("Actor or requester not found.");
+  const owned = payload.ownedContents === true;
+  const searcherActor = owned ? null : await resolveActor(payload.searcherActorUuid);
+  const searchedActor = owned ? null : await resolveActor(payload.searchedActorUuid);
+  const validate = () => {
+    if (owned) {
+      if (!requester.isGM && (!sourceActor.testUserPermission(requester, "OWNER")
+        || !targetActor.testUserPermission(requester, "OWNER"))) throw new Error("Нет прав на перенос содержимого.");
+    } else {
+      if (!searcherActor || !searchedActor) throw new Error("Search actors not found.");
+      validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+      const allowed = getSearchOrTradeAllowedActorUuids(payload, searcherActor, searchedActor, requesterUserId);
+      if (!allowed.has(sourceActor.uuid) || !allowed.has(targetActor.uuid)) throw new Error("Search transfer actor mismatch.");
+      if (isTradePayload(payload) && sourceActor.uuid !== targetActor.uuid) throw new Error("Use the trade offer to exchange contents.");
+    }
+    for (const [actor, parent] of [[sourceActor, payload.sourceParentId], [targetActor, payload.targetParentId]]) {
+      if (parent === BUTCHERING_STORAGE_PARENT_ID || (!owned && parent === LOCKED_STORAGE_PARENT_ID)) {
+        throw new Error("Недоступное место переноса.");
+      }
+      if (parent !== LOCKED_STORAGE_PARENT_ID) validateTargetParent(actor, String(parent ?? ROOT_CONTAINER_ID));
+    }
+    return true;
+  };
+  validate();
+  const source = { actor: sourceActor, parentId: String(payload.sourceParentId ?? ROOT_CONTAINER_ID), kind: "inventory" };
+  const target = { actor: targetActor, parentId: String(payload.targetParentId ?? ROOT_CONTAINER_ID), kind: "inventory" };
+  const before = getContextInventoryItems(source.parentId, sourceActor.items)
+    .map(item => ({ id: item.id, name: item.name, img: item.img, quantity: getItemQuantity(item) }));
+  const result = await transferInventoryContentsBatch({ source, target, canTransfer: validate,
+    move: (entry, { source: from, target: to, executeMutation }) => transferItemBetweenActors({
+      ...entry, sourceActor: from.actor, targetActor: to.actor,
+      sourceItem: from.actor.items.get(entry.itemId), allowLocked: owned,
+      allowEquipmentSwap: false, executeMutation
+    })
+  });
+  if (!owned && sourceActor.uuid !== targetActor.uuid && result.moved) {
+    const entries = before.map(item => ({ kind: "item", key: item.id, name: item.name, img: item.img,
+      quantity: item.quantity - getItemQuantity(sourceActor.items.get(item.id) ?? { system: { quantity: 0 } })
+    })).filter(entry => entry.quantity > 0);
+    recordSearchAuditTransfer({ payload, requesterUserId, searcherActor, searchedActor, sourceActor, targetActor, entries });
+    await requestDroppedItemsActorCleanup(sourceActor.uuid);
+  }
+  return result;
+}
+
 async function performSearchInventoryTransfer(payload = {}, requesterUserId = "") {
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
@@ -5640,6 +5738,13 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     ? createTradeItemPaymentMutationPlans(tradePayment)
     : [];
 
+  const swapCandidate = !isTradePayload(payload) && sourceActor.uuid !== targetActor.uuid
+    && item.system?.placement?.mode === "equipment" && payload.targetMode === "equipment"
+    ? getActorPlacementConflictingItems(targetActor, item.toObject(), {
+      mode: "equipment", equipmentSlot: String(payload.targetEquipmentSlot ?? "")
+    }).at(0)
+    : null;
+
   const result = await transferItemBetweenActors({
     sourceActor,
     targetActor,
@@ -5657,6 +5762,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     quantity,
     sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
     allowButchering: isItemInButcheringStorage(item),
+    allowEquipmentSwap: !isTradePayload(payload),
     mutationPlans: tradeMutationPlans
   });
   const sourceItemAfter = sourceActor.items?.get(item.id);
@@ -5679,6 +5785,13 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
         img: item.img,
         quantity: movedQuantity
       }]
+    });
+  }
+  if (swapCandidate && !targetActor.items.has(swapCandidate.id)) {
+    recordSearchAuditTransfer({ payload, requesterUserId, searcherActor, searchedActor,
+      sourceActor: targetActor, targetActor: sourceActor,
+      entries: [{ kind: "item", key: swapCandidate.id, name: swapCandidate.name,
+        img: swapCandidate.img, quantity: getItemQuantity(swapCandidate) }]
     });
   }
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
@@ -7315,6 +7428,27 @@ function normalizeTradeOfferPlacement(placement = null, fallback = null) {
   };
 }
 
+async function addContentsToTradeOffer(state, side, actor, parentId = ROOT_CONTAINER_ID) {
+  if (!TRADE_OFFER_SIDES.includes(side) || state.completed) throw new Error("Предложение недоступно.");
+  if ([LOCKED_STORAGE_PARENT_ID, BUTCHERING_STORAGE_PARENT_ID].includes(parentId)) throw new Error("Недоступное место переноса.");
+  validateTargetParent(actor, parentId);
+  let offers = normalizeTradeOffersState(state);
+  const result = await transferInventoryContents({
+    source: { actor, parentId, kind: "inventory" }, target: { actor, parentId: "", kind: "offer" },
+    canTransfer: () => true,
+    move: (entry, { item }) => {
+      assertSearchTransferableItem(item);
+      const index = usesVirtualInventoryStacks(item) ? entry.sourceStackIndex : null;
+      const before = getTradeOfferedItemQuantity(offers[side], item.id, actor.uuid, index);
+      offers = addTradeOfferItem(offers, side, item, entry.quantity, { rotated: entry.targetRotated }, actor.uuid, {
+        sourceStackIndex: entry.sourceStackIndex
+      });
+      return getTradeOfferedItemQuantity(offers[side], item.id, actor.uuid, index) > before;
+    }
+  });
+  return { offers, result };
+}
+
 function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "", { sourceStackIndex = 0, sourceWholeStack = false } = {}) {
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side) || !item) return offers;
@@ -7469,9 +7603,9 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
       itemCollection: priceItemCollection,
       containedItems: entry.containedItems ?? []
     });
-    const footprint = getItemFootprint(liveItem ?? itemData, priceItemCollection);
+    const footprint = createInventoryPackingCandidate(liveItem ?? itemData, priceItemCollection);
     const placement = resolveTradeOfferEntryPlacement(entry.placement, footprint, occupiedPlacements, columns);
-    placement.rotated = Boolean(entry.placement?.rotated ?? (liveItem ?? itemData)?.system?.placement?.rotated);
+    placement.rotated = Boolean(placement.rotated ?? entry.placement?.rotated ?? (liveItem ?? itemData)?.system?.placement?.rotated);
     const offerKey = getTradeOfferEntryKey(entry, "item");
     const interactionState = getItemInteractionState(sourceActor, liveItem ?? itemData);
     occupiedPlacements.push({ kind: "item", key: offerKey, placement });
@@ -7554,7 +7688,10 @@ function resolveTradeOfferEntryPlacement(placement = null, footprint = {}, occup
   const height = Math.max(1, toInteger(normalizedPlacement?.height) || toInteger(footprint?.height) || 1);
   const requested = normalizeTradeOfferPlacement({ ...(normalizedPlacement ?? {}), width, height }, { width, height });
   if (isTradeOfferPlacementAvailable(requested, occupiedPlacements.map(entry => entry.placement), columns, TRADE_OFFER_MAX_ROWS)) return requested;
-  return findFirstAvailableTradeOfferPlacement(occupiedPlacements.map(entry => entry.placement), columns, TRADE_OFFER_MAX_ROWS, { width, height }) ?? requested;
+  return findFirstAvailableTradeOfferPlacement(occupiedPlacements.map(entry => entry.placement), columns, TRADE_OFFER_MAX_ROWS, {
+    width, height, rotated: requested.rotated,
+    orientations: footprint.orientations
+  }) ?? requested;
 }
 
 function getTradeOfferOccupiedPlacements(offer = {}, { excludeKind = "", excludeKey = "" } = {}) {
@@ -7628,13 +7765,8 @@ function isTradeOfferPlacementAvailable(placement = null, occupiedPlacements = [
 function findFirstAvailableTradeOfferPlacement(occupiedPlacements = [], columns = TRADE_OFFER_DEFAULT_COLUMNS, rows = TRADE_OFFER_MAX_ROWS, footprint = {}) {
   const width = Math.max(1, Math.min(columns, toInteger(footprint.width) || 1));
   const height = Math.max(1, toInteger(footprint.height) || 1);
-  for (let y = 1; y <= rows; y += 1) {
-    for (let x = 1; x <= Math.max(1, columns - width + 1); x += 1) {
-      const placement = normalizeTradeOfferPlacement({ x, y, width, height });
-      if (isTradeOfferPlacementAvailable(placement, occupiedPlacements, columns, rows)) return placement;
-    }
-  }
-  return null;
+  const rectangle = createRectanglePacker({ columns, rows, occupied: occupiedPlacements }).find({ ...footprint, width, height });
+  return rectangle ? normalizeTradeOfferPlacement(rectangle) : null;
 }
 
 function findNearestAvailableTradeOfferPlacement(occupiedPlacements = [], columns = TRADE_OFFER_DEFAULT_COLUMNS, rows = TRADE_OFFER_MAX_ROWS, footprint = {}, preferred = null) {
@@ -8036,9 +8168,14 @@ export async function transferItemBetweenActors({
   sourceStackIndex = 0,
   allowLocked = false,
   allowButchering = false,
+  allowEquipmentSwap = true,
   spendWeaponSwitchCost = true,
-  mutationPlans = []
+  mutationPlans = [],
+  executeMutation = executeInventoryMutation
 } = {}) {
+  if (executeMutation !== executeInventoryMutation && (!isInventoryContextPlacementMode(targetMode) || isInstalledConstructPartItem(sourceItem))) {
+    throw new Error("Bulk transfer requires inventory contents.");
+  }
   assertSearchTransferableItem(sourceItem, { allowLocked, allowButchering });
   const itemData = sourceItem.toObject();
   if (targetRotated !== null && targetRotated !== undefined) {
@@ -8046,6 +8183,27 @@ export async function transferItemBetweenActors({
   }
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
+  if (allowEquipmentSwap && sourceActor.uuid !== targetActor.uuid && targetMode === "equipment"
+    && sourceItem.system?.placement?.mode === "equipment" && transferQuantity === getItemQuantity(sourceItem)) {
+    const requested = { mode: "equipment", equipmentSlot: targetEquipmentSlot };
+    const conflicts = getActorPlacementConflictingItems(targetActor, itemData, requested);
+    if (conflicts.length) {
+      if (conflicts.length !== 1) throw new Error("Для обмена выберите один занятый слот снаряжения.");
+      assertSearchTransferableItem(conflicts[0], { allowLocked });
+      const swap = planEquippedItemSwap({ sourceActor, targetActor, sourceItem, targetItem: conflicts[0],
+        targetPlacement: requested, resolvePlacement: resolveActorPlacement,
+        createTransferTree: (from, to, item, placement) => buildContainerTreeCreateData({
+          targetActor: to,
+          rootCreateData: createInventoryStackData(item.toObject(), getItemQuantity(item), ROOT_CONTAINER_ID, placement, { equipped: true }),
+          rootOldId: item.id,
+          containedItems: isContainerItem(item) ? getAllContainedItems(item.id, from.items) : [],
+          getChildData: child => child.toObject(), getChildOldId: child => child.id
+        })
+      });
+      await executeMutation([...swap.plans, ...mutationPlans], { reason: "equipment-swap" });
+      return targetActor.items.get(swap.targetRootId);
+    }
+  }
   const targetConstructSlot = targetMode === ITEM_FUNCTIONS.constructPart
     ? getConstructPartSlot(targetActor, targetConstructPartSlot)
     : null;
@@ -8066,7 +8224,7 @@ export async function transferItemBetweenActors({
     ? await prepareConstructPartDetachment(sourceActor, sourceItem)
     : "";
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
-  const targetStackPlacement = isInventoryContextPlacementMode(targetMode) && targetItem && areStackable(itemData, targetItem) && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
+  const targetStackPlacement = isInventoryContextPlacementMode(targetMode) && targetItem && areStackable(itemData, targetItem) && getItemStackAvailableSpace(targetItem) > 0
     ? normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, targetActor.items)
     : null;
   const preferredPlacement = getRequestedTargetPlacement({
@@ -8098,7 +8256,7 @@ export async function transferItemBetweenActors({
           sourceItem,
           targetParentId: ROOT_CONTAINER_ID,
           preferredPlacement,
-          mutationPlans
+          mutationPlans, executeMutation
         });
       } else {
         result = await createExternalPlacedItem(targetActor, itemData, preferredPlacement, {
@@ -8106,7 +8264,7 @@ export async function transferItemBetweenActors({
           sourceItem,
           sourceStackIndex,
           spendWeaponSwitchCost,
-          mutationPlans
+          mutationPlans, executeMutation
         });
       }
     } else if (sourceActor.uuid === targetActor.uuid) {
@@ -8115,7 +8273,7 @@ export async function transferItemBetweenActors({
         && getItemContainerParentId(sourceItem) === getStoredInventoryParentId(targetParentId)
         && sourceItem.system?.equipped !== true
       );
-      result = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
+      result = executeMutation !== executeInventoryMutation ? null : await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
         parentId: targetParentId,
         quantity: transferQuantity,
         targetItem,
@@ -8129,7 +8287,7 @@ export async function transferItemBetweenActors({
           sourceItem,
           targetItem,
           parentId: targetParentId,
-          sourceStackIndex
+          sourceStackIndex, executeMutation
         });
       }
     } else if (isContainerItem(sourceItem)) {
@@ -8139,7 +8297,7 @@ export async function transferItemBetweenActors({
         sourceItem,
         targetParentId,
         preferredPlacement,
-        mutationPlans
+        mutationPlans, executeMutation
       });
     } else {
       result = await insertExternalItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
@@ -8148,7 +8306,7 @@ export async function transferItemBetweenActors({
         targetItem,
         parentId: targetParentId,
         sourceStackIndex,
-        mutationPlans
+        mutationPlans, executeMutation
       });
     }
   } finally {
@@ -8227,14 +8385,15 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   targetItem = null,
   parentId = ROOT_CONTAINER_ID,
   sourceStackIndex = 0,
-  skipProjectedValidation = false
+  skipProjectedValidation = false,
+  executeMutation = executeInventoryMutation
 } = {}) {
   if (usesVirtualInventoryStacks(itemData)) {
     return insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
       sourceItem,
       targetItem,
       parentId,
-      sourceStackIndex
+      sourceStackIndex, executeMutation
     });
   }
 
@@ -8315,7 +8474,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
     throwInventoryNoSpace();
   }
 
-  const mutation = await executeInventoryMutation({
+  const mutation = await executeMutation({
     actor,
     updates,
     deletes,
@@ -8334,7 +8493,8 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   targetItem = null,
   parentId = ROOT_CONTAINER_ID,
   sourceStackIndex = 0,
-  mutationPlans = []
+  mutationPlans = [],
+  executeMutation = executeInventoryMutation
 } = {}) {
   const quantity = Math.max(1, getItemQuantity(itemData));
   const preferredPlacement = createContextInventoryPlacement(
@@ -8387,7 +8547,7 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   if (sourceOwner?.uuid === actor.uuid) {
     const updates = mergeItemUpdates(targetUpdates, sourceUpdates);
     if (!validateActorProjectedInventoryState(actor, { updates, deletes: sourceDeletes, creates: createData })) throwInventoryNoSpace();
-    const mutation = await executeInventoryMutation([
+    const mutation = await executeMutation([
       {
         actor,
         updates,
@@ -8404,7 +8564,7 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   const sourcePlan = sourceOwner && sourceItem
     ? createTransferredItemRemovalPlan(sourceItem, quantity, { stackIndex: sourceStackIndex })
     : { updates: [], deletes: [] };
-  await executeInventoryMutation([
+  await executeMutation([
     {
       actor,
       updates: targetUpdates,
@@ -8425,7 +8585,8 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
   targetItem = null,
   parentId = ROOT_CONTAINER_ID,
   sourceStackIndex = 0,
-  mutationPlans = []
+  mutationPlans = [],
+  executeMutation = executeInventoryMutation
 } = {}) {
   if (usesVirtualInventoryStacks(itemData)) {
     return insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
@@ -8434,7 +8595,7 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
       targetItem,
       parentId,
       sourceStackIndex,
-      mutationPlans
+      mutationPlans, executeMutation
     });
   }
 
@@ -8491,7 +8652,7 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
     getItemQuantity(itemData),
     { stackIndex: sourceStackIndex }
   );
-  await executeInventoryMutation([
+  await executeMutation([
     {
       actor,
       updates,
@@ -8512,7 +8673,8 @@ async function transferContainerTree({
   sourceItem,
   targetParentId,
   preferredPlacement,
-  mutationPlans = []
+  mutationPlans = [],
+  executeMutation = executeInventoryMutation
 } = {}) {
   if (preferredPlacement.mode === "inventory" && !isActorInventoryPlacementAvailable(targetActor, targetParentId, preferredPlacement, [], [], { allowLockedDisplacement: true })) {
     throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
@@ -8556,7 +8718,7 @@ async function transferContainerTree({
     getChildOldId: child => child.id
   });
 
-  const mutation = await executeInventoryMutation([
+  const mutation = await executeMutation([
     {
       actor: targetActor,
       updates: targetUpdates,
@@ -8735,17 +8897,18 @@ function getRequestedTargetPlacement({
     }, excluded, [], ROOT_CONTAINER_ID);
   }
 
-  if (Number.isFinite(Number(targetX)) && Number.isFinite(Number(targetY))) {
+  if (targetX != null && targetY != null && Number(targetX) > 0 && Number(targetY) > 0
+    && Number.isFinite(Number(targetX)) && Number.isFinite(Number(targetY))) {
     const placement = createInventoryPlacement(toInteger(targetX), toInteger(targetY), itemData, targetActor.items);
     if (isContainerItem(itemData) && sourceActor) {
-      const footprint = getItemFootprint(sourceItem ?? itemData, sourceActor.items);
+      const footprint = normalizeInventoryPlacement(placement, sourceItem ?? itemData, sourceActor.items);
       placement.width = footprint.width;
       placement.height = footprint.height;
     }
     const contextPlacement = createContextInventoryPlacement(placement, targetParentId);
     if (isActorInventoryPlacementAvailable(targetActor, targetParentId, contextPlacement, excluded, [], { allowLockedDisplacement: true })) return contextPlacement;
   }
-  const placement = getFirstAvailableActorInventoryPlacement(targetActor, targetParentId, itemData, excluded, [], { allowLockedDisplacement: true });
+  const placement = getFirstAvailableActorInventoryPlacement(targetActor, targetParentId, itemData, excluded, [], { allowLockedDisplacement: true, itemItems: sourceActor?.items });
   return placement ? createContextInventoryPlacement(placement, targetParentId) : null;
 }
 
@@ -9661,7 +9824,7 @@ function getPlacementDisplacementUpdates(actor, itemData, placement, parentId = 
   return conflicts.map(createLockedStorageItemUpdate);
 }
 
-export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds = [], reservedPlacements = [], { allowLockedDisplacement = false } = {}) {
+export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds = [], reservedPlacements = [], { allowLockedDisplacement = false, itemItems = null } = {}) {
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
   const contextItems = getContextInventoryItems(parentId, actor.items)
     .filter(item => allowLockedDisplacement && !isLockedStorageParentId(parentId) ? !isItemLocked(item) : true);
@@ -9673,7 +9836,7 @@ export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemDa
     actor.items,
     excludeItemIds,
     reservedPlacements,
-    getActorInventoryContextOptions(actor, parentId)
+    { ...getActorInventoryContextOptions(actor, parentId), itemItems }
   );
   return placement;
 }
@@ -10168,6 +10331,10 @@ async function handleSearchInventorySocketMessage(message = {}) {
       result = await enqueueSearchInventoryOperation(
         () => performSearchAuditCompletion(message.payload ?? {}, message.requesterUserId ?? "")
       );
+    } else if (message.action === "transferContents") {
+      result = await enqueueSearchInventoryOperation(
+        () => performInventoryContentsTransfer(message.payload ?? {}, message.requesterUserId ?? "")
+      );
     } else if (message.action === "transferItem") {
       result = await enqueueSearchInventoryOperation(
         () => performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "")
@@ -10211,6 +10378,7 @@ async function handleSearchInventorySocketMessage(message = {}) {
       "joinTradeSession",
       "selectTradeActor",
       "addTradeOfferItem",
+      "addTradeOfferContents",
       "moveTradeOfferEntry",
       "depositCompletedTradeItem",
       "addTradeOfferCurrency",
@@ -10343,9 +10511,19 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
   const session = getActiveTradeSession(payload.sessionId);
   if (!session) throw new Error("Trade session not found.");
   let claimResult = null;
+  let contentsResult = null;
   if (action === "selectTradeActor") {
     ensureTradeSessionParticipant(session, requesterUserId);
     selectTradeSessionActor(session, payload.side, payload.actorUuid, requesterUserId);
+  } else if (action === "addTradeOfferContents") {
+    const actor = await resolveActor(payload.sourceActorUuid);
+    if (!actor) throw new Error("Actor not found.");
+    ensureTradeSessionActorOfferMutation(session, actor.uuid, requesterUserId);
+    if (getTradeSessionActorSide(session, actor.uuid) !== payload.side) throw new Error("Trade offer side mismatch.");
+    const batch = await addContentsToTradeOffer(session.offers, payload.side, actor, payload.sourceParentId);
+    session.offers = batch.offers;
+    contentsResult = batch.result;
+    resetTradeSessionReady(session);
   } else if (action === "addTradeOfferItem") {
     const actor = await resolveActor(payload.sourceActorUuid);
     const item = actor?.items?.get(String(payload.itemId ?? ""));
@@ -10425,7 +10603,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
   touchTradeSession(session);
   const snapshot = createTradeSessionSnapshot(session);
   broadcastTradeSessionSnapshot(snapshot);
-  return { snapshot, completed: Boolean(session.offers.completed), claimResult };
+  return { snapshot, completed: Boolean(session.offers.completed), claimResult, contentsResult };
 }
 
 function createTradeSession(payload = {}) {

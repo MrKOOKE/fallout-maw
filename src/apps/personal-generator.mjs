@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
 import { DEFAULT_PERSONAL_NAME_BLOCKS } from "../data/personal-name-library.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
@@ -32,6 +33,7 @@ import {
   ROOT_CONTAINER_ID,
   createAnchoredItemStackPartsForQuantity,
   createInventoryPlacement,
+  normalizeInventoryPlacement,
   createInventoryPlacementPlanner,
   createItemStackPartAdditionUpdate,
   createStoredPlacement,
@@ -1628,7 +1630,7 @@ function findFirstGeneratedItemPlacement(
         options
       });
       if (!stackParts?.length) continue;
-      const placements = stackParts.map(part => createInventoryPlacement(part.x, part.y, itemData, projectedItems));
+      const placements = stackParts.map(part => normalizeInventoryPlacement(part, itemData, projectedItems));
       if (placementPlanner.reserveAll(placements)) return {
         parentId,
         placement: placements[0],
@@ -2189,7 +2191,7 @@ function applyNameOverwrite(baseName, generated) {
 function createEmbeddedItemData(item, quantity, entry = {}) {
   const count = Math.max(0, toInteger(quantity));
   if (!item || count <= 0) return null;
-  const data = item.toObject();
+  const data = createSourcedInventoryItemData(item);
   delete data._id;
   delete data.id;
   delete data.folder;

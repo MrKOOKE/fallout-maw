@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { refreshActorEffectExpiration } from "../effects/registry.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -309,9 +310,7 @@ async function expireInactiveLivingSteelEffects(worldTime, deltaTime) {
   for (const actor of actors) {
     await synchronizeLivingSteelEffectBonuses(actor, { worldTime });
   }
-  const ActiveEffectClass = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
-  if (!ActiveEffectClass?.registry?.refresh) return;
-  await ActiveEffectClass.registry.refresh(LIVING_STEEL_EXPIRY_EVENT, {
+  await refreshActorEffectExpiration(LIVING_STEEL_EXPIRY_EVENT, {
     actors,
     worldTime: Number(worldTime) || Number(game.time?.worldTime) || 0,
     deltaTime: Number(deltaTime) || 0
