@@ -29,7 +29,7 @@ const armor = () => ({ id: "armor", name: "Armor", type: "gear", system: { funct
   weapon: { enabled: true, moduleSlots: [{ id: "weaponSlot", moduleKey: "plate" }] }
 } } });
 function loadRenderers(extra = {}) {
-  const names = ["buildProtectionModuleSlotsTooltipSection", "renderWeaponTooltipModuleSlots", "renderWeaponTooltipModulePickerPanel", "getTooltipWeaponModuleCandidates", "renderWeaponTooltipModuleChoice", "buildDamageMitigationTooltipSection", "renderDamageMitigationTooltipTables", "buildDamageMitigationCellBreakdown"];
+  const names = ["buildInventoryTooltipFunctionSections", "buildModuleTooltipSection", "getModuleTooltipRows", "renderTooltipFunctionSection", "renderTooltipFunctionGrid", "hasTooltipRowValue", "renderTooltipRowValue", "formatTooltipLabel", "buildProtectionModuleSlotsTooltipSection", "renderWeaponTooltipModuleSlots", "renderWeaponTooltipModulePickerPanel", "getTooltipWeaponModuleCandidates", "renderWeaponTooltipModuleChoice", "buildDamageMitigationTooltipSection", "renderDamageMitigationTooltipTables", "buildDamageMitigationCellBreakdown"];
   const dependencies = {
     ...functions, ...modules, ...tooltip, prepareItemDamageMitigationCell, buildDamageMitigationTables,
     escapeHTML, escapeAttribute: escapeHTML, toInteger: value => Math.trunc(Number(value) || 0), formatNumber: String,
@@ -40,12 +40,54 @@ function loadRenderers(extra = {}) {
     getDamageTypeSettings: () => [{ key: "physical", label: "Physical" }],
     createActorEffectSnapshot: () => ({}), collectActorPreparedPathAttribution: () => ({ sources: [] }),
     PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY: "system.equipmentEffectiveness.protectionPercent",
-    renderTooltipFunctionGrid: () => "", renderDamageTypeIcon: row => escapeHTML(row.damageTypeLabel),
+    renderDamageTypeIcon: row => escapeHTML(row.damageTypeLabel),
+    renderTooltipValueTokens: values => values.map(escapeHTML).join(", "),
     renderItemValueBreakdownTooltipHTML: breakdown => `${breakdown.sources.map(source => source.name).join("+")}=${breakdown.total}`,
+    ...Object.fromEntries(["buildContainerTooltipSection", "buildConditionTooltipSection", "buildFirstAidTooltipSection", "buildNeedChangeTooltipSection", "buildOneTimeUseTooltipSection", "buildDamageSourceTooltipSection", "buildEnergySourceTooltipSection", "buildEnergyConsumerTooltipSection", "buildLightSourceTooltipSection", "buildConstructPartTooltipSection", "buildProsthesisTooltipSection"].map(name => [name, () => ""])),
+    buildWeaponTooltipSections: () => [], buildToolTooltipSections: () => [],
     ...extra
   };
   return new Function(...Object.keys(dependencies), `${names.map(sourceFunction).join("\n")}\nreturn {${names.join(",")}};`)(...Object.values(dependencies));
 }
+
+for (const mode of ["defense", "resistance"]) {
+  test(`standalone ${mode} module card uses the armor matrix and identifies its occupied slot`, () => {
+    const item = createModule("Plate C");
+    item.system.functions.condition.value = 100;
+    // The nested schema has enabled=false; the Module function enables this preview.
+    item.system.functions.module.damageMitigation.enabled = false;
+    item.system.functions.module.damageMitigation.mode = mode;
+    item.system.functions.module.damageMitigation.requirements = [{ key: "athletics", value: 50 }];
+    const original = structuredClone(item);
+    const html = loadRenderers({
+      getWeaponRequirementLabels: mitigation => (mitigation.requirements ?? []).map(entry => `${entry.key} ${entry.value}`)
+    }).buildInventoryTooltipFunctionSections(item, null);
+    assert.equal((html.match(/class="tooltip-mitigation-matrix"/g) ?? []).length, 1);
+    assert.match(html, />50<\/span>/);
+    assert.match(html, /<h4>FALLOUTMAW.Item.FunctionModule<\/h4>/);
+    assert.match(html, /FALLOUTMAW.Item.ModuleOccupiedSlot:[\s\S]*?<strong>plate<\/strong>/);
+    assert.match(html, new RegExp(`MitigationMode${mode === "defense" ? "Defense" : "Resistance"}`));
+    assert.match(html, /athletics 50/);
+    assert.doesNotMatch(html, /protection-module-slots-section|tooltip-module-picker-panel/);
+    assert.equal(functions.hasItemFunction(item, "damageMitigation"), false);
+    assert.deepEqual(item, original, "rendering must not activate or modify the inventory module");
+  });
+}
+
+test("a protective module preview preserves weakening and an installed module renders only one matrix", () => {
+  const module = createModule("Plate C");
+  module.system.functions.condition.value = 10;
+  const renderers = loadRenderers();
+  const html = renderers.buildInventoryTooltipFunctionSections(module, null);
+  assert.match(html, />30<\/span>/);
+  const host = armor();
+  host.system.functions.damageMitigation.moduleSlots[0].itemData = module;
+  const [installed] = functions.getInstalledFunctionModuleItems(host, "damageMitigation", { ignoreBroken: true });
+  const installedHTML = renderers.buildInventoryTooltipFunctionSections(installed, null);
+  assert.equal((installedHTML.match(/class="tooltip-mitigation-matrix"/g) ?? []).length, 1);
+  assert.match(installedHTML, />30<\/span>/);
+  assert.doesNotMatch(installedHTML, /protection-module-slots-section/);
+});
 
 test("armor card renders visible slots and only matching protective inventory choices", () => {
   const item = armor();

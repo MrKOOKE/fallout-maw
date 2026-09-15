@@ -1,4 +1,4 @@
-import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction, getProtectionModuleTooltipEntry } from "../utils/function-module-tooltip.mjs";
+import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction, getProtectionModuleTooltipEntry, getProtectionModuleTooltipItem } from "../utils/function-module-tooltip.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { InventoryBlockLayout } from "../utils/inventory-block-layout.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
@@ -5629,19 +5629,21 @@ function buildInventoryTooltipFunctionSections(item, sourceActor, {
   includeRecipeKnowledge = true,
   recipeKnowledgePreviews = new Map()
 } = {}) {
+  const protectionModule = getProtectionModuleTooltipItem(item);
   const sections = [
     buildContainerTooltipSection(item, sourceActor),
     buildConditionTooltipSection(item),
     buildFirstAidTooltipSection(item, evaluatingActor),
     buildNeedChangeTooltipSection(item, evaluatingActor),
     buildOneTimeUseTooltipSection(item, evaluatingActor, { includeRecipeKnowledge, recipeKnowledgePreviews }),
-    buildDamageMitigationTooltipSection(item, evaluatingActor),
-    buildProtectionModuleSlotsTooltipSection(item, sourceActor, evaluatingActor),
+    protectionModule ? buildModuleTooltipSection(item, evaluatingActor) : "",
+    buildDamageMitigationTooltipSection(protectionModule ?? item, evaluatingActor),
+    protectionModule ? "" : buildProtectionModuleSlotsTooltipSection(item, sourceActor, evaluatingActor),
     buildDamageSourceTooltipSection(item, evaluatingActor),
     buildEnergySourceTooltipSection(item),
     buildEnergyConsumerTooltipSection(item, { sourceActor, evaluatingActor }),
     buildLightSourceTooltipSection(item),
-    buildModuleTooltipSection(item, evaluatingActor),
+    protectionModule ? "" : buildModuleTooltipSection(item, evaluatingActor),
     buildConstructPartTooltipSection(item),
     buildProsthesisTooltipSection(item, evaluatingActor),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { sourceActor, evaluatingActor, baseMode }),
@@ -6327,7 +6329,6 @@ function getLightSourceCostTooltipLabel(costs = []) {
 
 function buildModuleTooltipSection(item, evaluatingActor = null) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })) return "";
-  if (String(getModuleFunction(item).targetFunction ?? "weapon") !== "weapon") return "";
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item, evaluatingActor));
 }
 
@@ -6413,22 +6414,10 @@ function getModuleTooltipRows(item, evaluatingActor = null) {
   const weapon = moduleData.weapon ?? {};
   const isProtection = moduleData.targetFunction === ITEM_FUNCTIONS.damageMitigation;
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.ModuleName"), getWeaponModuleTechnicalName(item)],
+    [game.i18n.localize(isProtection ? "FALLOUTMAW.Item.ModuleOccupiedSlot" : "FALLOUTMAW.Item.ModuleName"), getWeaponModuleTechnicalName(item)],
     [game.i18n.localize("FALLOUTMAW.Item.ModuleTargetFunction"), game.i18n.localize(isProtection ? "FALLOUTMAW.Item.FunctionDamageMitigation" : "FALLOUTMAW.Item.FunctionWeapon")]
   ];
-  if (isProtection) {
-    const mitigation = moduleData.damageMitigation ?? {};
-    const label = game.i18n.localize(mitigation.mode === DAMAGE_MITIGATION_MODES.resistance
-      ? "FALLOUTMAW.Item.MitigationModeResistance" : "FALLOUTMAW.Item.MitigationModeDefense");
-    const damageTypes = new Map(getDamageTypeSettings().map(type => [type.key, type.label || type.key]));
-    for (const [limbKey, entries] of Object.entries(mitigation.entries ?? {})) {
-      for (const [damageTypeKey, entry] of Object.entries(entries ?? {})) {
-        pushModuleChangeRow(rows, `${label}: ${getConfiguredLimbLabel(limbKey)}, ${damageTypes.get(damageTypeKey) || damageTypeKey}`, entry?.value);
-      }
-    }
-    pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.MitigationWearResistance"), mitigation.wearResistance);
-    return rows;
-  }
+  if (isProtection) return rows;
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), weapon.damage);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), weapon.accuracyBonus);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), weapon.criticalChanceModifier, { suffix: "%" });

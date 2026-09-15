@@ -26,6 +26,13 @@ test("native gear schema preserves protective modules, their slots and condition
   });
   assert.equal(module.system.functions.module.targetFunction, "damageMitigation");
   assert.equal(module.system.functions.module.damageMitigation.entries.torso.physical.value, 12);
+  const { getProtectionModuleTooltipItem } = await import("../../src/utils/function-module-tooltip.mjs");
+  const { hasItemFunction, getDamageMitigationFunction } = await import("../../src/utils/item-functions.mjs");
+  const preview = getProtectionModuleTooltipItem(module);
+  assert.equal(hasItemFunction(preview, "damageMitigation"), true);
+  assert.equal(getDamageMitigationFunction(preview).entries.torso.physical.value, 12);
+  assert.equal(preview.system.functions.condition.value, 75);
+  assert.equal(hasItemFunction(module, "damageMitigation"), false);
   const armor = create({ damageMitigation: { enabled: true, moduleSlots: [
     { id: "plate", moduleKey: "plate", itemData: module.toObject() }
   ] } });

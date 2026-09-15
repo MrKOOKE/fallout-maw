@@ -1778,6 +1778,7 @@
       "WeaponAddResourceCost": "Add Cost",
       "WeaponNoResourceCosts": "No attack costs.",
       "ModuleName": "Module Name",
+      "ModuleOccupiedSlot": "Occupies Slot",
       "ModuleRemove": "Remove module",
       "ModuleSlotDelete": "Delete slot",
       "ModuleTargetFunction": "Improves Function",

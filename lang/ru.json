@@ -1843,6 +1843,7 @@
       "WeaponAddResourceCost": "Добавить расход",
       "WeaponNoResourceCosts": "Расходы атаки не заданы.",
       "ModuleName": "Название модуля",
+      "ModuleOccupiedSlot": "Занимает слот",
       "ModuleRemove": "Снять модуль",
       "ModuleSlotDelete": "Удалить слот",
       "ModuleTargetFunction": "Улучшает функцию",

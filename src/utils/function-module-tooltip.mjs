@@ -1,4 +1,4 @@
-import { ITEM_FUNCTIONS, getDamageMitigationFunction, getEnabledWeaponFunctions, hasItemFunction } from "./item-functions.mjs";
+import { ITEM_FUNCTIONS, getDamageMitigationFunction, getEnabledWeaponFunctions, getModuleFunction, hasItemFunction } from "./item-functions.mjs";
 import { getWeaponModuleSlots } from "./weapon-modules.mjs";
 
 /** A module transfer needs one tooltip refresh after all document callbacks. */
@@ -19,6 +19,20 @@ export class ModuleTooltipMutation {
       }
     }
   }
+}
+
+/** Reuse armor presentation without enabling protection on the inventory Item. */
+export function getProtectionModuleTooltipItem(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })) return null;
+  const moduleData = getModuleFunction(item);
+  if (moduleData.targetFunction !== ITEM_FUNCTIONS.damageMitigation) return null;
+  return {
+    id: item.id, uuid: item.uuid, name: item.name, img: item.img, type: item.type,
+    system: { ...item.system, functions: {
+      ...item.system?.functions,
+      damageMitigation: { ...moduleData.damageMitigation, enabled: true, moduleSlots: [] }
+    } }
+  };
 }
 
 export function getProtectionModuleTooltipEntry(item) {
