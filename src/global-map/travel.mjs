@@ -234,7 +234,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
     });
   }
   for (const exit of state.locationExitZones) {
-    if (!exit.cells?.includes(key)) continue;
+    if (exit.hidden || !exit.cells?.includes(key)) continue;
     candidates.push({
       key: `locationExit:${exit.id}`,
       kind: "locationExit",
@@ -243,7 +243,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
     });
   }
   for (const location of state.locations) {
-    if (!location.linkedSceneId || !getLocationCells(scene, location).some(cell => cellKey(cell) === key)) continue;
+    if (location.hidden || !location.linkedSceneId || !getLocationCells(scene, location).some(cell => cellKey(cell) === key)) continue;
     candidates.push({
       key: `location:${location.id}`,
       kind: "location",

@@ -6,7 +6,8 @@ import {
   DEFAULT_TRANSITION,
   GLOBAL_MAP_LAYER,
   GLOBAL_MAP_ROLES,
-  TRAVEL_GROUP_TOKEN_FLAG
+  TRAVEL_GROUP_TOKEN_FLAG,
+  applyGlobalMapHiddenDisplay
 } from "./constants.mjs";
 import {
   assertSupportedGrid,
@@ -68,8 +69,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     });
   }
 
-  static prepareSceneControls() {
-    if (!game.user?.isGM || !getGlobalMapFlag(canvas?.scene)) return null;
+  static prepareSceneControls() {    if (!game.user?.isGM || !getGlobalMapFlag(canvas?.scene)) return null;
     const isLocationScene = getGlobalMapFlag(canvas.scene)?.role === GLOBAL_MAP_ROLES.LOCATION_SCENE;
     const canManageLocations = canCreateChildLocations(canvas.scene);
     return {
@@ -489,7 +489,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const key = cellKey(pointToCell(canvas.scene, point));
     const zone = [...getSceneState(canvas.scene).locationExitZones]
       .reverse()
-      .find(entry => entry.cells?.includes(key));
+      .find(entry => !entry.hidden && entry.cells?.includes(key));
     if (!zone) return false;
     const selection = foundry.utils.deepClone(this.arrivalSelection);
     const validExitZoneIds = Array.isArray(selection.validExitZoneIds) ? selection.validExitZoneIds : [];
@@ -635,33 +635,15 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       renderedLocations.set(this.editor.data.id, this.editor.data);
     }
     const discovered = new Set(discoveredIds ?? []);
+    // The GM keeps hidden markers while nothing is being played. As soon as a token is
+    // under control the GM sees the map the way that actor does, hidden entries included.
+    const gmPlayView = game.user.isGM
+      ? !isControllingAnyToken() && getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false
+      : false;
     for (const location of renderedLocations.values()) {
-      if (!game.user.isGM && !location.alwaysDiscovered && !discovered.has(location.id)) continue;
-      const cells = getLocationCells(canvas.scene, location);
-      const graphic = new PIXI.LegacyGraphics();
-      graphic.zIndex = 30;
-      const isEditMode = this.mode === "locationEdit";
-      const isActive = this.editor instanceof LocationEditor && this.editor.data.id === location.id;
-      const lineColor = isEditMode ? "#39ff88" : location.strokeColor;
-      const lineWidth = isEditMode ? Math.max(3, Number(location.strokeWidth) || 3) : location.strokeWidth;
-      drawCellBoundary(graphic, cells, lineColor, lineWidth, isActive ? 1 : 0.9);
-      this.container.addChild(graphic);
-      const bounds = getBoundaryBounds(getCellsBoundaryLoops(canvas.scene, cells));
-      this.#drawLocationIcon(this.container, location, bounds, 31, refreshCycle);
-      const text = new PIXI.Text(location.name ?? "", {
-        fill: location.textColor || "#ffffff",
-        fontSize: Math.max(8, Number(location.fontSize) || 28),
-        stroke: "#000000",
-        strokeThickness: 4,
-        align: "center"
-      });
-      text.anchor.set(0.5);
-      text.position.set(
-        bounds ? (bounds.minX + bounds.maxX) / 2 : location.x,
-        bounds ? bounds.minY - Math.max(8, Number(location.fontSize) * 0.7) : location.y
-      );
-      text.zIndex = 32;
-      this.container.addChild(text);
+      if (location.hidden && this.mode !== "locationEdit" && !gmPlayView) continue;
+      if (!game.user.isGM && (location.hidden || (!location.alwaysDiscovered && !discovered.has(location.id)))) continue;
+      this.#drawLocationEntry(this.container, location, 30, 31, 32, refreshCycle);
     }
     if (this.dragPreviewLocation) this.#drawLocationGhost(this.dragPreviewLocation);
   }
@@ -675,9 +657,15 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     }
     const discovered = new Set(discoveredIds ?? []);
     const editLocations = this.mode === "locationEdit" && game.user?.isGM;
+    const gmPlayView = game.user.isGM
+      ? !isControllingAnyToken() && getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false
+      : false;
     const visible = editLocations
       ? Array.from(renderedLocations.values())
-      : Array.from(renderedLocations.values()).filter(location => location.alwaysDiscovered || discovered.has(location.id));
+      : Array.from(renderedLocations.values()).filter(location => {
+        if (location.alwaysDiscovered || discovered.has(location.id)) return true;
+        return location.hidden && gmPlayView;
+      });
     if (!visible.length) return;
     const overlay = new PIXI.Container();
     overlay.name = "fallout-maw-discovered-locations";
@@ -693,25 +681,26 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     for (const location of visible) this.#drawLocationOverlayEntry(overlay, location, refreshCycle);
   }
 
-  #drawLocationOverlayEntry(container, location, refreshCycle) {
+  /**
+   * Draws one location marker (boundary, icon and label). Force-hidden locations are
+   * dimmed and desaturated instead of being hidden from the GM, so they stay
+   * recognizable while looking clearly different from active ones.
+   */
+  #drawLocationEntry(container, location, boundaryZ, iconZ, textZ, refreshCycle, withInteraction = false) {
     const cells = getLocationCells(canvas.scene, location);
-    if (!cells.length) return;
+    if (withInteraction && !cells.length) return;
     const graphic = new PIXI.LegacyGraphics();
-    graphic.zIndex = 1;
+    graphic.zIndex = boundaryZ;
     const isEditMode = this.mode === "locationEdit";
     const isActive = this.editor instanceof LocationEditor && this.editor.data.id === location.id;
     const lineColor = isEditMode ? "#39ff88" : (location.strokeColor || "#ffffff");
     const lineWidth = isEditMode ? Math.max(3, Number(location.strokeWidth) || 3) : Math.max(1, Number(location.strokeWidth) || 3);
-    drawCellBoundary(
-      graphic,
-      cells,
-      lineColor,
-      lineWidth,
-      isEditMode && !isActive ? 0.9 : 1
-    );
-    container.addChild(graphic);
+    drawCellBoundary(graphic, cells, lineColor, lineWidth, isEditMode && !isActive ? 0.9 : (isActive ? 1 : 0.9));
     const bounds = getBoundaryBounds(getCellsBoundaryLoops(canvas.scene, cells));
-    this.#drawLocationIcon(container, location, bounds, 2, refreshCycle);
+    const marker = location.hidden ? applyGlobalMapHiddenDisplay(new PIXI.Container()) : null;
+    const target = marker ?? container;
+    target.addChild(graphic);
+    this.#drawLocationIcon(target, location, bounds, iconZ, refreshCycle);
     const text = new PIXI.Text(location.name ?? "", {
       fill: location.textColor || "#ffffff",
       fontSize: Math.max(8, Number(location.fontSize) || 28),
@@ -724,9 +713,14 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       bounds ? (bounds.minX + bounds.maxX) / 2 : location.x,
       bounds ? bounds.minY - Math.max(8, Number(location.fontSize) * 0.7) : location.y
     );
-    text.zIndex = 3;
-    container.addChild(text);
-    this.#drawLocationInteractionArea(container, cells, location);
+    text.zIndex = withInteraction ? 3 : textZ;
+    target.addChild(text);
+    if (marker) container.addChild(marker);
+    if (withInteraction) this.#drawLocationInteractionArea(target, cells, location);
+  }
+
+  #drawLocationOverlayEntry(container, location, refreshCycle) {
+    this.#drawLocationEntry(container, location, 1, 2, 3, refreshCycle, true);
   }
 
   #drawLocationIcon(container, location, bounds, zIndex, refreshCycle) {
@@ -847,16 +841,27 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       : new Set();
     const validArrivalExitIds = new Set(this.arrivalSelection?.validExitZoneIds ?? []);
     const pending = this.pendingAreaOverwrites.locationExitZones;
+    // Same rule as locations: the GM sees hidden exit zones while not playing a token.
+    const gmPlayView = game.user.isGM
+      ? !isControllingAnyToken() && getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false
+      : false;
     for (const exit of exits) {
       if (activeIds.has(exit.id)) continue;
       if (validArrivalExitIds.size && !validArrivalExitIds.has(exit.id)) continue;
-      if (!this.arrivalSelection && !game.user.isGM && !exit.alwaysDiscovered && !discovered.has(exit.id)) continue;
+      if (this.arrivalSelection) {
+        if (exit.hidden) continue;
+      } else if (exit.hidden) {
+        // Shown dimmed only while the exit-zone tool is open or in the GM's overview.
+        if (!gmPlayView && !["locationExitDraw", "locationExitEdit"].includes(this.mode)) continue;
+      } else if (!game.user.isGM && (!exit.alwaysDiscovered && !discovered.has(exit.id))) continue;
       const graphic = new PIXI.LegacyGraphics();
       graphic.zIndex = this.arrivalSelection ? 120 : 24;
       const cuts = pending.get(exit.id);
       const cells = (exit.cells ?? []).filter(key => !cuts?.has(key)).map(parseCellKey).filter(Boolean);
       const color = this.arrivalSelection ? "#39ff88" : (exit.color || DEFAULT_LOCATION_EXIT.color);
       drawCellArea(graphic, cells, color, color, this.arrivalSelection ? 0.32 : 0.2, this.arrivalSelection ? 5 : 3);
+      // A GM still sees force-hidden exit zones, but dimmed and desaturated.
+      if (exit.hidden) applyGlobalMapHiddenDisplay(graphic);
       this.container.addChild(graphic);
     }
   }
@@ -919,6 +924,14 @@ function normalizeActiveIds(value) {
   if (value instanceof Set) return value;
   if (Array.isArray(value)) return new Set(value.filter(Boolean));
   return new Set([value].filter(Boolean));
+}
+
+/**
+ * True while the GM is playing an actor through a controlled token. In that state the
+ * GM must see the map the same way that actor does, so hidden entries are suppressed.
+ */
+function isControllingAnyToken() {
+  return (canvas?.tokens?.controlled?.length ?? 0) > 0;
 }
 
 function drawCell(graphic, cell, lineColor, fillColor, alpha = 0.2, width = 2) {

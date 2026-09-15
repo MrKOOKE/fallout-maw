@@ -247,6 +247,51 @@ export async function deleteTransitionTargetStructure(transition) {
   else await detachManagedScene(targetScene);
 }
 
+/**
+ * Detaches every scene that belongs to a location (including nested child locations)
+ * and clears the link on the affected location markers, so the same locations can be
+ * connected to different scenes afterwards. The scenes themselves are preserved.
+ */
+export async function detachLocationScenes(parentScene, locationId) {
+  const scenes = collectLocationScenes(locationId);
+  if (!scenes.length) return { scenes: [], locationIds: [] };
+  const sceneRefs = scenes.map(scene => ({ id: scene.id, name: scene.name }));
+  const locationIds = Array.from(new Set(scenes.map(scene => getGlobalMapFlag(scene)?.nodeId).filter(Boolean)));
+  for (const scene of scenes) {
+    await detachManagedScene(scene);
+  }
+  if (parentScene && locationIds.length) {
+    const removed = new Set(locationIds);
+    await updateSceneState(parentScene, state => {
+      state.locations = state.locations.map(location => removed.has(location.id)
+        ? { ...location, linkedSceneId: null, linkedSceneOwned: false }
+        : location);
+      state.discoveredLocationIds = state.discoveredLocationIds.filter(id => !removed.has(String(id)));
+      return state;
+    });
+  }
+  return { scenes: sceneRefs, locationIds };
+}
+
+function collectLocationScenes(locationId) {
+  const collected = new Map();
+  const visit = nodeId => {
+    if (!nodeId || collected.has(nodeId)) return;
+    collected.set(nodeId, []);
+    const folder = getLocationFolder(nodeId);
+    for (const scene of folder?.contents ?? []) {
+      if (getGlobalMapFlag(scene)?.role === GLOBAL_MAP_ROLES.LOCATION_SCENE) collected.get(nodeId).push(scene);
+    }
+    for (const candidate of game.folders ?? []) {
+      const flag = getGlobalMapFlag(candidate);
+      if (flag?.role !== GLOBAL_MAP_ROLES.LOCATION_FOLDER || flag.parentNodeId !== nodeId) continue;
+      visit(flag.nodeId);
+    }
+  };
+  visit(locationId);
+  return Array.from(collected.values()).flat();
+}
+
 export async function deleteLocationTree(parentScene, locationId, { deleteMarker = true } = {}) {
   const folder = getLocationFolder(locationId);
   if (folder) {

@@ -37,7 +37,10 @@
   {{else}}
   <div class="form-group">
     <label>Подключённая сцена</label>
-    <div class="form-fields"><input type="text" value="{{linkedSceneName}}" disabled></div>
+    <div class="form-fields">
+      <input type="text" value="{{linkedSceneName}}" disabled>
+      <button type="button" data-action="deleteLinkedScene" class="danger" title="Отключить сцену, чтобы подключить другую"><i class="fa-solid fa-trash"></i></button>
+    </div>
   </div>
   {{/if}}
   <div class="form-group">
@@ -57,9 +60,9 @@
     <div class="form-fields"><input type="number" name="location.fontSize" value="{{location.fontSize}}" min="8"></div>
   </div>
   <div class="form-group">
-    <label>Всегда обнаружена</label>
-    <div class="form-fields">
-      <input type="checkbox" name="location.alwaysDiscovered" {{checked location.alwaysDiscovered}}>
+    <div class="fallout-maw-global-map-visibility" style="display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 0.75rem; width: 100%;">
+      <label class="checkbox"><span>Раскрыта</span><input type="checkbox" name="location.alwaysDiscovered" title="Локация видна на карте всегда, даже до обнаружения." {{checked location.alwaysDiscovered}}></label>
+      <label class="checkbox"><span>Скрыта</span><input type="checkbox" name="location.hidden" title="Локация не отображается на карте и не срабатывает при входе в её клетки. Взаимоисключающа с «Раскрыта»." {{checked location.hidden}}></label>
     </div>
   </div>
   <footer class="form-footer">

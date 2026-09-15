@@ -534,6 +534,7 @@ async function handleExitRequest(payload) {
   const token = scene?.tokens?.get(payload.tokenId);
   const zone = getSceneState(scene).locationExitZones.find(entry => entry.id === payload.exitZoneId);
   const user = game.users?.get(payload.requestingUserId);
+  if (zone?.hidden) throw new Error("Эта зона выхода скрыта и недоступна.");
   validateExitParticipant(scene, zone, token, user);
   if (isTravelGroupCarrierActor(token.actor)) {
     if (token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival) {
@@ -759,6 +760,7 @@ async function handleArrivalRequest(payload) {
   const user = game.users?.get(payload.requestingUserId);
   const found = findLocation(payload.locationId);
   if (!originScene || !token?.actor || !user || !found || found.scene.id !== originScene.id) throw new Error("Локация или группа не найдена.");
+  if (found.location.hidden) throw new Error("Эта локация скрыта и недоступна для входа.");
   if (!token.actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId) throw new Error("На глобальную карту может входить только носитель группы.");
   if (!getTravelCarrierUnits(token.actor).length) throw new Error("В группе нет участников для переноса.");
   if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на группу.");
@@ -844,7 +846,7 @@ async function handleArrivalSelectRequest(payload) {
   if (!payload.transferId || payload.transferId !== pending.transferId) throw new Error("Этот выбор зоны уже устарел.");
   validatePendingCarrierPosition(originScene, token, pending);
   const targetScene = game.scenes?.get(pending.targetSceneId);
-  const zone = getSceneState(targetScene).locationExitZones.find(entry => entry.id === payload.exitZoneId && entry.cells?.length);
+  const zone = getSceneState(targetScene).locationExitZones.find(entry => entry.id === payload.exitZoneId && !entry.hidden && entry.cells?.length);
   if (!targetScene || !zone) throw new Error("Зона прибытия не найдена.");
   if (!getValidArrivalZones(targetScene, token, pending).some(entry => entry.id === zone.id)) {
     throw new Error("В выбранной зоне недостаточно свободного места.");
@@ -1586,7 +1588,7 @@ function getValidArrivalZones(targetScene, carrierToken, pending = {}) {
     ? new Set(pending.validExitZoneIds.map(String))
     : null;
   return getSceneState(targetScene).locationExitZones
-    .filter(zone => zone.cells?.length)
+    .filter(zone => !zone.hidden && zone.cells?.length)
     .filter(zone => !allowedZoneIds || allowedZoneIds.has(String(zone.id)))
     .filter(zone => entryMode === LOCATION_ENTRY_MODES.CARRIER
       ? canPlaceTravelCarrier(targetScene, zone, carrierToken)
@@ -2503,7 +2505,7 @@ async function resumeArrivalTimers() {
         const validExitZoneIds = Array.isArray(pending.validExitZoneIds) && pending.validExitZoneIds.length
           ? pending.validExitZoneIds
           : getSceneState(targetScene).locationExitZones
-            .filter(zone => zone.cells?.length)
+            .filter(zone => !zone.hidden && zone.cells?.length)
             .map(zone => zone.id);
         pending = createPendingArrival({
           ...pending,

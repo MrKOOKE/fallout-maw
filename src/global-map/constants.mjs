@@ -29,6 +29,34 @@ export const LOCATION_ENTRY_MODES = Object.freeze({
   DEPLOY: "deploy"
 });
 
+/** Alpha applied to force-hidden map entries so the GM can still spot them. */
+export const GLOBAL_MAP_HIDDEN_ALPHA = 0.55;
+
+// Desaturates force-hidden map entries in place without touching the source docs.
+const GLOBAL_MAP_DESATURATE_MATRIX = [
+  0.5, 0.5, 0, 0, 0,
+  0.5, 0.5, 0, 0, 0,
+  0.5, 0.5, 0, 0, 0,
+  0, 0, 0, 1, 0
+];
+let globalMapDesaturateFilter = null;
+
+/**
+ * Dims a force-hidden map entry: lowered alpha plus desaturation, so a GM can tell
+ * hidden markers apart from regular ones at a glance.
+ */
+export function applyGlobalMapHiddenDisplay(displayable) {
+  if (!displayable) return displayable;
+  displayable.alpha = GLOBAL_MAP_HIDDEN_ALPHA;
+  if (typeof PIXI === "undefined" || !PIXI?.ColorMatrixFilter) return displayable;
+  if (!globalMapDesaturateFilter || globalMapDesaturateFilter.destroyed) {
+    globalMapDesaturateFilter = new PIXI.ColorMatrixFilter();
+    globalMapDesaturateFilter.matrix = [...GLOBAL_MAP_DESATURATE_MATRIX];
+  }
+  displayable.filters = [globalMapDesaturateFilter];
+  return displayable;
+}
+
 export const DEFAULT_LOCATION = Object.freeze({
   name: "Новая локация",
   size: 1,
@@ -39,6 +67,7 @@ export const DEFAULT_LOCATION = Object.freeze({
   image: "",
   mapImage: "",
   alwaysDiscovered: false,
+  hidden: false,
   entryMode: LOCATION_ENTRY_MODES.DEPLOY,
   linkedSceneId: null,
   linkedSceneOwned: false
@@ -69,6 +98,7 @@ export const DEFAULT_LOCATION_EXIT = Object.freeze({
   color: "#ffb703",
   brushRadius: 1,
   alwaysDiscovered: false,
+  hidden: false,
   cells: []
 });
 
@@ -86,7 +116,8 @@ export const DEFAULT_SCENE_STATE = Object.freeze({
     mode: "native",
     cellRadius: 2,
     nativeMode: null,
-    exploredCellKeys: []
+    exploredCellKeys: [],
+    hiddenLocationsInPlay: true
   }
 });
 

@@ -18,6 +18,7 @@ import { getConnectedCellKeyGroups } from "./geometry.mjs";
 import {
   deleteLocationTree,
   deleteTransitionTargetStructure,
+  detachLocationScenes,
   ensureTransitionTargetStructure,
   ensureLocationStructure,
   getOrCreateGlobalMap,
@@ -56,8 +57,14 @@ class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
     await this._deleteEntry(target);
   }
 
+  static VISIBILITY_CHECKBOX_PAIRS = [
+    ["location.alwaysDiscovered", "location.hidden"],
+    ["exit.alwaysDiscovered", "exit.hidden"]
+  ];
+
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#bindVisibilityCheckboxPairs();
     this.form?.addEventListener("input", () => this.#syncLivePreview());
     this.form?.addEventListener("change", () => this.#syncLivePreview());
     if (this.#initialPositionApplied) return;
@@ -89,6 +96,34 @@ class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
     this._applyLiveValues(getExpandedFormData(formData));
     this._refreshLivePreview();
   }
+
+  /**
+   * Keeps a mutually exclusive checkbox group in sync. The two checkboxes share
+   * one visibility state, so checking one clears the other in the DOM before the
+   * live preview reads the form.
+   */
+  #bindVisibilityCheckboxPairs() {
+    if (!this.form) return;
+    for (const [discoveredName, hiddenName] of this.constructor.VISIBILITY_CHECKBOX_PAIRS) {
+      const discovered = findFormControl(this.form, discoveredName);
+      const hidden = findFormControl(this.form, hiddenName);
+      if (!discovered || !hidden) continue;
+      const sync = (source, target) => {
+        if (!source.checked || !target.checked) return;
+        target.checked = false;
+      };
+      discovered.addEventListener("change", () => sync(discovered, hidden));
+      hidden.addEventListener("change", () => sync(hidden, discovered));
+    }
+  }
+}
+
+function findFormControl(root, name) {
+  if (!root || !name) return null;
+  const escaped = name.replace(/"/g, "\\\"");
+  return root.querySelector(`input[type="checkbox"][name="${escaped}"]`)
+    ?? root.querySelector(`[name="${escaped}"]`)
+    ?? null;
 }
 
 export class LocationEditor extends GlobalMapEditorBase {
@@ -105,7 +140,8 @@ export class LocationEditor extends GlobalMapEditorBase {
     window: { title: "Локация", resizable: true },
     actions: {
       ...super.DEFAULT_OPTIONS.actions,
-      configureExitZones: LocationEditor.#configureExitZones
+      configureExitZones: LocationEditor.#configureExitZones,
+      deleteLinkedScene: LocationEditor.#deleteLinkedScene
     }
   };
 
@@ -170,6 +206,7 @@ export class LocationEditor extends GlobalMapEditorBase {
       strokeWidth: Math.max(1, Number(values.strokeWidth) || 3),
       fontSize: Math.max(8, Number(values.fontSize) || 28),
       alwaysDiscovered: readCheckboxValue(values.alwaysDiscovered),
+      hidden: readCheckboxValue(values.hidden),
       entryMode: normalizeLocationEntryMode(values.entryMode),
       mapImage: "",
       image: String(values.image ?? "").trim()
@@ -226,6 +263,39 @@ export class LocationEditor extends GlobalMapEditorBase {
     await layer.startLocationExitEditing();
   }
 
+  /**
+   * Detaches the scene connected to the location (after confirmation) so another scene
+   * can be connected. The scene itself is kept intact.
+   */
+  static async #deleteLinkedScene() {
+    const linkedSceneId = String(this.data.linkedSceneId ?? "").trim();
+    if (this.isNew || !linkedSceneId) {
+      ui.notifications.warn("К локации ещё не подключена сцена.");
+      return;
+    }
+    const target = game.scenes?.get(linkedSceneId);
+    const sceneName = target?.name ?? "сцена";
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Извлечь сцену из локации?" },
+      content: `<p>Сцена <strong>${foundry.utils.escapeHTML(sceneName)}</strong> будет извлечена из локации и сохранена. После этого можно подключить другую сцену.</p>`
+    });
+    if (!confirmed) return;
+    const result = await detachLocationScenes(this.scene, this.data.id);
+    if (!result.scenes.length && !result.locationIds.length) {
+      ui.notifications.warn("Подключённая сцена не найдена.");
+      return;
+    }
+    const stored = getSceneState(this.scene).locations.find(entry => entry.id === this.data.id);
+    this.data = {
+      ...(stored ?? this.data),
+      linkedSceneId: null,
+      linkedSceneOwned: false
+    };
+    canvas.falloutMaWGlobalMap?.refresh?.();
+    this.render();
+    ui.notifications.info("Сцена извлечена из локации. Можно подключить другую.");
+  }
+
   _applyLiveValues(values) {
     const location = values.location ?? {};
     Object.assign(this.data, {
@@ -238,6 +308,7 @@ export class LocationEditor extends GlobalMapEditorBase {
       textColor: String(location.textColor || "#ffffff"),
       fontSize: Math.max(8, Number(location.fontSize) || 28),
       alwaysDiscovered: readCheckboxValue(location.alwaysDiscovered),
+      hidden: readCheckboxValue(location.hidden),
       entryMode: normalizeLocationEntryMode(location.entryMode)
     });
   }
@@ -373,6 +444,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
       color: String(values.color || DEFAULT_LOCATION_EXIT.color),
       brushRadius: Math.max(1, Math.round(Number(values.brushRadius) || 1)),
       alwaysDiscovered: readCheckboxValue(values.alwaysDiscovered),
+      hidden: readCheckboxValue(values.hidden),
       cells: Array.from(new Set(this.data.cells ?? []))
     };
     if (!exit.cells.length) {
@@ -395,7 +467,8 @@ export class LocationExitEditor extends GlobalMapEditorBase {
       name: String(exit.name ?? this.data.name),
       color: String(exit.color || DEFAULT_LOCATION_EXIT.color),
       brushRadius: Math.max(1, Math.round(Number(exit.brushRadius) || 1)),
-      alwaysDiscovered: readCheckboxValue(exit.alwaysDiscovered)
+      alwaysDiscovered: readCheckboxValue(exit.alwaysDiscovered),
+      hidden: readCheckboxValue(exit.hidden)
     });
   }
 
@@ -439,7 +512,7 @@ async function saveLocationExitEntries(scene, exit, replaceIds = [exit.id]) {
     const previousDiscoveredIds = state.discoveredExitZoneIds ?? [];
     const discovered = new Set(previousDiscoveredIds.filter(id => knownExitIds.has(id) && !replaceIdSet.has(id)));
     const replacedWasDiscovered = previousDiscoveredIds.some(id => replaceIdSet.has(id));
-    if (replacedWasDiscovered || exit.alwaysDiscovered) {
+    if (!exit.hidden && (replacedWasDiscovered || exit.alwaysDiscovered)) {
       for (const entry of savedEntries) discovered.add(entry.id);
     }
     state.discoveredExitZoneIds = Array.from(discovered);
@@ -717,7 +790,8 @@ export class GlobalMapSceneSettings extends GlobalMapEditorBase {
   async _prepareContext() {
     return {
       fog: this.data,
-      isCellMode: this.data.mode === "cells"
+      isCellMode: this.data.mode === "cells",
+      hiddenLocationsInPlay: this.data.hiddenLocationsInPlay !== false
     };
   }
 
@@ -734,7 +808,8 @@ export class GlobalMapSceneSettings extends GlobalMapEditorBase {
         ...state.fog,
         mode,
         cellRadius: Math.max(1, Math.round(Number(values.cellRadius) || 2)),
-        nativeMode
+        nativeMode,
+        hiddenLocationsInPlay: readCheckboxValue(values.hiddenLocationsInPlay)
       };
       return state;
     });

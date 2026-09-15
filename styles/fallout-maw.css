@@ -19778,6 +19778,32 @@ label.checkbox.fallout-maw-ability-change-choice {
   color: var(--color-level-error);
 }
 
+/* The linked-scene field is disabled, so its unlink button must stay clickable. */
+.fallout-maw-global-map-editor .fallout-maw-global-map-form .form-fields > button[data-action="deleteLinkedScene"] {
+  flex: none;
+  width: auto;
+}
+
+/* Revealed / hidden row. The row layout itself is inlined on the wrapper in the
+   templates so no Foundry core rule (".form-fields > label.checkbox", ".form-fields
+   label", ":has(...)" and friends) can reflow it. Only the two checkbox widgets are
+   styled here: text left, box right, tight gap, and pinned sizing. */
+.fallout-maw-global-map-editor .fallout-maw-global-map-visibility label.checkbox {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.fallout-maw-global-map-editor .fallout-maw-global-map-visibility label.checkbox > input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+  width: auto;
+}
+
 .fallout-maw-global-map-dropzone {
   align-items: center;
   border: 1px dashed var(--color-border-light-2);

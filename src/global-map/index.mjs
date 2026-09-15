@@ -80,6 +80,9 @@ export function registerGlobalMapSystem() {
   registerGlobalMapGridHooks();
   registerGlobalMapKeybinding();
   Hooks.on("canvasReady", refreshGlobalMapUi);
+  // Hidden entries follow the controlled token: the GM sees them while nothing is
+  // played and loses them the moment an actor is taken under control (and vice versa).
+  Hooks.on("controlToken", () => canvas[GLOBAL_MAP_LAYER]?.refresh?.());
   Hooks.once("ready", () => void migrateGlobalMapVersion());
   Hooks.on("updateScene", scene => {
     if (scene.id === canvas.scene?.id) canvas[GLOBAL_MAP_LAYER]?.refresh?.();

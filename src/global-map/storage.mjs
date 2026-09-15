@@ -1,6 +1,7 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   DEFAULT_LOCATION,
+  DEFAULT_LOCATION_EXIT,
   DEFAULT_SCENE_STATE,
   GLOBAL_MAP_FLAG,
   GLOBAL_MAP_ROOT_SCENE_SETTING,
@@ -55,7 +56,9 @@ export function normalizeSceneState(value) {
   state.locations = Array.isArray(state.locations) ? state.locations.map(normalizeLocation) : [];
   state.terrains = Array.isArray(state.terrains) ? state.terrains : [];
   state.transitions = Array.isArray(state.transitions) ? state.transitions : [];
-  state.locationExitZones = Array.isArray(state.locationExitZones) ? state.locationExitZones : [];
+  state.locationExitZones = Array.isArray(state.locationExitZones)
+    ? state.locationExitZones.map(normalizeLocationExit)
+    : [];
   state.travelAssemblies = Array.isArray(state.travelAssemblies) ? state.travelAssemblies : [];
   state.version = GLOBAL_MAP_VERSION;
   state.discoveredLocationIds = uniqueStrings(state.discoveredLocationIds);
@@ -64,6 +67,7 @@ export function normalizeSceneState(value) {
   state.fog.mode = state.fog?.mode === "cells" ? "cells" : "native";
   state.fog.cellRadius = Math.max(1, Math.round(Number(state.fog?.cellRadius) || 2));
   state.fog.nativeMode = Number.isInteger(state.fog?.nativeMode) ? state.fog.nativeMode : null;
+  state.fog.hiddenLocationsInPlay = state.fog?.hiddenLocationsInPlay !== false;
   state.fog.exploredCellKeys = uniqueStrings(state.fog?.exploredCellKeys);
   return state;
 }
@@ -77,7 +81,22 @@ export function normalizeLocation(value) {
     recursive: true
   });
   location.entryMode = normalizeLocationEntryMode(source.entryMode);
+  location.alwaysDiscovered = source.alwaysDiscovered === true;
+  location.hidden = source.hidden === true;
   return location;
+}
+
+export function normalizeLocationExit(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? foundry.utils.deepClone(value)
+    : {};
+  const exit = foundry.utils.mergeObject(foundry.utils.deepClone(DEFAULT_LOCATION_EXIT), source, {
+    inplace: false,
+    recursive: true
+  });
+  exit.alwaysDiscovered = source.alwaysDiscovered === true;
+  exit.hidden = source.hidden === true;
+  return exit;
 }
 
 export function normalizeLocationEntryMode(value) {

@@ -118,13 +118,14 @@ async function enforceCellFogIsolation(scene) {
 async function reconcileDiscoveredLocationCells(scene) {
   if (!scene || !game.user?.isGM || !isResponsibleGM()) return;
   const state = getSceneState(scene);
+  await pruneHiddenDiscoveries(scene);
   if (state.fog.mode !== "cells") return;
   const discovered = new Set([
     ...state.discoveredLocationIds,
-    ...state.locations.filter(location => location.alwaysDiscovered).map(location => location.id)
+    ...state.locations.filter(location => location.alwaysDiscovered && !location.hidden).map(location => location.id)
   ]);
   const requiredKeys = state.locations
-    .filter(location => discovered.has(location.id))
+    .filter(location => discovered.has(location.id) && !location.hidden)
     .flatMap(location => getLocationCells(scene, location).map(cellKey));
   const existing = new Set(state.fog.exploredCellKeys);
   if (requiredKeys.every(key => existing.has(key))) return;
@@ -305,7 +306,7 @@ async function discoverVisibleObjects() {
   if (!scene || !getGlobalMapFlag(scene)) return;
   const state = getSceneState(scene);
   const locationIds = state.locations
-    .filter(location => location.alwaysDiscovered || isLocationVisible(scene, state, location))
+    .filter(location => !location.hidden && (location.alwaysDiscovered || isLocationVisible(scene, state, location)))
     .map(location => location.id)
     .filter(id => !state.discoveredLocationIds.includes(id));
   const transitionIds = state.transitions
@@ -313,7 +314,7 @@ async function discoverVisibleObjects() {
     .map(transition => transition.id)
     .filter(id => !state.discoveredTransitionIds.includes(id));
   const exitZoneIds = state.locationExitZones
-    .filter(exit => exit.alwaysDiscovered || isCellsVisible(scene, state, exit.cells))
+    .filter(exit => !exit.hidden && (exit.alwaysDiscovered || isCellsVisible(scene, state, exit.cells)))
     .map(exit => exit.id)
     .filter(id => !state.discoveredExitZoneIds.includes(id));
   if (!locationIds.length && !transitionIds.length && !exitZoneIds.length) return;
@@ -358,7 +359,7 @@ async function handleFogSocket(payload) {
     const state = getSceneState(scene);
     for (const id of payload.locationIds ?? []) {
       const location = state.locations.find(entry => entry.id === id);
-      if (location?.alwaysDiscovered || userHasNearbyOwnedToken(user, scene, state, location, "location")) {
+      if (!location?.hidden && (location?.alwaysDiscovered || userHasNearbyOwnedToken(user, scene, state, location, "location"))) {
         allowedLocationIds.push(id);
       }
     }
@@ -370,7 +371,7 @@ async function handleFogSocket(payload) {
     }
     for (const id of payload.exitZoneIds ?? []) {
       const exit = state.locationExitZones.find(entry => entry.id === id);
-      if (exit?.alwaysDiscovered || (exit && userHasNearbyOwnedToken(user, scene, state, exit, "exit"))) {
+      if (!exit?.hidden && (exit?.alwaysDiscovered || (exit && userHasNearbyOwnedToken(user, scene, state, exit, "exit")))) {
         allowedExitZoneIds.push(id);
       }
     }
@@ -475,6 +476,26 @@ async function applyDiscoveries(scene, locationIds, transitionIds, exitZoneIds =
   }
 }
 
+async function pruneHiddenDiscoveries(scene) {
+  if (!scene || !game.user?.isGM || !isResponsibleGM()) return false;
+  const state = getSceneState(scene);
+  const nextLocationIds = state.discoveredLocationIds.filter(id => !state.locations.find(entry => entry.id === id)?.hidden);
+  const nextExitIds = state.discoveredExitZoneIds.filter(id => !state.locationExitZones.find(entry => entry.id === id)?.hidden);
+  const changed = nextLocationIds.length !== state.discoveredLocationIds.length
+    || nextExitIds.length !== state.discoveredExitZoneIds.length;
+  if (!changed) return false;
+  await updateSceneState(scene, current => {
+    current.discoveredLocationIds = nextLocationIds;
+    current.discoveredExitZoneIds = nextExitIds;
+    return current;
+  });
+  game.socket.emit(GLOBAL_MAP_SOCKET, {
+    action: "globalMap.discovery.changed",
+    sceneId: scene.id
+  });
+  return true;
+}
+
 function isLocationVisible(scene, state, location) {
   const locationCells = getLocationCells(scene, location).map(cellKey);
   return isCellsVisible(scene, state, locationCells);
@@ -541,11 +562,11 @@ export async function resetCellFog(scene = canvas?.scene) {
   await updateSceneState(scene, state => {
     state.fog.exploredCellKeys = [];
     state.discoveredLocationIds = state.locations
-      .filter(entry => entry.alwaysDiscovered)
+      .filter(entry => entry.alwaysDiscovered && !entry.hidden)
       .map(entry => entry.id);
     state.discoveredTransitionIds = [];
     state.discoveredExitZoneIds = state.locationExitZones
-      .filter(entry => entry.alwaysDiscovered)
+      .filter(entry => entry.alwaysDiscovered && !entry.hidden)
       .map(entry => entry.id);
     return state;
   });
@@ -572,9 +593,13 @@ async function onFogReset() {
   });
   if (!confirmed) return;
   await updateSceneState(canvas.scene, state => {
-    state.discoveredLocationIds = state.locations.filter(entry => entry.alwaysDiscovered).map(entry => entry.id);
+    state.discoveredLocationIds = state.locations
+      .filter(entry => entry.alwaysDiscovered && !entry.hidden)
+      .map(entry => entry.id);
     state.discoveredTransitionIds = [];
-    state.discoveredExitZoneIds = state.locationExitZones.filter(entry => entry.alwaysDiscovered).map(entry => entry.id);
+    state.discoveredExitZoneIds = state.locationExitZones
+      .filter(entry => entry.alwaysDiscovered && !entry.hidden)
+      .map(entry => entry.id);
     return state;
   });
   game.socket.emit(GLOBAL_MAP_SOCKET, {
