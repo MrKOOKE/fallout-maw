@@ -635,17 +635,31 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       renderedLocations.set(this.editor.data.id, this.editor.data);
     }
     const discovered = new Set(discoveredIds ?? []);
-    // The GM keeps hidden markers while nothing is being played. As soon as a token is
-    // under control the GM sees the map the way that actor does, hidden entries included.
-    const gmPlayView = game.user.isGM
-      ? !isControllingAnyToken() && getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false
-      : false;
     for (const location of renderedLocations.values()) {
-      if (location.hidden && this.mode !== "locationEdit" && !gmPlayView) continue;
-      if (!game.user.isGM && (location.hidden || (!location.alwaysDiscovered && !discovered.has(location.id)))) continue;
+      if (!this.#isLocationVisible(location, discovered)) continue;
       this.#drawLocationEntry(this.container, location, 30, 31, 32, refreshCycle);
     }
     if (this.dragPreviewLocation) this.#drawLocationGhost(this.dragPreviewLocation);
+  }
+
+  /**
+   * Single source of truth for location visibility, shared by the layer and the overlay:
+   * - the location-edit tool shows everything so the GM can work;
+   * - while the GM plays a token (or for any player) only revealed or discovered
+   *   locations appear, and never hidden ones — the GM sees what the actor sees;
+   * - with nothing controlled the GM gets the overview: everything except hidden
+   *   markers, which the map setting can suppress as well.
+   */
+  #isLocationVisible(location, discovered) {
+    const editLocations = this.mode === "locationEdit" && game.user?.isGM;
+    if (editLocations) return true;
+    const known = location.alwaysDiscovered || discovered.has(location.id);
+    const gmOverview = game.user.isGM && !isControllingAnyToken();
+    if (gmOverview) {
+      if (!location.hidden) return true;
+      return getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false;
+    }
+    return known && !location.hidden;
   }
 
   #drawDiscoveredLocationOverlay(locations, discoveredIds, refreshCycle) {
@@ -657,15 +671,9 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     }
     const discovered = new Set(discoveredIds ?? []);
     const editLocations = this.mode === "locationEdit" && game.user?.isGM;
-    const gmPlayView = game.user.isGM
-      ? !isControllingAnyToken() && getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false
-      : false;
-    const visible = editLocations
-      ? Array.from(renderedLocations.values())
-      : Array.from(renderedLocations.values()).filter(location => {
-        if (location.alwaysDiscovered || discovered.has(location.id)) return true;
-        return location.hidden && gmPlayView;
-      });
+    const visible = Array.from(renderedLocations.values()).filter(location =>
+      this.#isLocationVisible(location, discovered)
+    );
     if (!visible.length) return;
     const overlay = new PIXI.Container();
     overlay.name = "fallout-maw-discovered-locations";

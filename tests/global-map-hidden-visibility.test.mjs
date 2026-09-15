@@ -129,6 +129,29 @@ test("the visibility row fits the default dialog width", async () => {
   }
 });
 
+test("the GM playing a token never sees undiscovered locations", async () => {
+  const layer = await readFile(new URL("../src/global-map/layer.mjs", import.meta.url), "utf8");
+  const visibility = layer.match(/#isLocationVisible\(location, discovered\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  assert.ok(visibility, "expected a single shared visibility predicate");
+
+  // One predicate for the layer and the overlay, so they cannot drift apart.
+  assert.equal(layer.split("#isLocationVisible(location, discovered)").length - 1, 3, "defined once, used twice");
+  const drawLocations = layer.match(/#drawLocations\(locations, discoveredIds, refreshCycle\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  assert.ok(drawLocations, "expected the location draw loop");
+  assert.doesNotMatch(drawLocations, /gmPlayView|game\.user\.isGM/, "the draw loop keeps no GM-only branch of its own");
+
+  // Playing a token: revealed or discovered, never hidden.
+  assert.match(visibility, /const gmOverview = game\.user\.isGM && !isControllingAnyToken\(\);/);
+  assert.match(visibility, /return known && !location\.hidden;/);
+  assert.match(visibility, /const known = location\.alwaysDiscovered \|\| discovered\.has\(location\.id\);/);
+
+  // Overview keeps hidden markers only while the setting allows it.
+  assert.match(visibility, /if \(!location\.hidden\) return true;/);
+  assert.match(visibility, /return getSceneState\(canvas\.scene\)\.fog\.hiddenLocationsInPlay !== false;/);
+  // The edit tool still shows everything.
+  assert.match(visibility, /if \(editLocations\) return true;/);
+});
+
 test("hidden global-map entries are dimmed and desaturated for the GM", async () => {
   assert.ok(GLOBAL_MAP_HIDDEN_ALPHA > 0 && GLOBAL_MAP_HIDDEN_ALPHA < 1);
 
@@ -154,11 +177,8 @@ test("the GM sees hidden entries only while no token is under control", async ()
 
   const drawLocations = layer.match(/#drawLocations\(locations, discoveredIds, refreshCycle\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
   assert.ok(drawLocations, "expected the location draw loop");
-  const hiddenGuard = drawLocations.indexOf('location.hidden && this.mode !== "locationEdit" && !gmPlayView');
-  const gmBranch = drawLocations.indexOf("!game.user.isGM");
-  assert.ok(hiddenGuard >= 0, "hidden locations must be skipped when the GM plays a token");
-  assert.ok(hiddenGuard < gmBranch, "the hidden guard must run for the GM too");
-  assert.match(drawLocations, /const gmPlayView = game\.user\.isGM[\s\S]*?!isControllingAnyToken\(\)/);
+  assert.match(drawLocations, /if \(!this\.#isLocationVisible\(location, discovered\)\) continue;/,
+    "the draw loop must use the shared predicate for everyone, the GM included");
 
   const drawExits = layer.match(/#drawLocationExitZones\(exits, discoveredIds\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
   assert.ok(drawExits, "expected the exit-zone draw loop");
@@ -196,9 +216,7 @@ test("hidden global-map entries stay out of discovery, rendering and travel trig
   assert.match(fog, /async function pruneHiddenDiscoveries/);
   assert.match(fog, /entry => entry\.alwaysDiscovered && !entry\.hidden/);
 
-  assert.match(layer, /location\.hidden \|\| \(!location\.alwaysDiscovered && !discovered\.has/);
-  assert.match(layer, /if \(location\.hidden && this\.mode !== "locationEdit" && !gmPlayView\) continue;/);
-  assert.match(layer, /return location\.hidden && gmPlayView;/);
+  assert.match(layer, /return known && !location\.hidden;/);
   assert.match(layer, /!game\.user\.isGM && \(!exit\.alwaysDiscovered && !discovered\.has/);
 
   assert.match(travel, /if \(exit\.hidden \|\| !exit\.cells\?\.includes\(key\)\) continue;/);
