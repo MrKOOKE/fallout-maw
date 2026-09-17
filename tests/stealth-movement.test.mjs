@@ -293,6 +293,35 @@ test("one route sample aggregates simultaneous observer checks without mutating 
   assert.equal(hidden.document.updates.length, 0);
 });
 
+test("full collection records every checkpoint before any state update", () => {
+  configureStealthRuleSettingsProvider(() => ({
+    ...SETTINGS,
+    autoDetection: { enabled: true, movementThresholdFormula: "3" },
+    detection: { skillKey: "naturalist", rangeFormula: "100" }
+  }));
+  const hidden = createToken("full-route", createActor("Actor.full-route", { hidden: true }), { x: 0, y: 0 });
+  const observer = createToken("full-observer", createActor("Actor.full-observer"), { x: 0, y: 0 });
+  const scene = { id: "full-route", uuid: "Scene.full-route", grid: { size: 100, distance: 5 } };
+  hidden.document.parent = scene;
+  observer.document.parent = scene;
+  globalThis.canvas = {
+    ready: true, scene,
+    grid: { isGridless: true, size: 100, distance: 5 },
+    tokens: { placeables: [hidden, observer] },
+    environment: { darknessLevel: 0, globalLightSource: { active: false } },
+    effects: { lightSources: new Map(), getDarknessLevel: () => 0, testInsideDarkness: () => false }
+  };
+  const destination = movementWaypoint({ x: 300 });
+  const collection = collectStealthMovementInterruptions({
+    tokenDocument: hidden.document, collectAll: true,
+    movement: { origin: movementWaypoint(), destination, passed: { waypoints: [destination] }, pending: { waypoints: [] } }
+  });
+  assert.ok(collection.events.length >= 3);
+  assert.equal(collection.routeSteps.at(-1).waypoint.x, 300);
+  assert.ok(collection.events.at(-1).routeOrder > collection.events[0].routeOrder);
+  assert.equal(hidden.document.updates.length, 0);
+});
+
 test("resumed routes preserve Foundry pending checkpoints, loops and fractional elevations", () => {
   const first = movementWaypoint({ x: 100, elevation: 1.25 });
   const loop = movementWaypoint({ x: 0, elevation: 1.375 });

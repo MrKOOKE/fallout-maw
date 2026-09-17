@@ -495,6 +495,7 @@ function hackingMethodField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
     toolKey: new StringField({ required: true, blank: true, initial: "" }),
+    interfaceType: new StringField({ required: true, blank: false, choices: ["terminal", "mechanical"], initial: "terminal" }),
     toolClass: new StringField({
       required: true,
       blank: false,

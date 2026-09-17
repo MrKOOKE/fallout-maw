@@ -1,11 +1,13 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getHackingSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getHackingSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEnabledToolFunctions, getToolResourceState } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { getActorToolSupplyCost } from "../utils/tool-supply-cost.mjs";
+import { buildHackingDialogState, getHackingCandidateBlockReason } from "./hacking-dialog-state.mjs";
+import { syncHackingDOM } from "./hacking-dialog-dom.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const HACKING_SOCKET = `system.${SYSTEM_ID}`;
@@ -78,10 +80,22 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   #hackerActor = null;
   #target = null;
   #selectedCandidateKey = "";
+  #selectedMethodId = "";
   #localMethods = null;
   #unlocked = false;
   #attemptInFlight = false;
   #onUnlocked = null;
+  #busy = "";
+  #feedback = null;
+  #hookIds = [];
+  #refreshTimer = null;
+  #closed = false;
+  #targetAvailable = true;
+  #viewState = null;
+  #choosingMethod = false;
+  #focusAfterRender = "";
+  #isMechanical = false;
+  #keyboardMenu = null;
 
   constructor({ hackerActor, target, onUnlocked = null } = {}) {
     super();
@@ -92,10 +106,13 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-hacking-dialog",
-    classes: ["fallout-maw", "fallout-maw-trap-disarm-dialog", "fallout-maw-hacking-dialog"],
-    position: { width: 900, height: "auto" },
+    classes: ["fallout-maw", "fallout-maw-hacking-dialog"],
+    position: { width: 740, height: "auto" },
     window: { resizable: true },
     actions: {
+      chooseMethod: this.#onChooseMethod,
+      showTools: this.#onShowTools,
+      selectMethod: this.#onSelectMethod,
       selectTool: this.#onSelectTool,
       attemptHack: this.#onAttemptHack,
       closeDialog: this.#onCloseDialog
@@ -107,61 +124,213 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   get title() {
-    return `Взлом — ${getHackingTargetName(this.#target)}`;
+    return this.#isMechanical ? "Взлом // Механика" : "Взлом // Терминал доступа";
+  }
+
+  _configureRenderOptions(options) {
+    const explicitHeight = Object.hasOwn(options.position ?? {}, "height");
+    super._configureRenderOptions(options);
+    if (options.isFirstRender || explicitHeight) return;
+    // ApplicationV2 otherwise re-applies DEFAULT_OPTIONS.height="auto" on every
+    // update, changing the frame size as busy messages and results appear.
+    if (options.position?.height === "auto") {
+      delete options.position.height;
+      if (!Object.keys(options.position).length) delete options.position;
+    }
+    if (this.minimized) return;
+    const scale = Number(this.position?.scale) || 1;
+    const height = this.element?.getBoundingClientRect?.().height / scale || this.element?.offsetHeight;
+    if (height > 0) {
+      this.setPosition({ height });
+      options.position = { ...options.position, height };
+    }
+  }
+
+  _replaceHTML(result, content, options) {
+    const current = this.parts?.body;
+    const next = result.body;
+    if (current?.isConnected && next && current.className === next.className) {
+      // There are no part-level forms/listeners here. Keeping the registered
+      // part in place also keeps focus, scrolling and frame-delegated actions.
+      syncHackingDOM(current, next);
+      return;
+    }
+    super._replaceHTML(result, content, options);
   }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const methods = this.#localMethods ?? getHackingTargetMethods(this.#target);
     const unlocked = this.#unlocked || !isHackingTargetLocked(this.#target);
-    const candidates = getHackingToolCandidates(this.#hackerActor, methods, this.#target);
-    if (!this.#selectedCandidateKey || !candidates.some(candidate => candidate.candidateKey === this.#selectedCandidateKey)) {
-      this.#selectedCandidateKey = String(candidates[0]?.candidateKey ?? "");
-    }
-    const selectedCandidate = candidates.find(candidate => candidate.candidateKey === this.#selectedCandidateKey) ?? null;
-    const selectedMethod = methods.find(method => method.id === selectedCandidate?.methodId) ?? null;
-    const availableMethods = methods.filter(method => method.attemptsRemaining > 0);
+    const candidates = getHackingToolCandidates(this.#hackerActor, methods, this.#target, { includeUnavailable: true });
+    const skillKey = getHackingSettings().skillKey;
+    const state = buildHackingDialogState({
+      methods: methods.map(method => ({ ...method, label: getToolLabel(method.toolKey) })),
+      candidates,
+      selectedMethodId: this.#selectedMethodId,
+      selectedCandidateKey: this.#selectedCandidateKey,
+      unlocked,
+      isOwner: Boolean(this.#hackerActor?.isOwner),
+      hasSkill: Boolean(this.#hackerActor?.system?.skills?.[skillKey]),
+      hasGM: Boolean(game.user?.isGM || getResponsibleGM()),
+      targetAvailable: this.#targetAvailable,
+      busy: this.#busy
+    });
+    this.#selectedMethodId = state.selectedMethodId;
+    this.#isMechanical = state.isMechanical;
+    this.#selectedCandidateKey = state.selectedCandidateKey;
     return {
       ...context,
+      ...state,
       targetName: getHackingTargetName(this.#target),
-      difficulty: selectedMethod?.difficulty ?? "—",
-      requiredClass: selectedMethod?.toolClass ?? "—",
-      methodLabel: selectedMethod ? getToolLabel(selectedMethod.toolKey) : "Метод не выбран",
-      attemptsRemaining: selectedMethod?.attemptsRemaining ?? 0,
-      attemptsTotal: selectedMethod?.attempts ?? 0,
-      statusLabel: unlocked
-        ? "Замок вскрыт"
-        : (availableMethods.length ? "Объект заперт" : "Попытки исчерпаны"),
-      statusClass: unlocked ? "status-ok" : (availableMethods.length ? "status-warn" : "status-bad"),
-      tools: candidates.map(candidate => ({
-        ...candidate,
-        selected: candidate.candidateKey === this.#selectedCandidateKey
-      })),
-      hasTools: candidates.length > 0,
-      hackDisabled: unlocked || !selectedCandidate || selectedMethod?.attemptsRemaining <= 0 || !this.#hackerActor?.isOwner
+      choosingMethod: this.#choosingMethod,
+      canChooseMethod: methods.length > 1,
+      hackerName: this.#hackerActor?.name ?? "Персонаж",
+      skillLabel: getSkillSettings().find(skill => skill.key === skillKey)?.label ?? skillKey,
+      feedback: this.#feedback
     };
+  }
+
+  async _preRender(context, options) {
+    const root = this.element;
+    const active = root?.contains(document.activeElement) ? document.activeElement : null;
+    this.#viewState = {
+      focusKey: active?.dataset?.focusKey,
+      scrolls: Array.from(root?.querySelectorAll("[data-hack-scroll]") ?? [])
+        .map(element => [element.dataset.hackScroll, element.scrollTop])
+    };
+    await super._preRender(context, options);
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    if (this.#closed) return;
+    const root = this.element;
+    root.classList?.toggle("is-mechanical", context.isMechanical);
+    const title = root.querySelector?.(".window-title");
+    if (title) title.textContent = this.title;
+    for (const element of root.querySelectorAll("[data-hack-scroll]")) {
+      element.scrollTop = this.#focusAfterRender ? 0
+        : this.#viewState?.scrolls.find(([key]) => key === element.dataset.hackScroll)?.[1] ?? 0;
+    }
+    const focus = Array.from(root.querySelectorAll("[data-focus-key]"))
+      .find(element => element.dataset.focusKey === this.#viewState?.focusKey);
+    if (focus && !focus.disabled) focus.focus({ preventScroll: true });
+    if (this.#focusAfterRender) {
+      const action = this.#focusAfterRender;
+      const menuFocus = root.querySelector?.(`[data-action="${action}"][aria-pressed="true"]`)
+        ?? root.querySelector?.(`[data-action="${action}"]:not(:disabled)`)
+        ?? root.querySelector?.('[data-action="closeDialog"]');
+      menuFocus?.focus({ preventScroll: true });
+      this.#focusAfterRender = "";
+    }
+    const menu = root.querySelector?.("[data-hack-options]");
+    if (menu && menu !== this.#keyboardMenu) menu.addEventListener("keydown", event => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const buttons = Array.from(event.currentTarget.querySelectorAll("button:not(:disabled)"));
+      const index = buttons.indexOf(event.target);
+      if (index < 0 || !buttons.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next].focus();
+    });
+    this.#keyboardMenu = menu;
+    if (!this.#hookIds.length) this.#bindDocumentHooks();
+  }
+
+  #bindDocumentHooks() {
+    const refresh = (document, deleted = false) => {
+      const isTarget = document?.uuid === this.#target?.uuid;
+      const isHacker = document?.uuid === this.#hackerActor?.uuid;
+      const isTool = document?.parent?.uuid === this.#hackerActor?.uuid;
+      if (!isTarget && !isHacker && !isTool && document?.documentName !== "User") return;
+      if (isTarget || isHacker) {
+        this.#localMethods = null;
+        if (deleted) this.#targetAvailable = false;
+      }
+      this.#scheduleRefresh();
+    };
+    for (const hook of ["updateActor", "updateWall", "createItem", "updateItem", "updateUser"]) {
+      this.#hookIds.push([hook, Hooks.on(hook, document => refresh(document))]);
+    }
+    for (const hook of ["deleteActor", "deleteWall", "deleteItem"]) {
+      this.#hookIds.push([hook, Hooks.on(hook, document => refresh(document, true))]);
+    }
+    this.#hookIds.push(["userConnected", Hooks.on("userConnected", () => this.#scheduleRefresh())]);
+  }
+
+  #scheduleRefresh() {
+    if (this.#closed || this.#attemptInFlight) return;
+    clearTimeout(this.#refreshTimer);
+    this.#refreshTimer = setTimeout(() => {
+      if (!this.#closed && !this.#attemptInFlight) void this.render();
+    }, 60);
+  }
+
+  async close(options = {}) {
+    this.#closed = true;
+    clearTimeout(this.#refreshTimer);
+    for (const [hook, id] of this.#hookIds) Hooks.off(hook, id);
+    this.#hookIds = [];
+    return super.close(options);
+  }
+
+  static #onSelectMethod(event, target) {
+    event.preventDefault();
+    if (this.#attemptInFlight) return;
+    this.#selectedMethodId = String(target.dataset.hackingMethod ?? "");
+    this.#selectedCandidateKey = "";
+    this.#choosingMethod = false;
+    this.#focusAfterRender = "selectTool";
+    return this.render();
+  }
+
+  static #onChooseMethod(event) {
+    event.preventDefault();
+    if (this.#attemptInFlight) return;
+    this.#choosingMethod = true;
+    this.#focusAfterRender = "selectMethod";
+    return this.render();
+  }
+
+  static #onShowTools(event) {
+    event.preventDefault();
+    if (this.#attemptInFlight) return;
+    this.#choosingMethod = false;
+    this.#focusAfterRender = "chooseMethod";
+    return this.render();
   }
 
   static #onSelectTool(event, target) {
     event.preventDefault();
-    this.#selectedCandidateKey = String(target.dataset.hackingCandidate ?? "");
-    return this.render({ force: true });
+    if (this.#attemptInFlight) return;
+    const candidateKey = String(target.dataset.hackingCandidate ?? "");
+    if (candidateKey === this.#selectedCandidateKey) return;
+    this.#selectedCandidateKey = candidateKey;
+    return this.render();
   }
 
   static async #onAttemptHack(event) {
     event.preventDefault();
-    if (this.#attemptInFlight || !isHackingTargetLocked(this.#target)) return undefined;
+    if (this.#attemptInFlight || this.#closed || !this.#targetAvailable || !this.#hackerActor?.isOwner
+      || !isHackingTargetLocked(this.#target)) return undefined;
+    if (!game.user?.isGM && !getResponsibleGM()) return this.render();
     const methods = this.#localMethods ?? getHackingTargetMethods(this.#target);
     const selectedCandidate = getHackingToolCandidates(this.#hackerActor, methods, this.#target)
       .find(candidate => candidate.candidateKey === this.#selectedCandidateKey);
     const selectedMethod = methods.find(method => method.id === selectedCandidate?.methodId);
     if (!selectedCandidate || !selectedMethod || selectedMethod.attemptsRemaining <= 0) {
       ui.notifications.warn("Нет доступного метода и инструмента для взлома.");
-      return this.render({ force: true });
+      return this.render();
     }
 
     this.#attemptInFlight = true;
+    this.#feedback = null;
+    this.#busy = "Проверка…";
     try {
+      await this.render();
       const skillKey = getHackingSettings().skillKey;
       if (!this.#hackerActor?.system?.skills?.[skillKey]) {
         ui.notifications.warn("У актёра нет выбранного для взлома навыка.");
@@ -187,8 +356,13 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         prompt: false,
         requester: "hacking"
       });
-      if (!outcome) return undefined;
+      if (!outcome) {
+        this.#feedback = { tone: "neutral", title: "Проверка отменена", text: "Попытка взлома не применена." };
+        return undefined;
+      }
 
+      this.#busy = "Применение результата…";
+      if (!this.#closed) await this.render();
       const result = await requestApplyHackingResult({
         hackerActor: this.#hackerActor,
         target: this.#target,
@@ -196,17 +370,29 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         toolItemId: selectedCandidate.itemId,
         success: isSkillCheckSuccess(outcome)
       });
-      if (!result) return undefined;
+      if (!result) throw new Error("Результат взлома не подтверждён. Проверьте состояние объекта перед следующей попыткой.");
       this.#localMethods = normalizeHackingMethods(result.methods);
       if (result.unlocked) {
         this.#unlocked = true;
         await this.close();
         return this.#onUnlocked?.();
       }
+      const remaining = this.#localMethods.find(method => method.id === selectedMethod.id)?.attemptsRemaining ?? 0;
+      this.#feedback = {
+        tone: "bad",
+        title: "Замок не поддался",
+        text: `${getToolLabel(selectedMethod.toolKey)}. Израсходовано: ${selectedCandidate.toolCost}. Осталось попыток: ${remaining}.`
+      };
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Hacking attempt failed`, error);
+      this.#localMethods = null;
+      this.#feedback = { tone: "bad", title: "Не удалось подтвердить результат", text: error.message || "Проверьте состояние объекта перед следующей попыткой." };
     } finally {
       this.#attemptInFlight = false;
+      this.#busy = "";
+      if (!this.#closed) await this.render();
     }
-    return this.render({ force: true });
+    return undefined;
   }
 
   static #onCloseDialog(event) {
@@ -288,6 +474,13 @@ function buildHackingMethodRow(method, index, prefix) {
         <label class="fallout-maw-hacking-method-tool">
           <span>Инструмент</span>
           <select name="${prefix}.${index}.toolKey">${toolOptions}</select>
+        </label>
+        <label class="fallout-maw-hacking-method-interface">
+          <span>Интерфейс</span>
+          <select name="${prefix}.${index}.interfaceType">
+            <option value="terminal" ${normalized.interfaceType === "terminal" ? "selected" : ""}>Терминал</option>
+            <option value="mechanical" ${normalized.interfaceType === "mechanical" ? "selected" : ""}>Механика</option>
+          </select>
         </label>
         <label>
           <span>Класс</span>
@@ -696,11 +889,11 @@ function hackingMethodsEqual(left, right) {
   return JSON.stringify(normalizeHackingMethods(left)) === JSON.stringify(normalizeHackingMethods(right));
 }
 
-function getHackingToolCandidates(actor, methods, target = null) {
+function getHackingToolCandidates(actor, methods, target = null, { includeUnavailable = false } = {}) {
   if (!actor) return [];
   const tools = actor.items?.contents ?? [];
   return methods.flatMap(method => {
-    if (method.attemptsRemaining <= 0 || !method.toolKey) return [];
+    if (!method.toolKey) return [];
     const toolCost = getActorToolSupplyCost(actor, method.toolKey, method.toolCost, {
       requester: "hacking",
       targetActor: target?.documentName === "Actor" ? target : target?.actor ?? null,
@@ -722,14 +915,25 @@ function getHackingToolCandidates(actor, methods, target = null) {
           itemId: item.id,
           itemUuid: item.uuid,
           name: item.name,
+          img: item.img || "icons/svg/item-bag.svg",
           toolClass: normalizeToolClass(tool.toolClass),
+          blockReason: getHackingCandidateBlockReason({
+            attemptsRemaining: method.attemptsRemaining,
+            toolClass: normalizeToolClass(tool.toolClass),
+            requiredClass: method.toolClass,
+            resourceConfigured: resource.configured,
+            supplyValue,
+            toolCost
+          }),
           resourceMode: resource.mode,
           supplyValue,
           supplyMax
         };
       })
-      .filter(tool => isToolClassAtLeast(tool.toolClass, method.toolClass) && tool.supplyValue >= toolCost));
+      .filter(tool => includeUnavailable || !tool.blockReason));
   }).sort((left, right) => {
+    const availabilityDelta = Number(Boolean(left.blockReason)) - Number(Boolean(right.blockReason));
+    if (availabilityDelta) return availabilityDelta;
     const methodDelta = left.methodLabel.localeCompare(right.methodLabel);
     if (methodDelta) return methodDelta;
     const rankDelta = TOOL_CLASS_RANKS[right.toolClass] - TOOL_CLASS_RANKS[left.toolClass];
@@ -785,6 +989,7 @@ function normalizeHackingMethod(value = {}) {
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     toolKey: toolSettings.some(tool => tool.key === configuredToolKey) ? configuredToolKey : fallbackToolKey,
+    interfaceType: value?.interfaceType === "mechanical" ? "mechanical" : "terminal",
     toolClass: normalizeToolClass(value?.toolClass),
     difficulty: Math.max(0, toInteger(value?.difficulty ?? 60)),
     toolCost: Math.max(1, toInteger(value?.toolCost ?? 1)),

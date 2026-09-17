@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { createStealthRoutePlanner } from "./route-plan.mjs";
 import { evaluateFormula } from "../formulas/evaluation.mjs";
 import {
   ACTION_RESOURCE_KEY,
@@ -58,15 +59,27 @@ let pauseGameCallback = () => undefined;
 let hasStealthedCanvasTokensCallback = null;
 let providerRegistered = false;
 let movementObserverRangeCache = null;
+let prepareStealthChecksCallback = null;
+let resolvePreparedStealthChecksCallback = null;
+const routePlanner = createStealthRoutePlanner({
+  collect: context => collectStealthMovementInterruptions(context),
+  prepareChecks: checks => prepareStealthChecksCallback(checks),
+  resolveChecks: checks => resolvePreparedStealthChecksCallback(checks),
+  pauseGame: () => pauseGameCallback()
+});
 
 export function registerStealthMovementProvider({
   rollStealthCheck,
   rollStealthChecks,
+  prepareStealthChecks,
+  resolvePreparedStealthChecks,
   pauseGame,
   hasStealthedCanvasTokens
 } = {}) {
   if (typeof rollStealthCheck === "function") rollStealthCheckCallback = rollStealthCheck;
   if (typeof rollStealthChecks === "function") rollStealthChecksCallback = rollStealthChecks;
+  if (typeof prepareStealthChecks === "function") prepareStealthChecksCallback = prepareStealthChecks;
+  if (typeof resolvePreparedStealthChecks === "function") resolvePreparedStealthChecksCallback = resolvePreparedStealthChecks;
   if (typeof pauseGame === "function") pauseGameCallback = pauseGame;
   if (typeof hasStealthedCanvasTokens === "function") {
     hasStealthedCanvasTokensCallback = hasStealthedCanvasTokens;
@@ -74,15 +87,23 @@ export function registerStealthMovementProvider({
   if (providerRegistered) return;
   registerMovementInterruptionProvider({
     id: STEALTH_DETECTION_PROVIDER_ID,
-    collect: collectStealthMovementInterruptions,
+    collect: context => prepareStealthChecksCallback ? routePlanner.collect(context) : collectStealthMovementInterruptions(context),
     commit: commitStealthMovementCollection,
     buildAtomicMovementUpdate: buildStealthMovementAtomicUpdate,
     hasCommitWork: collection => Boolean(collection?.stateUpdates?.size),
     commitOnInterruption: true,
     pauseNativeMovement: true,
-    execute: executeStealthMovementInterruption
+    synchronizeOnMove: true,
+    synchronize: context => routePlanner.synchronize(context),
+    execute: context => routePlanner.owns(context.event)
+      ? routePlanner.execute(context)
+      : executeStealthMovementInterruption(context)
   });
   providerRegistered = true;
+}
+
+export function clearStealthMovementPlans(tokenDocument = null) {
+  routePlanner.clear(tokenDocument);
 }
 
 /**
@@ -90,7 +111,7 @@ export function registerStealthMovementProvider({
  * shared interruption coordinator only if this movement (or this provider's
  * selected interruption) is actually accepted.
  */
-export function collectStealthMovementInterruptions({ tokenDocument, movement, options } = {}) {
+export function collectStealthMovementInterruptions({ tokenDocument, movement, options, collectAll = false } = {}) {
   if (!tokenDocument?.actor || !movement || !globalThis.canvas?.ready) {
     return createEmptyMovementCollection();
   }
@@ -173,6 +194,8 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
     const movementCostProfile = getCombatMovementCostProfile(tokenDocument.actor);
 
     let routeOrder = 0;
+    const events = [];
+    const routeSteps = [samples[0]];
     const routeInsideState = new Map();
     const stateUpdates = new Map();
     const stateBaselines = new Map();
@@ -215,6 +238,7 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
         routeOrder += 1;
         const previous = segmentSamples[segmentIndex - 1];
         const current = segmentSamples[segmentIndex];
+        if (collectAll) routeSteps.push(current);
         const previousPoint = normalizePoint(previous?.point, tokenDocument.elevation);
         const currentPoint = normalizePoint(current?.point, tokenDocument.elevation);
         const rawSegmentCost = getStealthMovementSegmentDistance(previous, current);
@@ -257,8 +281,7 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
           writeState(stateKey, accumulated, current.waypoint);
         }
         if (triggeredChecks.length) {
-          return {
-            events: [createStealthMovementEvent(
+          events.push(createStealthMovementEvent(
               triggeredChecks,
               current,
               segmentSamples,
@@ -267,7 +290,9 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
               index,
               routeOrder,
               movement
-            )],
+            ));
+          if (!collectAll) return {
+            events,
             stateUpdates,
             stateBaselines,
             stateTransitions
@@ -275,7 +300,7 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
         }
       }
     }
-    return { events: [], stateUpdates, stateBaselines, stateTransitions };
+    return { events, stateUpdates, stateBaselines, stateTransitions, routeSteps };
   } finally {
     for (const tester of pointTesters) tester.destroy();
   }
@@ -567,7 +592,7 @@ function decodeMovementStateEntryKey(encoded) {
 }
 
 function getCommittableStateUpdates(collection = {}, selectedEvent = null) {
-  if (!selectedEvent || selectedEvent.providerId === STEALTH_DETECTION_PROVIDER_ID) {
+  if (!selectedEvent) {
     return collection?.stateUpdates ?? new Map();
   }
 
@@ -1005,6 +1030,7 @@ function createStealthMovementEvent(
     observerTokenUuid: pair.observerToken.document?.uuid ?? pair.observerToken.uuid
   }));
   const primary = serializedChecks[0];
+  let remainingWaypoints;
   return {
     type: primary.type,
     eventId: `${routeOrder}:${serializedChecks.map(check => `${check.type}:${check.hiddenTokenUuid}:${check.observerTokenUuid}`).join("|")}`,
@@ -1016,13 +1042,15 @@ function createStealthMovementEvent(
     observerTokenUuid: primary.observerTokenUuid,
     checks: serializedChecks,
     reactorTokenUuids: [...new Set(serializedChecks.map(check => check.observerTokenUuid))],
-    remainingWaypoints: buildRemainingMovementWaypoints(
-      segmentSamples,
-      segmentIndex,
-      routeSamples,
-      routeIndex,
-      movement?.pending?.waypoints ?? []
-    )
+    get remainingWaypoints() {
+      return remainingWaypoints ??= buildRemainingMovementWaypoints(
+        segmentSamples,
+        segmentIndex,
+        routeSamples,
+        routeIndex,
+        movement?.pending?.waypoints ?? []
+      );
+    }
   };
 }
 

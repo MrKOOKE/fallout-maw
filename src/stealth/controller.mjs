@@ -1,5 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { createStealthCheckBatch } from "./check-batch.mjs";
 import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import {
   deferStealthActorRefresh,
@@ -12,7 +13,7 @@ import {
   invalidateStealthDetectionObserver
 } from "./detection.mjs";
 import { invalidateLightingAnalysisCache } from "./lighting.mjs";
-import { registerStealthMovementProvider } from "./movement.mjs";
+import { clearStealthMovementPlans, registerStealthMovementProvider } from "./movement.mjs";
 import {
   invalidateStealthRelationCache,
   isStealthObserverIncapacitated,
@@ -100,6 +101,8 @@ export function registerStealthHooks() {
   registerStealthMovementProvider({
     rollStealthCheck,
     rollStealthChecks,
+    prepareStealthChecks: checks => rollStealthChecks(checks, { deferDetection: true }),
+    resolvePreparedStealthChecks,
     pauseGame: pauseGameForStealthDetection,
     hasStealthedCanvasTokens: () => stealthedCanvasTokenIds.size > 0
   });
@@ -270,13 +273,13 @@ async function rollStealthCheck(sourceToken, targetToken, app = null, {
   return (await rollStealthChecks([{ sourceToken, targetToken, app, skillBonus }], { animate }))[0];
 }
 
-async function rollStealthChecks(checks = [], { animate = false } = {}) {
+async function rollStealthChecks(checks = [], { animate = false, deferDetection = false } = {}) {
   const prepared = [];
   for (const check of checks) {
     const sourceToken = check?.sourceToken ?? null;
     const targetToken = check?.targetToken ?? null;
     if (!sourceToken?.actor || isStealthObserverIncapacitated(targetToken)) continue;
-    const difficulty = computeStealthDifficulty(sourceToken, targetToken);
+    const difficulty = computeStealthDifficulty(sourceToken, targetToken, undefined, { sourcePosition: check.sourcePosition });
     if (!difficulty) continue;
     prepared.push({
       ...check,
@@ -289,34 +292,56 @@ async function rollStealthChecks(checks = [], { animate = false } = {}) {
   if (!prepared.length) return [];
 
   const resolved = [];
-  for (const check of prepared) {
-    const outcome = await requestSkillCheck({
-      actor: check.sourceToken.actor,
-      skillKey: "stealth",
-      requester: "stealth",
-      animate,
-      data: {
-        difficulty: check.difficulty.difficulty,
-        situationalModifier: check.skillBonus,
-        advantage: check.difficulty.advantageCount > 0,
-        advantageCount: check.difficulty.advantageCount,
-        actorToken: check.sourceToken,
-        targetToken: check.targetToken,
-        targetActor: check.targetToken?.actor ?? null
-      },
-      messageData: result => isStealthCheckSuccess(result)
-        ? createStealthSuccessMessageData(check.sourceToken.actor)
-        : {}
-    });
-    resolved.push({ ...check, outcome });
+  const batch = createStealthCheckBatch({
+    successMessageData: createStealthSuccessMessageData,
+    isSuccess: isStealthCheckSuccess
+  });
+  let failedCheckpoint = null;
+  try {
+    for (const check of prepared) {
+      if (deferDetection && failedCheckpoint !== null && check.checkpoint !== failedCheckpoint) break;
+      const outcome = await requestSkillCheck({
+        actor: check.sourceToken.actor,
+        skillKey: "stealth",
+        requester: "stealth",
+        animate,
+        createMessage: false,
+        completionCollector: batch,
+        data: {
+          difficulty: check.difficulty.difficulty,
+          situationalModifier: check.skillBonus,
+          advantage: check.difficulty.advantageCount > 0,
+          advantageCount: check.difficulty.advantageCount,
+          actorToken: check.sourceToken,
+          targetToken: check.targetToken,
+          targetActor: check.targetToken?.actor ?? null
+        }
+      });
+      resolved.push({ ...check, outcome });
+      if (deferDetection && isStealthCheckFailure(outcome)) failedCheckpoint = check.checkpoint;
+    }
+  } finally {
+    await batch.publish();
   }
+  if (deferDetection) return resolved;
+  return resolvePreparedStealthChecks(resolved);
+}
 
-  const failures = resolved.filter(check => isStealthCheckFailure(check.outcome));
-  const revealPrevented = failures.length
-    ? await resolveStealthDetectionFailures(failures)
-    : false;
+async function resolvePreparedStealthChecks(resolved = []) {
+  const failuresByActor = new Map();
+  for (const check of resolved) {
+    if (!isStealthCheckFailure(check.outcome)) continue;
+    const actorId = check.sourceToken.actor.uuid;
+    const failures = failuresByActor.get(actorId) ?? [];
+    failures.push(check);
+    failuresByActor.set(actorId, failures);
+  }
+  const preventedActors = new Set();
+  for (const [actorId, failures] of failuresByActor) {
+    if (await resolveStealthDetectionFailures(failures)) preventedActors.add(actorId);
+  }
   const outcomes = resolved.map(check => {
-    const preventedFailure = revealPrevented && isStealthCheckFailure(check.outcome);
+    const preventedFailure = preventedActors.has(check.sourceToken.actor.uuid) && isStealthCheckFailure(check.outcome);
     if (isStealthCheckSuccess(check.outcome) || preventedFailure) {
       notifyDangerSenseWarning(check.targetToken.actor);
     }
@@ -725,6 +750,7 @@ function onControlledTokenChanged() {
 }
 
 function onTokenDeleted(tokenDocument) {
+  clearStealthMovementPlans(tokenDocument);
   resetSmokeNativePerceptionGuard();
   const tokenId = tokenDocument?.id;
   stealthedCanvasTokenIds.delete(tokenId);
@@ -1286,6 +1312,7 @@ function cleanupTokenStealth(tokenId) {
 }
 
 function cleanupAllStealthUi() {
+  clearStealthMovementPlans();
   resetSmokeNativePerceptionGuard();
   clearRuntimeTimers();
   stopTargetingMode();

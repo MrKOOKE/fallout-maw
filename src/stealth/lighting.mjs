@@ -22,8 +22,8 @@ const cacheStatistics = {
 };
 let nextCacheObjectId = 1;
 
-export function analyzeTokenLighting(token) {
-  const points = getTokenLightingPoints(token).map(point => normalizeLightingPoint(point));
+export function analyzeTokenLighting(token, { position } = {}) {
+  const points = getTokenLightingPoints(token, position).map(point => normalizeLightingPoint(point));
   const cacheKey = getTokenLightingCacheKey(token, points, globalThis.canvas);
   if (cacheKey) {
     const cached = getLruEntry(tokenLightingCache, cacheKey);
@@ -116,10 +116,20 @@ export function getLightingAnalysisCacheStats() {
   };
 }
 
-function getTokenLightingPoints(token) {
+function getTokenLightingPoints(token, position) {
   const document = token?.document ?? token;
-  const points = document?.getVisibilityTestPoints?.();
+  const points = document?.getVisibilityTestPoints?.(position ?? {});
   if (Array.isArray(points) && points.length) return points;
+  if (position) {
+    const center = document?.getCenterPoint?.(position);
+    if (center) return [{ ...center, elevation: position.elevation ?? document?.elevation ?? 0 }];
+    const current = getTokenCenter(token);
+    return [{
+      x: current.x + (Number(position.x) - (Number(document?.x) || 0)),
+      y: current.y + (Number(position.y) - (Number(document?.y) || 0)),
+      elevation: position.elevation ?? current.elevation
+    }];
+  }
   return [getTokenCenter(token)];
 }
 

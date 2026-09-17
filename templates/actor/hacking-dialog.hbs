@@ -1,52 +1,138 @@
-<div class="fallout-maw-sheet fallout-maw-trap-disarm-terminal">
-  <div class="fallout-maw-trap-disarm-body">
-    <section class="fallout-maw-trap-disarm-column">
-      <div class="fallout-maw-trap-disarm-line">Объект: <strong>{{targetName}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line {{statusClass}}">Статус: {{statusLabel}}</div>
-      <div class="fallout-maw-trap-disarm-line">Сложность: <strong>{{difficulty}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line">Требуемый класс: <strong>{{requiredClass}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line">Метод взлома: <strong>{{methodLabel}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line">Попытки: <strong>{{attemptsRemaining}}</strong> / {{attemptsTotal}}</div>
-    </section>
-
-    <section class="fallout-maw-trap-disarm-column">
-      <div class="fallout-maw-trap-disarm-tools">
-        <table>
-          <thead>
-            <tr>
-              <th>Метод</th>
-              <th>Название</th>
-              <th>Кл.</th>
-              <th>Запас</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{#if hasTools}}
-              {{#each tools}}
-                <tr class="fallout-maw-trap-disarm-tool-row {{#if selected}}selected{{/if}}" data-action="selectTool" data-hacking-candidate="{{candidateKey}}">
-                  <td>{{methodLabel}}</td>
-                  <td>{{name}}</td>
-                  <td>{{toolClass}}</td>
-                  <td>{{supplyValue}}/{{supplyMax}}</td>
-                </tr>
-              {{/each}}
-            {{else}}
-              <tr class="fallout-maw-trap-disarm-tool-row disabled">
-                <td colspan="4">Нет доступных методов с подходящими инструментами</td>
-              </tr>
-            {{/if}}
-          </tbody>
-        </table>
+<div class="{{#if isMechanical}}fallout-maw-mechanical{{else}}fallout-maw-hack{{/if}}" aria-busy="{{busy}}">
+  {{#if isMechanical}}
+    <div class="maw-mech-sheet" data-hack-scroll="screen">
+      <header class="maw-mech-heading">
+        <p class="maw-mech-status">{{statusLabel}}</p>
+        <h2>{{targetName}}</h2>
+        <p class="maw-mech-identity">{{hackerName}}<span aria-hidden="true"> / </span>{{skillLabel}}</p>
+      </header>
+      {{#if choosingMethod}}
+        <section class="maw-mech-section" aria-label="Выбор метода взлома">
+          <h3>Способ вскрытия</h3>
+          <div class="maw-mech-options" data-hack-options>
+            {{#each methods}}
+              <button type="button" class="maw-mech-option {{#if selected}}is-selected{{/if}}" data-action="selectMethod" data-hacking-method="{{id}}" data-focus-key="method:{{id}}" aria-pressed="{{selected}}" {{#if ../busy}}disabled{{/if}}>
+                <span class="maw-mech-radio" aria-hidden="true"></span>
+                <span class="maw-mech-option-copy"><strong>{{label}}</strong><span>Сложность {{difficulty}} · Класс {{toolClass}} · Попытки {{attemptsRemaining}} / {{attempts}}</span>{{#if blockReason}}<em>{{blockReason}}</em>{{/if}}</span>
+              </button>
+            {{else}}<p class="maw-mech-empty">Для объекта не настроены методы взлома.</p>{{/each}}
+          </div>
+        </section>
+      {{else}}
+        <dl class="maw-mech-conditions" aria-label="Условия взлома">
+          <div><dt>Сложность</dt><dd>{{difficulty}}</dd></div>
+          <div><dt>Требуемый класс</dt><dd>{{requiredClass}}</dd></div>
+          <div><dt>Попытки</dt><dd>{{attemptsRemaining}} <span>/ {{attemptsTotal}}</span></dd></div>
+        </dl>
+        <section class="maw-mech-section" aria-label="Выбор инструмента">
+          <div class="maw-mech-method"><div><h3>Способ вскрытия</h3><p>{{selectedMethod.label}}</p></div>{{#if canChooseMethod}}<button type="button" class="maw-mech-link" data-action="chooseMethod" data-focus-key="chooseMethod" {{#if busy}}disabled{{/if}}>Сменить</button>{{/if}}</div>
+          <div class="maw-mech-list-heading"><h3>Инструмент</h3><span>Ресурс</span></div>
+          <div class="maw-mech-options" data-hack-options>
+            {{#each tools}}
+              <button type="button" class="maw-mech-option {{#if selected}}is-selected{{/if}}" data-action="selectTool" data-hacking-candidate="{{candidateKey}}" data-focus-key="tool:{{candidateKey}}" aria-pressed="{{selected}}" {{#if disabled}}disabled{{/if}}>
+                <span class="maw-mech-radio" aria-hidden="true"></span>
+                <span class="maw-mech-option-copy"><strong>{{name}}</strong><span>Класс {{toolClass}}</span>{{#if blockReason}}<em>{{blockReason}}</em>{{/if}}</span>
+                <span class="maw-mech-resource"><strong>{{supplyValue}}{{#if hasMeter}} <small>/ {{supplyMax}}</small>{{/if}}</strong><span>{{resourceLabel}}</span></span>
+              </button>
+            {{/each}}
+          </div>
+          {{#if selectedTool}}<p class="maw-mech-cost">Расход за попытку <strong>{{selectedTool.toolCost}}</strong><span class="maw-mech-after">{{resourceLabel}} после попытки <strong>{{remainingSupply}}</strong></span></p>{{/if}}
+        </section>
+      {{/if}}
+      <div class="maw-mech-feedback" role="status" aria-live="polite" aria-atomic="true">
+        {{#if feedback}}<p><strong>{{feedback.title}}</strong></p><p>{{feedback.text}}</p>{{/if}}
+        {{#unless choosingMethod}}{{#if blockReason}}<p>{{blockReason}}</p>{{/if}}{{/unless}}
+        {{#if busy}}<p>{{actionLabel}}</p>{{/if}}
       </div>
-    </section>
-  </div>
+    </div>
+    <footer class="maw-mech-footer">
+      <button type="button" class="maw-mech-close" data-action="closeDialog" data-focus-key="close">Отмена</button>
+      {{#if choosingMethod}}<button type="button" class="maw-mech-submit" data-action="showTools" data-focus-key="back" {{#if busy}}disabled{{/if}}>К инструментам</button>
+      {{else}}<button type="button" class="maw-mech-submit" data-action="attemptHack" data-focus-key="attempt" {{#if hackDisabled}}disabled{{/if}}>{{buttonLabel}}</button>{{/if}}
+    </footer>
+  {{else}}
+  <div class="fallout-maw-hack-screen">
+    <div class="fallout-maw-hack-readout" data-hack-scroll="screen">
+      <section class="fallout-maw-hack-target" aria-label="Объект взлома">
+        <p class="fallout-maw-hack-state">[ {{statusLabel}} ]</p>
+        <h2>{{targetName}}</h2>
+        <p class="fallout-maw-hack-identity">{{hackerName}} <span aria-hidden="true">/</span> {{skillLabel}}</p>
+      </section>
 
-  <footer class="fallout-maw-trap-disarm-footer">
-    <button type="button" data-action="attemptHack" {{#if hackDisabled}}disabled{{/if}}>
-      <i class="fa-solid fa-lock-open"></i> Взломать
-    </button>
-    <button type="button" data-action="closeDialog">
-      <i class="fa-solid fa-xmark"></i> Отмена
-    </button>
-  </footer>
+      {{#if choosingMethod}}
+        <section class="fallout-maw-hack-menu" aria-label="Выбор метода взлома">
+          <h3>ВЫБЕРИТЕ МЕТОД ВЗЛОМА</h3>
+          <div class="fallout-maw-hack-options" data-hack-options>
+            {{#each methods}}
+              <button type="button" class="fallout-maw-hack-option fallout-maw-hack-method {{#if selected}}is-selected{{/if}}"
+                data-action="selectMethod" data-hacking-method="{{id}}" data-focus-key="method:{{id}}" aria-pressed="{{selected}}" {{#if ../busy}}disabled{{/if}}>
+                <span class="fallout-maw-hack-cursor" aria-hidden="true">{{#if selected}}&gt;{{else}}·{{/if}}</span>
+                <span class="fallout-maw-hack-option-content"><strong>{{label}}</strong>
+                  <span class="fallout-maw-hack-option-details">Сложность {{difficulty}} / Класс {{toolClass}} / Попытки {{attemptsRemaining}} из {{attempts}}</span>
+                  {{#if blockReason}}<span class="fallout-maw-hack-reason">! {{blockReason}}</span>{{/if}}
+                </span>
+              </button>
+            {{else}}
+              <p class="fallout-maw-hack-empty">Для объекта не настроены методы взлома.</p>
+            {{/each}}
+          </div>
+        </section>
+      {{else}}
+        <section class="fallout-maw-hack-session" aria-label="Метод и условия взлома">
+          <div class="fallout-maw-hack-method-line">
+            <span class="fallout-maw-hack-label">МЕТОД</span>
+            <strong>{{#if selectedMethod}}{{selectedMethod.label}}{{else}}Не задан{{/if}}</strong>
+            {{#if canChooseMethod}}<button type="button" class="fallout-maw-hack-text-command" data-action="chooseMethod" data-focus-key="chooseMethod" {{#if busy}}disabled{{/if}}>[ сменить ]</button>{{/if}}
+          </div>
+          {{#if selectedMethod}}
+            <p class="fallout-maw-hack-requirements">
+              <span>Сложность <b>{{difficulty}}</b></span>
+              <span>Класс <b>{{requiredClass}}</b></span>
+              <span>Попытки <b>{{attemptsRemaining}}/{{attemptsTotal}}</b> <span class="fallout-maw-hack-lives" aria-hidden="true">{{#each attemptMarkers}}<span class="{{#unless remaining}}is-spent{{/unless}}">■</span>{{/each}}</span></span>
+            </p>
+          {{/if}}
+        </section>
+
+        <section class="fallout-maw-hack-menu" aria-label="Выбор инструмента">
+          <h3>ВЫБЕРИТЕ ИНСТРУМЕНТ</h3>
+          <div class="fallout-maw-hack-options" data-hack-options>
+            {{#each tools}}
+              <button type="button" class="fallout-maw-hack-option fallout-maw-hack-tool {{#if selected}}is-selected{{/if}}"
+                data-action="selectTool" data-hacking-candidate="{{candidateKey}}" data-focus-key="tool:{{candidateKey}}" aria-pressed="{{selected}}" {{#if disabled}}disabled{{/if}}>
+                <span class="fallout-maw-hack-cursor" aria-hidden="true">{{#if selected}}&gt;{{else}}·{{/if}}</span>
+                <span class="fallout-maw-hack-option-content"><strong>{{name}}</strong>
+                  <span class="fallout-maw-hack-option-details">Класс {{toolClass}} / {{resourceLabel}} {{supplyValue}}{{#if hasMeter}} из {{supplyMax}}{{/if}}</span>
+                  {{#if blockReason}}<span class="fallout-maw-hack-reason">! {{blockReason}}</span>{{/if}}
+                </span>
+              </button>
+            {{else}}
+              <p class="fallout-maw-hack-empty">&gt; Подходящих инструментов нет.</p>
+            {{/each}}
+          </div>
+          {{#if selectedTool}}
+            <p class="fallout-maw-hack-resource-line">{{resourceLabel}} после попытки: <strong>{{selectedTool.supplyValue}} → {{remainingSupply}}</strong><span class="fallout-maw-hack-resource-cost">Расход: {{selectedTool.toolCost}}</span></p>
+          {{/if}}
+        </section>
+      {{/if}}
+
+      <div class="fallout-maw-hack-output" role="status" aria-live="polite" aria-atomic="true">
+        {{#if feedback}}
+          <p class="fallout-maw-hack-output-title">&gt; {{feedback.title}}</p>
+          <p>{{feedback.text}}</p>
+        {{/if}}
+        {{#unless choosingMethod}}{{#if blockReason}}<p class="fallout-maw-hack-error">! {{blockReason}}</p>{{/if}}{{/unless}}
+        {{#if busy}}<p>&gt; {{actionLabel}}<span class="fallout-maw-hack-block-cursor" aria-hidden="true">▌</span></p>{{/if}}
+      </div>
+    </div>
+
+    <footer class="fallout-maw-hack-command-line">
+      {{#if choosingMethod}}
+        <button type="button" class="fallout-maw-hack-run" data-action="showTools" data-focus-key="back" {{#if busy}}disabled{{/if}}><span aria-hidden="true">&lt;</span> Назад к инструментам</button>
+      {{else}}
+        <button type="button" class="fallout-maw-hack-run" data-action="attemptHack" data-focus-key="attempt" {{#if hackDisabled}}disabled{{/if}}><span aria-hidden="true">&gt;</span> {{buttonLabel}}<span class="fallout-maw-hack-command-end" aria-hidden="true">↵</span></button>
+      {{/if}}
+      <button type="button" class="fallout-maw-hack-exit" data-action="closeDialog" data-focus-key="close">[ Завершить сеанс ]</button>
+    </footer>
+  </div>
+  {{/if}}
 </div>

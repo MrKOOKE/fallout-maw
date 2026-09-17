@@ -1,6 +1,7 @@
 const contextsByToken = new Map();
 
 export const INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION = "falloutMawInternalMovementResume";
+export const STEALTH_ROUTE_PLAN_OPTION = "falloutMawStealthRoutePlan";
 
 /**
  * Keep private resume metadata alive for the whole native Token#move Promise.

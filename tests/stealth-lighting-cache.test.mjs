@@ -61,6 +61,24 @@ test("repeated point analysis reuses its source traversal until invalidated", ()
   assert.equal(fixture.calls.testPoint, 2);
 });
 
+test("route lighting samples a future token footprint without moving the document", () => {
+  const fixture = createLightingCanvas();
+  globalThis.canvas = fixture.canvas;
+  canvas.effects.getDarknessLevel = point => point.x >= 100 ? 0 : 1;
+  canvas.effects.lightSources.clear();
+  const document = {
+    x: 0, y: 0, elevation: 4,
+    getVisibilityTestPoints(position = {}) {
+      return [{ x: position.x ?? this.x, y: position.y ?? this.y, elevation: position.elevation ?? this.elevation }];
+    }
+  };
+  assert.equal(analyzeTokenLighting({ document }).effectiveDarkness, 1);
+  assert.equal(analyzeTokenLighting({ document }, { position: { x: 100, y: 0, elevation: 8 } }).effectiveDarkness, 0);
+  assert.equal(document.x, 0);
+  assert.equal(document.elevation, 4);
+  assert.equal(analyzeTokenLighting({ document }).effectiveDarkness, 1);
+});
+
 test("token analysis is cached by its sampled positions and recomputed after invalidation", () => {
   const fixture = createLightingCanvas();
   globalThis.canvas = fixture.canvas;

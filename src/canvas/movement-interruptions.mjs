@@ -3,6 +3,7 @@ import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { trackSystemMovementOperation } from "./movement-settlement.mjs";
 import {
   INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+  STEALTH_ROUTE_PLAN_OPTION,
   withMovementResumeContext
 } from "./movement-resume-context.mjs";
 
@@ -974,6 +975,7 @@ export function createMovementOptions(
   for (const key of ["pan", "animate", "animation", "render", "renderSheet", "noHook", "diff"]) {
     if (operation?.[key] !== undefined) options[key] = operation[key];
   }
+  if (operation?.[STEALTH_ROUTE_PLAN_OPTION]) options[STEALTH_ROUTE_PLAN_OPTION] = operation[STEALTH_ROUTE_PLAN_OPTION];
   if (method === "paste" || operation?.isPaste) options.isPaste = true;
   if (method === "undo" || operation?.isUndo) options.isUndo = true;
   if (chainRef) {

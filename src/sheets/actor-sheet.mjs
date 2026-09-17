@@ -228,7 +228,8 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import {
   getWeaponProficiencyInfluenceBonus,
-  getWeaponProficiencyInfluenceLayers
+  getWeaponProficiencyInfluenceLayers,
+  getWeaponProficiencySettings
 } from "../utils/weapon-proficiencies.mjs";
 import { grantActorInventoryItem, planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
@@ -6730,6 +6731,9 @@ function buildWeaponTooltipRows(item, entry = {}, {
   const baseStats = baseMode ? stats : getWeaponTooltipCalculatedStats(item, baseData, { actor, baseMode: true });
   data._evaluatedPellets = Math.max(1, evaluateTooltipFormula(data.pellets, actor, { fallback: 1, minimum: 1 }));
   const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.TooltipBreakdownProficiency"), {
+      html: renderTooltipValueTokens(getWeaponProficiencySettings(data).map(proficiency => proficiency.label || proficiency.key))
+    }],
     [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), renderChangedWeaponDamageValue(data, stats.damage, baseStats.damage, {
       baseMode,
       breakdown: stats.breakdowns?.damage

@@ -55,12 +55,12 @@ export function isActorStealthed(actor) {
   return Boolean(actor?.statuses?.has(getStealthStatusId()));
 }
 
-export function computeStealthDifficulty(sourceToken, targetToken, settings = getRuntimeStealthSettings()) {
+export function computeStealthDifficulty(sourceToken, targetToken, settings = getRuntimeStealthSettings(), { sourcePosition } = {}) {
   const sourceActor = sourceToken?.actor;
   const targetActor = targetToken?.actor;
   if (!sourceActor || !targetActor) return null;
 
-  const lighting = getTokenLightingAnalysis(sourceToken, settings);
+  const lighting = getTokenLightingAnalysis(sourceToken, settings, { position: sourcePosition });
   const baseLightingDifficultyBonus = Math.max(0, Number(lighting.modifiers?.difficultyBonus) || 0);
   const illuminationPenaltyPercent = Number(sourceActor.system?.stealth?.illuminationPenaltyPercent) || 0;
   const lightingDifficultyMultiplier = Math.max(0, 100 + illuminationPenaltyPercent) / 100;
@@ -94,8 +94,8 @@ export function computeStealthDifficulty(sourceToken, targetToken, settings = ge
   };
 }
 
-export function getTokenLightingAnalysis(token, settings = getRuntimeStealthSettings()) {
-  const measured = analyzeTokenLighting(token);
+export function getTokenLightingAnalysis(token, settings = getRuntimeStealthSettings(), options = {}) {
+  const measured = analyzeTokenLighting(token, options);
   const effectiveDarkness = measured.effectiveDarkness;
   const modifiers = calculateLightingModifiers(effectiveDarkness, settings);
   return {
