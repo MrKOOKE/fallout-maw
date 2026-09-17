@@ -1628,6 +1628,8 @@
       "ImplantDifficulty": "Install Difficulty",
       "ImplantSkill": "Install Skill",
       "InstallationSlots": "Installation Slots",
+      "SuitableModules": "Compatible Modules",
+      "WeaponModuleNoFreeSlot": "This weapon has no compatible free module slot.",
       "ImplantLimbs": "Compatible Limbs",
       "ImplantNoLimbs": "No limbs selected.",
       "ConditionNoRecoveryMethods": "No recovery methods configured.",

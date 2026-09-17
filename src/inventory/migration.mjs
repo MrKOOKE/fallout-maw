@@ -1,4 +1,6 @@
 import { getPreparedRuntimeSettings } from "../settings/accessors.mjs";
+import { SYSTEM_ID } from "../constants.mjs";
+import { CREATURE_OPTIONS_SETTING } from "../settings/constants.mjs";
 import { executeInventoryMutation } from "./mutation.mjs";
 import { cloneInventoryItemData, planActorInventoryRepair } from "./repair.mjs";
 import { INVENTORY_ATOMIC_OPTION } from "./constants.mjs";
@@ -11,6 +13,7 @@ const INVENTORY_REPAIR_REASON = "inventory-repair";
 let hooksRegistered = false;
 let repairQueueRunning = false;
 const queuedActors = new Map();
+let worldRepairScheduled = false;
 
 /**
  * Register lightweight guards for documents which may enter the world outside
@@ -42,6 +45,10 @@ export function registerInventoryRepairHooks() {
   Hooks.on("updateToken", (token, changes = {}, options = {}) => {
     if (isRepairOperation(options) || !changesActorIdentity(changes)) return;
     queueInventoryRepair(token?.actor);
+  });
+  Hooks.on("updateSetting", setting => {
+    if (String(setting?.key ?? "") !== `${SYSTEM_ID}.${CREATURE_OPTIONS_SETTING}`) return;
+    scheduleWorldInventoryRepair();
   });
 }
 
@@ -76,6 +83,19 @@ export async function repairWorldInventories() {
     );
   }
   return { repaired: results, failures };
+}
+
+function scheduleWorldInventoryRepair() {
+  if (worldRepairScheduled) return;
+  worldRepairScheduled = true;
+  queueMicrotask(async () => {
+    worldRepairScheduled = false;
+    try {
+      await repairWorldInventories();
+    } catch (error) {
+      console.error("Fallout MaW | World inventory repair after creature-slot changes failed.", error);
+    }
+  });
 }
 
 /**

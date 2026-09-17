@@ -297,6 +297,7 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
     }
     if (data?.type === "Item") data[INVENTORY_DRAG_ROTATION_KEY] = resolveInitialItemRotation(data);
     FalloutMaWDragDrop.#payload = data ? { event, data } : null;
+    Hooks.callAll("falloutMawItemDragStart", data);
   }
 
   static #bindRotationKey(event) {
@@ -423,6 +424,7 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
   }
 
   static #clearRuntimeState() {
+    Hooks.callAll("falloutMawItemDragEnd");
     FalloutMaWDragDrop.#payload = null;
     FalloutMaWDragDrop.#lastDragOver = null;
     FalloutMaWDragDrop.#unbindRotationKey();

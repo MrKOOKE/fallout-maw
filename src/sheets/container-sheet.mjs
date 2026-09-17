@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
@@ -76,6 +77,7 @@ export function executeSearchContainerTransfer(transferId, payload = {}) {
 
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #contentsTransfer = new InventoryTransferMode();
+  #moduleDropPreview = new WeaponModuleDropPreview();
   #contentsTransferOptions = null;
   #draggedItemData = null;
   #draggedItemId = "";
@@ -198,6 +200,12 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#moduleDropPreview.bind(this.element, {
+      resolveItem: element => this.actor?.items?.get(element.dataset.itemId),
+      canUse: () => Boolean(this.actor?.isOwner && this.isEditable && this.#contentsTransferOptions?.enabled?.() !== false),
+      onModuleHover: () => this.#clearItemTooltip({ force: true }),
+      getEvaluatingActor: (actor, perspective) => this.#resolveItemTooltipEvaluatingActor(actor, perspective)
+    });
     this.#contentsTransfer.bind(this.element, {
       getActor: () => this.actor,
       canUse: () => Boolean(this.actor?.isOwner && this.isEditable),
@@ -227,6 +235,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   _onClose(options) {
+    this.#moduleDropPreview.destroy();
     super._onClose(options);
     this.#contentsTransfer.destroy();
     if (this.actor) delete this.actor.apps[this.id];
@@ -571,6 +580,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   _onDragOver(event) {
     const zone = this.#getDropZone(event);
     if (!zone) return;
+    if (this.#moduleDropPreview.matches(event)) {
+      this.#clearInventoryHoverPreview();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "link";
+      return;
+    }
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
     this.#setInventoryHoverPreview(zone);
@@ -592,6 +606,15 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
+    const moduleTargetElement = getWeaponModuleDropElement(event, this.element);
+    const moduleTarget = this.actor?.items?.get(moduleTargetElement?.dataset?.itemId ?? "");
+    if (isWeaponModuleDrop(dropped.item ?? dropped.itemData, moduleTarget)) {
+      if (!canUseWeaponModuleDrag(data) || !this.isEditable || this.#contentsTransferOptions?.enabled?.() === false) return null;
+      return installDroppedWeaponModule({
+        actor: this.actor, weapon: moduleTarget, moduleItem: dropped.item ?? dropped.itemData,
+        sourceStackIndex: Math.max(0, toInteger(data.stackIndex))
+      });
+    }
     const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
     const sourceOwned = Boolean(
       dropped.item?.parent?.documentName === "Actor"
@@ -1402,6 +1425,9 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (isContainerItem(item)) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (canShowSuitableWeaponModules(item)) {
+      menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
+    }
     if (getItemInteractionState(this.actor, item).hasInteraction) {
       menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
     }
@@ -1433,10 +1459,13 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       clickEvent.preventDefault();
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
+      if (action === "suitableModules") return this.#moduleDropPreview.highlightModules(item);
       if (action === "open") {
         const app = new FalloutMaWContainerSheet({
           document: item,
-          evaluatingActorUuid: this.options?.evaluatingActorUuid ?? ""
+          evaluatingActorUuid: this.options?.evaluatingActorUuid ?? "",
+          contentsTransferOptions: this.#contentsTransferOptions,
+          searchTransferHandler: this.#searchTransferHandler
         });
         await app.render({ force: true });
         app.bringToFront();

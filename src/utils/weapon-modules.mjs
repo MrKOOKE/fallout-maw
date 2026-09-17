@@ -2,6 +2,7 @@ import {
   ITEM_FUNCTIONS,
   getConditionWeakeningData,
   getModuleFunction,
+  getEnabledWeaponFunctions,
   getWeaponFunctionById,
   getWeaponFunctionModuleSlots,
   hasItemFunction
@@ -106,6 +107,20 @@ export function isModuleItemCompatibleWithSlot(itemOrData = null, slot = {}, tar
   const slotKey = String(slot?.moduleKey ?? "").trim();
   if (!slotKey) return true;
   return getWeaponModuleTechnicalName(itemOrData) === slotKey;
+}
+
+/** Choose a real, vacant slot; unresolved UUIDs still reserve their slots. */
+export function findFreeWeaponModuleSlot(weapon = null, moduleItem = null) {
+  if (weapon === moduleItem || (weapon?.uuid && weapon.uuid === moduleItem?.uuid)) return null;
+  if (!isFunctionModuleItem(moduleItem, ITEM_FUNCTIONS.weapon)) return null;
+  for (const entry of getEnabledWeaponFunctions(weapon, { ignoreBroken: true })) {
+    if (!entry.canHaveModuleSlots) continue;
+    const slots = getWeaponModuleSlots(entry.data);
+    const slotIndex = slots.findIndex(slot => !slot.itemUuid && !slot.itemData?.system
+      && isModuleItemCompatibleWithSlot(moduleItem, slot));
+    if (slotIndex >= 0) return { entry, slots, slotIndex };
+  }
+  return null;
 }
 
 export function getInstalledWeaponModuleItems(weaponData = {}, { moduleSlots = null } = {}) {

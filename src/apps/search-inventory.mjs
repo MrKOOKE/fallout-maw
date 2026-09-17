@@ -2,6 +2,8 @@ import { createRectanglePacker, packInventoryRectangles } from "../inventory/pac
 import { transferInventoryContentsBatch } from "../inventory/contents-batch.mjs";
 import { transferInventoryContents } from "../inventory/contents-transfer.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
+import { findFreeWeaponModuleSlot } from "../utils/weapon-modules.mjs";
 import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { planEquippedItemSwap } from "../inventory/equipment-swap.mjs";
@@ -416,6 +418,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #dragDrop = null;
   #bulkTransferInProgress = false;
   #contentsTransfer = new InventoryTransferMode();
+  #moduleDropPreview = new WeaponModuleDropPreview();
   #butcheringInProgress = false;
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
@@ -747,6 +750,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#restoreScrollPositions(() => this.#restoreInventoryTooltipAfterRender());
     this.#syncRenderedTradeOfferColumns();
     this.#applyTradeCompatibilityHighlight();
+    this.#moduleDropPreview.bind(this.element, {
+      resolveItem: element => this.#getActorByUuid(element.dataset.searchActorUuid)?.items?.get(element.dataset.itemId),
+      canUse: (_item, element) => Boolean(this.#canInteract() && (!this.#isTradeMode() || this.#tradeOffers.completed)
+        && !element.closest("[data-trade-offer-entry], [data-trade-catalog-phantom], [data-trade-catalog-aggregate]")),
+      onModuleHover: () => this.#clearInventoryTooltip({ force: true }),
+      getEvaluatingActor: () => this.#isTradeMode()
+        ? this.#getActorByUuid(this.#getLocalTradeActorUuid()) : this.#searcherActor
+    });
   }
 
   #renderPreservingWindowStack(options = {}) {
@@ -756,6 +767,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async _onClose(options) {
+    this.#moduleDropPreview.destroy();
     this.#contentsTransfer.destroy();
     const searchAuditPayload = !this.#isTradeMode() && this.#searchAuditSessionId
       ? {
@@ -1049,6 +1061,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     event.stopPropagation();
     const zone = this.#getDropZone(event);
     if (!zone || !this.#canInteract()) return;
+    if (this.#moduleDropPreview.matches(event)) {
+      this.#clearInventoryHoverPreview();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "link";
+      return;
+    }
     this.#clearInventoryTooltip({ force: true });
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
@@ -1113,6 +1130,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (this.#isTradeMode() && sourceActor.uuid !== targetActor.uuid && !completedTradeOfferDrop) {
         ui.notifications.warn("В торговле предметы сначала кладутся в предложение.");
         return null;
+      }
+
+      const moduleTargetElement = getWeaponModuleDropElement(event, this.element);
+      const moduleTarget = moduleTargetElement?.dataset?.searchActorUuid === targetActor.uuid
+        ? targetActor.items.get(moduleTargetElement.dataset.itemId) : null;
+      if (isWeaponModuleDrop(item, moduleTarget)) {
+        if (!canUseWeaponModuleDrag(data) || (this.#isTradeMode() && !this.#tradeOffers.completed)) return null;
+        return await installDroppedWeaponModule({ actor: targetActor, weapon: moduleTarget, moduleItem: item, sourceStackIndex });
       }
 
       const placementRequest = getDropZonePlacementRequest(zone);
@@ -2591,6 +2616,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (canHighlightTradeAmmoCompatibility(item)) {
       menuOptions.push(["highlightAmmo", "fa-crosshairs", "Подходящие боеприпасы"]);
     }
+    if (canShowSuitableWeaponModules(item)) {
+      menuOptions.push(["highlightModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
+    }
     if (canHighlightTradeEnergyCompatibility(item)) {
       menuOptions.push(["highlightEnergy", "fa-bolt", "Подходящие источники энергии"]);
     }
@@ -2623,6 +2651,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         });
       }
       if (action === "highlightAmmo") return this.#setTradeCompatibilityHighlight("ammo", actor, item);
+      if (action === "highlightModules") return this.#setTradeCompatibilityHighlight("modules", actor, item);
       if (action === "highlightEnergy") return this.#setTradeCompatibilityHighlight("energy", actor, item);
       return undefined;
     });
@@ -2654,6 +2683,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
     if (!isButcheringItem && isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
+    }
+    if (!isButcheringItem && canShowSuitableWeaponModules(item)) {
+      menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
     }
     if (!isButcheringItem && getItemInteractionState(actor, item).hasInteraction) {
       menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
@@ -2702,6 +2734,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "takeButchering") return this.#takeButcheringItem(actor, item);
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openSearchContainerSheet(item);
+      if (action === "suitableModules") return this.#moduleDropPreview.highlightModules(item);
       if (action === "interact") return openItemInteractionDialog({ actor, item, application: this });
       if (action === "use") return useActiveItem({ actor, item, application: this });
       if (action === "rotate") return this.#rotateSearchItem(actor, item);
@@ -4085,7 +4118,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #setTradeCompatibilityHighlight(kind = "", actor = null, item = null) {
-    const normalizedKind = kind === "energy" ? "energy" : "ammo";
+    const normalizedKind = kind === "modules" ? "modules" : kind === "energy" ? "energy" : "ammo";
     if (!this.#isTradeMode() || !actor || !item) return;
     this.#tradeCompatibilityHighlight = {
       kind: normalizedKind,
@@ -4132,7 +4165,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const actor = this.#getActorByUuid(String(element.dataset.searchActorUuid ?? ""));
       const item = actor?.items?.get(String(element.dataset.itemId ?? ""));
       if (!actor || !item) continue;
-      const matches = state.kind === "energy"
+      const matches = state.kind === "modules"
+        ? Boolean(findFreeWeaponModuleSlot(sourceItem, item))
+        : state.kind === "energy"
         ? isTradeEnergyCompatibleItem(sourceItem, item)
         : isTradeAmmoCompatibleItem(sourceItem, item);
       if (matches) element.classList.add("trade-compatibility-highlight");

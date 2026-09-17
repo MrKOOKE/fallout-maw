@@ -1,4 +1,6 @@
 import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction, getProtectionModuleTooltipEntry, getProtectionModuleTooltipItem } from "../utils/function-module-tooltip.mjs";
+import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
+import { uninstallInventoryModule } from "../utils/inventory-module-slots.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { InventoryBlockLayout } from "../utils/inventory-block-layout.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
@@ -416,6 +418,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipItemId = "";
   #tooltipWeaponTabIndex = 0;
   #moduleTooltipMutation = new ModuleTooltipMutation();
+  #moduleDropPreview = new WeaponModuleDropPreview();
   #tooltipDocumentPointerDownHandler = null;
   #tooltipDocumentKeyHandler = null;
   #tooltipBaseMode = false;
@@ -809,9 +812,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#syncFreeEditHeaderButton();
     this.#syncWorldSidebarPeekToggle();
     this.#syncInventoryTooltipAfterRender();
+    this.#moduleDropPreview.bind(this.element, {
+      resolveItem: element => this.actor.items.get(element.dataset.itemId),
+      canUse: () => Boolean(this.actor.isOwner && this.isEditable),
+      onModuleHover: () => this.#clearInventoryTooltip({ force: true })
+    });
   }
 
   _onClose(options) {
+    this.#moduleDropPreview.destroy();
     super._onClose(options);
     this.#unbindViewportResize();
     this.#inventoryBlockLayout.destroy();
@@ -838,6 +847,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
     if (dropped.itemData?.type === "ability") return this.#onDropAbilityItem(dropped);
+
+    const moduleTargetElement = getWeaponModuleDropElement(event, this.element);
+    const moduleTarget = this.actor.items.get(moduleTargetElement?.dataset?.itemId ?? "");
+    if (isWeaponModuleDrop(dropped.item ?? dropped.itemData, moduleTarget)) {
+      if (!canUseWeaponModuleDrag(data)) return null;
+      return installDroppedWeaponModule({
+        actor: this.actor, weapon: moduleTarget, moduleItem: dropped.item ?? dropped.itemData,
+        sourceStackIndex: Math.max(0, toInteger(data.stackIndex))
+      });
+    }
 
     const zone = this.#getDropZone(event);
     const parentId = this.#getInventoryContextParentId(zone);
@@ -1022,6 +1041,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     const zone = this.#getDropZone(event);
     if (!zone) return;
+    if (this.#moduleDropPreview.matches(event)) {
+      this.#clearInventoryHoverPreview();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "link";
+      return;
+    }
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
     this.#setInventoryHoverPreview(zone, event);
@@ -3485,6 +3509,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return;
     }
     const { getCraftWindowOpenOptionsForItem, openCraftWindow } = await import("../apps/craft-window.mjs");
+    if (canShowSuitableWeaponModules(item)) {
+      menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
+    }
     const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
@@ -3531,6 +3558,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#closeInventoryContextMenu();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openContainerSheet(item);
+      if (action === "suitableModules") return this.#moduleDropPreview.highlightModules(item);
       if (action.startsWith("craft-open-")) {
         const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
         if (!option) return undefined;
@@ -4159,7 +4187,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const { item, entry, slotIndex, slot } = this.#getTooltipWeaponModuleSlotContext(slotElement);
     const itemData = getWeaponModuleSlotItemData(slot);
     if (!item || !entry || !itemData?.system) return;
-    await this.#uninstallWeaponModule(item, entry, slotIndex, itemData);
+    await this.#uninstallWeaponModule(item, entry, slotIndex);
   }
 
   #getTooltipWeaponModuleSlotContext(slotElement) {
@@ -4226,49 +4254,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }, () => this.#refreshInventoryTooltip());
   }
 
-  async #uninstallWeaponModule(weapon, entry, slotIndex, itemData) {
+  async #uninstallWeaponModule(weapon, entry, slotIndex) {
     if (this.#moduleTooltipMutation.active) return;
     const targetFunction = getModuleTooltipTargetFunction(entry);
-    const path = targetFunction === ITEM_FUNCTIONS.damageMitigation
-      ? "system.functions.damageMitigation" : getWeaponFunctionUpdatePath(entry);
-    if (!path) return;
-    const slots = getWeaponModuleSlots(entry.data ?? {});
-    const slot = slots[slotIndex];
+    const slot = getWeaponModuleSlots(entry.data ?? {})[slotIndex];
     if (!slot) return;
-    slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
-    let returnPlan;
-    let magazinePlan = { overflow: 0, updates: [], creates: [] };
-    try {
-      returnPlan = planActorInventoryGrant(this.actor, itemData, {
-        quantity: 1,
-        merge: false
-      });
-      if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-      if (targetFunction === ITEM_FUNCTIONS.weapon) {
-        magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
-          reservedCreates: returnPlan.creates
-        });
-      }
-    } catch (error) {
-      ui.notifications.warn(error.message);
-      return;
-    }
-    const weaponUpdate = {
-      _id: weapon.id,
-      [`${path}.moduleSlots`]: slots
-    };
-    if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await this.#moduleTooltipMutation.run(async () => {
-      await executeInventoryMutation({
-        actor: this.actor,
-        updates: [
-          weaponUpdate,
-          ...returnPlan.updates,
-          ...magazinePlan.updates
-        ],
-        creates: [...returnPlan.creates, ...magazinePlan.creates]
-      }, { reason: `uninstall-${targetFunction}-module` });
-      if (targetFunction === ITEM_FUNCTIONS.weapon) this.#restoreTooltipModuleSlotsTab(weapon.id);
+      const removed = await uninstallInventoryModule(weapon, entry.id, targetFunction, slot.id);
+      if (removed && targetFunction === ITEM_FUNCTIONS.weapon) this.#restoreTooltipModuleSlotsTab(weapon.id);
     }, () => this.#refreshInventoryTooltip());
   }
 

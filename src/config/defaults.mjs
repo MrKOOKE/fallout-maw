@@ -80,17 +80,12 @@ export const DEFAULT_PROFICIENCIES = Object.freeze([
   { key: "pistol", abbr: "pis", label: "Пистолет", max: 1000 },
   { key: "automatic", abbr: "aut", label: "Автомат", max: 1000 },
   { key: "rifle", abbr: "rif", label: "Винтовка", max: 1000 },
-  { key: "machineGun", abbr: "mac", label: "Пулемёт", max: 1000 },
+  { key: "heavyRanged", abbr: "hvy", label: "Тяжелое стрелковое", max: 1000 },
   { key: "shotgun", abbr: "sho", label: "Дробовик", max: 1000 },
-  { key: "grenadeLauncher", abbr: "gla", label: "Гранатомет", max: 1000 },
-  { key: "flamethrower", abbr: "fla", label: "Огнемет", max: 1000 },
   { key: "grenade", abbr: "grn", label: "Граната", max: 1000 },
-  { key: "oneHandedSlashing", abbr: "ohs", label: "Одноручное режущее", max: 1000 },
-  { key: "twoHandedSlashing", abbr: "ths", label: "Двуручное режущее", max: 1000 },
-  { key: "oneHandedPiercing", abbr: "ohp", label: "Одноручное колющее", max: 1000 },
-  { key: "twoHandedPiercing", abbr: "thp", label: "Двуручное колющее", max: 1000 },
-  { key: "oneHandedBludgeoning", abbr: "ohb", label: "Одноручное дробящее", max: 1000 },
-  { key: "twoHandedBludgeoning", abbr: "thb", label: "Двуручное дробящее", max: 1000 }
+  { key: "oneHandedMelee", abbr: "ohm", label: "Одноручное холодное", max: 1000 },
+  { key: "twoHandedMelee", abbr: "thm", label: "Двуручное холодное", max: 1000 },
+  { key: "natural", abbr: "nat", label: "Природное", max: 1000 }
 ]);
 
 export const DEFAULT_PROFICIENCY_INFLUENCE = Object.freeze({

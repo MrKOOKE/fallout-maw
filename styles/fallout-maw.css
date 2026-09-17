@@ -19920,6 +19920,80 @@ label.checkbox.fallout-maw-ability-change-choice {
   order: 1;
 }
 
+.fallout-maw-has-alt-module-slots {
+  position: relative;
+}
+
+.fallout-maw-item-module-slots {
+  bottom: 2px;
+  right: 2px;
+  max-width: calc(100% - 4px);
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  gap: 1px;
+  position: absolute;
+  z-index: 6;
+}
+
+.fallout-maw-item-module-slots > .fallout-maw-item-module-slot {
+  background: #11150d;
+  border: 1px solid #aaa477;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px #393d27;
+  box-sizing: border-box;
+  cursor: pointer;
+  flex: 0 0 calc(var(--fallout-maw-inventory-cell-size) / 2);
+  height: calc(var(--fallout-maw-inventory-cell-size) / 2);
+  width: calc(var(--fallout-maw-inventory-cell-size) / 2);
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 2px;
+  overflow: hidden;
+}
+
+.fallout-maw-item-module-slots > .fallout-maw-item-module-slot.empty {
+  background: rgba(8, 12, 6, 0.85);
+  cursor: default;
+}
+
+.fallout-maw-item-module-slots > .fallout-maw-item-module-slot:hover {
+  border-color: #ffe879;
+  box-shadow: inset 0 0 0 1px #ffe879;
+}
+
+.fallout-maw-item-module-slots .fallout-maw-item-module-slot > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: static;
+  inset: auto;
+  max-width: 100%;
+  max-height: 100%;
+  pointer-events: none;
+  transform: none !important;
+}
+
+.fallout-maw-alt-module-tooltip {
+  pointer-events: none;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+}
+
+.fallout-maw-inventory-item.module-drop-match-preview {
+  outline: 2px solid #a1d96e;
+  outline-offset: -2px;
+  box-shadow: inset 0 0 12px rgba(161, 217, 110, 0.45);
+  opacity: 1 !important;
+}
+
+.fallout-maw-inventory-item.module-compatibility-highlight {
+  outline: 2px solid #ffea68;
+  outline-offset: -2px;
+  opacity: 1 !important;
+}
+
 .application .fallout-maw-container-controls[hidden] {
   display: none;
 }

@@ -1645,6 +1645,8 @@
       "ImplantDifficulty": "Сложность установки",
       "ImplantSkill": "Навык установки",
       "InstallationSlots": "Слоты установки",
+      "SuitableModules": "Подходящие модули",
+      "WeaponModuleNoFreeSlot": "У оружия нет свободного слота для этого модуля.",
       "ImplantLimbs": "Подходит к частям тела",
       "ImplantNoLimbs": "Части тела не выбраны.",
       "ConditionNoRecoveryMethods": "Методы восстановления не заданы.",
