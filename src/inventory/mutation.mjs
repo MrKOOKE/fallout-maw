@@ -9,6 +9,7 @@ import {
   getItemContainerParentId,
   getItemDeletionClosureIds,
   getItemId,
+  planInventoryContainerGrowth,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
@@ -291,16 +292,24 @@ function prepareActorMutationPlan(rawPlan) {
   const updatedBeforeDelete = projectActorInventoryState(actor, { updates });
   const deletes = expandInventoryDeleteIds(updatedBeforeDelete, requestedDeleteIds);
   const deleteSet = new Set(deletes);
-  const survivingUpdates = updates.filter(update => !deleteSet.has(String(update._id)));
+  let survivingUpdates = updates.filter(update => !deleteSet.has(String(update._id)));
   const {
     creates,
     createIdMap
   } = allocateInventoryCreateIds(actor, rawPlan.creates);
-  const projectedItems = projectActorInventoryState(actor, {
+  let projectedItems = projectActorInventoryState(actor, {
     updates: survivingUpdates,
     deletes,
     creates
   });
+  const race = getCreatureOptions().races.find(entry => String(entry.id) === String(actor.system?.creature?.raceId ?? ""));
+  const growth = planInventoryContainerGrowth(snapshots, projectedItems, getActorInventoryGridDimensions(actor, race), {
+    rootOptions: getActorRootInventoryGridOptions(actor, "")
+  });
+  if (growth?.updates.length) {
+    survivingUpdates = mergeInventoryUpdates([...survivingUpdates, ...growth.updates]);
+    projectedItems = growth.items;
+  }
   const touchedExistingIds = new Set([
     ...survivingUpdates.map(update => String(update._id)),
     ...deletes

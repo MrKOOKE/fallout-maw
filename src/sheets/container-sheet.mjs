@@ -2,8 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
-import { createDefaultInventorySize } from "../settings/creature-options.mjs";
-import { getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
+import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
 import {
   buildInventoryCellStyle,
   createAnchoredItemStackPartsForQuantity,
@@ -1334,7 +1333,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const validation = validateInventoryTree(
       this.#projectInventoryState({ updates, deletes, creates }),
       getRootInventoryDimensions(this.actor),
-      { rootOptions: getActorRootInventoryGridOptions(this.actor, "") }
+      { previousItems: this.actor.items, rootOptions: getActorRootInventoryGridOptions(this.actor, "") }
     );
     if (validation.valid) return true;
     this.#warnValidation(validation);
@@ -1439,7 +1438,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
           document: item,
           evaluatingActorUuid: this.options?.evaluatingActorUuid ?? ""
         });
-        app.render({ force: true });
+        await app.render({ force: true });
         app.bringToFront();
         return app;
       }
@@ -1704,9 +1703,5 @@ function createInventoryItemData(item, allItems, placement = null, { actor = nul
 
 function getRootInventoryDimensions(actor) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns)),
-    rows: Math.max(1, toInteger(inventorySize.rows))
-  };
+  return getActorInventoryGridDimensions(actor, race);
 }

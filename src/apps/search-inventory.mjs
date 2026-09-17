@@ -6,7 +6,7 @@ import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { planEquippedItemSwap } from "../inventory/equipment-swap.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
-import { getCraftingSettings, getCreatureOptions, getCurrencySettings, getItemCategorySettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getCraftingSettings, getCreatureOptions, getCurrencySettings, getItemCategorySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { isGuaranteedResolutionMode, isSkillThresholdMode } from "../settings/crafting.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
@@ -402,7 +402,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #personalTradeOperationId = "";
   #tradeOffers = createEmptyTradeOffers();
   #tradeCatalogEnabledCategories = new Map();
-  #tradeCatalogExpandedWeaponGroups = new Map();
+  #tradeCatalogExpandedSubcategories = new Map();
   #tradeCompatibilityHighlight = null;
   #tradeCompatibilityHighlightTimer = null;
   #tradeCompletionInProgress = false;
@@ -426,8 +426,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #tooltipAnchorElement = null;
   #tooltipActorUuid = "";
   #tooltipCloseTimer = null;
+  #tooltipBaseMode = false;
   #tooltipCompareMode = false;
+  #tooltipRenderGeneration = 0;
   #tooltipDocumentKeyHandler = null;
+  #tooltipDocumentBlurHandler = null;
   #tooltipDocumentPointerDownHandler = null;
   #tooltipElement = null;
   #tooltipItemId = "";
@@ -539,7 +542,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeSessionRevision = 0;
     this.#tradeOffers = createEmptyTradeOffers();
     this.#tradeCatalogEnabledCategories.clear();
-    this.#tradeCatalogExpandedWeaponGroups.clear();
+    this.#tradeCatalogExpandedSubcategories.clear();
     this.#clearTradeCompatibilityHighlight();
     if (tradeSnapshot) this.#applyTradeSessionSnapshot(tradeSnapshot, { render: false });
     this.#tradeCompletionInProgress = false;
@@ -666,7 +669,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           tradeCurrencyKey: this.#tradeCurrencyKey,
           tradeOffer: tradeContext?.offers?.searcher,
           tradeCatalogEnabledCategories: this.#getTradeCatalogEnabledCategories(this.#searcherActor?.uuid ?? this.#searcherActorUuid),
-          tradeCatalogExpandedWeaponGroups: this.#getTradeCatalogExpandedWeaponGroups(this.#searcherActor?.uuid ?? this.#searcherActorUuid),
+          tradeCatalogExpandedSubcategories: this.#getTradeCatalogExpandedSubcategories(this.#searcherActor?.uuid ?? this.#searcherActorUuid),
           tradeCatalogGrouping,
           sideBarterValues: tradeSideBarterValues,
           tradeCounterpartyActor: this.#searchedActor,
@@ -684,7 +687,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           tradeCurrencyKey: this.#tradeCurrencyKey,
           tradeOffer: tradeContext?.offers?.searched,
           tradeCatalogEnabledCategories: this.#getTradeCatalogEnabledCategories(this.#searchedActor?.uuid ?? this.#searchedActorUuid),
-          tradeCatalogExpandedWeaponGroups: this.#getTradeCatalogExpandedWeaponGroups(this.#searchedActor?.uuid ?? this.#searchedActorUuid),
+          tradeCatalogExpandedSubcategories: this.#getTradeCatalogExpandedSubcategories(this.#searchedActor?.uuid ?? this.#searchedActorUuid),
           tradeCatalogGrouping,
           sideBarterValues: tradeSideBarterValues,
           tradeCounterpartyActor: this.#searcherActor,
@@ -1736,12 +1739,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return enabled;
   }
 
-  #getTradeCatalogExpandedWeaponGroups(actorUuid = "") {
+  #getTradeCatalogExpandedSubcategories(actorUuid = "") {
     const key = String(actorUuid ?? "");
-    let expanded = this.#tradeCatalogExpandedWeaponGroups.get(key);
+    let expanded = this.#tradeCatalogExpandedSubcategories.get(key);
     if (!expanded) {
       expanded = new Set();
-      this.#tradeCatalogExpandedWeaponGroups.set(key, expanded);
+      this.#tradeCatalogExpandedSubcategories.set(key, expanded);
     }
     return expanded;
   }
@@ -1752,8 +1755,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     for (const key of this.#tradeCatalogEnabledCategories.keys()) {
       if (!actorUuids.has(key)) this.#tradeCatalogEnabledCategories.delete(key);
     }
-    for (const key of this.#tradeCatalogExpandedWeaponGroups.keys()) {
-      if (!actorUuids.has(key)) this.#tradeCatalogExpandedWeaponGroups.delete(key);
+    for (const key of this.#tradeCatalogExpandedSubcategories.keys()) {
+      if (!actorUuids.has(key)) this.#tradeCatalogExpandedSubcategories.delete(key);
     }
   }
 
@@ -2428,9 +2431,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return;
     }
 
-    const tradeCatalogWeaponGroup = event.target?.closest?.("[data-trade-catalog-weapon-group]");
-    if (tradeCatalogWeaponGroup && this.element?.contains(tradeCatalogWeaponGroup)) {
-      await this.#onTradeCatalogWeaponGroupClick(event, tradeCatalogWeaponGroup);
+    const tradeCatalogSubcategory = event.target?.closest?.("[data-trade-catalog-subcategory]");
+    if (tradeCatalogSubcategory && this.element?.contains(tradeCatalogSubcategory)) {
+      await this.#onTradeCatalogSubcategoryClick(event, tradeCatalogSubcategory);
       return;
     }
 
@@ -2515,14 +2518,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     await this.#renderPreservingWindowStack();
   }
 
-  async #onTradeCatalogWeaponGroupClick(event, button) {
+  async #onTradeCatalogSubcategoryClick(event, button) {
     event.preventDefault();
     event.stopPropagation();
     if (!this.#isTradeMode() || this.#tradeOffers.completed) return;
     const actorUuid = String(button?.dataset?.tradeActorUuid ?? "");
-    const stateKey = String(button?.dataset?.tradeCatalogWeaponGroup ?? "").trim();
+    const stateKey = String(button?.dataset?.tradeCatalogSubcategory ?? "").trim();
     if (!actorUuid || !stateKey) return;
-    const expanded = this.#getTradeCatalogExpandedWeaponGroups(actorUuid);
+    const expanded = this.#getTradeCatalogExpandedSubcategories(actorUuid);
     if (expanded.has(stateKey)) expanded.delete(stateKey);
     else expanded.add(stateKey);
     this.#captureScrollPositions();
@@ -3133,7 +3136,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return game.user?.isGM ? (this.#searcherActor?.uuid ?? this.#searchedActor?.uuid ?? "") : "";
   }
 
-  #openSearchContainerSheet(item) {
+  async #openSearchContainerSheet(item) {
     if (!isContainerItem(item)) return null;
     const evaluatingActorUuid = this.#isTradeMode()
       ? this.#getLocalTradeActorUuid()
@@ -3144,7 +3147,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       searchTransferHandler: payload => this.#executeContainerSheetTransfer(payload),
       contentsTransferOptions: this.#getContentsTransferOptions(item.parent)
     });
-    app.render({ force: true });
+    await app.render({ force: true });
     app.bringToFront();
     return app;
   }
@@ -3178,11 +3181,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!this.#getActorByUuid(zone.actor?.uuid)) return false;
       if (zone.parentId === BUTCHERING_STORAGE_PARENT_ID || zone.parentId === LOCKED_STORAGE_PARENT_ID) return false;
       if (!this.#isTradeMode()) return true;
-      if (zone.kind === "offer" && this.#tradeOffers.completed) return false;
-      return this.#canManageTradeOfferSide(this.#getTradeSideForActor(zone.actor.uuid));
+      if (!this.#tradeOffers.completed || zone.kind === "offer") return false;
+      return this.#canClaimCompletedTradeSide(this.#getTradeSideForActor(zone.actor.uuid));
     };
     return {
       application: this,
+      enabled: () => !this.#isTradeMode() || this.#tradeOffers.completed,
       beforeTransfer: () => {
         this.#renderRefresh?.cancel?.();
         this.#captureScrollPositions();
@@ -3658,9 +3662,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     this.#cancelInventoryTooltipClose();
+    const changedMode = this.#tooltipBaseMode !== Boolean(event.altKey) || this.#tooltipCompareMode !== Boolean(event.ctrlKey);
+    this.#tooltipBaseMode = Boolean(event.altKey);
     this.#tooltipCompareMode = Boolean(event.ctrlKey);
-    if (this.#tooltipAnchorElement === anchor && this.#tooltipElement) return;
-    this.#scheduleInventoryTooltip(anchor, { compareMode: event.ctrlKey });
+    if (this.#tooltipAnchorElement === anchor && this.#tooltipElement) {
+      if (changedMode) void this.#showInventoryTooltip(anchor, { refresh: true });
+      return;
+    }
+    this.#scheduleInventoryTooltip(anchor, { baseMode: event.altKey, compareMode: event.ctrlKey });
   }
 
   #onInventoryTooltipPointerOut(event) {
@@ -3679,13 +3688,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     event.preventDefault();
     event.stopPropagation();
     this.#clearInventoryTooltip({ force: true });
+    this.#tooltipBaseMode = Boolean(event.altKey);
     this.#tooltipCompareMode = Boolean(event.ctrlKey);
     void this.#showInventoryTooltip(anchor, { pinned: true });
   }
 
-  #scheduleInventoryTooltip(anchor, { compareMode = this.#tooltipCompareMode } = {}) {
+  #scheduleInventoryTooltip(anchor, { baseMode = this.#tooltipBaseMode, compareMode = this.#tooltipCompareMode } = {}) {
     if (this.#tooltipPinned) return;
     this.#tooltipCompareMode = Boolean(compareMode);
+    this.#tooltipBaseMode = Boolean(baseMode);
     const view = this.element?.ownerDocument?.defaultView ?? window;
     if (this.#tooltipElement && !this.#tooltipPinned) {
       if (this.#tooltipTimer) {
@@ -3709,11 +3720,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
 
     this.#clearInventoryTooltip();
+    this.#tooltipBaseMode = Boolean(baseMode);
     this.#tooltipCompareMode = Boolean(compareMode);
     this.#tooltipAnchorElement = anchor;
     this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
     this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
     this.#tooltipWeaponTabIndex = 0;
+    this.#bindInventoryTooltipKeyMode();
     this.#tooltipTimer = view.setTimeout(() => {
       this.#tooltipTimer = null;
       void this.#showInventoryTooltip(anchor);
@@ -3721,6 +3734,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false, refresh = false } = {}) {
+    const generation = ++this.#tooltipRenderGeneration;
     const actor = this.#getActorByUuid(String(anchor?.dataset?.searchActorUuid ?? this.#tooltipActorUuid));
     const itemId = String(anchor?.dataset?.tooltipItem ?? anchor?.dataset?.itemId ?? this.#tooltipItemId);
     const completedOfferAnchor = Boolean(
@@ -3738,11 +3752,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const tooltipHTML = await renderInventoryItemTooltipHTML(item, sourceActor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
-      baseMode: false,
+      baseMode: this.#tooltipBaseMode,
       compareActor: evaluatingActor,
       compareMode: this.#tooltipCompareMode,
       evaluatingActor
     });
+    if (generation !== this.#tooltipRenderGeneration) return;
     if (refresh && ((this.#tooltipActorUuid !== actor.uuid) || (this.#tooltipItemId !== item.id))) return;
 
     if (refresh && this.#tooltipElement) {
@@ -3880,6 +3895,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
     const margin = Math.max(8, 12 * this.#uiScale);
     const gap = Math.max(10, 12 * this.#uiScale);
+    const availableHeight = Math.max(80, Math.floor((viewportHeight - (margin * 2)) / Math.max(0.1, this.#uiScale)));
+    this.#tooltipElement.style.setProperty("--fallout-maw-tooltip-max-height", `${availableHeight}px`);
     const anchorRect = this.#tooltipAnchorElement.getBoundingClientRect();
     let tooltipRect = this.#tooltipElement.getBoundingClientRect();
     let left = anchorRect.right + gap;
@@ -3889,7 +3906,6 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     top = Math.max(margin, Math.min(viewportHeight - tooltipRect.height - margin, top));
     this.#tooltipElement.style.left = `${Math.round(left)}px`;
     this.#tooltipElement.style.top = `${Math.round(top)}px`;
-    this.#tooltipElement.style.maxHeight = `${Math.max(220, viewportHeight - (margin * 2))}px`;
     tooltipRect = this.#tooltipElement.getBoundingClientRect();
     if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
       this.#tooltipElement.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
@@ -4014,14 +4030,25 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#tooltipDocumentKeyHandler) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     this.#tooltipDocumentKeyHandler = event => {
-      if (event.key !== "Control") return;
-      const compareMode = event.type === "keydown";
-      if (this.#tooltipCompareMode === compareMode) return;
-      this.#tooltipCompareMode = compareMode;
-      if (this.#tooltipAnchorElement) void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
+      if (!["Alt", "Control"].includes(event.key)) return;
+      const active = event.type === "keydown";
+      if (event.key === "Alt") {
+        if (this.#tooltipBaseMode === active) return;
+        this.#tooltipBaseMode = active;
+      } else {
+        if (this.#tooltipCompareMode === active) return;
+        this.#tooltipCompareMode = active;
+      }
+      if (this.#tooltipAnchorElement && (this.#tooltipElement || !this.#tooltipTimer)) void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
+    };
+    this.#tooltipDocumentBlurHandler = () => {
+      const changed = this.#tooltipBaseMode || this.#tooltipCompareMode;
+      this.#tooltipBaseMode = false; this.#tooltipCompareMode = false;
+      if (changed && this.#tooltipAnchorElement && (this.#tooltipElement || !this.#tooltipTimer)) void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
     };
     view.document.addEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
     view.document.addEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
+    view.addEventListener("blur", this.#tooltipDocumentBlurHandler);
   }
 
   #unbindInventoryTooltipKeyMode() {
@@ -4029,7 +4056,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const view = this.element?.ownerDocument?.defaultView ?? window;
     view.document.removeEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
     view.document.removeEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
+    view.removeEventListener("blur", this.#tooltipDocumentBlurHandler);
     this.#tooltipDocumentKeyHandler = null;
+    this.#tooltipDocumentBlurHandler = null;
   }
 
   #clearInventoryTooltip({ force = false, keepAnchor = false } = {}) {
@@ -4040,12 +4069,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
     this.#cancelInventoryTooltipClose();
     if (this.#tooltipPinned && !force) return;
+    this.#tooltipRenderGeneration += 1;
     this.#unbindInventoryTooltipDocumentClose();
     this.#unbindInventoryTooltipKeyMode();
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
     this.#tooltipPinned = false;
     if (!keepAnchor) this.#tooltipCompareMode = false;
+    if (!keepAnchor) this.#tooltipBaseMode = false;
     if (!keepAnchor) {
       this.#tooltipAnchorElement = null;
       this.#tooltipActorUuid = "";
@@ -4222,7 +4253,7 @@ export function prepareSearchActorContext(actor, {
   tradeCurrencyKey = "",
   tradeOffer = null,
   tradeCatalogEnabledCategories = null,
-  tradeCatalogExpandedWeaponGroups = null,
+  tradeCatalogExpandedSubcategories = null,
   tradeCatalogGrouping = null,
   sideBarterValues = null,
   tradeCounterpartyActor = null,
@@ -4243,7 +4274,7 @@ export function prepareSearchActorContext(actor, {
     tradeCurrencyKey: selectedTradeCurrencyKey,
     tradeOffer,
     tradeCatalogEnabledCategories,
-    tradeCatalogExpandedWeaponGroups,
+    tradeCatalogExpandedSubcategories,
     tradeCatalogGrouping,
     side,
     sideBarterValues,
@@ -4288,7 +4319,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
   tradeCurrencyKey = "",
   tradeOffer = null,
   tradeCatalogEnabledCategories = null,
-  tradeCatalogExpandedWeaponGroups = null,
+  tradeCatalogExpandedSubcategories = null,
   tradeCatalogGrouping = null,
   side = "",
   sideBarterValues = null,
@@ -4378,7 +4409,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
       ? prepareTradeCatalogContext(decorated, actor, tradeCatalogEnabledCategories, {
         canInteract,
         tradeOffer,
-        expandedWeaponGroups: tradeCatalogExpandedWeaponGroups,
+        expandedSubcategories: tradeCatalogExpandedSubcategories,
         catalogGrouping
       })
       : null
@@ -4388,16 +4419,16 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
 function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategoriesInput = null, {
   canInteract = false,
   tradeOffer = null,
-  expandedWeaponGroups: expandedWeaponGroupsInput = null,
+  expandedSubcategories: expandedSubcategoriesInput = null,
   catalogGrouping
 } = {}) {
   const columns = TRADE_OFFER_DEFAULT_COLUMNS;
   const enabledCategories = enabledCategoriesInput instanceof Set
     ? enabledCategoriesInput
     : new Set(Array.isArray(enabledCategoriesInput) ? enabledCategoriesInput.map(normalizeTradeCatalogCategory) : []);
-  const expandedWeaponGroups = expandedWeaponGroupsInput instanceof Set
-    ? expandedWeaponGroupsInput
-    : new Set(Array.isArray(expandedWeaponGroupsInput) ? expandedWeaponGroupsInput.map(value => String(value ?? "").trim()).filter(Boolean) : []);
+  const expandedSubcategories = expandedSubcategoriesInput instanceof Set
+    ? expandedSubcategoriesInput
+    : new Set(Array.isArray(expandedSubcategoriesInput) ? expandedSubcategoriesInput.map(value => String(value ?? "").trim()).filter(Boolean) : []);
   const allItems = aggregateTradeCatalogItems(collectTradeCatalogItems(inventory)
     .map(item => ({
       ...item,
@@ -4412,12 +4443,12 @@ function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategor
       label,
       enabled: enabledCategories.has(label),
       count: items.length,
-      weaponGroups: enabledCategories.has(label)
-        ? getTradeCatalogWeaponGroups(items, label, expandedWeaponGroups, catalogGrouping)
+      subcategories: enabledCategories.has(label)
+        ? getTradeCatalogSubcategories(items, label, expandedSubcategories, catalogGrouping)
         : []
     };
   });
-  const weaponGroups = categories.flatMap(category => category.enabled ? category.weaponGroups : []);
+  const subcategories = categories.flatMap(category => category.enabled ? category.subcategories : []);
 
   const gridItems = [];
   const dividers = [];
@@ -4433,7 +4464,7 @@ function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategor
     });
     y += 1;
 
-    for (const sectionItems of getTradeCatalogLayoutSections(categoryItems, category.label, expandedWeaponGroups, catalogGrouping)) {
+    for (const sectionItems of getTradeCatalogLayoutSections(categoryItems, category.label, expandedSubcategories, catalogGrouping)) {
       const placedItems = placeTradeCatalogItems(sectionItems, { columns, startY: y });
       for (const { item, placement } of placedItems.items) {
         gridItems.push({
@@ -4453,7 +4484,7 @@ function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategor
   const rows = Math.max(1, y - 1);
   return {
     categories,
-    weaponGroups,
+    subcategories,
     grid: {
       columns,
       rows,
@@ -4470,7 +4501,7 @@ function collectTradeCatalogItems(inventory = {}) {
   const seen = new Set();
   const addItem = (item = null, source = "") => {
     if (!item?.id || item.phantom) return;
-    if (isEquippedTradeCatalogContainer(item, source)) return;
+    if (isEquippedTradeCatalogItem(item, source)) return;
     const key = [
       String(item.actorUuid ?? ""),
       String(item.id ?? ""),
@@ -4495,8 +4526,7 @@ function collectTradeCatalogItems(inventory = {}) {
   return items;
 }
 
-function isEquippedTradeCatalogContainer(item = null, source = "") {
-  if (!isContainerItem(item)) return false;
+function isEquippedTradeCatalogItem(item = null, source = "") {
   const sourceKey = String(source ?? "");
   if (sourceKey === "equipment" || sourceKey === "prosthesis" || sourceKey.startsWith("weapon:")) return true;
   const placementMode = String(item?.placement?.mode ?? item?.system?.placement?.mode ?? "");
@@ -4544,15 +4574,15 @@ function aggregateTradeCatalogItems(items = [], actor = null, tradeOffer = null)
   return result;
 }
 
-function getTradeCatalogWeaponGroups(items = [], categoryLabel = "", expandedWeaponGroups = new Set(), catalogGrouping) {
+function getTradeCatalogSubcategories(items = [], categoryLabel = "", expandedSubcategories = new Set(), catalogGrouping) {
   const groups = new Map();
   for (const item of items) {
-    if (!isTradeCatalogWeaponItem(item)) continue;
+    if (!isTradeCatalogGroupedItem(item)) continue;
     const key = catalogGrouping.keyOf(item);
     if (!groups.has(key)) {
       groups.set(key, {
         key,
-        stateKey: getTradeCatalogWeaponGroupStateKey(categoryLabel, key),
+        stateKey: getTradeCatalogSubcategoryStateKey(categoryLabel, key),
         label: catalogGrouping.labelOf(key),
         count: 0,
         expanded: false
@@ -4564,7 +4594,7 @@ function getTradeCatalogWeaponGroups(items = [], categoryLabel = "", expandedWea
   return Array.from(groups.values())
     .map(group => ({
       ...group,
-      expanded: expandedWeaponGroups.has(group.stateKey)
+      expanded: expandedSubcategories.has(group.stateKey)
     }))
     .sort((left, right) => {
       const leftOrder = order.get(left.key) ?? Number.MAX_SAFE_INTEGER;
@@ -4574,23 +4604,23 @@ function getTradeCatalogWeaponGroups(items = [], categoryLabel = "", expandedWea
     });
 }
 
-function getTradeCatalogLayoutSections(items = [], categoryLabel = "", expandedWeaponGroups = new Set(), catalogGrouping) {
-  if (!items.some(isTradeCatalogWeaponItem)) return [items];
+function getTradeCatalogLayoutSections(items = [], categoryLabel = "", expandedSubcategories = new Set(), catalogGrouping) {
+  if (!items.some(isTradeCatalogGroupedItem)) return [items];
   const sections = [];
-  const weaponSections = new Map();
-  const nonWeaponItems = [];
+  const subcategorySections = new Map();
+  const nonGroupedItems = [];
   for (const item of items) {
-    if (!isTradeCatalogWeaponItem(item)) {
-      nonWeaponItems.push(item);
+    if (!isTradeCatalogGroupedItem(item)) {
+      nonGroupedItems.push(item);
       continue;
     }
     const key = catalogGrouping.keyOf(item);
-    if (!weaponSections.has(key)) weaponSections.set(key, []);
-    weaponSections.get(key).push(item);
+    if (!subcategorySections.has(key)) subcategorySections.set(key, []);
+    subcategorySections.get(key).push(item);
   }
   const order = catalogGrouping.orderFor(categoryLabel);
-  sections.push(...Array.from(weaponSections.entries())
-    .filter(([key]) => expandedWeaponGroups.has(getTradeCatalogWeaponGroupStateKey(categoryLabel, key)))
+  sections.push(...Array.from(subcategorySections.entries())
+    .filter(([key]) => expandedSubcategories.has(getTradeCatalogSubcategoryStateKey(categoryLabel, key)))
     .sort(([leftKey], [rightKey]) => {
       const leftOrder = order.get(leftKey) ?? Number.MAX_SAFE_INTEGER;
       const rightOrder = order.get(rightKey) ?? Number.MAX_SAFE_INTEGER;
@@ -4598,63 +4628,33 @@ function getTradeCatalogLayoutSections(items = [], categoryLabel = "", expandedW
       return catalogGrouping.labelOf(leftKey).localeCompare(catalogGrouping.labelOf(rightKey));
     })
     .map(([, section]) => section));
-  if (nonWeaponItems.length) sections.push(nonWeaponItems);
+  if (nonGroupedItems.length) sections.push(nonGroupedItems);
   return sections.filter(section => section.length);
 }
 
-function isTradeCatalogWeaponItem(item = null) {
+function isTradeCatalogGroupedItem(item = null) {
   return Boolean(String(item?.tradeCatalogGroupKey ?? "").trim());
 }
 
-function getTradeCatalogWeaponGroupStateKey(categoryLabel = "", proficiencyKey = "") {
-  return `${normalizeTradeCatalogCategory(categoryLabel)}::${String(proficiencyKey ?? "").trim() || "__none__"}`;
+function getTradeCatalogSubcategoryStateKey(categoryLabel = "", subcategory = "") {
+  return `${normalizeTradeCatalogCategory(categoryLabel)}::${String(subcategory ?? "").trim() || "__none__"}`;
 }
 
 function createTradeCatalogGrouping() {
-  const rulesProfile = getActiveRulesProfile();
-  const mode = rulesProfile.tradeWeaponGrouping;
   const categorySettings = getItemCategorySettings();
-  const categoryLabels = categorySettings.map(category => normalizeTradeCatalogCategory(category?.label));
-  const proficiencies = mode === "proficiency" ? getProficiencySettings(rulesProfile) : [];
-  const proficiencyLabels = new Map(proficiencies.map(entry => [String(entry.key), String(entry.label)]));
-  const proficiencyOrder = new Map(proficiencies.map((entry, index) => [String(entry.key), index]));
-  const subcategoriesByCategory = mode === "subcategory"
-    ? new Map(categorySettings.map(category => [
-      normalizeTradeCatalogCategory(category?.label),
-      (category?.subcategories ?? []).map(entry => String(entry?.label ?? entry ?? "").trim()).filter(Boolean)
-    ]))
-    : new Map();
-  const subcategoryOrderByCategory = new Map(Array.from(subcategoriesByCategory, ([category, subcategories]) => [
-    category,
-    new Map(subcategories.map((key, index) => [key, index]))
+  const orders = new Map(categorySettings.map(category => [normalizeTradeCatalogCategory(category.label),
+    new Map((category.subcategories ?? []).map((entry, index) => [String(entry.label).trim(), index]))
   ]));
   const emptyOrder = new Map();
-
   return {
-    categoryLabels,
+    categoryLabels: categorySettings.map(category => normalizeTradeCatalogCategory(category.label)),
     keyOf(item) {
-      const prepared = String(item?.tradeCatalogGroupKey ?? "").trim();
-      if (prepared) return prepared;
-      if (mode === "subcategory") {
-        const category = normalizeTradeCatalogCategory(item?.system?.itemCategory ?? item?.itemCategory);
-        if (!subcategoriesByCategory.get(category)?.length) return "";
-        return String(item?.system?.itemSubcategory ?? item?.itemSubcategory ?? "").trim() || "__none__";
-      }
-      const weaponData = getTradeWeaponDataList(item)[0] ?? null;
-      if (!weaponData) return "";
-      return String(weaponData?.proficiencyKey ?? "").trim() || "__none__";
+      const category = normalizeTradeCatalogCategory(item?.system?.itemCategory ?? item?.itemCategory);
+      const label = String(item?.system?.itemSubcategory ?? item?.itemSubcategory ?? "").trim();
+      return label || (orders.get(category)?.size ? "__none__" : "");
     },
-    labelOf(key) {
-      const normalized = String(key ?? "").trim();
-      if (!normalized || normalized === "__none__") {
-        return mode === "subcategory" ? "Без подкатегории" : "Без владения";
-      }
-      return mode === "subcategory" ? normalized : (proficiencyLabels.get(normalized) ?? normalized);
-    },
-    orderFor(categoryLabel) {
-      if (mode !== "subcategory") return proficiencyOrder;
-      return subcategoryOrderByCategory.get(normalizeTradeCatalogCategory(categoryLabel)) ?? emptyOrder;
-    }
+    labelOf(key) { return !key || key === "__none__" ? "Без подкатегории" : key; },
+    orderFor(category) { return orders.get(normalizeTradeCatalogCategory(category)) ?? emptyOrder; }
   };
 }
 
@@ -4703,16 +4703,11 @@ function getTradeCatalogItemSourceQuantity(item = null) {
 function getTradeCatalogItemFootprint(item = null, columns = TRADE_OFFER_DEFAULT_COLUMNS) {
   const placement = item?.placement ?? {};
   const gridColumns = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
-  const width = Math.max(1, toInteger(placement.width) || 1);
-  const height = Math.max(1, toInteger(placement.height) || 1);
-  const current = {
-    width: width > gridColumns && height > gridColumns ? gridColumns : width,
-    height,
-    rotated: Boolean(placement.rotated)
-  };
-  return { ...current, orientations: [
-    current, { width: current.height, height: current.width, rotated: !current.rotated }
-  ] };
+  // Catalog cards always use the original image orientation, independently of
+  // how an owned item is rotated in its inventory. Packing cannot turn cards.
+  const width = Math.max(1, toInteger(placement.rotated ? placement.height : placement.width) || 1);
+  const height = Math.max(1, toInteger(placement.rotated ? placement.width : placement.height) || 1);
+  return { width: Math.min(width, gridColumns), height, rotated: false };
 }
 
 async function performActorButchering(payload = {}, requesterUserId = "") {
@@ -6274,6 +6269,7 @@ function validateTradeOfferSide(actor, offer = {}) {
     if (!sourceActor) throw new Error("Trade item source actor not found.");
     const item = sourceActor?.items?.get(String(entry.itemId ?? ""));
     if (!item) throw new Error("Item not found.");
+    if (isEquippedTradeCatalogItem(item)) throw new Error("Сначала снимите предмет, чтобы предложить его для торговли.");
     assertSearchTransferableItem(item);
     const requested = Math.max(1, toInteger(entry.quantity));
     const sourceStackIndex = toInteger(entry.sourceStackIndex);
@@ -7452,6 +7448,7 @@ async function addContentsToTradeOffer(state, side, actor, parentId = ROOT_CONTA
 function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "", { sourceStackIndex = 0, sourceWholeStack = false } = {}) {
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side) || !item) return offers;
+  if (isEquippedTradeCatalogItem(item)) throw new Error("Сначала снимите предмет, чтобы предложить его для торговли.");
   const itemId = String(item.id ?? "");
   const sourceUuid = String(sourceActorUuid ?? "");
   const stackIndex = Math.max(0, toInteger(sourceStackIndex));
@@ -9876,6 +9873,7 @@ function validateTargetParent(actor, parentId = ROOT_CONTAINER_ID) {
 function validateActorProjectedInventoryState(actor, { updates = [], deletes = [], creates = [] } = {}) {
   const projectedItems = projectActorInventoryState(actor, { updates, deletes, creates });
   const validation = validateInventoryTree(projectedItems, getActorInventoryContextDimensions(actor, ROOT_CONTAINER_ID), {
+    previousItems: actor.items,
     rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   });
   if (validation.valid) {

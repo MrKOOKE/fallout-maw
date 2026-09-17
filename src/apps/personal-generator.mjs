@@ -2261,6 +2261,7 @@ function applyProjectedItemUpdate(itemData, update = {}) {
 
 function validateProjectedItems(actor, projectedMap) {
   return validateInventoryTree(Array.from(projectedMap.values()), getActorRootDimensions(actor), {
+    previousItems: actor.items,
     rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   }).valid;
 }

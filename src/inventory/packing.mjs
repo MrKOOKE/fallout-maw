@@ -114,18 +114,32 @@ export function createRectanglePacker({ columns, rows, occupied = [], zones = []
       for (const r of free) {
         for (const shape of orientations) {
           if (shape.width > r.width || shape.height > r.height) continue;
-          const candidate = { x: r.x, y: r.y, width: shape.width, height: shape.height,
+          const anchor = item.preferredPosition;
+          const candidate = {
+            x: anchor ? Math.max(r.x, Math.min(anchor.x, right(r) - shape.width)) : r.x,
+            y: anchor ? Math.max(r.y, Math.min(anchor.y, bottom(r) - shape.height)) : r.y,
+            width: shape.width, height: shape.height,
             ...(shape.rotated === undefined ? {} : { rotated: Boolean(shape.rotated) }) };
           const w = Math.max(bounds.width, right(candidate) - 1);
           const h = Math.max(bounds.height, bottom(candidate) - 1);
           const shortSide = Math.min(r.width - shape.width, r.height - shape.height);
           const longSide = Math.max(r.width - shape.width, r.height - shape.height);
           const turns = Number(Boolean(shape.rotated) !== Boolean(item.rotated));
-          const fragmentation = strategy === "compact" ? freeSpaceScore(subtract(free, candidate)) : [];
+          const fragmentation = strategy === "compact" && !allowOverflowRows ? freeSpaceScore(subtract(free, candidate)) : [];
           // Preserve small-pocket priority, saving the main compartment for bulky items.
-          const score = strategy === "fit"
+          // A grid that grows downward has a fixed usable width. Minimize its
+          // height first; fragmentation of the artificial bottom boundary must
+          // not push items down or turn them merely to keep that space connected.
+          const fitScore = allowOverflowRows
+            ? strategy === "fit"
+              ? [h, shortSide, longSide, turns, r.y, r.x]
+              : [h, r.y, turns, r.x, shortSide, longSide]
+            : strategy === "fit"
             ? [r.zoneArea, Number(r.base), shortSide, longSide, w * h, h, turns, r.y, r.x]
             : [r.zoneArea, Number(r.base), ...fragmentation, w * h, h, shortSide, longSide, turns, r.y, r.x];
+          const score = anchor
+            ? [Math.abs(candidate.x - anchor.x) + Math.abs(candidate.y - anchor.y), ...fitScore]
+            : fitScore;
           if (!bestScore || compare(score, bestScore) < 0) { best = candidate; bestScore = score; }
         }
       }
@@ -180,8 +194,8 @@ export function packInventoryRectangles(items, context) {
       const placements = Array(items.length).fill(null);
       let packedArea = 0;
       let count = 0;
-      let width = 0;
-      let height = 0;
+      let width = (context.occupied ?? []).reduce((max, r) => r ? Math.max(max, right(r) - 1) : max, 0);
+      let height = (context.occupied ?? []).reduce((max, r) => r ? Math.max(max, bottom(r) - 1) : max, 0);
       let turns = 0;
       for (const item of order) {
         const placement = packer.findAndReserve(item);
@@ -193,7 +207,9 @@ export function packInventoryRectangles(items, context) {
         width = Math.max(width, right(placement) - 1);
         height = Math.max(height, bottom(placement) - 1);
       }
-      const score = [-packedArea, -count, ...packer.freeSpaceScore(), width * height, height, width, turns];
+      const score = context.allowOverflowRows
+        ? [-packedArea, -count, height, turns, ...packer.freeSpaceScore(), width * height, width]
+        : [-packedArea, -count, ...packer.freeSpaceScore(), width * height, height, width, turns];
       if (!bestScore || compare(score, bestScore) < 0) { best = placements; bestScore = score; }
     }
   }

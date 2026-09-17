@@ -1030,6 +1030,7 @@ function findFirstActorDropPlacement(actor, itemData) {
       projectedItem
     ];
     if (validateInventoryTree(projectedItems, rootDimensions, {
+      previousItems: actor.items,
       rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
     }).valid) {
       return { parentId: context.parentId, placement };

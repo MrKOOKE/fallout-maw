@@ -34,12 +34,14 @@ import {
   getRaceEquipmentSlotsForItem,
   getRequiredEquipmentSlotsForItem,
   getRequiredWeaponSlotsForItem,
+  getSelectedEquipmentSlotKeys,
   getValidSelectedEquipmentSlotKeys,
   getValidSelectedEquipmentSlotKeysForOptions,
   getValidSelectedWeaponSlotKeys,
   getValidSelectedWeaponSlotKeysForOptions,
   getWeaponSlotRequirement,
   getWeaponSlotRequirementSize,
+  groupRaceEquipmentSlotsBySet,
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
 import { buildDamageMitigationTables, buildDamageTypeIconClass, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
@@ -98,6 +100,7 @@ import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON
 import { decorateActionPointHudEntry } from "../combat/reaction-resources.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
+  getActorInventoryGridDimensions,
   getActorRootInventoryGridOptions,
   prepareIndicatorEntry as prepareDisplayIndicatorEntry,
   prepareInventoryContext as prepareDisplayInventoryContext
@@ -166,6 +169,7 @@ import {
   getEnergySourceFunction,
   getFirstAidChargesData,
   getFirstAidFunction,
+  getImplantFunction,
   getLightSourceFunction,
   getNeedChangeFunction,
   getOneTimeUseFunction,
@@ -226,6 +230,7 @@ import {
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getTooltipItemDragData, registerTooltipItemDrag } from "../utils/tooltip-item-drag.mjs";
 import {
   getWeaponProficiencyInfluenceBonus,
   getWeaponProficiencyInfluenceLayers,
@@ -2459,6 +2464,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#clearDragPreviewCache();
       return null;
     }
+    if (data.data?.system) return applyInventoryDragRotation(data.data, data);
 
     const sourceKey = this.#getDragPreviewSourceKey(data);
     if (this.#draggedItemData && sourceKey && (sourceKey === this.#dragPreviewSourceKey)) {
@@ -3124,6 +3130,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
     const projectedItems = this.#projectInventoryState({ updates, deletes, creates });
     const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace(), this.actor), {
+      previousItems: this.actor.items,
       rootOptions: this.#getInventoryGridOptions(ROOT_CONTAINER_ID)
     });
     if (validation.valid) {
@@ -3570,13 +3577,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#inventoryContextMenuOpen = false;
   }
 
-  #openContainerSheet(item) {
+  async #openContainerSheet(item) {
     if (!isContainerItem(item)) return null;
     const app = new FalloutMaWContainerSheet({
       document: item,
       evaluatingActorUuid: getInventoryTooltipPerspectiveActor(this.actor)?.uuid ?? ""
     });
-    app.render({ force: true });
+    await app.render({ force: true });
     app.bringToFront();
     return app;
   }
@@ -3999,7 +4006,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tooltip.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
     tooltip.addEventListener("contextmenu", event => this.#onInventoryTooltipContextMenu(event));
     tooltip.addEventListener("mouseleave", event => {
-      if (!this.#tooltipPinned) this.#clearInventoryTooltip();
+      if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
     });
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
@@ -4281,7 +4288,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #syncInventoryTooltipPointerEvents(tooltip = this.#tooltipElement, { pinned = this.#tooltipPinned } = {}) {
     if (!tooltip) return;
-    tooltip.style.pointerEvents = pinned ? "auto" : "none";
+    tooltip.style.pointerEvents = pinned || game.user?.isGM ? "auto" : "none";
   }
 
   #clearNestedInventoryTooltip() {
@@ -4733,6 +4740,7 @@ export async function renderInventoryItemTooltipHTML(item, sourceActor, {
 } = {}) {
   ensureRecipeKnowledgeTooltipListeners();
   ensureResponsiveHorizontalTooltipListeners();
+  registerTooltipItemDrag();
   const descriptionHTML = await renderInventoryItemDescriptionHTML(item, evaluatingActor);
   const recipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(item, evaluatingActor);
   if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, evaluatingActor, { descriptionHTML });
@@ -5542,7 +5550,7 @@ function renderInventoryItemTooltipContentHTML(item, sourceActor, {
     <section class="content">
       <section class="header">
         <div class="top">
-          <div class="name">${escapeHTML(item.name)}</div>
+          <div class="name" ${renderTooltipItemDragAttributes(item)}>${escapeHTML(item.name)}</div>
         </div>
         <div class="bottom">
           <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${weightLabel}</div>
@@ -5550,10 +5558,29 @@ function renderInventoryItemTooltipContentHTML(item, sourceActor, {
         </div>
       </section>
       ${armedStatus}
+      ${renderInventoryTooltipOccupiedSlots(item)}
       ${functionSections}
       ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
     </section>
   `;
+}
+
+function renderInventoryTooltipOccupiedSlots(item) {
+  const equipmentKeys = getSelectedEquipmentSlotKeys(item);
+  if (!equipmentKeys.size) return "";
+
+  const creatureOptions = getCreatureOptions();
+  const labelsOf = (groups, keys) => Array.from(new Set(groups.flatMap(group => group.slots
+    .filter(slot => keys.has(slot.selectionKey))
+    .map(slot => slot.label))));
+  const modeLabel = mode => game.i18n.localize(mode === "oneOf"
+    ? "FALLOUTMAW.Item.WeaponSlotModeOneOf" : "FALLOUTMAW.Item.WeaponSlotModeAll");
+  const rows = [];
+  if (equipmentKeys.size) {
+    const labels = labelsOf(groupRaceEquipmentSlotsBySet(creatureOptions), equipmentKeys);
+    if (labels.length) rows.push([modeLabel(item.system?.occupiedSlotMode), labels.join(", ")]);
+  }
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.OccupiedSlots"), rows);
 }
 
 function renderArmedDelayedExplosionStatus(item = null) {
@@ -5646,6 +5673,7 @@ function buildInventoryTooltipFunctionSections(item, sourceActor, {
     buildLightSourceTooltipSection(item),
     protectionModule ? "" : buildModuleTooltipSection(item, evaluatingActor),
     buildConstructPartTooltipSection(item),
+    buildImplantTooltipSection(item, evaluatingActor),
     buildProsthesisTooltipSection(item, evaluatingActor),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { sourceActor, evaluatingActor, baseMode }),
     ...buildToolTooltipSections(item)
@@ -5657,15 +5685,60 @@ function buildInventoryTooltipFunctionSections(item, sourceActor, {
 function buildContainerTooltipSection(item, actor) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.container, { ignoreBroken: true })) return "";
   const system = item.system ?? {};
+  const preview = buildContainerTooltipGrid(item, actor);
   const rows = [
-    ["Размер", `${toInteger(system.container?.columns)} x ${toInteger(system.container?.rows)}`],
+    ["Ячейки", preview.cellCount],
     ["Нагруженность", `${formatWeight(getContainerContentsWeight(item, actor?.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`]
   ];
   const extraWeaponSlots = toInteger(system.functions?.container?.extraWeaponSlots);
   const loadReduction = Math.max(0, Math.min(100, Number(system.functions?.container?.loadReduction) || 0));
   if (extraWeaponSlots) rows.push([game.i18n.localize("FALLOUTMAW.Item.ContainerExtraWeaponSlots"), extraWeaponSlots]);
   if (loadReduction) rows.push([game.i18n.localize("FALLOUTMAW.Item.ContainerLoadReduction"), `${loadReduction}%`]);
-  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"), rows);
+  return `<section class="function-section">
+    <h4>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"))}</h4>
+    ${renderTooltipFunctionGrid(rows)}
+    ${preview.html}
+  </section>`;
+}
+
+function buildContainerTooltipGrid(item, actor) {
+  const options = getContainerInventoryGridOptions(item);
+  const allItems = actor?.items?.contents ?? [];
+  const contents = item.id ? getContextInventoryItems(item.id, allItems) : [];
+  const grid = prepareInventoryGridContext(contents, options.columns, options.rows, allItems,
+    (child, placement) => ({
+      name: child.name, img: child.img, placement,
+      gridStyle: buildInventoryCellStyleHelper(placement.x, placement.y, placement),
+      quantity: child._stackQuantity ?? getItemQuantityHelper(child)
+    }), options);
+  const zones = options.zones?.length ? options.zones : [
+    { x: 1, y: 1, width: options.columns, height: options.rows }
+  ];
+  // Count the actual union of zones; gaps between pockets are not cells.
+  const cells = new Set();
+  for (const zone of zones) {
+    for (let y = zone.y; y < zone.y + zone.height; y += 1) {
+      for (let x = zone.x; x < zone.x + zone.width; x += 1) {
+        const key = `${x},${y}`;
+        cells.add(key);
+      }
+    }
+  }
+  const zonesHTML = grid.zones.map(zone =>
+    `<div class="fallout-maw-inventory-grid-zone${zone.base ? " base" : ""}" style="${escapeAttribute(zone.style)}"></div>`
+  ).join("");
+  const itemsHTML = grid.items.map(child => `<article class="fallout-maw-inventory-item fallout-maw-inventory-grid-item${child.placement.rotated ? " rotated" : ""}${child.phantom ? " phantom" : ""}" style="${escapeAttribute(child.gridStyle)}">
+    <img src="${escapeAttribute(child.img ?? "")}" alt="${escapeAttribute(child.name)}">
+    ${child.quantity > 1 ? `<strong>${child.quantity}</strong>` : ""}
+  </article>`).join("");
+  return {
+    cellCount: cells.size,
+    html: `<div class="fallout-maw-tooltip-container-grid">
+      <div class="fallout-maw-inventory-grid${grid.hasZones ? " has-zones" : ""}${grid.hasPhantomItems ? " has-phantom-items" : ""}" style="${escapeAttribute(grid.style)}" role="img" aria-label="${escapeAttribute(game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"))}: ${cells.size}">
+        ${zonesHTML}${itemsHTML}
+      </div>
+    </div>`
+  };
 }
 
 function buildConditionTooltipSection(item) {
@@ -6359,13 +6432,24 @@ function getConstructPartBlockedEffects(itemOrData = null) {
     .filter(Boolean)));
 }
 
+function buildImplantTooltipSection(item, actor = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.implant, { ignoreBroken: true })) return "";
+  const implant = getImplantFunction(item);
+  const limbLabels = getInstallationLimbLabels(implant.limbKeys, actor, "FALLOUTMAW.Item.ImplantNoLimbs");
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionImplant"), [
+    [game.i18n.localize("FALLOUTMAW.Item.InstallationSlots"), { html: renderTooltipValueTokens(limbLabels) }],
+    [game.i18n.localize("FALLOUTMAW.Item.ImplantDifficulty"), Math.max(0, toInteger(implant.difficulty ?? 60))],
+    [game.i18n.localize("FALLOUTMAW.Item.ImplantSkill"), getSkillLabel(implant.skillKey ?? "doctor")]
+  ]);
+}
+
 function buildProsthesisTooltipSection(item, actor = null) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.prosthesis, { ignoreBroken: true })) return "";
   const prosthesis = getProsthesisFunction(item);
-  const limbLabels = getProsthesisLimbLabels(prosthesis.limbKeys, actor);
+  const limbLabels = getInstallationLimbLabels(prosthesis.limbKeys, actor);
   const blockedLabels = getProsthesisBlockedEffectLabels(prosthesis.blockedPeriodicEffects);
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisLimbs"), limbLabels.length
+    [game.i18n.localize("FALLOUTMAW.Item.InstallationSlots"), limbLabels.length
       ? { html: renderTooltipValueTokens(limbLabels) }
       : ""],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisIntegration"), `${Math.max(0, Math.min(100, toInteger(prosthesis.integrationPercent)))}%`],
@@ -6394,10 +6478,13 @@ function getProsthesisBlockedEffectLabels(effectKeys = []) {
   });
 }
 
-function getProsthesisLimbLabels(limbKeys = [], actor = null) {
-  const keys = Array.from(new Set((limbKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean)));
+function getInstallationLimbLabels(limbKeys = [], actor = null, emptyLabel = "FALLOUTMAW.Item.ProsthesisNoLimbs") {
+  const source = Array.isArray(limbKeys)
+    ? limbKeys
+    : limbKeys && typeof limbKeys === "object" ? Object.values(limbKeys) : [];
+  const keys = Array.from(new Set(source.map(key => String(key ?? "").trim()).filter(Boolean)));
   const actorLabels = new Map(Object.entries(actor?.system?.limbs ?? {}).map(([key, limb]) => [key, String(limb?.label ?? key)]));
-  if (!keys.length) return [game.i18n.localize("FALLOUTMAW.Item.ProsthesisNoLimbs")];
+  if (!keys.length) return [game.i18n.localize(emptyLabel)];
   return keys.map(key => actorLabels.get(key) ?? getConfiguredLimbLabel(key));
 }
 
@@ -6667,6 +6754,7 @@ function renderWeaponTooltipModuleSlots(item, entries = [], sourceActor = null, 
 function renderInstalledModuleTooltipAttributes(item, sourceActor = null, evaluatingActor = sourceActor) {
   const html = renderInventoryItemTooltipContentHTML(item, sourceActor, { evaluatingActor });
   return [
+    renderTooltipItemDragAttributes(item),
     `data-tooltip-html="${escapeAttribute(html)}"`,
     `data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`,
     `data-tooltip-direction="RIGHT"`
@@ -8703,10 +8791,15 @@ function renderEnergyConsumerSourceChips(consumer = {}, {
 
 const tooltipItemRenderStack = new Set();
 
+function renderTooltipItemDragAttributes(item) {
+  const data = getTooltipItemDragData(item);
+  return data ? `data-tooltip-drag-item="${escapeAttribute(JSON.stringify(data))}"` : "";
+}
+
 function renderTooltipItemAttributes(sourceItem, sourceActor = null, evaluatingActor = sourceActor) {
   const sourceKey = String(sourceItem?.uuid ?? sourceItem?.id ?? "").trim();
   if (sourceKey && tooltipItemRenderStack.has(sourceKey)) {
-    return `title="${escapeAttribute(sourceItem?.name ?? sourceKey)}"`;
+    return `${renderTooltipItemDragAttributes(sourceItem)} title="${escapeAttribute(sourceItem?.name ?? sourceKey)}"`;
   }
 
   if (sourceKey) tooltipItemRenderStack.add(sourceKey);
@@ -8720,6 +8813,7 @@ function renderTooltipItemAttributes(sourceItem, sourceActor = null, evaluatingA
     if (sourceKey) tooltipItemRenderStack.delete(sourceKey);
   }
   return [
+    renderTooltipItemDragAttributes(sourceItem),
     `data-tooltip-html="${escapeAttribute(html)}"`,
     `data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`,
     `data-tooltip-responsive-horizontal`,
@@ -9270,15 +9364,7 @@ function hexToRgb(hexColor) {
 }
 
 function getInventoryGridDimensions(race, actor = null) {
-  const actorInventory = actor?.system?.inventory;
-  const columns = toInteger(actorInventory?.columns);
-  const rows = toInteger(actorInventory?.rows);
-  if (columns > 0 && rows > 0) return { columns, rows };
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns)),
-    rows: Math.max(1, toInteger(inventorySize.rows))
-  };
+  return getActorInventoryGridDimensions(actor, race);
 }
 
 function getItemQuantity(itemOrSystem) {

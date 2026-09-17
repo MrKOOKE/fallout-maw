@@ -1,4 +1,6 @@
 import { isSameContentsZone, transferOwnedInventoryContents } from "../inventory/contents-transfer.mjs";
+import { sortInventoryContents } from "../inventory/contents-sort.mjs";
+import { InventorySortMenu } from "./inventory-sort-menu.mjs";
 import { InventoryRenderBatch, runInventoryRenderBatch, registerInventoryRenderView, unregisterInventoryRenderView } from "./inventory-render-batch.mjs";
 
 const views = new Set();
@@ -14,6 +16,13 @@ export class InventoryTransferMode {
   options = null;
 
   bind(root, options) {
+    if (options.enabled?.() === false) {
+      this.destroy();
+      root?.querySelectorAll("[data-contents-transfer-button], .fallout-maw-contents-transfer-highlight").forEach(element => element.remove());
+      root?.querySelectorAll(".fallout-maw-contents-transfer-heading").forEach(element => element.classList.remove("fallout-maw-contents-transfer-heading"));
+      return;
+    }
+    for (const zone of this.zones) zone.sortMenu?.destroy();
     this.root = root;
     this.options = options;
     this.zones = [];
@@ -62,6 +71,11 @@ export class InventoryTransferMode {
           title.append(button);
         }
         zone.button = button;
+        zone.sortMenu = new InventorySortMenu(title, button, {
+          canUse: () => !inProgress && zone.actor?.isOwner && zone.view.options.canUse(zone),
+          onOpen: () => { cancel(); zone.view.options.onSelect?.(); },
+          onSort: mode => { void sortZone(zone, mode); }
+        });
       }
     }
     if (selection?.view === this) {
@@ -71,6 +85,7 @@ export class InventoryTransferMode {
   }
 
   destroy() {
+    for (const zone of this.zones) zone.sortMenu?.destroy();
     if (selection?.view === this) selection = null;
     views.delete(this);
     unregisterInventoryRenderView(this);
@@ -97,7 +112,13 @@ function available(source, target) {
     && source.view.options.canTransfer(source, target);
 }
 function refresh() {
+  if (selection?.view.options.enabled?.() === false) selection = null;
   for (const zone of zones()) {
+    if (zone.sortMenu) {
+      const enabled = zone.view.options.enabled?.() !== false;
+      zone.sortMenu.controls.hidden = !enabled;
+      if (!enabled && zone.sortMenu.menu.matches(":popover-open")) zone.sortMenu.menu.hidePopover();
+    }
     zone.element.classList.toggle("contents-transfer-source", Boolean(selection && isSameContentsZone(zone, selection)));
     zone.element.classList.toggle("contents-transfer-target", Boolean(selection && available(selection, zone)));
     zone.element.classList.toggle("contents-transfer-pending", inProgress);
@@ -105,6 +126,7 @@ function refresh() {
       zone.button.disabled = inProgress || !zone.view.options.canUse(zone);
       zone.button.setAttribute("aria-pressed", String(Boolean(selection && isSameContentsZone(zone, selection))));
     }
+    if (zone.sortMenu) zone.sortMenu.button.disabled = inProgress || !zone.actor?.isOwner || !zone.view.options.canUse(zone);
   }
 }
 function consume(event) { event.preventDefault(); event.stopImmediatePropagation(); }
@@ -117,6 +139,8 @@ function onPointerEnter(event) {
 }
 
 function onClick(event) {
+  // The sorting dropdown owns its clicks; it is never a transfer destination.
+  if (event.target?.closest?.("[data-inventory-sort-control]") && !event.target.closest("[data-contents-transfer-button]")) return;
   const element = event.target?.closest?.("[data-contents-transfer-zone]");
   const zone = zones().find(entry => entry.element === element);
   if (!zone) return;
@@ -147,4 +171,19 @@ function onClick(event) {
     else if (!result.moved) ui.notifications.info("Нечего переносить.");
   }).catch(error => ui.notifications.error(error.message || "Не удалось перенести содержимое."))
     .finally(() => { inProgress = false; refresh(); });
+}
+
+async function sortZone(zone, mode) {
+  if (inProgress || !zone.actor?.isOwner || !zone.view.options.canUse(zone)) return;
+  selection = null; inProgress = true; refresh();
+  const affected = [...views].filter(view => view.zones.some(entry => entry.actor.uuid === zone.actor.uuid));
+  try {
+    const result = await runInventoryRenderBatch(affected.map(view => ({
+      batch: view.renderBatch, application: view.options.application,
+      before: view.options.beforeTransfer, after: view.options.afterTransfer
+    })), () => sortInventoryContents({ actor: zone.actor, parentId: zone.parentId, mode }));
+    if (!result.sorted) ui.notifications.info("Нечего сортировать.");
+  } catch (error) {
+    ui.notifications.warn(error.message || "Не удалось отсортировать содержимое.");
+  } finally { inProgress = false; refresh(); }
 }

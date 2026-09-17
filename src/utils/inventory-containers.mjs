@@ -344,7 +344,9 @@ export function createAnchoredItemStackPartsForQuantity({
       const rectangle = packer.find(candidate);
       placement = applyPackedInventoryRectangle(candidate, rectangle);
     }
-    if (!placement || !packer.reserve(placement)) return null;
+    if (!placement || !packer.reserve(placement)) {
+      return null;
+    }
     applyStackPartPlacement(part, placement);
     anchored.push(part);
     reserved.push(placement);
@@ -1321,8 +1323,84 @@ function getInventoryCellKey(x, y) {
   return `${x}:${y}`;
 }
 
+/** Move only containers whose contents grew, leaving their contents and neighbours in place. */
+export function planInventoryContainerGrowth(previousItems, projectedItems, rootDimensions, options = {}) {
+  const before = getItemsArray(previousItems);
+  let items = getItemsArray(projectedItems);
+  const beforeById = new Map(before.map(item => [getItemId(item), item]));
+  const afterById = new Map(items.map(item => [getItemId(item), item]));
+  const beforeMemo = new Map();
+  const updates = [];
+  let copied = false;
+  const depthOf = item => {
+    const visited = new Set([getItemId(item)]);
+    let parentId = getItemContainerParentId(item);
+    let depth = 0;
+    while (parentId) {
+      if (visited.has(parentId)) return -1;
+      visited.add(parentId);
+      depth += 1;
+      parentId = getItemContainerParentId(afterById.get(parentId));
+    }
+    return depth;
+  };
+  const containers = items.filter(item => isContainerItem(item)
+    && String(item.system?.placement?.mode ?? "inventory") === "inventory"
+    && beforeById.has(getItemId(item)))
+    .map(item => ({ id: getItemId(item), depth: depthOf(item) }))
+    .sort((a, b) => b.depth - a.depth);
+  for (const { id, depth } of containers) {
+    if (depth < 0) return null;
+    const container = afterById.get(id);
+    const original = beforeById.get(id);
+    const stored = container.system?.placement ?? {};
+    const oldStored = original.system?.placement ?? {};
+    const parentId = getItemContainerParentId(container);
+    // An explicit move of the container retains its requested destination.
+    if (getItemContainerParentId(original) !== parentId
+      || String(oldStored.mode ?? "inventory") !== "inventory"
+      || toInteger(stored.x) !== toInteger(oldStored.x)
+      || toInteger(stored.y) !== toInteger(oldStored.y)
+      || Boolean(stored.rotated) !== Boolean(oldStored.rotated)) continue;
+    const oldFootprint = getItemFootprint(original, before, beforeMemo);
+    const memo = new Map();
+    const current = normalizeInventoryPlacement(stored, container, items, memo);
+    if (current.width <= oldFootprint.width && current.height <= oldFootprint.height) continue;
+    const parent = parentId ? afterById.get(parentId) : null;
+    if (parentId && !isContainerItem(parent)) return null;
+    const grid = parentId ? getContainerInventoryGridOptions(parent) : {
+      ...rootDimensions, ...(options.rootOptions ?? {})
+    };
+    const peers = createInventoryPlacementItems(getContextInventoryItems(parentId, items), items)
+      .filter(item => getItemId(item) !== id);
+    const occupied = peers.map(item => normalizeInventoryPlacement(item.system?.placement, item, items, memo));
+    if (isInventoryPlacementWithinBounds(current, grid.columns, grid.rows, grid)
+      && !occupied.some(placement => inventoryPlacementsOverlap(current, placement))) continue;
+    const planningRows = grid.allowOverflowRows ? Math.max(grid.rows, current.y + current.height - 1) : grid.rows;
+    const next = createRectanglePacker({ ...grid, rows: planningRows, occupied, strategy: "fit" }).find({
+      ...current, orientations: [current], preferredPosition: { x: current.x, y: current.y }
+    });
+    if (!next) return null;
+    if (!copied) {
+      items = items.map(item => item.toObject?.() ?? foundry.utils.deepClone(item));
+      afterById.clear();
+      for (const item of items) afterById.set(getItemId(item), item);
+      copied = true;
+    }
+    const moved = afterById.get(id);
+    moved.system.placement.x = next.x;
+    moved.system.placement.y = next.y;
+    updates.push({ _id: id, "system.placement.x": next.x, "system.placement.y": next.y });
+  }
+  return { items, updates };
+}
+
 export function validateInventoryTree(items, rootDimensions, options = {}) {
-  const itemsArray = getItemsArray(items).filter(isInventoryManagedItem);
+  // UI previews use the same growth plan that the atomic mutation will persist.
+  const growth = options.previousItems
+    ? planInventoryContainerGrowth(options.previousItems, items, rootDimensions, options)
+    : null;
+  const itemsArray = getItemsArray(growth?.items ?? items).filter(isInventoryManagedItem);
   const itemMap = new Map(itemsArray.map(item => [getItemId(item), item]));
   const contextItemsByParent = buildInventoryContextItemsByParent(itemsArray);
   const contentsWeightMemo = new Map();
@@ -1357,19 +1435,21 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
 
   for (const container of itemsArray) {
     if (!isContainerItem(container)) continue;
+    const containerId = getItemId(container);
     const gridOptions = getContainerInventoryGridOptions(container);
-    const contents = contextItemsByParent.get(container.id) ?? [];
+    const contents = contextItemsByParent.get(containerId) ?? [];
     if (!validateContextPlacements(contents, gridOptions.columns, gridOptions.rows, itemsArray, gridOptions)) {
-      return { valid: false, reason: "no-space", parentId: container.id, itemId: container.id };
+      return { valid: false, reason: "no-space", parentId: containerId, itemId: containerId };
     }
 
     if (getContainerContentsWeight(container, itemsArray, contentsWeightMemo) > getContainerMaxLoad(container)) {
-      return { valid: false, reason: "max-load", parentId: container.id, itemId: container.id };
+      return { valid: false, reason: "max-load", parentId: containerId, itemId: containerId };
     }
   }
 
-  return { valid: true };
+  return growth?.updates.length ? { valid: true, containerUpdates: growth.updates } : { valid: true };
 }
+
 
 function isInventoryManagedItem(itemOrSystem = null) {
   const type = getItemType(itemOrSystem);
@@ -1405,7 +1485,7 @@ export function createInventoryTreePlacementRepairUpdates(items, rootDimensions,
   for (const container of itemsArray) {
     if (!isContainerItem(container)) continue;
     const gridOptions = getContainerInventoryGridOptions(container);
-    const contents = contextItemsByParent.get(container.id) ?? [];
+    const contents = contextItemsByParent.get(getItemId(container)) ?? [];
     const containerUpdates = createContextPlacementRepairUpdates(contents, gridOptions.columns, gridOptions.rows, itemsArray, gridOptions);
     if (!containerUpdates) return null;
     updates.push(...containerUpdates);
@@ -1567,12 +1647,16 @@ function validateStoredContextPlacements(contextItems, columns, rows, allItems, 
     if (item._stackHasStoredPlacement === false) return false;
 
     const placement = normalizeInventoryPlacement(rawPlacement, item, allItems, footprintMemo);
-    if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
+    if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) {
+      return false;
+    }
 
     for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
       for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
         const key = getInventoryCellKey(x, y);
-        if (occupiedCells.has(key)) return false;
+        if (occupiedCells.has(key)) {
+          return false;
+        }
         occupiedCells.add(key);
       }
     }

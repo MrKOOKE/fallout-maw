@@ -1,4 +1,5 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
+import { registerTooltipItemDrag } from "./utils/tooltip-item-drag.mjs";
 import { FalloutMaWTileDocument } from "./documents/tile-reset-cache.mjs";
 import { FalloutMaWToken, initializeEffectTooltips } from "./canvas/token.mjs";
 import { FalloutMaWTokenLayer } from "./canvas/token-layer.mjs";
@@ -246,6 +247,7 @@ Hooks.once("init", () => {
 
 Hooks.on("openDetachedWindow", (_id, win) => {
   registerFormFocusDragGuard(win?.document);
+  registerTooltipItemDrag(win?.document);
 });
 
 Hooks.once("ready", () => {
@@ -253,6 +255,7 @@ Hooks.once("ready", () => {
   // Promises. Register request handlers before starting any asynchronous
   // maintenance so the live UI never observes a half-registered system.
   initializeEffectTooltips();
+  registerTooltipItemDrag();
   initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
   registerSkillCheckSocket();
@@ -509,6 +512,7 @@ function planActorDropItem(actor, itemData) {
   const rootDimensions = getActorRootInventoryDimensions(actor);
   const projectedItems = projectActorDropItems(actor, { updates, creates });
   if (!validateInventoryTree(projectedItems, rootDimensions, {
+    previousItems: actor.items,
     rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   }).valid) return null;
   return { updates, creates };
@@ -578,6 +582,7 @@ function planActorDropVirtualItem(actor, itemData) {
   const rootDimensions = getActorRootInventoryDimensions(actor);
   const projectedItems = projectActorDropItems(actor, { updates, creates });
   if (!validateInventoryTree(projectedItems, rootDimensions, {
+    previousItems: actor.items,
     rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   }).valid) return null;
   return { updates, creates };
@@ -711,6 +716,7 @@ function findFirstActorDropPlacement(actor, itemData, reservedPlacements = new M
       creates: [createActorDropItemData(itemData, { parentId: context.parentId, placement })]
     });
     if (validateInventoryTree(projectedItems, rootDimensions, {
+      previousItems: actor.items,
       rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
     }).valid) {
       return { parentId: context.parentId, placement };
@@ -719,4 +725,3 @@ function findFirstActorDropPlacement(actor, itemData, reservedPlacements = new M
 
   return null;
 }
-

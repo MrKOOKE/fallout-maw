@@ -20,8 +20,7 @@ import {
   getConstructPartLimbKey,
   getConstructPartSlots,
   getConstructPartTypeLabel,
-  getInstalledConstructPartForSlot,
-  isConstructPartCompatibleWithSlot
+  getInstalledConstructPartForSlot
 } from "../utils/construct-parts.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
 import {
@@ -107,6 +106,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   async #onDropConstructPart(event) {
     event.preventDefault();
+    event.stopPropagation();
     const data = readDropData(event);
     if (data?.type !== "Item") return;
     const item = await Item.implementation.fromDropData(data).catch(() => null);
@@ -167,40 +167,12 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   async #onEntryDrop(event) {
     const entryId = this.#readDraggedEntryId(event);
-    if (!entryId) return this.#onDropIntoEntry(event);
+    if (!entryId) return this.#onDropConstructPart(event);
     event.preventDefault();
     event.stopPropagation();
     this.#syncEntriesToPreviewOrder();
     this.#dropCommitted = true;
     this.#previewDirty = false;
-    return this.render();
-  }
-
-  async #onDropIntoEntry(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const targetEntryId = event.currentTarget?.dataset?.constructPartEntryId ?? "";
-    const entry = this.#entries.find(candidate => candidate.entryId === targetEntryId);
-    if (!entry) return;
-    if (entry.installed) {
-      ui.notifications?.warn?.("Сначала снимите установленную деталь из этого слота.");
-      return;
-    }
-    const data = readDropData(event);
-    if (data?.type !== "Item") return;
-    const item = await Item.implementation.fromDropData(data).catch(() => null);
-    if (!isConstructPartCompatibleWithSlot(item, entry.slot)) {
-      ui.notifications?.warn?.("Тип детали не совпадает с типом этого слота конструкта.");
-      return;
-    }
-    if (item.parent === this.actor && this.#entries.some(candidate => candidate !== entry && candidate.installed && candidate.itemId === item.id)) {
-      ui.notifications?.warn?.("Эта деталь уже установлена в другой слот конструкта.");
-      return;
-    }
-    entry.item = item.parent === this.actor ? item : null;
-    entry.itemId = entry.item?.id ?? "";
-    entry.itemData = item.parent === this.actor ? null : item.toObject();
-    entry.installed = true;
     return this.render();
   }
 
@@ -223,12 +195,12 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     const entryId = event.currentTarget?.dataset?.constructPartRemove ?? "";
     if (!entryId) return;
     const entry = this.#entries.find(candidate => candidate.entryId === entryId);
-    if (!entry?.installed) return;
+    if (!entry) return;
     if (hasConstructPartWeaponOccupants(this.actor, entry.slot?.id)) {
       ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
       return;
     }
-    entry.installed = false;
+    this.#entries = this.#entries.filter(candidate => candidate !== entry);
     return this.render();
   }
 
@@ -284,7 +256,10 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     const updates = [];
     const createPlans = [];
     const previousEntries = getOwnedConstructPartEntries(this.actor);
-    const previousItemBySlotId = new Map(previousEntries.map(entry => [entry.slot.id, entry.item]));
+    const entriesBySlotId = new Map(this.#entries.map(entry => [entry.slot.id, entry]));
+    const removedSlotIds = previousEntries
+      .filter(entry => !entriesBySlotId.has(entry.slot.id))
+      .map(entry => entry.slot.id);
     const installedOwnedIds = new Set(
       this.#entries
         .filter(entry => entry.installed && entry.itemId)
@@ -295,9 +270,12 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
     const { columns, rows } = getActorInventoryGridDimensions(this.actor, null);
     const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, this.actor.items);
-    const detachedEntries = this.#entries
-      .map(entry => ({ entry, item: previousItemBySlotId.get(entry.slot.id) ?? null }))
-      .filter(({ entry, item }) => item && (!entry.installed || entry.itemId !== item.id));
+    const detachedEntries = previousEntries
+      .filter(entry => {
+        const current = entriesBySlotId.get(entry.slot.id);
+        return entry.item && (!current?.installed || current.itemId !== entry.item.id);
+      })
+      .map(entry => ({ entry, item: entry.item }));
     const detachedSlotIds = detachedEntries.map(({ entry }) => entry.slot.id);
     const detachedItems = detachedEntries.filter(({ item }) => !installedOwnedIds.has(item.id));
     const inventoryExcludeIds = Array.from(new Set([
@@ -351,16 +329,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       if (createData) createPlans.push({ entryId: entry.entryId, order, data: createData });
     }
 
-    const itemUpdates = coalesceConstructPartItemUpdates(updates);
-    if (itemUpdates.length || createPlans.length) {
-      await executeInventoryMutation({
-        actor: this.actor,
-        updates: itemUpdates,
-        creates: createPlans.map(plan => plan.data)
-      }, { reason: "construct-structure-save" });
-    }
-
-    await this.actor.update({
+    const actorUpdates = {
       "system.creature.typeId": "",
       "system.creature.raceId": "",
       "system.creature.subtypeId": "",
@@ -369,11 +338,21 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
         previousEntries,
         finalEntries: this.#entries
       })
-    });
+    };
+    await executeInventoryMutation({
+      actor: this.actor,
+      updates: coalesceConstructPartItemUpdates(updates),
+      creates: createPlans.map(plan => plan.data),
+      actorUpdates
+    }, { reason: "construct-structure-save" });
 
     for (const slotId of detachedSlotIds) {
+      if (!entriesBySlotId.has(slotId)) continue;
       if (getInstalledConstructPartForSlot(this.actor, slotId)) continue;
       await applyDestroyedLimbConsequences(this.actor, [getConstructPartLimbKey(slotId)], { ignoreInstalledProsthesis: true });
+    }
+    for (const slotId of removedSlotIds) {
+      await clearLimbLossState(this.actor, getConstructPartLimbKey(slotId));
     }
     for (const slotId of installedSlotIds) {
       if (!getInstalledConstructPartForSlot(this.actor, slotId)) continue;
@@ -604,7 +583,7 @@ function getConstructPartStateColor(hasCondition, value, max) {
 }
 
 function isConstructPartItem(item) {
-  return Boolean(item?.type === "gear" && hasItemFunction(item, ITEM_FUNCTIONS.constructPart));
+  return Boolean(item?.type === "gear" && hasItemFunction(item, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true }));
 }
 
 function createConstructPartPlacementUpdate(itemId, slotId, order) {

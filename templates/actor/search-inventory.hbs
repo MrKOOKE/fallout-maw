@@ -140,16 +140,7 @@
 
             {{#with inventory.tradeCatalog}}
             <section class="fallout-maw-panel fallout-maw-trade-catalog">
-              <div class="fallout-maw-contents-transfer-catalog">
-                <div data-contents-transfer-zone data-search-actor-uuid="{{../uuid}}" data-inventory-parent-id="">
-                  <strong data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}</strong>
-                </div>
-                {{#each ../inventory.containers}}
-                <div data-contents-transfer-zone data-search-actor-uuid="{{actorUuid}}" data-inventory-parent-id="{{id}}">
-                  <strong data-contents-transfer-title>{{name}}</strong>
-                </div>
-                {{/each}}
-              </div>
+              <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
               <div class="fallout-maw-trade-catalog-filter-list">
                 {{#each categories}}
                 <button type="button" class="fallout-maw-trade-catalog-filter {{#if enabled}}active{{/if}}" data-trade-catalog-category="{{label}}" data-trade-actor-uuid="{{../../uuid}}" aria-pressed="{{#if enabled}}true{{else}}false{{/if}}">
@@ -160,10 +151,10 @@
                 <p class="fallout-maw-empty-list">Нет предметов для торговли.</p>
                 {{/each}}
               </div>
-              {{#if weaponGroups}}
-              <div class="fallout-maw-trade-catalog-weapon-group-list">
-                {{#each weaponGroups}}
-                <button type="button" class="fallout-maw-trade-catalog-weapon-group {{#if expanded}}active{{/if}}" data-trade-catalog-weapon-group="{{stateKey}}" data-trade-actor-uuid="{{../../uuid}}" aria-pressed="{{#if expanded}}true{{else}}false{{/if}}">
+              {{#if subcategories}}
+              <div class="fallout-maw-trade-catalog-subcategory-list">
+                {{#each subcategories}}
+                <button type="button" class="fallout-maw-trade-catalog-subcategory {{#if expanded}}active{{/if}}" data-trade-catalog-subcategory="{{stateKey}}" data-trade-actor-uuid="{{../../uuid}}" aria-pressed="{{#if expanded}}true{{else}}false{{/if}}">
                   <i class="fa-solid {{#if expanded}}fa-chevron-down{{else}}fa-chevron-right{{/if}}"></i>
                   <span>{{label}}</span>
                   <strong>{{count}}</strong>

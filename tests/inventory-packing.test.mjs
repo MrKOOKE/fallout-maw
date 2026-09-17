@@ -259,6 +259,43 @@ test("trade catalog sections use group packing and keep their section offset", (
   check(placements, 10, 3);
 });
 
+test("trade catalog packing never turns horizontal weapon cards upright, including stored rotated items", () => {
+  const footprint = searchFunction("getTradeCatalogItemFootprint", "async function performActorButchering", {
+    TRADE_OFFER_DEFAULT_COLUMNS: 14, toInteger: Math.trunc
+  });
+  const place = searchFunction("placeTradeCatalogItems", "function getTradeCatalogCategoryLabels", {
+    TRADE_OFFER_DEFAULT_COLUMNS: 14, packInventoryRectangles, getTradeCatalogItemFootprint: footprint
+  });
+  const items = [[6, 3, false], [4, 2, false], [2, 4, true], [4, 2, false], [4, 2, false], [4, 2, false], [4, 2, false]]
+    .map(([width, height, rotated]) => ({ placement: { width, height, rotated } }));
+  const before = structuredClone(items);
+  const result = place(items, { columns: 14, startY: 2 });
+  assert.deepEqual(result.items.map(e => [e.placement.width, e.placement.height, e.placement.rotated]),
+    [[6, 3, false], ...Array.from({ length: 6 }, () => [4, 2, false])]);
+  assert.deepEqual(items, before);
+  const placements = result.items.map(e => ({ ...e.placement, y: e.placement.y - 1 }));
+  check(placements, 14, result.nextY - 2);
+  assert.deepEqual(footprint({ placement: { width: 20, height: 3 } }, 14), { width: 14, height: 3, rotated: false });
+});
+
+test("trade catalog excludes every worn item and still offers items inside an equipped backpack", () => {
+  const equipped = searchFunction("isEquippedTradeCatalogItem", "function aggregateTradeCatalogItems", {});
+  const collect = searchFunction("collectTradeCatalogItems", "function isEquippedTradeCatalogItem", {
+    isEquippedTradeCatalogItem: equipped, toInteger: Math.trunc
+  });
+  const inventory = {
+    equipmentSlots: [{ item: { id: "armor", equipped: true } }],
+    prosthesisSlots: [{ item: { id: "prosthesis" } }],
+    weaponSets: [{ key: "one", slots: [{ key: "primary", item: { id: "rifle" } }] }],
+    grid: { items: [{ id: "ammo", placement: { mode: "inventory" } }, { id: "stale", equipped: true }] },
+    containers: [{ id: "bag", equipped: true, grid: { items: [{ id: "aid", parentId: "bag" }] } }]
+  };
+  assert.deepEqual(collect(inventory).map(i => i.id), ["ammo", "aid"]);
+  assert.equal(equipped({ system: { placement: { mode: "equipment" } } }), true);
+  assert.equal(equipped({ system: { placement: { mode: "weapon" } } }), true);
+  assert.equal(equipped({ system: { placement: { mode: "inventory" }, equipped: false } }), false);
+});
+
 test("trade offers fill the gap below an item instead of extending the first row", () => {
   const find = searchFunction("findFirstAvailableTradeOfferPlacement", "function findNearestAvailableTradeOfferPlacement", {
     TRADE_OFFER_DEFAULT_COLUMNS: 10, TRADE_OFFER_MAX_ROWS: 100, createRectanglePacker,

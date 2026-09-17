@@ -29,15 +29,9 @@
           </div>
           {{/if}}
         </div>
-        {{#if installed}}
-        <button class="fallout-maw-construct-part-remove" type="button" title="Снять деталь" data-construct-part-remove="{{id}}">
-          <i class="fa-solid fa-eject"></i>
+        <button class="fallout-maw-construct-part-remove" type="button" title="Удалить слот" data-construct-part-remove="{{id}}">
+          <i class="fa-solid fa-trash"></i>
         </button>
-        {{else}}
-        <span class="fallout-maw-construct-part-empty-mark" title="Перетащите сюда подходящую деталь">
-          <i class="fa-solid fa-link-slash"></i>
-        </span>
-        {{/if}}
       </article>
       {{else}}
       <div class="fallout-maw-construct-drop-placeholder">

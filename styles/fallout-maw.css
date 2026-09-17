@@ -5539,6 +5539,23 @@ body #prosemirror-dropdown {
   cursor: grab;
 }
 
+.fallout-maw-tooltip-container-grid {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+  margin: 0.6rem auto 0;
+}
+
+.fallout-maw-tooltip-container-grid .fallout-maw-inventory-grid {
+  --fallout-maw-inventory-grid-gap: min(0.25rem, calc(100cqw / (var(--fallout-maw-inventory-columns) * 14)));
+  --fallout-maw-inventory-cell-size: min(5rem, calc((100cqw - (var(--fallout-maw-inventory-columns) - 1) * var(--fallout-maw-inventory-grid-gap)) / var(--fallout-maw-inventory-columns)));
+  margin-inline: auto;
+}
+
+.fallout-maw-tooltip-container-grid .fallout-maw-inventory-item {
+  cursor: default;
+}
+
 .fallout-maw-inventory-item img {
   align-self: stretch;
   display: block;
@@ -6913,9 +6930,16 @@ label.fallout-maw-mitigation-cell {
   max-height: calc(var(--fallout-maw-tooltip-max-height, 100vh) - 2.76rem);
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fallout-maw-tooltip-edge-light) rgba(0, 0, 0, 0.28);
   padding: 1.38rem;
   position: relative;
   z-index: 2;
+}
+
+.fallout-maw-inventory-tooltip .content > * {
+  flex-shrink: 0;
 }
 
 .fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison {
@@ -7458,6 +7482,27 @@ label.fallout-maw-mitigation-cell {
   pointer-events: none;
 }
 
+.fallout-maw-inventory-tooltip [data-tooltip-drag-item] {
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.fallout-maw-inventory-tooltip [data-tooltip-drag-item] img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+body.fallout-maw-tooltip-item-dragging .fallout-maw-inventory-tooltip {
+  visibility: hidden !important;
+}
+
+body.fallout-maw-tooltip-item-dragging .fallout-maw-inventory-tooltip,
+body.fallout-maw-tooltip-item-dragging .fallout-maw-inventory-tooltip * {
+  pointer-events: none !important;
+}
+
 .fallout-maw-inventory-tooltip .tooltip-module-picker-panels {
   border-top: 1px solid rgba(218, 207, 147, 0.24);
   flex-basis: 100%;
@@ -7778,15 +7823,15 @@ label.fallout-maw-mitigation-cell {
   font-size: 1.38rem;
   line-height: 1.28;
   margin-right: -0.53rem;
-  max-height: 465px;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   padding-right: 0.53rem;
   padding-top: 0.83rem;
   text-align: left;
 }
 
 .fallout-maw-inventory-tooltip .description.overflowing {
-  mask-image: linear-gradient(to bottom, black 88%, transparent);
+  mask-image: none;
 }
 
 .fallout-maw-inventory-tooltip .fallout-maw-ability-tooltip-content.description,
@@ -16928,7 +16973,8 @@ label.checkbox.fallout-maw-ability-change-choice {
     0 1px 0 rgba(219, 219, 186, 0.05);
 }
 
-.application.fallout-maw-actor-sheet .fallout-maw-inventory-grid {
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-grid,
+.fallout-maw-tooltip-container-grid .fallout-maw-inventory-grid {
   --fallout-maw-inventory-grid-line-size: 1px;
   --fallout-maw-inventory-grid-line-color: rgb(70, 64, 40);
   --fallout-maw-inventory-grid-background: linear-gradient(180deg, rgba(3, 5, 4, 0.98), rgba(8, 10, 7, 0.97));
@@ -17232,7 +17278,8 @@ label.checkbox.fallout-maw-ability-change-choice {
   margin: 0 0 0.55rem;
 }
 
-.application.fallout-maw-actor-sheet .fallout-maw-inventory-item {
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-item,
+.fallout-maw-tooltip-container-grid .fallout-maw-inventory-item {
   background:
     radial-gradient(circle at 78% 72%, rgba(61, 55, 38, 0.14), transparent 2.8rem),
     linear-gradient(180deg, rgba(219, 219, 186, 0.14) 0%, transparent 34%),
@@ -17244,7 +17291,8 @@ label.checkbox.fallout-maw-ability-change-choice {
     0 6px 12px rgba(0, 0, 0, 0.22);
 }
 
-.application.fallout-maw-actor-sheet .fallout-maw-inventory-grid-item {
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-grid-item,
+.fallout-maw-tooltip-container-grid .fallout-maw-inventory-grid-item {
   border: 2px solid rgba(164, 146, 85, 0.52);
   border-radius: 0;
 }
@@ -17787,7 +17835,7 @@ label.checkbox.fallout-maw-ability-change-choice {
   color: #efeaa5;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group-list {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory-list {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -17796,7 +17844,7 @@ label.checkbox.fallout-maw-ability-change-choice {
   padding-left: 0.675rem;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory {
   align-items: center;
   background: rgba(8, 10, 7, 0.68);
   border: 1px solid rgba(128, 119, 79, 0.42);
@@ -17814,36 +17862,36 @@ label.checkbox.fallout-maw-ability-change-choice {
   transition: none;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group i {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory i {
   color: rgba(239, 234, 165, 0.58);
   font-size: 0.93rem;
   width: 1.05rem;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group span {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group strong {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory strong {
   color: rgba(239, 234, 165, 0.54);
   font-size: 0.99rem;
   font-weight: 700;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group.active,
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:hover,
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:focus-visible {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory.active,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory:hover,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory:focus-visible {
   background: rgba(34, 43, 22, 0.84);
   border-color: rgba(214, 231, 135, 0.68);
   color: #d6e787;
   transform: none;
 }
 
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group.active strong,
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:hover strong,
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:focus-visible strong {
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory.active strong,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory:hover strong,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-subcategory:focus-visible strong {
   color: #efeaa5;
 }
 
@@ -19861,6 +19909,137 @@ label.checkbox.fallout-maw-ability-change-choice {
   padding: 9px 10px;
   text-align: left;
   width: 100%;
+}
+
+.application .fallout-maw-container-controls {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+  margin-left: auto;
+  order: 1;
+}
+
+.application .fallout-maw-container-controls[hidden] {
+  display: none;
+}
+
+.application [data-contents-transfer-zone] .fallout-maw-container-controls .fallout-maw-contents-transfer-button {
+  margin-left: 0;
+}
+
+.application [data-contents-transfer-zone] .fallout-maw-container-controls .fallout-maw-inventory-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  order: 0;
+  border: 1px solid #938655;
+  border-radius: 2px;
+  background: linear-gradient(#303322, #14170f);
+  color: #ddcc84;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  position: relative;
+  z-index: 6;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  text-shadow: none;
+  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease, transform 80ms ease;
+  cursor: pointer;
+}
+
+.application [data-contents-transfer-zone] .fallout-maw-container-controls .fallout-maw-inventory-sort-button:is(:hover, [aria-expanded="true"]):not(:disabled) {
+  color: #fff1b2;
+  border-color: #ead681;
+  background: linear-gradient(#56583a, #2b3020);
+  box-shadow: inset 0 0 0 1px rgba(238, 219, 137, 0.18), 0 0 5px rgba(225, 204, 119, 0.35);
+}
+
+.application [data-contents-transfer-zone] .fallout-maw-container-controls .fallout-maw-inventory-sort-button:active:not(:disabled) {
+  transform: translateY(1px);
+  background: #222619;
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.75);
+}
+
+.application [data-contents-transfer-zone] .fallout-maw-container-controls .fallout-maw-inventory-sort-button:focus-visible {
+  outline: 2px solid #fff1b2;
+  outline-offset: 2px;
+  background: linear-gradient(#303322, #14170f);
+  color: #ddcc84;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.application [data-contents-transfer-zone] .fallout-maw-container-controls .fallout-maw-inventory-sort-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.fallout-maw-inventory-sort-menu {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  width: 13rem;
+  max-height: calc(100vh - 1rem);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.3rem;
+  border: 1px solid #938655;
+  border-radius: 3px;
+  background: linear-gradient(#202317, #0c0f09);
+  color: #eadfa1;
+  box-shadow: 0 5px 16px #0009, inset 0 0 0 1px #e5d59122;
+  font-size: 0.9rem;
+  font-weight: normal;
+  text-align: left;
+  transform-origin: top right;
+}
+
+.fallout-maw-inventory-sort-menu:popover-open {
+  display: grid;
+  gap: 0.15rem;
+  animation: fallout-maw-sort-menu-open 120ms ease-out;
+}
+
+.fallout-maw-inventory-sort-menu[data-direction="up"] { transform-origin: bottom right; }
+
+.fallout-maw-inventory-sort-menu > button {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 1.8rem;
+  padding: 0.35rem 0.7rem;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fallout-maw-inventory-sort-menu > button:is(:hover, :focus-visible) {
+  border-color: #938655;
+  background: #e5d59122;
+  color: #fff1b2;
+  outline: none;
+}
+
+@keyframes fallout-maw-sort-menu-open {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fallout-maw-inventory-sort-menu:popover-open { animation: none; }
 }
 .fallout-maw-hack .fallout-maw-hack-option.is-selected { background: var(--hack-phosphor); color: var(--hack-screen); text-shadow: none; }
 .fallout-maw-hack .fallout-maw-hack-option:not(:disabled):not(.is-selected):hover { background: #efc87815; outline: 1px solid var(--hack-dim); outline-offset: -1px; }

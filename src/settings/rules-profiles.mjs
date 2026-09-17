@@ -14,8 +14,7 @@ const STANDARD_RULES_PROFILE = Object.freeze({
   skillCheckMode: "standard",
   skillAdvancementMode: "configured",
   fixedAbilityFunctionsEnabled: true,
-  weaponProficienciesEnabled: true,
-  tradeWeaponGrouping: "proficiency"
+  weaponProficienciesEnabled: true
 });
 
 let activeProfileId = "";
@@ -70,8 +69,7 @@ export function registerRulesProfile(module, rawProfile = {}) {
       : "standard",
     skillAdvancementMode: rawProfile?.skillAdvancementMode === "fixed" ? "fixed" : "configured",
     fixedAbilityFunctionsEnabled: rawProfile?.fixedAbilityFunctionsEnabled !== false,
-    weaponProficienciesEnabled: rawProfile?.weaponProficienciesEnabled !== false,
-    tradeWeaponGrouping: rawProfile?.tradeWeaponGrouping === "subcategory" ? "subcategory" : "proficiency"
+    weaponProficienciesEnabled: rawProfile?.weaponProficienciesEnabled !== false
   });
   profiles.set(id, profile);
   return profile;

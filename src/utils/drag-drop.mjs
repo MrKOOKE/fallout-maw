@@ -2,7 +2,7 @@ import { INVENTORY_DRAG_ROTATION_KEY } from "./inventory-rotation.mjs";
 import { getItemFootprint } from "./inventory-containers.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "./overlay-layer.mjs";
 
-const POINTER_DRAG_SELECTOR = ".fallout-maw-draggable-item[data-item-id]";
+const POINTER_DRAG_SELECTOR = ".fallout-maw-draggable-item[data-item-id], [data-tooltip-drag-item]";
 const POINTER_DRAG_THRESHOLD = 4;
 const POINTER_DROP_CONTROLLERS = new WeakMap();
 
@@ -92,12 +92,16 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
     return FalloutMaWDragDrop.#payload?.data ?? null;
   }
 
-  #handlePointerDown(event) {
+  /** Start a delegated item drag from an overlay outside an application root. */
+  startPointerDrag(event, source = event.currentTarget) {
+    this.#handlePointerDown(event, source);
+  }
+
+  #handlePointerDown(event, source = event.currentTarget) {
     if (event.button !== 0) return;
     if (FalloutMaWDragDrop.#pointerSession) {
       FalloutMaWDragDrop.#cleanupPointerSession(FalloutMaWDragDrop.#pointerSession);
     }
-    const source = event.currentTarget;
     if (!source?.matches?.(POINTER_DRAG_SELECTOR)) return;
     const ownerDocument = source.ownerDocument ?? globalThis.document;
 
@@ -495,6 +499,7 @@ function findPointerDropTarget(event) {
 
 function resolvePointerDragItem(data = null) {
   if (data?.type !== "Item") return null;
+  if (data.data?.system) return { itemData: data.data, items: null };
   let item = data.uuid ? foundry.utils.fromUuidSync(data.uuid) : null;
   if (!item && data.sourceActorUuid && data.itemId) {
     const actor = foundry.utils.fromUuidSync(data.sourceActorUuid);

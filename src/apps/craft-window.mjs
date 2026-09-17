@@ -8,7 +8,6 @@ import {
   getCraftFailureRefundPercent,
   isSkillThresholdMode
 } from "../settings/crafting.mjs";
-import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
   canUseWeaponSlotForItem,
@@ -6482,23 +6481,13 @@ function prepareCraftInventoryContext(inventory, actor) {
 
 function getCraftInventoryDimensions(actor, parentId = ROOT_CONTAINER_ID) {
   if (parentId === LOCKED_STORAGE_PARENT_ID) {
-    const race = getActorRace(actor);
-    const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-    return {
-      columns: Math.max(1, toInteger(inventorySize.columns)),
-      rows: Math.max(1, toInteger(inventorySize.rows))
-    };
+    return getActorInventoryGridDimensions(actor, getActorRace(actor));
   }
   if (parentId) {
     const container = actor?.items?.get(parentId);
     if (container) return getContainerInventoryGridOptions(container);
   }
-  const race = getActorRace(actor);
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
-    rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
-  };
+  return getActorInventoryGridDimensions(actor, getActorRace(actor));
 }
 
 function getDragEventData(event) {
