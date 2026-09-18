@@ -341,6 +341,15 @@ import {
   buildQualityServiceHoldEffectData,
   getQualityServiceTier
 } from "./quality-service.mjs";
+import {
+  QUALITY_SERVICE_HOLD_GRANT_KIND,
+  QUALITY_SERVICE_PASSIVE_GRANT_KIND,
+  abilityItemHasQualityService,
+  cleanupQualityServicePassiveEffects,
+  getQualityServiceSelfPassiveFunctions,
+  qualityServiceFunctionIsSelfPassive,
+  reconcileQualityServicePassiveEffects
+} from "./quality-service-passives.mjs";
 import { syncActorAbilityEffects } from "./effects.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { areTokensAdjacent, areTokensAdjacentAt, resolveKnockback } from "../combat/active-actions.mjs";
@@ -1428,8 +1437,12 @@ function registerFixedAbilityRuntimeHooks() {
     if (changes?.disabled === true) void cleanupDisabledMaintainedTargetEffect(effect, options);
   }));
   Hooks.on("createItem", runFixedAbilityRuntimeHandler((item, _options = {}, userId = "") => {
-    if (isInitiatingDocumentUser(userId) && abilityItemHasLivingSteel(item)) {
+    if (!isInitiatingDocumentUser(userId)) return;
+    if (abilityItemHasLivingSteel(item)) {
       void reconcileLivingSteelEffectsForAbilityItem(item);
+    }
+    if (abilityItemHasQualityService(item)) {
+      void reconcileQualityServicePassiveEffects(item);
     }
   }));
   Hooks.on("preUpdateItem", runFixedAbilityRuntimeHandler((item, changes = {}, options = {}) => {
@@ -1441,6 +1454,7 @@ function registerFixedAbilityRuntimeHooks() {
     void cleanupMaintainedTargetAbilityItemHolds(item, options);
     if (isInitiatingDocumentUser(userId)) {
       void cleanupLivingSteelEffectsForAbilityItem(item);
+      void cleanupQualityServicePassiveEffects(item);
     }
     if (isPainLordEffectLifecycleAuthority(userId) && abilityItemHasPainLord(item)) {
       void cleanupPainLordEffectsForAbilityItem(item);
@@ -1455,6 +1469,10 @@ function registerFixedAbilityRuntimeHooks() {
         void cleanupLivingSteelEffectsForAbilityItem(item);
       } else if (item?.type === "ability" && maintainedTargetAbilityUpdateMayAffectHolds(changes)) {
         void reconcileLivingSteelEffectsForAbilityItem(item);
+      }
+      if (item?.type === "ability" && qualityServiceAbilityUpdateMayAffectPassive(changes)) {
+        if (abilityItemHasQualityService(item)) void reconcileQualityServicePassiveEffects(item);
+        else void cleanupQualityServicePassiveEffects(item);
       }
     }
     if (!isPainLordEffectLifecycleAuthority(userId)) return;
@@ -1517,6 +1535,12 @@ function registerFixedAbilityRuntimeHooks() {
   CONFIG.queries[OVERSIGHT_QUERY_NAME] = runFixedAbilityRuntimeHandler(handleOversightAttackQuery);
   Hooks.on("sightRefresh", runFixedAbilityRuntimeHandler(() => scheduleOversightVisibilityRefresh()));
   Hooks.on("canvasReady", runFixedAbilityRuntimeHandler(() => scheduleOversightVisibilityRefresh()));
+  Hooks.on("ready", runFixedAbilityRuntimeHandler(() => {
+    void reconcileQualityServicePassivesForKnownActors();
+  }));
+  Hooks.on("canvasReady", runFixedAbilityRuntimeHandler(() => {
+    void reconcileQualityServicePassivesForKnownActors();
+  }));
   Hooks.on("deleteToken", runFixedAbilityRuntimeHandler(token => {
     if (isPhantomEntity(token)) return;
     void cleanupOversightToken(token);
@@ -2647,6 +2671,10 @@ async function addMaintainedTargetHold(actor, abilityItem, abilityFunction, targ
     senderUserId: game.user?.id ?? ""
   });
   if (!applied) {
+    if (targetActor?.uuid && targetActor.uuid === actor?.uuid && qualityServiceFunctionIsSelfPassive(abilityFunction)) {
+      ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: владелец уже получает бонус пассивно — удержание на себе не требуется.`);
+      return false;
+    }
     ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не удалось включить удержание.`);
     return false;
   }
@@ -2739,15 +2767,21 @@ async function processMaintainedTargetOperation(payload = {}) {
 
   if (mode !== "add") return false;
   const targetActor = await fromUuid(String(payload.targetActorUuid ?? ""));
-  if (!targetActor || targetActor.uuid === sourceActor.uuid) return false;
+  if (!targetActor) return false;
   if (!["character", "construct"].includes(String(targetActor.type ?? ""))) return false;
+  // A quality service switched to passive already grants its owner the same
+  // bonus, so holding on self would pay energy for nothing. Every other target,
+  // the owner included, is allowed.
+  const targetsSelf = targetActor.uuid === sourceActor.uuid;
+  if (targetsSelf && qualityServiceFunctionIsSelfPassive(abilityFunction)) return false;
+  const grantKind = maintainedTargetGrantKind(abilityFunction);
   return maintainedTargetOperationLock.runMany([sourceActor, targetActor], null, async () => {
     if (isActorInActiveCombat(sourceActor)) return false;
     if (definition.effects.getHolds(sourceActor, {
       abilityItemId: abilityItem.id,
       functionId: abilityFunction.id
     }).some(effect => definition.effects.getHoldData(effect)?.targetActorUuid === targetActor.uuid)) return false;
-    if (definition.effects.findGrant(targetActor)) return false;
+    if (definition.effects.findGrant(targetActor, { kind: grantKind })) return false;
 
     const profile = definition.getProfile(abilityFunction.fixedSettings, payload.profileId);
     if (!profile || !canActorSpendEnergy(sourceActor, profile.holdEnergy)) return false;
@@ -2772,6 +2806,18 @@ async function processMaintainedTargetOperation(payload = {}) {
     await syncActorAbilityEffects(targetActor);
     return true;
   });
+}
+
+/**
+ * A self-passive quality service keeps its owner bonus under the same grant
+ * flag, so ordinary holds must match the hold kind explicitly. Every other
+ * maintained ability has a single, kind-less grant.
+ */
+function maintainedTargetGrantKind(abilityFunction = null) {
+  if (abilityFunction?.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.qualityService) return "";
+  return qualityServiceFunctionIsSelfPassive(abilityFunction)
+    ? QUALITY_SERVICE_PASSIVE_GRANT_KIND
+    : QUALITY_SERVICE_HOLD_GRANT_KIND;
 }
 
 async function deleteMaintainedTargetPair(definition, sourceActor, holdEffect) {
@@ -2910,6 +2956,43 @@ function maintainedTargetAbilityUpdateMayAffectHolds(changes = {}) {
     || path === "system.functions"
     || path.startsWith("system.functions.")
   ));
+}
+
+/**
+ * Evolution metadata lives in flags and the passive owner bonus is rebuilt from
+ * the ability functions, so only edits that can change either one matter here.
+ */
+function qualityServiceAbilityUpdateMayAffectPassive(changes = {}) {
+  return Object.keys(foundry.utils.flattenObject(changes ?? {})).some(path => (
+    path === "name"
+    || path === "img"
+    || path === "system.functions"
+    || path.startsWith("system.functions.")
+    || path.endsWith("abilitySource")
+  ));
+}
+
+/**
+ * Repair the passive owner bonus after a reload for every Actor this client can
+ * already see: the world directory plus the Actors drawn on the active Scene.
+ * Hidden or unloaded Actors stay with the Document hooks that own them.
+ */
+async function reconcileQualityServicePassivesForKnownActors() {
+  if (!game.user?.isActiveGM) return;
+  const actors = new Map();
+  for (const actor of game.actors ?? []) {
+    if (actor?.uuid) actors.set(actor.uuid, actor);
+  }
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const actor = token?.actor;
+    if (actor?.uuid) actors.set(actor.uuid, actor);
+  }
+  for (const actor of actors.values()) {
+    for (const item of actor?.items ?? []) {
+      if (!abilityItemHasQualityService(item)) continue;
+      await reconcileQualityServicePassiveEffects(item);
+    }
+  }
 }
 
 async function cleanupDisabledMaintainedTargetEffect(effect, options = {}) {

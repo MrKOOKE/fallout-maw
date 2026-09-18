@@ -220,10 +220,11 @@ test("quality service is an active fixed function on the shared maintained-targe
   ]);
   assert.match(fixed, /key:\s*ABILITY_FIXED_FUNCTION_KEYS\.qualityService[\s\S]*?active:\s*true/);
   assert.match(fixed, /MAINTAINED_TARGET_DEFINITIONS/);
-  assert.match(fixed, /definition\.effects\.findGrant\(targetActor\)/);
+  assert.match(fixed, /definition\.effects\.findGrant\(targetActor,\s*\{\s*kind:\s*grantKind\s*\}\)/);
   assert.match(fixed, /isActorInActiveCombat\(sourceActor\)/);
   assert.match(app, /getQualityServiceTiers/);
   assert.match(app, /findQualityServiceGrant\(actor\)/);
+  assert.match(app, /includeSelf:\s*true/);
   assert.match(app, /tierId:\s*tier\.id/);
   assert.match(template, /data-action="tier"/);
   assert.match(template, /fallout-maw-maintained-target-row/);

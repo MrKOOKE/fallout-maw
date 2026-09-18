@@ -3106,6 +3106,7 @@ function readFixedFunctionSettings(row) {
   }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.qualityService) {
     return {
+      selfPassive: Boolean(row.querySelector("[data-field='fixed.qualityService.selfPassive']")?.checked),
       tiers: ["10", "20", "40"].map(id => ({
         id,
         holdEnergy: row.querySelector(`[data-field='fixed.qualityService.tiers.${id}.holdEnergy']`)?.value,

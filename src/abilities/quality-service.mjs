@@ -51,7 +51,8 @@ export function normalizeQualityServiceSettings(value = {}) {
   const inputById = new Map((Array.isArray(value?.tiers) ? value.tiers : [])
     .map(entry => [String(entry?.id ?? ""), entry]));
   return {
-    tiers: DEFAULT_TIERS.map(defaults => normalizeTier(inputById.get(defaults.id), defaults))
+    tiers: DEFAULT_TIERS.map(defaults => normalizeTier(inputById.get(defaults.id), defaults)),
+    selfPassive: normalizeSelfPassive(value?.selfPassive)
   };
 }
 
@@ -61,6 +62,16 @@ export function getQualityServiceTiers(value = {}) {
     label: `${tier.holdEnergy} энергии`,
     summary: formatQualityServiceTierSummary(tier)
   }));
+}
+
+/** The passive owner bonus lives on the richest configured set. */
+export function getQualityServiceSelfTier(value = {}) {
+  return getQualityServiceTiers(value)
+    .reduce((best, tier) => (best && best.holdEnergy >= tier.holdEnergy ? best : tier), null);
+}
+
+export function isQualityServiceSelfPassive(value = {}) {
+  return normalizeQualityServiceSettings(value).selfPassive;
 }
 
 export function getQualityServiceTier(value = {}, tierId = "") {
@@ -82,13 +93,13 @@ export function buildQualityServiceChanges(tier = {}) {
   return changes;
 }
 
-export function buildQualityServiceGrantEffectData({ tier = null, ...context } = {}) {
+export function buildQualityServiceGrantEffectData({ tier = null, metadata, ...context } = {}) {
   const profile = tier ?? getQualityServiceTier();
   return QUALITY_SERVICE_MAINTAINED_EFFECTS.buildGrantEffectData({
     ...context,
     fallbackName: "Качественное обслуживание",
     changes: buildQualityServiceChanges(profile),
-    metadata: buildTierMetadata(profile)
+    metadata: { ...buildTierMetadata(profile), ...(metadata ?? {}) }
   });
 }
 
@@ -126,6 +137,12 @@ function normalizeTier(value, defaults) {
     protectionPercent: toNumber(source.protectionPercent ?? defaults.protectionPercent),
     equipmentBonusPercent: toNumber(source.equipmentBonusPercent ?? defaults.equipmentBonusPercent)
   };
+}
+
+function normalizeSelfPassive(value) {
+  if (value === undefined || value === null || value === "") return false;
+  if (typeof value === "string") return value === "true";
+  return Boolean(value);
 }
 
 function buildTierMetadata(tier) {

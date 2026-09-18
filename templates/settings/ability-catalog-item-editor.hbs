@@ -1600,6 +1600,10 @@
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Качественное обслуживание</h3>
       <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Владелец</strong>
+          <label><span>Работает на владельца пассивно (старший набор, без энергии)</span><input type="checkbox" data-field="fixed.qualityService.selfPassive" {{#if fixedQualityServiceSettings.selfPassive}}checked{{/if}}></label>
+        </div>
         {{#each fixedQualityServiceSettings.tiers}}
         <div class="fallout-maw-fixed-settings-row fallout-maw-quality-settings-row">
           <strong>Набор {{id}}</strong>

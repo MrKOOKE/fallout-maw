@@ -183,7 +183,7 @@ test("perfect fit is wired through passive requirements, the management window a
   assert.match(fixed, /action:\s*"manageMaintainedTarget"/);
   assert.match(fixed, /buildPerfectFitHoldEffectData/);
   assert.match(fixed, /maintainedTargetOperationLock\.runMany\(\[sourceActor, targetActor\]/);
-  assert.match(fixed, /definition\.effects\.findGrant\(targetActor\)/);
+  assert.match(fixed, /definition\.effects\.findGrant\(targetActor,\s*\{\s*kind:\s*grantKind\s*\}\)/);
   assert.match(fixed, /Hooks\.on\("deleteActor"[\s\S]*?cleanupMaintainedTargetDeletedActorLinks/);
   assert.match(fixed, /Hooks\.on\("deleteToken"[\s\S]*?cleanupMaintainedTargetDeletedActorLinks/);
   assert.match(app, /requestCustomActorTokenSelection/);

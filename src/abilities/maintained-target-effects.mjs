@@ -58,17 +58,20 @@ function findMaintainedGrant(actor, getGrantData, {
   sourceActorUuid = "",
   abilityItemId = "",
   functionId = "",
+  kind = "",
   includeInactive = false
 } = {}) {
   const sourceUuid = String(sourceActorUuid ?? "").trim();
   const itemId = String(abilityItemId ?? "").trim();
   const requestedFunctionId = String(functionId ?? "").trim();
+  const requestedKind = String(kind ?? "").trim();
   return Array.from(actor?.effects ?? []).find(effect => {
     if (!includeInactive && !isActiveEffect(effect)) return false;
     const data = getGrantData(effect);
     if (!data) return false;
     if (sourceUuid && String(data.sourceActorUuid ?? "") !== sourceUuid) return false;
     if (itemId && String(data.abilityItemId ?? "") !== itemId) return false;
+    if (requestedKind && String(data.kind ?? "") !== requestedKind) return false;
     return !requestedFunctionId || String(data.functionId ?? "") === requestedFunctionId;
   }) ?? null;
 }

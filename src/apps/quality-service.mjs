@@ -9,6 +9,7 @@ import {
   getQualityServiceTier,
   getQualityServiceTiers
 } from "../abilities/quality-service.mjs";
+import { qualityServiceFunctionIsSelfPassive } from "../abilities/quality-service-passives.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -127,6 +128,11 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
     await super._onClose(options);
   }
 
+  /** The self-passive switch already covers the owner, so holding on self would only waste energy. */
+  #hasPassiveSelfBonus() {
+    return qualityServiceFunctionIsSelfPassive(this.#abilityFunction);
+  }
+
   async #runSelection() {
     if (this.#busy || isActorInActiveCombat(this.#actor)) return;
     const tier = getQualityServiceTier(this.#abilityFunction?.fixedSettings, this.#selectedTierId);
@@ -144,12 +150,17 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
       const selected = await requestCustomActorTokenSelection({
         sourceActor: this.#actor,
         sourceToken: this.#sourceToken,
-        includeSelf: false,
+        includeSelf: true,
         title: this.title,
         noneWarning: "Нет доступных целей для Качественного обслуживания.",
         instructions: `${this.title}: выберите подсвеченную цель для набора «${tier.label}». Esc/ПКМ отменяет.`,
-        getReason: ({ actor }) => {
+        getReason: ({ actor, isSelf }) => {
           if (heldActorUuids.has(String(actor?.uuid ?? ""))) return "Бонус для этой цели уже удерживается.";
+          if (isSelf) {
+            return this.#hasPassiveSelfBonus()
+              ? "Владелец уже получает этот бонус пассивно — удержание на себе не требуется."
+              : "";
+          }
           return findQualityServiceGrant(actor) ? "На цели уже действует Качественное обслуживание." : "";
         }
       });

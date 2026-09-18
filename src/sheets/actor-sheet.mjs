@@ -4281,7 +4281,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #syncInventoryTooltipPointerEvents(tooltip = this.#tooltipElement, { pinned = this.#tooltipPinned } = {}) {
     if (!tooltip) return;
-    tooltip.style.pointerEvents = pinned || game.user?.isGM ? "auto" : "none";
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
   }
 
   #clearNestedInventoryTooltip() {
