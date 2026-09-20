@@ -1,3 +1,237 @@
+{{#*inline "weaponActionSettings"}}
+    <div class="fallout-maw-weapon-action-settings-list">
+      {{#each actionChoices}}
+      {{#if selected}}
+      <section class="fallout-maw-weapon-action-settings" data-weapon-action-settings="{{key}}">
+        <h3>{{displayLabel}}</h3>
+        {{#if ../isModuleModifier}}
+        <label><span>{{localize "FALLOUTMAW.Item.ModuleActionAvailability"}}</span>
+          <select name="{{../path}}.{{key}}.availability">{{#each availabilityChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+        </label>
+        {{/if}}
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponActionName"}}</span>
+            <input type="text" name="{{../path}}.{{key}}.name" value="{{name}}" placeholder="{{label}}">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponActionPointCost"}}</span>
+            <input type="number" name="{{#if ../isModuleModifier}}system.functions.module.weapon.actionPointCosts.{{key}}{{else}}{{../path}}.{{key}}.actionPointCost{{/if}}" value="{{actionPointCost}}" {{#unless ../isModuleModifier}}min="0"{{/unless}} step="1">
+          </label>
+        </div>
+        {{#if isReload}}
+        {{else if isVolley}}
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
+            <input type="text" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyExplosionDelay"}}</span>
+            <input type="text" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
+          </label>
+        </div>
+        <div class="fallout-maw-panel-header">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h4>
+          <button type="button" data-add-volley-region-damage {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
+        </div>
+        {{#if ../isModuleModifier}}
+        <label><span>{{localize "FALLOUTMAW.Item.ModuleListMode"}}</span><select name="{{../path}}.{{key}}.regionDamageEntriesMode">{{#each regionDamageEntriesModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        {{/if}}
+        <div class="fallout-maw-settings-table fallout-maw-damage-entry-table fallout-maw-volley-region-damage">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+            <span></span>
+          </div>
+          {{#each volleyRegionDamageRows}}
+          <div class="fallout-maw-settings-row" data-volley-region-damage-row="{{index}}">
+            <select name="{{../../path}}.volley.regionDamageEntries.{{index}}.damageTypeKey" data-volley-region-damage-type {{#if ../../usesDamageSource}}disabled{{/if}}>
+              {{#each choices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <input type="text" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" data-formula-autocomplete="all" data-volley-region-damage-amount {{#if ../../usesDamageSource}}disabled{{/if}}>
+            <button type="button" class="fallout-maw-icon-delete-button" data-delete-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
+          {{/each}}
+        </div>
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
+            <input type="text" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
+            <input type="text" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
+            <input type="text" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
+          </label>
+        </div>
+        <div class="fallout-maw-panel-header">
+          <h4>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h4>
+          <button type="button" data-add-region-special-property data-region-special-property-path="{{../path}}.volley" {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
+        </div>
+        {{#if ../isModuleModifier}}
+        <label><span>{{localize "FALLOUTMAW.Item.ModuleListMode"}}</span><select name="{{../path}}.{{key}}.regionSpecialPropertiesMode">{{#each regionSpecialPropertiesModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        {{/if}}
+        <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
+          {{#each volleyRegionSpecialProperties}}
+          <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-row="{{index}}">
+            <select name="{{../../path}}.volley.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}" data-region-special-property-path="{{../../path}}.volley" {{#if ../../usesDamageSource}}disabled{{/if}}>
+              {{#each choices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            {{#if isSmoke}}
+            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" data-formula-autocomplete="all" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
+            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" data-formula-autocomplete="all" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
+            {{/if}}
+            <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="{{../../path}}.volley" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{/each}}
+        </div>
+        {{#if ../isModuleModifier}}
+        <div class="fallout-maw-list-grid two-columns">
+          <label><span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span><input type="text" name="{{../path}}.volley.explosionAnimationKey" value="{{explosionAnimationKey}}"></label>
+          <label><span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span><input type="text" name="{{../path}}.volley.explosionSoundPath" value="{{explosionSoundPath}}"></label>
+        </div>
+        {{/if}}
+        {{else}}
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
+            <input type="number" name="{{../path}}.{{key}}.attackConeDegrees" value="{{attackConeDegrees}}" {{#unless ../isModuleModifier}}min="0"{{/unless}} step="1">
+          </label>
+          {{#if isPush}}
+          <label><span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span><input type="number" name="{{../path}}.push.maxRangeMeters" value="{{maxRangeMeters}}" step="1"></label>
+          <label><span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span><input type="number" name="{{../path}}.push.accuracyModifier" value="{{accuracyModifier}}" step="1"></label>
+          <label><span>{{localize "FALLOUTMAW.Item.WeaponPushDifficultyModifier"}}</span><input type="number" name="{{../path}}.push.pushDifficultyModifier" value="{{pushDifficultyModifier}}" step="1"></label>
+          {{/if}}
+          {{#if isBurst}}
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponBurstCount"}}</span>
+            <input type="number" name="{{../path}}.burst.count" value="{{burstCount}}" {{#unless ../isModuleModifier}}min="1"{{/unless}} step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponBurstDifficultyPerShot"}}</span>
+            <input type="number" name="{{../path}}.burst.difficultyPerShot" value="{{burstDifficultyPerShot}}" {{#unless ../isModuleModifier}}min="0"{{/unless}} step="1">
+          </label>
+          {{/if}}
+        </div>
+        {{#if isMelee}}
+        <div class="fallout-maw-weapon-action-mode-grid">
+          <section class="fallout-maw-weapon-action-mode">
+            <div class="fallout-maw-weapon-action-mode-header">
+              <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeThrust"}}</h4>
+              <div>
+                {{#if ../isModuleModifier}}
+                <select name="{{../path}}.{{key}}.thrust.enabled">{{#each thrustChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                {{else}}
+                <input aria-label="{{localize 'FALLOUTMAW.Effects.Enable'}}" type="checkbox" name="{{../path}}.{{key}}.thrust.enabled" data-weapon-attack-mode-enabled="thrust" {{checked thrust.enabled}}>
+                {{/if}}
+                <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
+              </div>
+            </div>
+            <div class="fallout-maw-list-grid three-columns">
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.thrust.accuracyModifier" value="{{thrust.accuracyModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeCriticalChanceModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.thrust.criticalChanceModifier" value="{{thrust.criticalChanceModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeDamagePercentModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.thrust.damagePercentModifier" value="{{thrust.damagePercentModifier}}" step="1">
+              </label>
+            </div>
+          </section>
+          <section class="fallout-maw-weapon-action-mode">
+            <div class="fallout-maw-weapon-action-mode-header">
+              <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeSwing"}}</h4>
+              <div>
+                {{#if ../isModuleModifier}}
+                <select name="{{../path}}.{{key}}.swing.enabled">{{#each swingChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                {{else}}
+                <input aria-label="{{localize 'FALLOUTMAW.Effects.Enable'}}" type="checkbox" name="{{../path}}.{{key}}.swing.enabled" data-weapon-attack-mode-enabled="swing" {{checked swing.enabled}}>
+                {{/if}}
+                <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
+              </div>
+            </div>
+            <div class="fallout-maw-list-grid three-columns">
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.swing.accuracyModifier" value="{{swing.accuracyModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeCriticalChanceModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.swing.criticalChanceModifier" value="{{swing.criticalChanceModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeDamagePercentModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.swing.damagePercentModifier" value="{{swing.damagePercentModifier}}" step="1">
+              </label>
+            </div>
+          </section>
+        </div>
+        {{/if}}
+        {{/if}}
+        {{#unless isReload}}
+        <div class="fallout-maw-panel-header fallout-maw-weapon-action-subheader">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponCriticalFailureConsequences"}}</h4>
+          <button type="button" data-add-weapon-critical-failure-consequence="{{key}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddCriticalFailureConsequence"}}</button>
+        </div>
+        {{#if ../isModuleModifier}}
+        <label><span>{{localize "FALLOUTMAW.Item.ModuleListMode"}}</span><select name="{{../path}}.{{key}}.criticalFailureConsequencesMode">{{#each criticalFailureConsequencesModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        {{/if}}
+        <div class="fallout-maw-settings-table fallout-maw-weapon-critical-failure-consequences">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+            <span>{{localize "FALLOUTMAW.Item.WeaponCriticalFailureResource"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+            <span></span>
+          </div>
+          {{#each criticalFailureConsequences}}
+          <div class="fallout-maw-settings-row">
+            <input type="hidden" name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.id" value="{{id}}">
+            <select name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.type">
+              {{#each typeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <div class="fallout-maw-stacked-controls">
+              <select name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.resourceType">
+                {{#each resourceChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+              {{#if isActorResource}}
+              <select name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.resourceKey">
+                {{#each actorResourceChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+              {{/if}}
+            </div>
+            <input type="number" name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.amount" value="{{amount}}" {{#unless ../isModuleModifier}}min="0"{{/unless}} step="1">
+            <button type="button" data-weapon-action-key="{{../key}}" data-delete-weapon-critical-failure-consequence="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoCriticalFailureConsequences"}}</p>
+          {{/each}}
+        </div>
+        {{/unless}}
+      </section>
+      {{/if}}
+      {{/each}}
+    </div>
+{{/inline}}
 {{#*inline "damageMitigationEditor"}}
 <div data-mitigation-function-path="{{path}}">
     <div class="fallout-maw-panel-header">
@@ -182,6 +416,14 @@
         <span>Категория предмета</span>
         <select name="system.itemCategory">
           {{#each itemCategoryChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ItemClass"}}</span>
+        <select name="system.itemClass">
+          {{#each itemClassChoices}}
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
@@ -4426,6 +4668,14 @@
           {{/each}}
         </select>
       </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ItemClass"}}</span>
+        <select name="system.itemClass">
+          {{#each itemClassChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
       {{#if hasItemSubcategories}}
       <label>
         <span>Подкатегория предмета</span>
@@ -6682,15 +6932,20 @@
       <h3>{{localize "FALLOUTMAW.Item.ModuleActionPointCosts"}}</h3>
       <button type="button" data-add-module-weapon-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddAdditionalWeaponFunction"}}</button>
     </div>
-    <div class="fallout-maw-list-grid three-columns">
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionAimedShot"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.aimedShot" value="{{system.functions.module.weapon.actionPointCosts.aimedShot}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionSnapshot"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.snapshot" value="{{system.functions.module.weapon.actionPointCosts.snapshot}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionBurst"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.burst" value="{{system.functions.module.weapon.actionPointCosts.burst}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionVolley"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.volley" value="{{system.functions.module.weapon.actionPointCosts.volley}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionMeleeAttack"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.meleeAttack" value="{{system.functions.module.weapon.actionPointCosts.meleeAttack}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.aimedMeleeAttack" value="{{system.functions.module.weapon.actionPointCosts.aimedMeleeAttack}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionReload"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.reload" value="{{system.functions.module.weapon.actionPointCosts.reload}}" step="1"></label>
+    <p class="hint">{{localize "FALLOUTMAW.Item.ModuleActionChangesHint"}}</p>
+    {{#with moduleActionSection}}
+    <div data-weapon-function-section data-weapon-function-path="{{path}}" data-module-action-modifiers>
+      <div class="fallout-maw-hidden-controls">
+        {{#each actionChoices}}<input type="checkbox" name="{{../path}}.availableActions.{{key}}" data-weapon-action-input="{{key}}" {{checked selected}}>{{/each}}
+      </div>
+      <div class="fallout-maw-button-toggle-grid">
+        {{#each actionChoices}}
+        <button type="button" class="fallout-maw-toggle-button {{#if selected}}active{{/if}}" data-weapon-action-choice="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">{{label}}</button>
+        {{/each}}
+      </div>
+      {{> weaponActionSettings}}
     </div>
+    {{/with}}
     {{/if}}
   </section>
   {{/if}}
@@ -7722,205 +7977,7 @@
       </button>
       {{/each}}
     </div>
-    <div class="fallout-maw-weapon-action-settings-list">
-      {{#each actionChoices}}
-      {{#if selected}}
-      <section class="fallout-maw-weapon-action-settings" data-weapon-action-settings="{{key}}">
-        <h3>{{displayLabel}}</h3>
-        <div class="fallout-maw-list-grid three-columns">
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponActionName"}}</span>
-            <input type="text" name="{{../path}}.{{key}}.name" value="{{name}}" placeholder="{{label}}">
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponActionPointCost"}}</span>
-            <input type="number" name="{{../path}}.{{key}}.actionPointCost" value="{{actionPointCost}}" min="0" step="1">
-          </label>
-        </div>
-        {{#if isReload}}
-        {{else if isVolley}}
-        <div class="fallout-maw-list-grid three-columns">
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
-            <input type="text" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyExplosionDelay"}}</span>
-            <input type="text" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
-          </label>
-        </div>
-        <div class="fallout-maw-panel-header">
-          <h4>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h4>
-          <button type="button" data-add-volley-region-damage {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
-        </div>
-        <div class="fallout-maw-settings-table fallout-maw-damage-entry-table fallout-maw-volley-region-damage">
-          <div class="fallout-maw-settings-row fallout-maw-grid-header">
-            <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
-            <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
-            <span></span>
-          </div>
-          {{#each volleyRegionDamageRows}}
-          <div class="fallout-maw-settings-row" data-volley-region-damage-row="{{index}}">
-            <select name="{{../../path}}.volley.regionDamageEntries.{{index}}.damageTypeKey" data-volley-region-damage-type {{#if ../../usesDamageSource}}disabled{{/if}}>
-              {{#each choices}}
-              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-              {{/each}}
-            </select>
-            <input type="text" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" data-formula-autocomplete="all" data-volley-region-damage-amount {{#if ../../usesDamageSource}}disabled{{/if}}>
-            <button type="button" class="fallout-maw-icon-delete-button" data-delete-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
-          </div>
-          {{else}}
-          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
-          {{/each}}
-        </div>
-        <div class="fallout-maw-list-grid three-columns">
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
-            <input type="text" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
-            <input type="text" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
-            <input type="text" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
-          </label>
-        </div>
-        <div class="fallout-maw-panel-header">
-          <h4>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h4>
-          <button type="button" data-add-region-special-property data-region-special-property-path="{{../path}}.volley" {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
-        </div>
-        <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
-          {{#each volleyRegionSpecialProperties}}
-          <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-row="{{index}}">
-            <select name="{{../../path}}.volley.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}" data-region-special-property-path="{{../../path}}.volley" {{#if ../../usesDamageSource}}disabled{{/if}}>
-              {{#each choices}}
-              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-              {{/each}}
-            </select>
-            {{#if isSmoke}}
-            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" data-formula-autocomplete="all" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
-            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" data-formula-autocomplete="all" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
-            {{/if}}
-            <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="{{../../path}}.volley" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
-          </div>
-          {{/each}}
-        </div>
-        {{else}}
-        <div class="fallout-maw-list-grid three-columns">
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
-            <input type="number" name="{{../path}}.{{key}}.attackConeDegrees" value="{{attackConeDegrees}}" min="0" step="1">
-          </label>
-          {{#if isBurst}}
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponBurstCount"}}</span>
-            <input type="number" name="{{../path}}.burst.count" value="{{burstCount}}" min="1" step="1">
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponBurstDifficultyPerShot"}}</span>
-            <input type="number" name="{{../path}}.burst.difficultyPerShot" value="{{burstDifficultyPerShot}}" min="0" step="1">
-          </label>
-          {{/if}}
-        </div>
-        {{#if isMelee}}
-        <div class="fallout-maw-weapon-action-mode-grid">
-          <section class="fallout-maw-weapon-action-mode">
-            <div class="fallout-maw-weapon-action-mode-header">
-              <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeThrust"}}</h4>
-              <div>
-                <input aria-label="{{localize 'FALLOUTMAW.Effects.Enable'}}" type="checkbox" name="{{../path}}.{{key}}.thrust.enabled" data-weapon-attack-mode-enabled="thrust" {{checked thrust.enabled}}>
-                <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
-              </div>
-            </div>
-            <div class="fallout-maw-list-grid three-columns">
-              <label>
-                <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
-                <input type="number" name="{{../path}}.{{key}}.thrust.accuracyModifier" value="{{thrust.accuracyModifier}}" step="1">
-              </label>
-              <label>
-                <span>{{localize "FALLOUTMAW.Item.WeaponModeCriticalChanceModifier"}}</span>
-                <input type="number" name="{{../path}}.{{key}}.thrust.criticalChanceModifier" value="{{thrust.criticalChanceModifier}}" step="1">
-              </label>
-              <label>
-                <span>{{localize "FALLOUTMAW.Item.WeaponModeDamagePercentModifier"}}</span>
-                <input type="number" name="{{../path}}.{{key}}.thrust.damagePercentModifier" value="{{thrust.damagePercentModifier}}" step="1">
-              </label>
-            </div>
-          </section>
-          <section class="fallout-maw-weapon-action-mode">
-            <div class="fallout-maw-weapon-action-mode-header">
-              <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeSwing"}}</h4>
-              <div>
-                <input aria-label="{{localize 'FALLOUTMAW.Effects.Enable'}}" type="checkbox" name="{{../path}}.{{key}}.swing.enabled" data-weapon-attack-mode-enabled="swing" {{checked swing.enabled}}>
-                <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
-              </div>
-            </div>
-            <div class="fallout-maw-list-grid three-columns">
-              <label>
-                <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
-                <input type="number" name="{{../path}}.{{key}}.swing.accuracyModifier" value="{{swing.accuracyModifier}}" step="1">
-              </label>
-              <label>
-                <span>{{localize "FALLOUTMAW.Item.WeaponModeCriticalChanceModifier"}}</span>
-                <input type="number" name="{{../path}}.{{key}}.swing.criticalChanceModifier" value="{{swing.criticalChanceModifier}}" step="1">
-              </label>
-              <label>
-                <span>{{localize "FALLOUTMAW.Item.WeaponModeDamagePercentModifier"}}</span>
-                <input type="number" name="{{../path}}.{{key}}.swing.damagePercentModifier" value="{{swing.damagePercentModifier}}" step="1">
-              </label>
-            </div>
-          </section>
-        </div>
-        {{/if}}
-        {{/if}}
-        {{#unless isReload}}
-        <div class="fallout-maw-panel-header fallout-maw-weapon-action-subheader">
-          <h4>{{localize "FALLOUTMAW.Item.WeaponCriticalFailureConsequences"}}</h4>
-          <button type="button" data-add-weapon-critical-failure-consequence="{{key}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddCriticalFailureConsequence"}}</button>
-        </div>
-        <div class="fallout-maw-settings-table fallout-maw-weapon-critical-failure-consequences">
-          <div class="fallout-maw-settings-row fallout-maw-grid-header">
-            <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
-            <span>{{localize "FALLOUTMAW.Item.WeaponCriticalFailureResource"}}</span>
-            <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
-            <span></span>
-          </div>
-          {{#each criticalFailureConsequences}}
-          <div class="fallout-maw-settings-row">
-            <input type="hidden" name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.id" value="{{id}}">
-            <select name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.type">
-              {{#each typeChoices}}
-              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-              {{/each}}
-            </select>
-            <div class="fallout-maw-stacked-controls">
-              <select name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.resourceType">
-                {{#each resourceChoices}}
-                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                {{/each}}
-              </select>
-              {{#if isActorResource}}
-              <select name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.resourceKey">
-                {{#each actorResourceChoices}}
-                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                {{/each}}
-              </select>
-              {{/if}}
-            </div>
-            <input type="number" name="{{../../path}}.{{../key}}.criticalFailureConsequences.{{index}}.amount" value="{{amount}}" min="0" step="1">
-            <button type="button" data-weapon-action-key="{{../key}}" data-delete-weapon-critical-failure-consequence="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-          </div>
-          {{else}}
-          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoCriticalFailureConsequences"}}</p>
-          {{/each}}
-        </div>
-        {{/unless}}
-      </section>
-      {{/if}}
-      {{/each}}
-    </div>
+    {{> weaponActionSettings}}
     {{!-- Legacy fallback field is intentionally hidden while older items migrate by normal form saves. --}}
     <input type="hidden" name="{{path}}.attackConeDegrees" value="{{weaponData.attackConeDegrees}}">
 

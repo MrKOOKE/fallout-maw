@@ -9,6 +9,7 @@ import {
 } from "./item-functions.mjs";
 import { toInteger } from "./numbers.mjs";
 import { resolveWorldItemSync } from "./world-items.mjs";
+import { applyWeaponModuleActionModifiers } from "./weapon-module-actions.mjs";
 
 export const WEAPON_MODULE_ACTION_KEYS = Object.freeze([
   "aimedShot",
@@ -151,6 +152,7 @@ export function applyWeaponModuleModifiers(weaponData = {}, options = {}) {
       : 1;
     const modifiers = scaleWeaponModuleModifiers(sourceModifiers, ratio);
     applySingleWeaponModule(result, modifiers);
+    applyWeaponModuleActionModifiers(result, sourceModifiers.actions, ratio);
     noiseDelta += toInteger(modifiers.noiseLevel);
   }
   result.noiseLevel = Math.max(0, getWeaponNoiseLevel(result) + noiseDelta);

@@ -1,4 +1,5 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
+import { MODULE_ACTION_LABELS } from "../utils/weapon-module-actions.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { activateAdvancementPureValuesControls } from "../apps/advancement-pure-values-control.mjs";
@@ -775,6 +776,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       toolFunctions,
       weaponModuleChoices: buildWeaponModuleChoices(item),
       weaponFunctionSections,
+      moduleActionSection: buildModuleActionSection(item, damageTypeSettings),
       weaponFunctionTabs: buildWeaponFunctionTabs(weaponFunctionSections),
       canAddAdditionalWeaponFunction: hasWeaponFunction,
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
@@ -809,6 +811,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: currency.key === priceCurrency
       })),
       itemCategoryChoices: buildItemCategoryChoices(itemCategory, itemCategories),
+      itemClassChoices: buildToolClassChoices(item.system?.itemClass ?? "D"),
       itemSubcategoryChoices,
       hasItemSubcategories: itemSubcategoryChoices.length > 1,
       weaponProficienciesEnabled: rulesProfile.weaponProficienciesEnabled !== false
@@ -5604,7 +5607,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     consequences.push({
       id: foundry.utils.randomID(),
       type: "extraResourceCost",
-      resourceType: String(firstResourceCost?.type ?? ""),
+      resourceType: String(firstResourceCost?.type ?? (section?.hasAttribute("data-module-action-modifiers") ? "magazine" : "")),
       resourceKey: String(firstResourceCost?.resourceKey ?? ""),
       amount: 0
     });
@@ -12313,6 +12316,53 @@ function removeWeaponResourceCostTypeFromWeaponData(weaponData = {}, type = "") 
   }
 
   return data;
+}
+
+function buildModuleActionSection(item, damageTypeSettings = []) {
+  const weapon = item.system?.functions?.module?.weapon ?? {};
+  const actions = weapon.actions ?? {};
+  const stateChoices = value => [
+    ["unchanged", "ModuleActionUnchanged"], ["enable", "ModuleActionEnable"], ["disable", "ModuleActionDisable"]
+  ].map(([key, label]) => ({ value: key, label: game.i18n.localize(`FALLOUTMAW.Item.${label}`), selected: key === (value || "unchanged") }));
+  const listChoices = value => [["append", "ModuleListAppend"], ["replace", "ModuleListReplace"]]
+    .map(([key, label]) => ({ value: key, label: game.i18n.localize(`FALLOUTMAW.Item.${label}`), selected: key === (value || "append") }));
+  // A standalone module can be installed on weapons with any resource costs.
+  const resourceCosts = ["magazine", "condition", "energyConsumer", "quantity"].map(type => ({ type }));
+  resourceCosts.push(...getAbilityEventReactionResourceDefinitions().map(resource => ({ type: "actorResource", resourceKey: resource.key })));
+  const source = { ...actions, resourceCosts };
+  const ordinaryChoices = buildWeaponActionChoicesForData(source, source, damageTypeSettings);
+  return {
+    path: "system.functions.module.weapon.actions",
+    isModuleModifier: true,
+    usesDamageSource: false,
+    actionChoices: Object.entries(MODULE_ACTION_LABELS).map(([key, labelKey]) => {
+      const data = actions[key] ?? {};
+      const label = game.i18n.localize(`FALLOUTMAW.Item.${labelKey}`);
+      return {
+        ...ordinaryChoices.find(choice => choice.key === key),
+        key, label, displayLabel: label,
+        selected: Boolean(actions.availableActions?.[key]),
+        name: String(data.name ?? ""),
+        actionPointCost: Number(weapon.actionPointCosts?.[key]) || 0,
+        attackConeDegrees: Number(data.attackConeDegrees) || 0,
+        burstCount: Number(data.count) || 0,
+        burstDifficultyPerShot: Number(data.difficultyPerShot) || 0,
+        maxRangeMeters: Number(data.maxRangeMeters) || 0,
+        accuracyModifier: Number(data.accuracyModifier) || 0,
+        pushDifficultyModifier: Number(data.pushDifficultyModifier) || 0,
+        isPush: key === "push",
+        thrust: prepareWeaponAttackModeSettings(data.thrust), swing: prepareWeaponAttackModeSettings(data.swing),
+        thrustChoices: stateChoices(data.thrust?.enabled), swingChoices: stateChoices(data.swing?.enabled),
+        availabilityChoices: stateChoices(data.availability),
+        criticalFailureConsequences: buildWeaponCriticalFailureConsequenceRows(data, source),
+        criticalFailureConsequencesModeChoices: listChoices(data.criticalFailureConsequencesMode),
+        regionDamageEntriesModeChoices: listChoices(data.regionDamageEntriesMode),
+        regionSpecialPropertiesModeChoices: listChoices(data.regionSpecialPropertiesMode),
+        explosionAnimationKey: String(data.explosionAnimationKey ?? ""),
+        explosionSoundPath: String(data.explosionSoundPath ?? "")
+      };
+    })
+  };
 }
 
 function buildWeaponActionChoices(item, damageTypeSettings = []) {

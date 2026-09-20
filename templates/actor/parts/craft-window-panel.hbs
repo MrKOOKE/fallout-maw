@@ -48,7 +48,7 @@
     {{#if craft.acquisition.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.acquisition.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -58,6 +58,7 @@
           <div class="fallout-maw-craft-acquisition-entry-meta">
             <span>{{category}}</span>
             <span>{{targetQuantityLabel}}</span>
+            {{#if recipeName}}<span>{{recipeName}}</span>{{/if}}
           </div>
           <div class="fallout-maw-craft-acquisition-outputs">
             {{#each outputs}}
@@ -80,7 +81,7 @@
   <div class="fallout-maw-craft-acquisition">
     <header class="fallout-maw-craft-acquisition-header">
       <div>
-        <h2>Показать в каких крафтах участвует</h2>
+        <h2>{{craft.usage.title}}</h2>
         <span>{{craft.usage.targetName}}</span>
       </div>
       <strong>{{craft.usage.entries.length}}</strong>
@@ -88,7 +89,7 @@
     {{#if craft.usage.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.usage.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -104,7 +105,7 @@
       {{/each}}
     </div>
     {{else}}
-    <div class="fallout-maw-craft-acquisition-empty">Нет известных крафтов, где используется этот предмет.</div>
+    <div class="fallout-maw-craft-acquisition-empty">{{craft.usage.emptyMessage}}</div>
     {{/if}}
   </div>
   {{else}}

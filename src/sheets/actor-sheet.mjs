@@ -1,3 +1,4 @@
+import { getWeaponModuleActionTooltipRows } from "../utils/weapon-module-actions.mjs";
 import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction, getProtectionModuleTooltipEntry, getProtectionModuleTooltipItem } from "../utils/function-module-tooltip.mjs";
 import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
 import { uninstallInventoryModule } from "../utils/inventory-module-slots.mjs";
@@ -6511,6 +6512,8 @@ function getModuleTooltipRows(item, evaluatingActor = null) {
   });
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), weapon.magazineMax);
   rows.push(...getModuleActionPointRows(weapon.actionPointCosts));
+  rows.push(...getWeaponModuleActionTooltipRows(weapon.actions, key => game.i18n.localize(key),
+    key => getDamageTypeSettings().find(type => type.key === key)?.label ?? key, renderModuleChangeValue));
   rows.push(...getModuleAddedWeaponFunctionRows(item, moduleData.additionalWeapons, evaluatingActor));
   return rows;
 }

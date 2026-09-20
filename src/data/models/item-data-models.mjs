@@ -1,5 +1,6 @@
 import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
 import { getPreviewItemValidationOptions } from "../../documents/token-clone-initialization.mjs";
+import { MODULE_ACTION_LABELS, getModuleActionNumericFields } from "../../utils/weapon-module-actions.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField, TypedSchemaField } = foundry.data.fields;
 const OPTIONAL_FUNCTION_FIELD_OPTIONS = Object.freeze({ required: false });
@@ -34,6 +35,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         rotated: new BooleanField({ required: false, nullable: true, initial: null })
       }), { required: true, initial: [] }),
       itemCategory: new StringField({ required: true, blank: true, initial: "" }),
+      itemClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
       itemSubcategory: new StringField({ required: true, blank: true, initial: "" }),
       weight: new NumberField({ required: true, min: 0, initial: 0 }),
       price: new NumberField({ required: true, min: 0, initial: 0 }),
@@ -1126,6 +1128,7 @@ function weaponModuleModifiersField() {
     penetration: new NumberField({ required: true, integer: true, initial: 0 }),
     noiseLevel: new NumberField({ required: true, integer: true, initial: 0 }),
     magazineMax: new NumberField({ required: true, integer: true, initial: 0 }),
+    actions: weaponModuleActionsField(),
     actionPointCosts: new SchemaField({
       aimedShot: new NumberField({ required: true, integer: true, initial: 0 }),
       snapshot: new NumberField({ required: true, integer: true, initial: 0 }),
@@ -1137,6 +1140,46 @@ function weaponModuleModifiersField() {
       reload: new NumberField({ required: true, integer: true, initial: 0 })
     })
   });
+}
+
+function weaponModuleActionsField() {
+  const state = () => new StringField({ required: true, choices: ["unchanged", "enable", "disable"], initial: "unchanged" });
+  const listMode = () => new StringField({ required: true, choices: ["append", "replace"], initial: "append" });
+  const schema = {
+    availableActions: new SchemaField(Object.fromEntries(Object.keys(MODULE_ACTION_LABELS)
+      .map(key => [key, new BooleanField({ required: true, initial: false })])))
+  };
+  for (const key of Object.keys(MODULE_ACTION_LABELS)) {
+    const action = {
+      name: new StringField({ required: true, blank: true, initial: "" }),
+      availability: state()
+    };
+    const modes = {};
+    for (const spec of getModuleActionNumericFields(key)) {
+      const field = spec.formula
+        ? new StringField({ required: true, blank: true, initial: "0" })
+        : new NumberField({ required: true, integer: spec.integer, initial: 0 });
+      if (spec.mode) {
+        modes[spec.mode] ??= { enabled: state() };
+        modes[spec.mode][spec.path.split(".")[1]] = field;
+      } else action[spec.path] = field;
+    }
+    for (const [mode, fields] of Object.entries(modes)) action[mode] = new SchemaField(fields);
+    if (key !== "reload") {
+      action.criticalFailureConsequences = new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] });
+      action.criticalFailureConsequencesMode = listMode();
+    }
+    if (key === "volley") {
+      action.regionDamageEntries = new ArrayField(weaponDamageEntryField(), { required: true, initial: [] });
+      action.regionSpecialProperties = new ArrayField(regionSpecialPropertyField(), { required: true, initial: [] });
+      action.regionDamageEntriesMode = listMode();
+      action.regionSpecialPropertiesMode = listMode();
+      action.explosionAnimationKey = new StringField({ required: true, blank: true, initial: "" });
+      action.explosionSoundPath = new StringField({ required: true, blank: true, initial: "" });
+    }
+    schema[key] = new SchemaField(action);
+  }
+  return new SchemaField(schema);
 }
 
 function weaponSpecialPropertyField() {

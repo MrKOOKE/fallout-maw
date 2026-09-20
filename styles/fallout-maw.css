@@ -18181,7 +18181,10 @@ label.checkbox.fallout-maw-ability-change-choice {
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-craft-window {
-  --fallout-maw-craft-window-sidebar-width: 19rem;
+  /* +10% over the previous 19rem so the category -> subcategory -> class
+     folder tree keeps space for recipe names. */
+  --fallout-maw-craft-window-sidebar-width: 20.9rem;
+  --fallout-maw-craft-window-folder-indent: 0.5rem;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-craft-window .window-content {
@@ -18983,7 +18986,9 @@ label.checkbox.fallout-maw-ability-change-choice {
   gap: 0.35rem;
 }
 
-.fallout-maw-craft-window-recipe-category-header {
+.fallout-maw-craft-window-recipe-category-header,
+.fallout-maw-craft-window-recipe-subcategory-header,
+.fallout-maw-craft-window-recipe-class-header {
   align-items: center;
   background: rgba(10, 10, 10, 0.28);
   border: 0;
@@ -19009,13 +19014,19 @@ label.checkbox.fallout-maw-ability-change-choice {
 }
 
 .fallout-maw-craft-window-recipe-category-header:hover,
-.fallout-maw-craft-window-recipe-category-header:focus-visible {
+.fallout-maw-craft-window-recipe-category-header:focus-visible,
+.fallout-maw-craft-window-recipe-subcategory-header:hover,
+.fallout-maw-craft-window-recipe-subcategory-header:focus-visible,
+.fallout-maw-craft-window-recipe-class-header:hover,
+.fallout-maw-craft-window-recipe-class-header:focus-visible {
   color: #ffd700;
   outline: 0;
   text-shadow: none;
 }
 
-.fallout-maw-craft-window-recipe-category-header span {
+.fallout-maw-craft-window-recipe-category-header span,
+.fallout-maw-craft-window-recipe-subcategory-header span,
+.fallout-maw-craft-window-recipe-class-header span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -19032,6 +19043,78 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 .fallout-maw-craft-window-recipe-category.collapsed.searching .fallout-maw-craft-window-recipe-category-list {
   display: grid;
+}
+
+/* Level 2: subcategory. */
+.fallout-maw-craft-window-recipe-subcategory {
+  display: grid;
+  gap: 0.35rem;
+  margin-left: var(--fallout-maw-craft-window-folder-indent);
+}
+
+.fallout-maw-craft-window-recipe-subcategory-header {
+  border-bottom-color: rgba(232, 212, 136, 0.3);
+  font-size: 1.15rem;
+  min-height: 2rem;
+}
+
+.fallout-maw-craft-window-recipe-subcategory-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fallout-maw-craft-window-recipe-subcategory.collapsed .fallout-maw-craft-window-recipe-subcategory-list {
+  display: none;
+}
+
+.fallout-maw-craft-window-recipe-subcategory.collapsed.searching .fallout-maw-craft-window-recipe-subcategory-list {
+  display: grid;
+}
+
+.fallout-maw-craft-window-recipe-subcategory.empty .fallout-maw-craft-window-recipe-subcategory-header {
+  color: rgba(232, 212, 136, 0.42);
+}
+
+/* Level 3: class folder. */
+.fallout-maw-craft-window-recipe-class {
+  display: grid;
+  gap: 0.3rem;
+  margin-left: var(--fallout-maw-craft-window-folder-indent);
+}
+
+.fallout-maw-craft-window-recipe-class-header {
+  border-bottom-color: rgba(232, 212, 136, 0.2);
+  color: #d8c274;
+  font-size: 1.05rem;
+  min-height: 1.9rem;
+}
+
+.fallout-maw-craft-window-recipe-class-list {
+  display: grid;
+  gap: 0.4rem;
+  margin-left: var(--fallout-maw-craft-window-folder-indent);
+}
+
+.fallout-maw-craft-window-recipe-class.collapsed .fallout-maw-craft-window-recipe-class-list {
+  display: none;
+}
+
+.fallout-maw-craft-window-recipe-class.collapsed.searching .fallout-maw-craft-window-recipe-class-list {
+  display: grid;
+}
+
+.fallout-maw-craft-window-recipe-empty {
+  color: rgba(232, 212, 136, 0.55);
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 0.15rem 0.25rem;
+}
+
+/* Subcategory headers are the toggle targets for their class folders. */
+.fallout-maw-craft-window-recipe-subcategory-header,
+.fallout-maw-craft-window-recipe-class-header {
+  cursor: pointer;
 }
 
 .fallout-maw-craft-window-recipe {
@@ -19643,13 +19726,6 @@ label.checkbox.fallout-maw-ability-change-choice {
 .fallout-maw-butchering-stage-header label {
   display: grid;
   gap: 0.2rem;
-}
-
-.fallout-maw-craft-window-recipe-limit {
-  color: rgba(232, 212, 136, 0.72);
-  font-family: "Courier New", Courier, monospace;
-  margin: 0.35rem 0.25rem;
-  text-align: center;
 }
 
 .fallout-maw-butchering-tool-requirement {
@@ -22769,4 +22845,12 @@ label.checkbox.fallout-maw-ability-change-choice {
   .fallout-maw-quality-tier-list {
     grid-template-columns: 1fr;
   }
+}
+
+/* Missing category levels expose class folders without an extra header or indent. */
+.fallout-maw-craft-window-recipe-subcategory.transparent {
+  margin-left: 0;
+}
+.fallout-maw-craft-window-recipe-category.transparent > .fallout-maw-craft-window-recipe-category-list > .fallout-maw-craft-window-recipe-subcategory.transparent > .fallout-maw-craft-window-recipe-subcategory-list > .fallout-maw-craft-window-recipe-class {
+  margin-left: 0;
 }
