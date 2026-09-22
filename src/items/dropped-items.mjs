@@ -1,3 +1,4 @@
+import { captureSceneCreationPoint, getSceneCreationLevelId, getSceneCreationLevels } from "../canvas/creation-levels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
@@ -147,6 +148,49 @@ export async function dropItemDataForActor(actor, itemData, containedItems = [],
   return addDroppedItemToScene(actor, dropped);
 }
 
+export async function commitInventoryWithDroppedItems(actor, mutation, drops = [], { reason = "disassembly" } = {}) {
+  const scene = canvas?.scene;
+  const token = getActorDropTokenDocument(actor, scene);
+  const payload = {
+    actorUuid: actor.uuid, sceneId: scene?.id, tokenId: token?.id,
+    updates: mutation.updates ?? [], deletes: mutation.deletes ?? [], creates: mutation.creates ?? [],
+    expectedItems: mutation.expectedItems ?? actor.items.contents.map(item => item.toObject()), drops, reason
+  };
+  return game.user?.isGM
+    ? performInventoryWithDroppedItems(payload, game.user.id)
+    : requestDroppedItemsSocket("commitInventoryWithDrops", payload);
+}
+
+async function performInventoryWithDroppedItems(payload, requesterUserId) {
+  const requester = game.users?.get(String(requesterUserId ?? ""));
+  const actor = await resolveDroppedActor(String(payload.actorUuid ?? ""));
+  if (!requester || !actor || (!requester.isGM && !actor.testUserPermission?.(requester, "OWNER"))) {
+    throw new Error("Нет прав на разбор предметов этого актёра.");
+  }
+  const scene = game.scenes?.get(String(payload.sceneId ?? ""));
+  const token = scene?.tokens?.get(String(payload.tokenId ?? ""));
+  if (!scene || !token || !doesTokenRepresentActor(token, actor)) throw new Error("Для выброса результатов нужен токен актёра на сцене.");
+  const position = getActorDropPosition(actor, { scene, token });
+  const staged = [];
+  try {
+    const entries = (payload.drops ?? []).map(spec => ({
+      entryId: foundry.utils.randomID(), sourceActorUuid: actor.uuid,
+      itemData: normalizeDroppedItemData(spec.data, spec.quantity), containedItems: [],
+      quantity: Math.max(1, toInteger(spec.quantity)), createdAt: Date.now()
+    }));
+    if (entries.length) {
+      const tile = await addDroppedItemsToScene(actor, entries, { scene, position });
+      staged.push(...entries.map(entry => ({ tile, entryId: entry.entryId })));
+    }
+    await executeInventoryMutation({ actor, updates: payload.updates, deletes: payload.deletes,
+      creates: payload.creates, expectedItems: payload.expectedItems }, { reason: payload.reason });
+    return { dropped: staged.length };
+  } catch (error) {
+    for (const entry of staged.reverse()) await rollbackDroppedItemEntry(entry.tile, entry.entryId);
+    throw error;
+  }
+}
+
 export function canDropItemsForActor(actor) {
   return Boolean(canvas?.scene && getActorDropPosition(actor));
 }
@@ -274,6 +318,8 @@ async function handleDroppedItemsSocketMessage(message = {}) {
     } else if (message.action === "dropActorInventoryItem") {
       const tile = await performActorInventoryItemDrop(message.payload ?? {}, message.requesterUserId ?? "");
       result = serializeDroppedItemsTile(tile);
+    } else if (message.action === "commitInventoryWithDrops") {
+      result = await performInventoryWithDroppedItems(message.payload ?? {}, message.requesterUserId ?? "");
     } else if (message.action === "cleanupDroppedItemsActor") {
       const actor = await resolveDroppedActor(String(message.payload?.actorUuid ?? ""));
       if (actor) await cleanupDroppedItemsActorIfEmpty(actor);
@@ -606,12 +652,19 @@ async function addDroppedItemToScene(actor, droppedEntry, {
   scene = canvas?.scene,
   position = null
 } = {}) {
+  return addDroppedItemsToScene(actor, [droppedEntry], { scene, position });
+}
+
+async function addDroppedItemsToScene(actor, droppedEntries, {
+  scene = canvas?.scene,
+  position = null
+} = {}) {
   if (!scene) throw new Error("No active scene for item drop.");
   position ??= getActorDropPosition(actor, { scene });
   if (!position) throw new Error("No actor token for item drop.");
   const existing = findNearbyDroppedItemsTile(scene, position);
-  if (existing) return appendDroppedItemToTile(existing, droppedEntry);
-  return createDroppedItemsTile(scene, position, droppedEntry);
+  if (existing) return appendDroppedItemToTile(existing, droppedEntries);
+  return createDroppedItemsTile(scene, position, droppedEntries);
 }
 
 function getActorDropPosition(actor, {
@@ -621,15 +674,15 @@ function getActorDropPosition(actor, {
   const tokenDocument = token?.document ?? token ?? getActorDropTokenDocument(actor, scene);
   const tokenObject = token?.document ? token : tokenDocument?.object;
   const center = tokenObject?.center;
-  if (center) return { x: Math.round(center.x), y: Math.round(center.y) };
+  if (center) return captureSceneCreationPoint(scene, { x: Math.round(center.x), y: Math.round(center.y) }, tokenDocument);
   const document = tokenDocument?.x !== undefined && tokenDocument?.y !== undefined ? tokenDocument : null;
   if (!document) return null;
   const width = Math.max(1, Number(document.width) || 1) * getSceneGridSize(scene);
   const height = Math.max(1, Number(document.height) || 1) * getSceneGridSize(scene);
-  return {
+  return captureSceneCreationPoint(scene, {
     x: Math.round((Number(document.x) || 0) + (width / 2)),
     y: Math.round((Number(document.y) || 0) + (height / 2))
-  };
+  }, document);
 }
 
 function getActorDropTokenDocument(actor, scene = canvas?.scene) {
@@ -662,6 +715,12 @@ function findNearbyDroppedItemsTile(scene, position) {
   const radius = getPixelsForMeters(scene, DROPPED_ITEMS_RADIUS_METERS);
   return scene.tiles?.contents
     ?.filter(tile => {
+      const level = getSceneCreationLevelId(scene, position);
+      const levels = getSceneCreationLevels(scene, tile);
+      return (!levels.length || levels.includes(level))
+        && (Number(tile.elevation) || 0) === (Number(position.elevation) || 0);
+    })
+    ?.filter(tile => {
       const state = getDroppedItemsFlag(tile);
       return state.items.length || state.actorUuid;
     })
@@ -671,26 +730,20 @@ function findNearbyDroppedItemsTile(scene, position) {
     .at(0)?.tile ?? null;
 }
 
-async function appendDroppedItemToTile(tile, droppedEntry) {
+async function appendDroppedItemToTile(tile, droppedEntries) {
   const state = getDroppedItemsFlag(tile);
   const actor = game.user?.isGM ? await resolveDroppedActor(state.actorUuid) : null;
   if (actor) {
-    const createData = buildDroppedItemCreateData(actor, [droppedEntry]);
+    const createData = buildDroppedItemCreateData(actor, droppedEntries);
     if (createData.length) {
       await executeInventoryMutation({
         actor,
         creates: createData
       }, { reason: "append-dropped-item", render: false });
     }
-    await tile.update({
-      name: "Выброшенные предметы",
-      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.actorUuid`]: actor.uuid,
-      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.items`]: [],
-      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.updatedAt`]: Date.now()
-    });
     return tile;
   }
-  const items = [...state.items, droppedEntry];
+  const items = [...state.items, ...droppedEntries];
   await tile.update({
     name: state.actorUuid ? "Выброшенные предметы" : getDroppedTileName(items),
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.items`]: items,
@@ -729,17 +782,18 @@ async function rollbackDroppedItemEntry(tile, entryId = "") {
   }
 }
 
-async function createDroppedItemsTile(scene, position, droppedEntry) {
+async function createDroppedItemsTile(scene, position, droppedEntries) {
   const size = getSceneGridSize(scene);
   const [tile] = await scene.createEmbeddedDocuments("Tile", [{
-    name: getDroppedTileName([droppedEntry]),
+    name: getDroppedTileName(droppedEntries),
     x: Math.round(position.x),
     y: Math.round(position.y),
     width: size,
     height: size,
-    elevation: 0,
+    elevation: Number(position.elevation) || 0,
+    levels: getSceneCreationLevels(scene, position),
     texture: {
-      src: String(droppedEntry.itemData?.img || DROPPED_ITEMS_FALLBACK_ICON),
+      src: String(droppedEntries[0]?.itemData?.img || DROPPED_ITEMS_FALLBACK_ICON),
       anchorX: 0.5,
       anchorY: 0.5,
       fit: "contain",
@@ -753,7 +807,7 @@ async function createDroppedItemsTile(scene, position, droppedEntry) {
       [SYSTEM_ID]: {
         [DROPPED_ITEMS_FLAG]: {
           actorUuid: "",
-          items: [droppedEntry],
+          items: droppedEntries,
           createdAt: Date.now(),
           updatedAt: Date.now()
         }

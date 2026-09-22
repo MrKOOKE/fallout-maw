@@ -110,7 +110,7 @@
         <section class="fallout-maw-panel fallout-maw-inventory-pane">
           <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll">
             <section data-contents-transfer-zone data-search-actor-uuid="{{actor.uuid}}" data-inventory-parent-id="">
-              <h2 data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
+              <h2 data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}<button type="button" class="fallout-maw-bulk-open" data-bulk-open>Массовый разбор</button></h2>
               <div class="fallout-maw-contents-transfer-grid-scroll" data-search-scroll-key="craft:inventory-grid">
                 <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if inventory.grid.hasZones}}has-zones{{/if}}" data-search-drop-zone data-search-actor-uuid="{{actor.uuid}}" data-inventory-grid data-inventory-parent-id="" style="{{inventory.grid.style}}">
                   {{#each inventory.grid.zones}}

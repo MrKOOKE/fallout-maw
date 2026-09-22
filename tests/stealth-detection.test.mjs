@@ -23,6 +23,35 @@ const originalConfig = globalThis.CONFIG;
 const originalGame = globalThis.game;
 const originalPIXI = globalThis.PIXI;
 
+test("detection attenuation and cached previews use the observer's level instead of the viewed level", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 5, cellSize: 100 });
+  canvas.level = { id: "surface" };
+  canvas.scene.regions = [{
+    includedInLevel: level => level === "basement", testPoint: () => true,
+    behaviors: [{ type: "adjustDarknessLevel", active: true, system: { mode: 0, modifier: 1 } }]
+  }];
+  const observer = createObserver("level-observer");
+  observer.document.level = "surface";
+  const settings = createSettings("3");
+  const origin = { x: 0, y: 0, elevation: 0 };
+  const destination = { x: 200, y: 0, elevation: 0 };
+  assert.equal(computeDetectionPathCost(observer, origin, destination, settings), 2);
+  const surfaceZone = buildObserverDetectionZone(observer, { origin, settings });
+  const tester = createStealthDetectionPointTester(observer, origin, { settings });
+  assert.equal(tester.test(destination), true);
+  observer.document.level = "basement";
+  tester.setOrigin(origin);
+  assert.equal(computeDetectionPathCost(observer, origin, destination, settings), 4);
+  const basementZone = buildObserverDetectionZone(observer, { origin, settings });
+  assert.notStrictEqual(surfaceZone, basementZone);
+  assert.ok(basementZone.offsets.length < surfaceZone.offsets.length);
+  assert.equal(tester.test(destination), false);
+  // A previewed waypoint can be on a different level without moving the token.
+  assert.equal(computeDetectionPathCost(observer, { ...origin, level: "surface" }, destination, settings), 2);
+  tester.destroy();
+});
+
 afterEach(() => {
   invalidateStealthDetectionCache();
   invalidateLightingAnalysisCache();

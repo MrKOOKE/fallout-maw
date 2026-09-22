@@ -72,7 +72,7 @@
             <span class="fallout-maw-currency-icon-placeholder"></span>
             {{/if}}
           </span>
-          {{#if ../freeEdit}}<input class="fallout-maw-currency-amount-input" type="number" name="system.currencies.{{key}}" value="{{amount}}" min="0" step="1">{{else}}<strong class="fallout-maw-currency-amount">{{amount}}</strong>{{/if}}
+          <input class="fallout-maw-currency-amount-input" type="text" data-currency-editor="{{key}}" value="{{amount}}" aria-label="{{label}}" autocomplete="off" spellcheck="false" {{#unless ../editable}}readonly{{/unless}}>
         </div>
         {{else}}
         <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Currencies.Empty"}}</p>

@@ -1,3 +1,4 @@
+import { getMapTokenLevelId, isMapAreaOnLevel, getMapAreaLevelId, getMapAreaTokenPlacement } from "./levels.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
@@ -136,6 +137,7 @@ export async function promptLocationExit({ sceneId, exitZoneId, tokenId, userId 
   const zone = getSceneState(scene).locationExitZones.find(entry => entry.id === exitZoneId);
   const token = scene?.tokens?.get(tokenId);
   if (!scene || !zone || !token) return false;
+  if (!isMapAreaOnLevel(scene, zone, getMapTokenLevelId(scene, token))) return false;
   const promptKey = `${sceneId}:${tokenId}`;
   if (pendingExitPrompts.has(promptKey)) return false;
   pendingExitPrompts.set(promptKey, { dialog: null, sceneId, exitZoneId, tokenId, userId });
@@ -666,6 +668,8 @@ async function removePassengerFromAssembly(scene, assembly, model, member) {
   delete tokenData._id;
   delete tokenData.id;
   tokenData.hidden = false;
+  tokenData.level = vehicleToken._source?.level ?? vehicleToken.level;
+  tokenData.elevation = Number(vehicleToken.elevation) || 0;
   const center = pointToCell(scene, tokenCenter(vehicleToken, scene));
   const preferred = center ? getCellCluster(scene, center, 2) : [];
   const position = findFreePlacement(scene, tokenData, preferred);
@@ -913,10 +917,10 @@ async function performCarrierDepartureInRoot({
     if (isSystemEventCancelled(gate)) return false;
   }
 
-  const destinationUpdate = {};
+  const destinationUpdate = getMapAreaTokenPlacement(parentScene, location);
   const position = findFreePlacement(
     parentScene,
-    carrierToken.toObject(),
+    { ...carrierToken.toObject(), ...destinationUpdate },
     getLocationCells(parentScene, location),
     [],
     { strictPreferredCells: true }
@@ -944,6 +948,7 @@ async function performCarrierDepartureInRoot({
     console.warn(`${FALLOUT_MAW.id} | Could not activate parent Scene`, error);
   });
   notifyTravelComplete(parentScene.id, viewerUserIds, {
+    targetLevelId: getMapAreaLevelId(parentScene, location),
     activateTokenControls: true,
     controlTokenIds: [destinationToken.id]
   });
@@ -1060,6 +1065,7 @@ async function performDepartureInRoot({
     });
     const prototype = await carrierActor.getTokenDocument({}, { parent: parentScene });
     const carrierData = prototype.toObject();
+    Object.assign(carrierData, getMapAreaTokenPlacement(parentScene, location));
     delete carrierData._id;
     const position = findFreePlacement(
       parentScene,
@@ -1106,7 +1112,7 @@ async function performDepartureInRoot({
   }
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
   if (!parentScene.active) await parentScene.activate();
-  notifyTravelComplete(parentScene.id, viewerUserIds);
+  notifyTravelComplete(parentScene.id, viewerUserIds, { targetLevelId: getMapAreaLevelId(parentScene, location) });
   const group = carrierActor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
   const groupData = {
     groupId: String(group?.groupId ?? ""),
@@ -1310,7 +1316,7 @@ async function performDeployArrivalInRoot(originScene, carrierToken, targetScene
   const reserved = [];
   for (const unit of units) {
     if (!unit.tokenData) continue;
-    const data = foundry.utils.deepClone(unit.tokenData);
+    const data = { ...foundry.utils.deepClone(unit.tokenData), ...getMapAreaTokenPlacement(targetScene, zone) };
     delete data._id;
     delete data.id;
     data.hidden = false;
@@ -1356,6 +1362,7 @@ async function performDeployArrivalInRoot(originScene, carrierToken, targetScene
   });
   await restoreTokenControlsAfterArrival(closedPayload);
   notifyTravelComplete(targetScene.id, viewerUserIds, {
+    targetLevelId: getMapAreaLevelId(targetScene, zone),
     activateTokenControls: true,
     controlTokenIds: created.map(token => token.id)
   });
@@ -1453,10 +1460,10 @@ async function performCarrierArrivalInRoot(originScene, carrierToken, targetScen
     if (isSystemEventCancelled(gate)) return false;
   }
 
-  const destinationUpdate = {};
+  const destinationUpdate = getMapAreaTokenPlacement(targetScene, zone);
   const position = findFreePlacement(
     targetScene,
-    carrierToken.toObject(),
+    { ...carrierToken.toObject(), ...destinationUpdate },
     zone.cells,
     [],
     { strictPreferredCells: true }
@@ -1496,6 +1503,7 @@ async function performCarrierArrivalInRoot(originScene, carrierToken, targetScen
   });
   await restoreTokenControlsAfterArrival(closedPayload);
   notifyTravelComplete(targetScene.id, viewerUserIds, {
+    targetLevelId: getMapAreaLevelId(targetScene, zone),
     activateTokenControls: true,
     controlTokenIds: [destinationToken.id]
   });
@@ -1778,7 +1786,9 @@ function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [],
   const allowedCellKeys = strictPreferredCells ? new Set(source.map(cellKey)) : null;
 
   const occupied = [
-    ...(scene.tokens?.contents ?? []).map(token => tokenRect(scene, token)),
+    ...(scene.tokens?.contents ?? [])
+      .filter(token => getMapTokenLevelId(scene, token) === getMapTokenLevelId(scene, tokenData))
+      .map(token => tokenRect(scene, token)),
     ...reserved
   ];
 
@@ -1883,6 +1893,7 @@ async function ensureTravelGroupFolder() {
 
 function validateExitParticipant(scene, zone, token, user) {
   if (!scene || !zone || !token?.actor || !user) throw new Error("Участник или зона выхода не найдена.");
+  if (!isMapAreaOnLevel(scene, zone, getMapTokenLevelId(scene, token))) throw new Error("Зона выхода находится на другом уровне.");
   if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на участника.");
   const key = cellKey(pointToCell(scene, tokenCenter(token, scene)));
   if (!zone.cells.includes(key)) throw new Error("Участник больше не находится в зоне выхода.");
@@ -2341,6 +2352,7 @@ async function restoreTokenControlsAfterArrival({
 }
 
 function notifyTravelComplete(targetSceneId, viewerUserIds, {
+  targetLevelId = "",
   activateTokenControls = false,
   controlTokenIds = []
 } = {}) {
@@ -2348,6 +2360,7 @@ function notifyTravelComplete(targetSceneId, viewerUserIds, {
     action: "globalMap.travel.complete",
     requestId: foundry.utils.randomID(),
     targetSceneId,
+    targetLevelId,
     viewerUserIds,
     activateTokenControls,
     controlTokenIds
@@ -2364,7 +2377,9 @@ async function completeTravelNotificationForCurrentViewer(payload) {
     runAfterCanvasSettles(() => completeTravelNotificationForCurrentViewer(payload));
     return true;
   }
-  if (canvas.scene?.id !== targetScene.id) await targetScene.view();
+  if (canvas.scene?.id !== targetScene.id || (payload.targetLevelId && canvas.level?.id !== payload.targetLevelId)) {
+    await targetScene.view(payload.targetLevelId ? { level: payload.targetLevelId } : {});
+  }
   if (canvas.loading || canvas.scene?.id !== targetScene.id || !canvas.ready) {
     runAfterCanvasSettles(() => completeTravelNotificationForCurrentViewer(payload));
     return true;
@@ -2607,8 +2622,9 @@ function canPlaceTravelPassengers(scene, zone, passengers) {
   try {
     for (const passenger of passengers) {
       if (!passenger.tokenData) continue;
-      const position = findFreePlacement(scene, passenger.tokenData, zone.cells, reserved);
-      reserved.push(tokenRect(scene, { ...passenger.tokenData, ...position }));
+      const tokenData = { ...passenger.tokenData, ...getMapAreaTokenPlacement(scene, zone) };
+      const position = findFreePlacement(scene, tokenData, zone.cells, reserved);
+      reserved.push(tokenRect(scene, { ...tokenData, ...position }));
     }
     return true;
   } catch (_error) {

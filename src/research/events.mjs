@@ -87,8 +87,8 @@ export function buildResearchEventPayload({
     ? roundSignedResearchNumber(after.target - before.target)
     : 0;
   const normalizedGain = gain === null || gain === undefined
-    ? Math.max(0, actualProgressDelta)
-    : roundResearchNumber(gain);
+    ? actualProgressDelta
+    : roundSignedResearchNumber(gain);
   const normalizedChecks = normalizeResearchCheckSummary(checkSummary);
 
   return {
@@ -153,7 +153,7 @@ export function normalizeResearchCheckSummary(summary = null) {
     checks: Math.max(0, toInteger(summary.checks)),
     resolved: Math.max(0, toInteger(summary.resolved ?? Object.values(counts).slice(0, 4).reduce((sum, value) => sum + value, 0))),
     counts,
-    totalGain: roundResearchNumber(summary.totalGain)
+    totalGain: roundSignedResearchNumber(summary.totalGain)
   };
 }
 

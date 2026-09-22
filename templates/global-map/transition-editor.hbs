@@ -1,4 +1,5 @@
 <div class="fallout-maw-global-map-form">
+  {{#if levels.length}}<div class="form-group"><label>Уровень</label><div class="form-fields"><select name="transition.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
   <div class="form-group"><label>Название</label><div class="form-fields"><input type="text" name="transition.name" value="{{transition.name}}" required></div></div>
   <div class="form-group"><label>Цвет</label><div class="form-fields"><input type="color" name="transition.color" value="{{transition.color}}"></div></div>
   <div class="form-group"><label>Радиус кисти</label><div class="form-fields"><input type="number" name="transition.brushRadius" value="{{transition.brushRadius}}" min="1" max="12"></div></div>

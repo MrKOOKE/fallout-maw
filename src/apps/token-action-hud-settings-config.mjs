@@ -39,7 +39,8 @@ const ADVANCEMENT_ACTION_ICON_ROW = Object.freeze({
 });
 
 const ACTOR_CONTAINER_ACTION_ICON_ROWS = Object.freeze([
-  { section: "activeActions", key: "boardTransport", label: "Сесть в транспорт" }
+  { section: "activeActions", key: "boardTransport", label: "Сесть в транспорт" },
+  { section: "activeActions", key: "camp", label: "Лагерь" }
 ]);
 
 const COMBAT_END_ICON_ROWS = Object.freeze([

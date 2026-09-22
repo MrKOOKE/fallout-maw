@@ -127,6 +127,9 @@ export function registerStealthHooks() {
   Hooks.on("canvasReady", onCanvasReady);
   Hooks.on("canvasTearDown", cleanupAllStealthUi);
   Hooks.on("updateScene", onSceneUpdated);
+  Hooks.on("createLevel", onSceneGeometryChanged);
+  Hooks.on("updateLevel", onSceneGeometryChanged);
+  Hooks.on("deleteLevel", onSceneGeometryChanged);
   Hooks.on("createAmbientLight", onSceneGeometryChanged);
   Hooks.on("updateAmbientLight", onSceneGeometryChanged);
   Hooks.on("deleteAmbientLight", onSceneGeometryChanged);

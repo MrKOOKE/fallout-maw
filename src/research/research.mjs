@@ -8,25 +8,18 @@ import {
   clampResearchProgress,
   formatResearchValue,
   getResearchById,
-  roundResearchValue
+  roundSignedResearchValue
 } from "./storage.mjs";
 import { resolveResearchChainRef } from "./events.mjs";
+import { isLegacyResearchProgress } from "../settings/research.mjs";
+import { calculateResearchProgressGain } from "./progress.mjs";
+export { calculateResearchProgressGain } from "./progress.mjs";
 const { renderTemplate } = foundry.applications.handlebars;
 
 export function getResearchCheckCount(duration = {}) {
   const hours = Math.max(0, toInteger(duration.hours));
   const halfHour = Boolean(duration.halfHour);
   return (hours * 2) + (halfHour ? 1 : 0);
-}
-
-export function calculateResearchProgressGain(skillValue, result = {}) {
-  const baseSkill = Math.max(0, Number(skillValue) || 0);
-  if (!baseSkill) return 0;
-
-  if (result.key === "criticalSuccess") return roundResearchValue(baseSkill * 1.5);
-  if (result.key === "success") return roundResearchValue(baseSkill);
-  if (result.key === "failure") return result.autoFailure ? 0 : roundResearchValue(baseSkill * 0.3);
-  return 0;
 }
 
 export async function applyResearchTime(actor, researchId, duration = {}, options = {}) {
@@ -58,6 +51,10 @@ export async function applyResearchTime(actor, researchId, duration = {}, option
     chainRef: resolveResearchChainRef(options)
   }, async scope => {
     let totalGain = 0;
+    const progressOptions = {
+      progressPerSuccess: research.progressPerSuccess,
+      legacy: isLegacyResearchProgress()
+    };
     const batch = await requestSkillCheckBatch({
       actor,
       skillKey: research.skillKey,
@@ -87,10 +84,10 @@ export async function applyResearchTime(actor, researchId, duration = {}, option
     for (const outcome of batch.outcomes) {
       counts[outcome.result.key] = (counts[outcome.result.key] ?? 0) + 1;
       if (outcome.result.autoFailure) counts.autoFailure += 1;
-      totalGain += calculateResearchProgressGain(outcome.skill.value, outcome.result);
+      totalGain += calculateResearchProgressGain(outcome.skill.value, outcome.result, progressOptions);
     }
 
-    totalGain = roundResearchValue(totalGain);
+    totalGain = roundSignedResearchValue(totalGain);
     const nextProgress = clampResearchProgress(Number(research.progress) + totalGain, research.target);
     await actor.updateResearch(researchId, { progress: nextProgress }, {
       chainRef: scope.chainRef,
@@ -115,7 +112,7 @@ export async function applyResearchTime(actor, researchId, duration = {}, option
       checks,
       counts,
       totalGain,
-      gainLabel: formatResearchValue(totalGain),
+      gainLabel: `${totalGain > 0 ? "+" : ""}${formatResearchValue(totalGain)}`,
       progressLabel: formatResearchValue(nextProgress),
       targetLabel: formatResearchValue(research.target)
     };

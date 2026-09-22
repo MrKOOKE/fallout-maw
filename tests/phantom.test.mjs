@@ -18,6 +18,36 @@ import {
   isPhantomEntity
 } from "../src/abilities/phantom-entity.mjs";
 
+// Exercise the production data builder without loading canvas controllers.
+const phantomSource = await readFile(new URL("../src/abilities/phantom.mjs", import.meta.url), "utf8");
+const builderSource = phantomSource.slice(
+  phantomSource.indexOf("export function buildPhantomTokenData("),
+  phantomSource.indexOf("export function getPhantomData(")
+).replace("export function", "function");
+const buildPhantomTokenData = new Function(
+  "cloneData", "CONST", "SYSTEM_ID", "PHANTOM_ENTITY_FLAG_KEY", "PHANTOM_FLAG_KEY", "PHANTOM_VISION_FLAG_KEY", "buildPhantomEntityData",
+  `${builderSource}; return buildPhantomTokenData;`
+)(structuredClone, { TOKEN_DISPOSITIONS: { NEUTRAL: 0 }, TOKEN_DISPLAY_MODES: { NONE: 0 } },
+  "fallout-maw", PHANTOM_ENTITY_FLAG_KEY, "phantom", "phantomVision", buildPhantomEntityData);
+
+test("a summoned phantom explicitly inherits the caster's level and elevation", () => {
+  const caster = { x: 100, y: 200, elevation: -4, level: "basement", width: 1, height: 1 };
+  const before = structuredClone(caster);
+  const created = buildPhantomTokenData(caster, { id: "phantom-actor" });
+  // Emulate Foundry filling a missing level from a different viewed/default level.
+  const persisted = { level: "surface", ...created };
+  assert.equal(persisted.level, "basement");
+  assert.equal(persisted.elevation, -4);
+  assert.equal(persisted.x, caster.x);
+  assert.equal(persisted.y, caster.y);
+  assert.deepEqual(caster, before);
+});
+
+test("phantom creation uses the committed level during a token level transition", () => {
+  const caster = { level: "surface", _source: { level: "basement" }, elevation: -4 };
+  assert.equal(buildPhantomTokenData(caster, { id: "phantom-actor" }).level, "basement");
+});
+
 test("phantom defaults match the fixed ability design", () => {
   assert.equal(ABILITY_FIXED_FUNCTION_KEYS.phantom, "phantom");
   assert.deepEqual(normalizePhantomSettings(), {

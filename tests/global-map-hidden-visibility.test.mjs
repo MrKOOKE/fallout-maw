@@ -212,14 +212,14 @@ test("hidden global-map entries stay out of discovery, rendering and travel trig
   const travelGroups = await readFile(new URL("../src/global-map/travel-groups.mjs", import.meta.url), "utf8");
 
   assert.match(fog, /location => !location\.hidden && \(location\.alwaysDiscovered \|\| isLocationVisible/);
-  assert.match(fog, /exit => !exit\.hidden && \(exit\.alwaysDiscovered \|\| isCellsVisible/);
+  assert.match(fog, /exit => !exit\.hidden && isMapAreaOnLevel\(scene, exit\) && \(exit\.alwaysDiscovered \|\| isCellsVisible/);
   assert.match(fog, /async function pruneHiddenDiscoveries/);
   assert.match(fog, /entry => entry\.alwaysDiscovered && !entry\.hidden/);
 
   assert.match(layer, /return known && !location\.hidden;/);
   assert.match(layer, /!game\.user\.isGM && \(!exit\.alwaysDiscovered && !discovered\.has/);
 
-  assert.match(travel, /if \(exit\.hidden \|\| !exit\.cells\?\.includes\(key\)\) continue;/);
+  assert.match(travel, /if \(exit\.hidden \|\| !isMapAreaOnLevel\(scene, exit, levelId\) \|\| !exit\.cells\?\.includes\(key\)\) continue;/);
   assert.match(travel, /if \(location\.hidden \|\| !location\.linkedSceneId/);
   assert.match(travelGroups, /filter\(zone => !zone\.hidden && zone\.cells\?\.length\)/);
   assert.match(travelGroups, /if \(found\.location\.hidden\) throw new Error/);

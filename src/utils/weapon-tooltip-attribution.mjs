@@ -1,3 +1,4 @@
+import { finalizeAttackActionPointCost } from "./action-point-cost-limits.mjs";
 import {
   getActorAtRandomActionPointCostReduction,
   getActorAtRandomActionPointCostSources
@@ -57,11 +58,11 @@ export function getWeaponActionPointCostAttribution(
   const baseCost = getWeaponActionPointBaseCost(baseWeaponData, actionKey);
   const configuredCost = getWeaponActionPointBaseCost(effectiveWeaponData, actionKey);
   const atRandomReduction = getActorAtRandomActionPointCostReduction(actor, actionKey);
-  const cost = Math.max(0, Math.ceil(
+  const cost = finalizeAttackActionPointCost(
     applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey }).action)
     + getActorPostureWeaponActionPointCostBonus(actor)
-    - atRandomReduction
-  ));
+    - atRandomReduction, actionKey
+  );
   const tone = cost < baseCost ? "cheaper" : (cost > baseCost ? "dearer" : "");
   const sources = collectWeaponActionPointCostSources(actor, {
     actionKey,
@@ -135,7 +136,7 @@ export function collectWeaponActionPointCostSources(
     runningCost = after;
   }
 
-  const finalCost = Math.max(0, Math.ceil(runningCost));
+  const finalCost = finalizeAttackActionPointCost(runningCost, actionKey);
   if (runningCost !== finalCost) {
     sources.push(createCalculationSource({
       key: "calculation:final-action-cost",

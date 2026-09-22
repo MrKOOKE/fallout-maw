@@ -114,7 +114,8 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     grapple: "icons/svg/sword.svg",
     dragGrappled: "icons/svg/wingfoot.svg",
     push: "icons/svg/impact.svg",
-    boardTransport: "icons/svg/mystery-man.svg"
+    boardTransport: "icons/svg/mystery-man.svg",
+    camp: "icons/environment/settlement/tent.webp"
   }),
   weaponActions: Object.freeze({
     aimedShot: "icons/svg/target.svg",
@@ -775,6 +776,11 @@ export function getTokenActionHudIcons() {
 
 export function getTokenActionHudExperienceAwardSettings() {
   return getTokenActionHudIcons().experienceAward;
+}
+
+export function getSourceToggleIcon(active, hudIcons = getTokenActionHudIcons()) {
+  const key = active ? "lightOff" : "lightOn";
+  return normalizeImageSettingPath(hudIcons.weaponActions?.[key], DEFAULT_TOKEN_ACTION_HUD_ICONS.weaponActions[key]);
 }
 
 export async function setTokenActionHudDamageIcons(value) {

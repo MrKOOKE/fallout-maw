@@ -1,5 +1,5 @@
-import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, getWeaponFunctionUpdatePath } from "./item-functions.mjs";
-import { createWeaponModuleSlotItemData, findFreeWeaponModuleSlot, isFunctionModuleItem } from "./weapon-modules.mjs";
+import { ITEM_FUNCTIONS, getWeaponFunctionUpdatePath } from "./item-functions.mjs";
+import { createWeaponModuleSlotItemData, findFreeFunctionModuleSlot, getModuleSlotFunctionEntries, isFunctionModuleItem } from "./weapon-modules.mjs";
 import { getItemQuantity } from "./inventory-containers.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
@@ -7,7 +7,7 @@ import { planWeaponMagazineCapacityTransition } from "../items/weapon-magazine.m
 import { InventoryModuleSlots } from "./inventory-module-slots.mjs";
 
 export function canShowSuitableWeaponModules(item) {
-  return getEnabledWeaponFunctions(item, { ignoreBroken: true }).length > 0;
+  return getModuleSlotFunctionEntries(item).length > 0;
 }
 
 export function canUseWeaponModuleDrag(data = {}) {
@@ -15,7 +15,7 @@ export function canUseWeaponModuleDrag(data = {}) {
 }
 
 export function isWeaponModuleDrop(moduleItem, weapon) {
-  return isFunctionModuleItem(moduleItem, ITEM_FUNCTIONS.weapon) && canShowSuitableWeaponModules(weapon);
+  return getModuleSlotFunctionEntries(weapon).some(entry => isFunctionModuleItem(moduleItem, entry.targetFunction));
 }
 
 export function getWeaponModuleDropElement(event, root) {
@@ -39,17 +39,20 @@ export async function installDroppedWeaponModule({ actor, weapon, moduleItem, so
   const sourceActor = moduleItem?.parent?.documentName === "Actor" ? moduleItem.parent : null;
   if (sourceActor) moduleItem = sourceActor.items.get(moduleItem.id);
   if (!weapon || !moduleItem || getItemQuantity(moduleItem) < 1) return null;
-  const match = findFreeWeaponModuleSlot(weapon, moduleItem);
+  const match = findFreeFunctionModuleSlot(weapon, moduleItem);
   if (!match) {
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleNoFreeSlot"));
     return null;
   }
   const { entry, slots, slotIndex } = match;
-  const path = getWeaponFunctionUpdatePath(weapon, entry.id);
+  const path = entry.targetFunction === ITEM_FUNCTIONS.damageMitigation
+    ? "system.functions.damageMitigation" : getWeaponFunctionUpdatePath(weapon, entry.id);
   if (!path) return null;
   slots[slotIndex] = { ...slots[slotIndex], itemUuid: moduleItem.uuid ?? "", itemData: createWeaponModuleSlotItemData(moduleItem) };
   try {
-    const magazinePlan = planWeaponMagazineCapacityTransition(actor, entry.data, slots);
+    const magazinePlan = entry.targetFunction === ITEM_FUNCTIONS.weapon
+      ? planWeaponMagazineCapacityTransition(actor, entry.data, slots)
+      : { overflow: 0, updates: [], creates: [] };
     const update = { _id: weapon.id, [`${path}.moduleSlots`]: slots };
     if (magazinePlan.overflow) update[`${path}.magazine.value`] = magazinePlan.value;
     const plans = [{ actor, updates: [update, ...magazinePlan.updates], creates: magazinePlan.creates }];
@@ -58,7 +61,7 @@ export async function installDroppedWeaponModule({ actor, weapon, moduleItem, so
       if (!consumption.changed) return null;
       plans.push({ actor: sourceActor, updates: consumption.updates, deletes: consumption.deletes });
     }
-    await executeInventoryMutation(plans, { reason: "drop-install-weapon-module" });
+    await executeInventoryMutation(plans, { reason: `drop-install-${entry.targetFunction}-module` });
     return actor.items.get(weapon.id) ?? null;
   } catch (error) {
     ui.notifications.warn(error.message);
@@ -122,7 +125,8 @@ export class WeaponModuleDropPreview {
     if (!item) {
       try { item = await Item.implementation.fromDropData(data); } catch { return; }
     }
-    if (generation !== this.#generation || !isFunctionModuleItem(item, ITEM_FUNCTIONS.weapon) || getItemQuantity(item) < 1) return;
+    if (generation !== this.#generation || ![ITEM_FUNCTIONS.weapon, ITEM_FUNCTIONS.damageMitigation]
+      .some(target => isFunctionModuleItem(item, target)) || getItemQuantity(item) < 1) return;
     this.#moduleItem = item;
     this.#apply();
   }
@@ -135,7 +139,7 @@ export class WeaponModuleDropPreview {
       const weapon = this.#resolveItem(element);
       if (!weapon || !this.#canUse(weapon, element) || !canInstallModule(weapon.parent, this.#moduleItem)) continue;
       const key = weapon.uuid;
-      if (!matches.has(key)) matches.set(key, Boolean(findFreeWeaponModuleSlot(weapon, this.#moduleItem)));
+      if (!matches.has(key)) matches.set(key, Boolean(findFreeFunctionModuleSlot(weapon, this.#moduleItem)));
       if (matches.get(key)) element.classList.add("module-drop-match-preview");
     }
   }
@@ -145,7 +149,7 @@ export class WeaponModuleDropPreview {
     const element = getWeaponModuleDropElement(event, this.#root);
     const weapon = element ? this.#resolveItem(element) : null;
     return Boolean(weapon && moduleItem && this.#canUse(weapon, element)
-      && canInstallModule(weapon.parent, moduleItem) && findFreeWeaponModuleSlot(weapon, moduleItem));
+      && canInstallModule(weapon.parent, moduleItem) && findFreeFunctionModuleSlot(weapon, moduleItem));
   }
 
   highlightModules(weapon) {
@@ -153,7 +157,7 @@ export class WeaponModuleDropPreview {
     if (this.#highlightTimer) clearTimeout(this.#highlightTimer);
     for (const element of this.#root?.querySelectorAll("[data-item-id]") ?? []) {
       const item = this.#resolveItem(element);
-      if (item && findFreeWeaponModuleSlot(weapon, item)) element.classList.add("module-compatibility-highlight");
+      if (item && findFreeFunctionModuleSlot(weapon, item)) element.classList.add("module-compatibility-highlight");
     }
     this.#highlightTimer = setTimeout(() => {
       this.#highlightTimer = null;

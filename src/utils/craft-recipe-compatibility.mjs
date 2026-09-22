@@ -1,6 +1,5 @@
 import { getItemMagazineSourceUuids, isAmmoCompatibleItem } from "./item-ammo-compatibility.mjs";
-import { getEnabledWeaponFunctions } from "./item-functions.mjs";
-import { findFreeWeaponModuleSlot } from "./weapon-modules.mjs";
+import { findFreeFunctionModuleSlot, getModuleSlotFunctionEntries } from "./weapon-modules.mjs";
 import { resolveWorldItemSync } from "./world-items.mjs";
 
 export function getCraftCompatibilityActions(item) {
@@ -8,7 +7,7 @@ export function getCraftCompatibilityActions(item) {
   if (getItemMagazineSourceUuids(item).length) {
     actions.push({ action: "show-ammo", kind: "ammo", icon: "fa-crosshairs", label: "Подходящие боеприпасы" });
   }
-  if (getEnabledWeaponFunctions(item, { ignoreBroken: true }).length) {
+  if (getModuleSlotFunctionEntries(item).length) {
     actions.push({ action: "show-modules", kind: "modules", icon: "fa-puzzle-piece", label: "Подходящие модули" });
   }
   return actions;
@@ -23,7 +22,7 @@ export function filterCompatibleCraftRecipes(targetItem, kind, recipes = [], res
     if (!matches.has(uuid)) {
       const item = resolveItem(uuid);
       matches.set(uuid, Boolean(item && (kind === "modules"
-        ? findFreeWeaponModuleSlot(targetItem, item)
+        ? findFreeFunctionModuleSlot(targetItem, item)
         : isAmmoCompatibleItem(targetItem, item))));
     }
     return matches.get(uuid);

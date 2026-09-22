@@ -7,11 +7,12 @@ const knowledgeSource = fs.readFileSync(new URL("../src/items/recipe-knowledge.m
 const mainSource = fs.readFileSync(new URL("../src/main.mjs", import.meta.url), "utf8");
 const craftTemplate = fs.readFileSync(new URL("../templates/actor/craft-window.hbs", import.meta.url), "utf8");
 
-test("craft catalog is actor-local and never builds a world-wide idle index", () => {
+test("craft catalog annotates world recipes with actor knowledge only when opened", () => {
   assert.doesNotMatch(mainSource, /initializeCraftRecipeWorldIndex/);
   assert.doesNotMatch(craftSource, /requestIdleCallback|scheduleWorldRecipeIndexBuild/);
   assert.match(craftSource, /const knownUuids = getKnownCraftItemUuids\(actor\)/);
-  assert.match(craftSource, /for \(const itemUuid of knownUuids\)/);
+  assert.match(craftSource, /globalThis\.game\?\.items\?\.contents/);
+  assert.match(craftSource, /summary\.known = knownUuids\.has\(item\.uuid\)/);
   assert.match(craftSource, /resolveWorldItemSync\(itemUuid\)/);
 });
 
@@ -133,6 +134,6 @@ test("click validation does not duplicate authoritative output placement", () =>
   const validation = craftSource.match(/async function validateCraftRequest[\s\S]*?\n\}\n\nasync function applyCraftOperation/)?.[0] ?? "";
   const application = craftSource.match(/async function applyCraftOperation[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(validation, /createCraftOutputPlan|createCraftFailureOutputPlan/);
-  assert.match(application, /createCraftOutputPlan/);
+  assert.match(application, /planCraftOutputPlacement/);
   assert.match(application, /createCraftFailureOutputPlan/);
 });

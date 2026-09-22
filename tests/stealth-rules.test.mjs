@@ -9,6 +9,7 @@ import {
   computeStealthDifficulty,
   configureStealthRuleSettingsProvider,
   getDetectionRangeFactor,
+  getTokenLightingAnalysis,
   getRuntimeStealthSettings,
   getStealthDifficultyLevel,
   invalidateStealthRuleCache
@@ -31,6 +32,32 @@ const SETTINGS = Object.freeze({
     Object.freeze({ label: "Очень яркий свет", threshold: 0, difficultyBonus: 120 })
   ]),
   autoDetection: Object.freeze({ enabled: true, movementThresholdFormula: "0" })
+});
+
+test("stealth checks and window labels use the same level-aware region darkness", () => {
+  globalThis.canvas = {
+    level: { id: "surface" },
+    scene: { regions: [{
+      includedInLevel: level => level === "basement", testPoint: () => true,
+      behaviors: [{ type: "adjustDarknessLevel", active: true, system: { mode: 0, modifier: 1 } }]
+    }] },
+    environment: { darknessLevel: 0 },
+    effects: { getDarknessLevel: () => 0 }
+  };
+  const source = {
+    actor: { statuses: new Set() },
+    document: { level: "basement", getVisibilityTestPoints: () => [{ x: 0, y: 0, elevation: 0 }] }
+  };
+  const target = { actor: { statuses: new Set(), system: { skills: { naturalist: { value: 31 } } } } };
+  const lighting = getTokenLightingAnalysis(source, SETTINGS);
+  const check = computeStealthDifficulty(source, target, SETTINGS);
+  assert.equal(lighting.effectiveDarkness, 1);
+  assert.equal(lighting.levelLabel, "Тускло");
+  assert.equal(check.difficulty, 51);
+  assert.equal(check.lighting.modifiers.difficultyBonus, lighting.modifiers.difficultyBonus);
+  const surfaceCheck = computeStealthDifficulty(source, target, SETTINGS, { sourcePosition: { level: "surface" } });
+  assert.equal(surfaceCheck.difficulty, 151);
+  assert.equal(surfaceCheck.lighting.levelLabel, "Очень яркий свет");
 });
 
 afterEach(() => {

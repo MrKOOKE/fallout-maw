@@ -37,6 +37,14 @@
             <span>Стоимость вставки оружия в набор, ОД</span>
             <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
           </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.MinimumAttackActionPointCost"}}</span>
+            <input type="number" name="minimumAttackActionPointCost" value="{{settings.minimumAttackActionPointCost}}" min="0" step="1">
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.MinimumActiveItemActionPointCost"}}</span>
+            <input type="number" name="minimumActiveItemActionPointCost" value="{{settings.minimumActiveItemActionPointCost}}" min="0" step="1">
+          </label>
           <label class="fallout-maw-combat-settings-field span-all">
             <span>{{localize "FALLOUTMAW.Settings.Combat.ActiveEffectDisplay"}}</span>
             <select name="activeEffectDisplay">

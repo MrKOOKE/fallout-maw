@@ -1,3 +1,4 @@
+import { captureSceneCreationPoint, getSceneCreationLevels } from "./creation-levels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
@@ -70,7 +71,7 @@ export async function createThrownItemTile({
   const request = {
     sceneId,
     itemData: droppedItemData,
-    point: serializePoint(point),
+    point: serializePoint(captureSceneCreationPoint(game.scenes?.get(sceneId), point)),
     sourceActorUuid: String(sourceActorUuid ?? ""),
     sourceItemUuid: String(sourceItemUuid ?? ""),
     sourceUserId: String(sourceUserId || game.user?.id || ""),
@@ -203,6 +204,7 @@ async function createThrownItemTileDocument({
     width: dimensions.width,
     height: dimensions.height,
     elevation: Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : 0,
+    levels: getSceneCreationLevels(scene, point),
     sort: getNextTileSort(scene),
     hidden: false,
     locked: true,
@@ -1214,6 +1216,7 @@ function normalizeImagePath(path, fallback = "") {
 
 function serializePoint(point) {
   const data = {
+    level: point?.level,
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0
   };

@@ -1,3 +1,4 @@
+import { captureSceneCreationPoint, getSceneCreationLevelId } from "./creation-levels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ACTOR_CONTAINER_FLAG,
@@ -569,10 +570,10 @@ function getTokenPlacementAtPoint(tokenData = {}, point = {}) {
     y: (Number(point?.y) || 0) - (size.height / 2)
   };
   const snapped = getSnappedTokenPosition(tokenData, topLeft);
-  return {
+  return captureSceneCreationPoint(canvas.scene, {
     x: Math.round(snapped.x),
     y: Math.round(snapped.y)
-  };
+  });
 }
 
 function getSnappedTokenPosition(tokenData = {}, position = {}) {
@@ -685,6 +686,8 @@ async function performExitPassenger({ sceneId = "", vehicleActorUuid = "", passe
   delete tokenData._id;
   tokenData.x = Math.round(Number(placement.x) || 0);
   tokenData.y = Math.round(Number(placement.y) || 0);
+  tokenData.level = getSceneCreationLevelId(scene, placement);
+  tokenData.elevation = Number(placement.elevation) || 0;
   tokenData.hidden = false;
   const remaining = passengers.filter(entry => entry.id !== passengerId);
   const ownershipUpdate = getTemporaryOwnershipCleanupUpdate(vehicleActor, passenger, remaining);

@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { getSourceToggleIcon } from "../settings/accessors.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
 import { FALLBACK_ICON, escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
@@ -431,7 +432,7 @@ function renderEnergyConsumptionConditionCard(actor = null, item = null, conditi
       <strong>${escapeHTML(formatNumberForDisplay(condition.amountPerHour))}/ч</strong>
     </button>
     <button type="button" class="fallout-maw-reload-source-card ${active ? "active" : ""}" data-energy-consumption-toggle="${escapeAttribute(condition.id)}" ${disabled ? "disabled" : ""}>
-      <img src="${escapeAttribute(normalizeImagePath("icons/svg/light.svg", FALLBACK_ICON))}" alt="">
+      <img src="${escapeAttribute(getSourceToggleIcon(active))}" alt="">
       <span>${escapeHTML(label)}</span>
     </button>
   `;

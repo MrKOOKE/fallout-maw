@@ -14,6 +14,8 @@ const EXPECTED_FIELDS = [
   "activeEffectDisplay",
   "turnOrder.scheme",
   "weaponSwitch.actionPointCost",
+  "minimumAttackActionPointCost",
+  "minimumActiveItemActionPointCost",
   "reactions.timeoutSeconds",
   "dodge.attackCostPercent",
   "dodge.burstMultiplier",

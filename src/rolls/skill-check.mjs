@@ -1836,13 +1836,14 @@ function calculateCriticalThresholds(check, finalSkillValue = 0, difficulty = 0,
   if (skillCheckMode === LEGACY_VARIABLE_LOW_ROLL_MODE) {
     return calculateLegacyVariableLowRollThresholds(check, finalSkillValue, difficulty);
   }
+  const luck = toInteger(check.actor?.system?.characteristics?.luck);
   const gambling = toInteger(check.actor?.system?.skills?.gambling?.value);
   const baseFailureChance = clamp(toInteger(check.criticalFailureBonus) + 5, 0, 100);
   const excessSkillSteps = Math.max(0, Math.floor((toInteger(finalSkillValue) - toInteger(difficulty)) / 20));
   const failureReduction = Math.min(baseFailureChance, excessSkillSteps);
   const criticalSuccessOverflow = Math.max(0, excessSkillSteps - baseFailureChance);
   const failureChance = clamp(baseFailureChance - failureReduction, 0, 100);
-  const successChance = clamp(Number(check.criticalSuccessBonus || 0) + 4 + (gambling / 20) + criticalSuccessOverflow, 0, 100);
+  const successChance = clamp(Number(check.criticalSuccessBonus || 0) + 1 + (luck / 2) + (gambling / 20) + criticalSuccessOverflow, 0, 100);
   return {
     baseFailureChance,
     failureChance,

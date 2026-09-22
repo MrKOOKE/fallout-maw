@@ -106,6 +106,12 @@ import {
 } from "../utils/construct-parts.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createSourcedInventoryItemData, getCraftItemSourceKeys } from "../utils/craft-item-source.mjs";
+import { formatCraftYieldQuantity, layoutCraftEmbeddedItems } from "../utils/craft-embedded-layout.mjs";
+import {
+  getCraftEmbeddedReturns,
+  planCraftEmbeddedCreation,
+  scaleCraftDisassemblyOutputs
+} from "../utils/craft-item-resources.mjs";
 import {
   craftCategoryExpansionKey,
   craftClassFolderExpansionKey,
@@ -119,7 +125,8 @@ import { actorKnowsCraftItem, getKnownCraftItemUuids, hasCraftKnowledgeLayoutDat
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { getItemInteractionState } from "../items/item-interactions.mjs";
-import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { executeInventoryMutation, validateActorInventoryState } from "../inventory/mutation.mjs";
+import { commitInventoryWithDroppedItems } from "../items/dropped-items.mjs";
 import {
   createInventoryStackCandidateIndex,
   getInventoryStackCandidates
@@ -302,8 +309,9 @@ function buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes 
     });
 
     if (targetQuantity < 1) continue;
-    const missing = actor ? isCraftRecipeMissing(recipe, actor, CRAFT_MODE_DISASSEMBLY, availability) : false;
+    const missing = recipe.known !== false && actor ? isCraftRecipeMissing(recipe, actor, CRAFT_MODE_DISASSEMBLY, availability) : false;
     entries.push({
+      unknown: recipe.known === false,
       recipeSelectionUuid: recipe.uuid,
       tooltipUuid: recipe.itemUuid,
       mode: CRAFT_MODE_DISASSEMBLY,
@@ -318,7 +326,7 @@ function buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes 
       outputs: outputChips
     });
   }
-  return entries;
+  return entries.map(prepareCraftRecipeDisplay);
 }
 
 function buildUsageCraftEntries(targetItem, targetProfile, candidateRecipes = [], actor = null, availability = null) {
@@ -329,8 +337,9 @@ function buildUsageCraftEntries(targetItem, targetProfile, candidateRecipes = []
     const matchingRequirements = requirements.filter(requirement => craftRequirementMatchesItem(targetItem, requirement, targetProfile));
     if (!matchingRequirements.length) continue;
 
-    const missing = actor ? isCraftRecipeMissing(recipe, actor, CRAFT_MODE_CREATE, availability) : false;
+    const missing = recipe.known !== false && actor ? isCraftRecipeMissing(recipe, actor, CRAFT_MODE_CREATE, availability) : false;
     entries.push({
+      unknown: recipe.known === false,
       recipeSelectionUuid: recipe.uuid,
       tooltipUuid: recipe.itemUuid,
       mode: CRAFT_MODE_CREATE,
@@ -345,15 +354,16 @@ function buildUsageCraftEntries(targetItem, targetProfile, candidateRecipes = []
       outputs: []
     });
   }
-  return entries;
+  return entries.map(prepareCraftRecipeDisplay);
 }
 
 function buildCompatibleCraftEntries(targetItem, kind, candidateRecipes = [], actor = null, availability = null) {
   return filterCompatibleCraftRecipes(targetItem, kind, candidateRecipes)
     .filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_CREATE))
     .map(recipe => {
-      const missing = actor ? isCraftRecipeMissing(recipe, actor, CRAFT_MODE_CREATE, availability) : false;
+      const missing = recipe.known !== false && actor ? isCraftRecipeMissing(recipe, actor, CRAFT_MODE_CREATE, availability) : false;
       return {
+        unknown: recipe.known === false,
         recipeSelectionUuid: recipe.uuid,
         tooltipUuid: recipe.itemUuid,
         mode: CRAFT_MODE_CREATE,
@@ -365,7 +375,26 @@ function buildCompatibleCraftEntries(targetItem, kind, candidateRecipes = [], ac
         statusLabel: missing ? "Недоступно: нет компонентов или инструмента" : "Доступно: можно создать",
         statusClass: missing ? "missing" : "ready"
       };
-    });
+    }).map(prepareCraftRecipeDisplay);
+}
+
+function prepareCraftRecipeDisplay(entry) {
+  if (!entry.unknown) return entry;
+  return {
+    ...entry,
+    uuid: "", itemUuid: "", tooltipUuid: "", recipeSelectionUuid: "",
+    name: "Неизвестный рецепт", displayName: "Неизвестный рецепт",
+    recipeName: "", category: "", targetQuantityLabel: "", outputs: [],
+    img: FALLBACK_ICON,
+    available: false, missing: false, selected: false,
+    statusClass: "unknown", statusLabel: ""
+  };
+}
+
+function compareCraftRecipeAvailability(left, right) {
+  const rank = entry => entry.unknown ? 2 : (entry.missing || entry.available === false ? 1 : 0);
+  return rank(left) - rank(right)
+    || String(left.displayName ?? left.name ?? "").localeCompare(String(right.displayName ?? right.name ?? ""), game.i18n.lang);
 }
 
 function getCraftRecipeMissingCacheKey(mode, recipeUuid = "") {
@@ -519,9 +548,9 @@ export async function getCraftWindowOpenOptionsForItem(item, actor = item?.paren
   if (!item || item.type !== "gear") return [];
   await getCraftRecipeSummaries(actor);
   const matchingRecipes = findCraftRecipesForItem(item);
-  const createOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_CREATE);
-  const disassemblyOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_DISASSEMBLY);
-  return [...createOptions, ...disassemblyOptions];
+  const createOptions = buildCraftOpenOptionsForMode(matchingRecipes.filter(recipe => recipe.known !== false), CRAFT_MODE_CREATE);
+  const disassemblyOptions = buildCraftOpenOptionsForMode(matchingRecipes.filter(recipe => recipe.known !== false || (actor && item.parent === actor && !recipe.system?.craft?.disassemblyRequiresRecipe)), CRAFT_MODE_DISASSEMBLY);
+  return [...createOptions, ...disassemblyOptions.map(option => ({ ...option, sourceItemId: item.parent === actor ? item.id : "" }))];
 }
 
 class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -531,6 +560,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #selectedRecipeUuid = "";
   #selectedRecipeId = DEFAULT_CRAFT_RECIPE_ID;
   #selectedRecipe = null;
+  #craftResourceOptions = {};
   #acquisitionTargetUuid = "";
   #usageTargetUuid = "";
   #usageKind = "usage";
@@ -540,6 +570,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #craftRepeatCount = 0;
   #craftBatchSummaryClose = null;
   #craftBatchSummaryTimer = null;
+  #bulkEntries = new Map();
+  #bulkRunPending = false;
   #busy = false;
   #pendingOperation = null;
   #startedOperationId = "";
@@ -606,7 +638,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#ensureCraftTabs();
     this.#saveActiveCraftTabState();
     const activeTab = this.#getActiveCraftTab();
-    const useActiveTab = !this.#selectedRecipeUuid && activeTab;
+    const useActiveTab = !this.#selectedRecipeUuid && !this.#acquisitionTargetUuid && !this.#usageTargetUuid && activeTab && !activeTab.bulk;
     const tab = useActiveTab ? activeTab : this.#createCraftTab();
     if (!useActiveTab) {
       this.#craftTabs.push(tab);
@@ -614,6 +646,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     this.#loadCraftTabState(tab);
     this.#craftMode = normalizeCraftMode(selection.mode);
+    this.#craftResourceOptions = { sourceItemId: String(selection.sourceItemId ?? ""), selections: {} };
     this.#selectedRecipeUuid = String(selection.recipeSelectionUuid ?? selection.recipeUuid ?? "");
     this.#selectedRecipeId = parseCraftRecipeSelectionUuid(this.#selectedRecipeUuid).recipeId;
     this.#selectedRecipe = null;
@@ -638,6 +671,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#pendingOperation = null;
       this.#startedOperationId = "";
       this.#animatingOperationId = "";
+      this.#bulkEntries.clear();
       this.#resetCraftTabs();
     } else if (actorUuid === this.#actorUuid) {
       this.#selectedRecipe = null;
@@ -645,6 +679,236 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#actorUuid = actorUuid;
     this.#actor = actor ?? null;
     this.#ensureCraftTabs();
+  }
+
+  async #openBulk() {
+    if (this.#busy) return;
+    const tab = this.#craftTabs.find(entry => entry.bulk);
+    if (tab) { this.#selectCraftTab(tab.id); return; }
+    await this.#addCraftTab({ bulk: true, mode: CRAFT_MODE_DISASSEMBLY });
+  }
+
+  async #addBulkItem(item, event = {}, stack = {}) {
+    if (!this._canDragDrop() || item.parent?.uuid !== this.#actorUuid) return;
+    const existing = this.#bulkEntries.get(item.id);
+    const available = Math.max(0, getItemQuantity(item) - (existing?.quantity ?? 0));
+    const stackQuantity = Math.max(1, Number(stack.stackQuantity) || (usesVirtualInventoryStacks(item)
+      ? getItemStackPartQuantity(item, Math.max(0, toInteger(stack.stackIndex))) : getItemQuantity(item)));
+    const maximum = Math.min(available, stackQuantity);
+    if (!maximum) return;
+    const quantity = event.ctrlKey ? await promptSearchItemStackQuantity({
+      item, title: "Массовый разбор", actionLabel: "Добавить", max: maximum, value: maximum
+    }) : maximum;
+    if (!quantity || this.#busy) return;
+    this.#bulkEntries.set(item.id, { ...existing, stackOrder: [...new Set([...(existing?.stackOrder ?? []), Math.max(0, toInteger(stack.stackIndex))])], itemId: item.id, name: item.name, img: item.img,
+      quantity: Math.min(getItemQuantity(item), (existing?.quantity ?? 0) + quantity) });
+    this.#clearInventoryTooltip({ force: true });
+    await this.#openBulk();
+    await this.#renderPreservingWindowStack();
+  }
+
+  async #autoFillBulk() {
+    if (!this._canDragDrop() || this.#busy) return;
+    await getCraftRecipeSummaries(this.#actor);
+    if (this.#busy) return;
+    for (const item of this.#actor?.items.contents ?? []) {
+      const quantity = getItemQuantity(item);
+      if (!quantity) continue;
+      const recipes = findCraftRecipesForItem(item);
+      if (!recipes.some(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY))
+        || recipes.some(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_CREATE))) continue;
+      const existing = this.#bulkEntries.get(item.id);
+      this.#bulkEntries.set(item.id, { ...existing, itemId: item.id, name: item.name, img: item.img, quantity });
+    }
+    this.#clearInventoryTooltip({ force: true });
+    await this.#updateCraftPanel();
+  }
+
+  async #prepareBulkContext() {
+    await getCraftRecipeSummaries(this.#actor);
+    const rows = [], outputTotals = new Map(), tools = [], toolSelections = {}, requirements = [];
+    let difficulty = 0, randomOutputs = false;
+    for (const entry of this.#bulkEntries.values()) {
+      const item = this.#actor?.items.get(entry.itemId);
+      const row = { ...entry, error: "", options: [], repeats: 0 };
+      rows.push(row);
+      if (!item) { row.error = "Предмета больше нет в инвентаре"; continue; }
+      const candidates = findCraftRecipesForItem(item).filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY));
+      const selected = candidates.find(recipe => recipe.uuid === entry.selectionUuid) ?? candidates[0];
+      row.hasVariants = candidates.length > 1;
+      row.options = candidates.map(recipe => ({ value: recipe.uuid, name: recipe.recipeName, selected: recipe === selected }));
+      if (!selected) { row.error = "Нет разбора"; continue; }
+      entry.selectionUuid = selected.uuid;
+      const { item: recipe, recipeId } = resolveCraftRecipeSelection(selected.uuid);
+      row.recipe = recipe; row.recipeId = recipeId;
+      if (!actorKnowsCraftItem(this.#actor, recipe) && recipe.system?.craft?.disassemblyRequiresRecipe) {
+        row.error = "Необходимо знание рецепта"; continue;
+      }
+      if (isNaturalRaceItem(item) || item.system?.locked) { row.error = "Предмет недоступен для разбора"; continue; }
+      if ((this.#actor.items.contents ?? []).some(child => getItemContainerParentId(child) === item.id)) {
+        row.error = "Сначала освободите контейнер"; continue;
+      }
+      const craft = getCraftRenderData(recipe, this.#actor, CRAFT_MODE_DISASSEMBLY, { recipeId });
+      const links = prepareCraftOperationLinks(craft.links, craft.nodes);
+      for (const link of links) if (!link.noCheck) difficulty = Math.max(difficulty, link.difficulty);
+      const sourceRequirements = craft.requirements.filter(req => craftItemMatchesRequirement(item, req));
+      const perAttempt = sourceRequirements.reduce((sum, req) => sum + req.quantity, 0);
+      row.perAttempt = perAttempt;
+      if (!perAttempt || !links.length || !craft.outputs.length) { row.error = "Некорректная схема разбора"; continue; }
+      if (entry.quantity > getItemQuantity(item)) { row.error = "Не хватает предметов"; continue; }
+      if (entry.quantity < perAttempt || entry.quantity % perAttempt) {
+        row.error = `Для разбора нужно количество, кратное ${perAttempt}`; continue;
+      }
+      row.repeats = entry.quantity / perAttempt;
+      const unmet = getUnmetCraftSkillThreshold(this.#actor, links);
+      if (unmet) { row.error = getCraftSkillThresholdMessage(unmet, CRAFT_MODE_DISASSEMBLY); continue; }
+      row.requirements = craft.requirements.map(req => ({ ...req, ...(sourceRequirements.includes(req) ? { itemId: item.id } : {}) }));
+      try { createCraftRequirementSpendPlan(this.#actor, row.requirements.map(req => ({ ...req, quantity: req.quantity * row.repeats }))); }
+      catch (error) { row.error = error.message; continue; }
+      const toolPlan = createCraftToolRequirementSpendPlan(this.#actor, craft.toolRequirements);
+      if (!toolPlan.valid) { row.error = toolPlan.message; continue; }
+      row.toolSelections = Object.fromEntries([...toolPlan.selectedByRequirement].map(([key, tool]) => [key, tool.id]));
+      for (const req of craft.toolRequirements) {
+        const key = `${item.id}:${req.key}`;
+        tools.push({ ...req, key, quantity: req.quantity * row.repeats });
+        toolSelections[key] = row.toolSelections[req.key];
+      }
+      requirements.push(...row.requirements.map(req => ({ ...req, quantity: req.quantity * row.repeats })));
+      const resources = prepareCraftDisassemblyResources(this.#actor, row.requirements, craft.outputs);
+      row.outputs = [...resources.outputs, ...resources.embedded];
+      if (resources.embedded.some(output => !output.data)) row.error = "Не найден встроенный предмет";
+      row.randomOutputs = craft.nodes.some(node => !node.root && Number(node.blockLimit) > 0);
+      randomOutputs ||= row.randomOutputs;
+    }
+    const fullToolPlan = createCraftToolRequirementSpendPlan(this.#actor, tools, toolSelections);
+    if (!fullToolPlan.valid) for (const row of rows) if (!row.error && Object.keys(row.toolSelections ?? {}).length) row.error = fullToolPlan.message;
+    const selectedIds = new Set(rows.map(row => row.itemId));
+    for (const row of rows) if (!row.error && Object.values(row.toolSelections ?? {}).some(id => selectedIds.has(id))) row.error = "Инструмент также выбран для разбора";
+    try { createCraftRequirementSpendPlan(this.#actor, requirements); }
+    catch (error) { for (const row of rows) if (!row.error) row.error = error.message; }
+    for (const row of rows) {
+      if (row.error) continue;
+      for (const output of row.outputs ?? []) {
+        if (output.quantity <= 0 && !(output.fullQuantity > 0)) continue;
+        const item = output.data ?? resolveWorldItemSync(output.sourceUuid);
+        if (!item) { row.error = "Не найден результат разбора"; continue; }
+        const key = output.data ? `${output.sourceUuid}:${getCraftItemFingerprint(output.data)}` : output.sourceUuid;
+        const current = outputTotals.get(key) ?? { uuid: output.sourceUuid, name: item.name, img: item.img, quantity: 0, fullQuantity: 0, embedded: Boolean(output.embedded) };
+        current.quantity += output.quantity * row.repeats;
+        current.fullQuantity += (output.fullQuantity ?? output.quantity) * row.repeats;
+        current.quantityLabel = formatCraftYieldQuantity(current.quantity, current.fullQuantity);
+        outputTotals.set(key, current);
+      }
+    }
+    return { rows, outputs: [...outputTotals.values()], difficulty, randomOutputs,
+      canRun: Boolean(rows.length && rows.every(row => !row.error) && !this.#busy && this.#actor?.isOwner),
+      busy: this.#busy, checks: !isSkillThresholdMode(getCraftingSettings().craft.mode) };
+  }
+
+  #syncBulkInventorySelection() {
+    const groups = new Map();
+    for (const element of this.element?.querySelectorAll(".fallout-maw-craft-window-inventory [data-item-id][data-search-actor-uuid]") ?? []) {
+      element.querySelector(":scope > .fallout-maw-bulk-shade")?.remove();
+      const id = element.dataset.itemId;
+      const group = groups.get(id) ?? []; group.push(element); groups.set(id, group);
+    }
+    for (const [id, elements] of groups) {
+      const entry = this.#bulkEntries.get(id);
+      if (!entry?.quantity) continue;
+      const order = entry.stackOrder ?? [];
+      const priority = el => { const index = order.indexOf(Number(el.dataset.stackIndex) || 0); return index < 0 ? order.length + (Number(el.dataset.stackIndex) || 0) : index; };
+      const allocations = new Map();
+      let remaining = entry.quantity;
+      for (const element of elements.sort((a,b) => priority(a)-priority(b))) {
+        const stackIndex = Number(element.dataset.stackIndex) || 0;
+        const total = Number(element.dataset.stackQuantity) || getItemQuantity(this.#actor?.items.get(id));
+        if (!allocations.has(stackIndex)) { allocations.set(stackIndex, Math.min(remaining, total)); remaining = Math.max(0, remaining-total); }
+        const selected = allocations.get(stackIndex);
+        if (!selected) continue;
+        const shade = element.ownerDocument.createElement("span");
+        shade.className = `fallout-maw-bulk-shade${selected < total ? " partial" : ""}`;
+        shade.setAttribute("aria-hidden", "true"); element.append(shade);
+      }
+    }
+  }
+
+  #bindBulkControls() {
+    this.#syncBulkInventorySelection();
+    for (const button of this.element?.querySelectorAll("[data-bulk-open]") ?? []) {
+      button.textContent = this.#getActiveCraftTab()?.bulk ? "Автоматическое заполнение" : "Массовый разбор";
+      button.disabled = this.#busy;
+    }
+    const bind = (selector, callback, type = "click") => {
+      for (const element of this.element?.querySelectorAll(selector) ?? []) {
+        if (element.dataset.bulkBound) continue;
+        element.dataset.bulkBound = "true";
+        element.addEventListener(type, event => { event.preventDefault(); event.stopPropagation(); if (!this.#busy) void callback(event, element); });
+      }
+    };
+    bind("[data-bulk-open]", () => this.#getActiveCraftTab()?.bulk ? this.#autoFillBulk() : this.#openBulk());
+    bind("[data-bulk-remove]", async (_event, element) => { this.#bulkEntries.delete(element.dataset.bulkRemove); await this.#updateCraftPanel(); });
+    bind("[data-bulk-clear]", async () => { this.#bulkEntries.clear(); await this.#updateCraftPanel(); });
+    bind("[data-bulk-recipe]", async (_event, element) => { const entry = this.#bulkEntries.get(element.dataset.bulkRecipe); if (entry) entry.selectionUuid = element.value; await this.#updateCraftPanel(); }, "change");
+    bind("[data-bulk-quantity]", async (_event, element) => {
+      const entry = this.#bulkEntries.get(element.dataset.bulkQuantity), item = this.#actor?.items.get(entry?.itemId);
+      if (!item) return;
+      const quantity = await promptSearchItemStackQuantity({ item, title: "Массовый разбор", actionLabel: "Изменить", max: getItemQuantity(item), value: entry.quantity });
+      if (quantity) { entry.quantity = quantity; await this.#updateCraftPanel(); }
+    });
+    bind("[data-bulk-run]", () => this.#runBulk());
+  }
+
+  async #runBulk() {
+    if (this.#busy || this.#bulkRunPending) return;
+    this.#bulkRunPending = true;
+    let preview;
+    try { preview = await this.#prepareBulkContext(); }
+    finally { this.#bulkRunPending = false; }
+    if (!preview.canRun) { await this.#updateCraftPanel(); return; }
+    this.#busy = true;
+    await this.#updateCraftPanel();
+    const collector = createSkillCheckBatchCollector({ requester: "Разбор", title: "Массовый разбор" });
+    let completed = 0, dropped = false;
+    try {
+      const expectedItems = this.#actor.items.contents.map(item => item.toObject());
+      const operations = [];
+      for (const row of preview.rows) {
+        const repetitions = !preview.checks && !row.randomOutputs ? row.repeats : 1;
+        for (let attempt = 0; attempt < row.repeats; attempt += repetitions) {
+          const validation = await validateCraftRequest(this.#actor, row.recipe, CRAFT_MODE_DISASSEMBLY, row.toolSelections, row.recipeId, { sourceItemId: row.itemId });
+          if (!validation.valid) throw new Error(validation.message);
+          const item = this.#actor.items.get(row.itemId);
+          if (!item) throw new Error("Предмета больше нет в инвентаре");
+          if (item.system?.locked || (this.#actor.items.contents ?? []).some(child => getItemContainerParentId(child) === item.id)) throw new Error("Предмет заблокирован или содержит другие предметы");
+          validation.requirements = validation.requirements.map(req => ({ ...req, ...(craftItemMatchesRequirement(item, req) ? { itemId: row.itemId } : {}) }));
+          createCraftRequirementSpendPlan(this.#actor, validation.requirements);
+          const linkResults = await this.#resolveCraftLinkResults(this.#actor, validation.links, { createMessages: false, collector, mode: CRAFT_MODE_DISASSEMBLY });
+          if (!linkResults) throw new Error("Проверка разбора отменена");
+          const operation = { ...this.#buildCraftOperation(this.#actor, row.recipe, validation, linkResults),
+            mode: CRAFT_MODE_DISASSEMBLY, recipeId: row.recipeId, repetitions, suppressOverflowNotification: true };
+          if (repetitions > 1) {
+            for (const key of ["requirements", "toolRequirements", "outputs"]) {
+              operation[key] = (operation[key] ?? []).map(entry => ({ ...entry, quantity: entry.quantity * repetitions }));
+            }
+          }
+          operations.push(operation);
+        }
+      }
+      const result = await applyBulkCraftOperations(this.#actor, operations, expectedItems);
+      dropped = Boolean(result?.dropped);
+      completed = preview.rows.reduce((sum, row) => sum + row.repeats, 0);
+      invalidateCraftRecipeAvailabilityCaches();
+      for (const row of preview.rows) {
+        const entry = this.#bulkEntries.get(row.itemId);
+        if (entry) { entry.quantity -= row.perAttempt * row.repeats; if (entry.quantity <= 0) this.#bulkEntries.delete(row.itemId); }
+      }
+    } catch (error) { console.error(`${SYSTEM_ID} | Bulk disassembly`, error); ui.notifications.warn(error.message || "Разбор остановлен"); }
+    finally {
+      try { if (collector.size) await collector.publish({ forceBatch: true }); }
+      finally { await Promise.allSettled([collector.abort()]); this.#busy = false; await this.#renderPreservingWindowStack(); }
+      if (dropped) ui.notifications.warn("В инвентаре не хватило места, лишние предметы выброшены на землю.");
+      else if (completed) ui.notifications.info(`Массовый разбор: выполнено ${completed}`);
+    }
   }
 
   #resetCraftTabs() {
@@ -677,10 +941,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const id = String(data.id ?? foundry.utils.randomID());
     return {
       id,
+      bulk: Boolean(data.bulk),
+      returnTabId: String(data.returnTabId ?? ""),
       name: String(data.name ?? `${DEFAULT_CRAFT_TAB_NAME} ${index}`),
       mode: normalizeCraftMode(data.mode),
       selectedRecipeUuid: String(data.selectedRecipeUuid ?? ""),
       selectedRecipeId: String(data.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID,
+      craftResourceOptions: foundry.utils.deepClone(data.craftResourceOptions ?? {}),
       acquisitionTargetUuid: String(data.acquisitionTargetUuid ?? ""),
       usageTargetUuid: String(data.usageTargetUuid ?? ""),
       usageKind: String(data.usageKind ?? "usage"),
@@ -703,6 +970,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     tab.mode = this.#craftMode;
     tab.selectedRecipeUuid = this.#selectedRecipeUuid;
     tab.selectedRecipeId = this.#selectedRecipeId;
+    tab.craftResourceOptions = foundry.utils.deepClone(this.#craftResourceOptions);
     tab.acquisitionTargetUuid = this.#acquisitionTargetUuid;
     tab.usageTargetUuid = this.#usageTargetUuid;
     tab.usageKind = this.#usageKind;
@@ -720,6 +988,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#craftMode = normalizeCraftMode(tab.mode);
     this.#selectedRecipeUuid = String(tab.selectedRecipeUuid ?? "");
     this.#selectedRecipeId = String(tab.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID;
+    this.#craftResourceOptions = foundry.utils.deepClone(tab.craftResourceOptions ?? {});
     this.#selectedRecipe = null;
     this.#acquisitionTargetUuid = String(tab.acquisitionTargetUuid ?? "");
     this.#usageTargetUuid = String(tab.usageTargetUuid ?? "");
@@ -737,6 +1006,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #updateCraftTabTitle(tab = null, recipe = null) {
     if (!tab) return;
+    if (tab.bulk) { tab.name = "Массовый разбор"; return; }
     const acquisitionTarget = tab.acquisitionTargetUuid ? resolveCraftAcquisitionTargetItem(tab.acquisitionTargetUuid) : null;
     if (acquisitionTarget) {
       tab.name = `Способы: ${String(acquisitionTarget.name ?? "").trim() || "предмет"}`;
@@ -826,12 +1096,30 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #addCraftTab(data = {}) {
+    this.#ensureCraftTabs();
     this.#saveActiveCraftTabState();
     const tab = this.#createCraftTab(data);
     this.#craftTabs.push(tab);
     this.#loadCraftTabState(tab);
+    this.#updateActiveCraftTabTitle();
     this.#clearInventoryTooltip({ force: true });
-    void this.#renderPreservingWindowStack();
+    return this.#renderPreservingWindowStack();
+  }
+
+  #getCraftReturnTab() {
+    const active = this.#getActiveCraftTab();
+    return this.#craftTabs.find(tab => tab.id === active?.returnTabId && tab.id !== active.id) ?? null;
+  }
+
+  #returnFromCraftTab() {
+    if (this.#busy) return;
+    const target = this.#getCraftReturnTab();
+    if (!target) return;
+    const closingId = this.#activeCraftTabId;
+    this.#craftTabs = this.#craftTabs.filter(tab => tab.id !== closingId);
+    this.#loadCraftTabState(target);
+    this.#clearCraftContextOverlays();
+    return this.#renderPreservingWindowStack();
   }
 
   #closeCraftTab(tabId = "") {
@@ -878,7 +1166,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#ensureCraftTabs();
     this.#actor = await resolveActor(this.#actorUuid);
     const recipes = await getCraftRecipeSummaries(this.#actor);
-    const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode));
+    const modeRecipes = recipes.filter(recipe => (recipe.known !== false || (this.#craftMode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(this.#actor, resolveWorldItemSync(recipe.itemUuid)))) && hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode));
     if (this.#selectedRecipeUuid && !modeRecipes.some(recipe => recipe.uuid === this.#selectedRecipeUuid)) {
       this.#selectedRecipeUuid = "";
       this.#selectedRecipe = null;
@@ -910,12 +1198,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         busy: this.#busy,
         mode: this.#craftMode,
         recipeId: this.#selectedRecipeId,
+        resourceOptions: this.#craftResourceOptions,
         toolPickerNodeId: this.#craftToolPickerNodeId,
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
     const acquisition = acquisitionTarget ? await this.#prepareAcquisitionWaysContext(acquisitionTarget) : null;
     const usage = usageTarget ? await this.#prepareUsageCraftsContext(usageTarget) : null;
+    craft.canReturn = !this.#busy && Boolean(this.#getCraftReturnTab());
     if (acquisition) {
       craft.acquisition = acquisition;
       craft.canShowAcquisitionWays = false;
@@ -945,12 +1235,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       expandedKeys: this.#expandedRecipeNodes,
       mode: this.#craftMode,
       search: this.#recipeSearch,
-      selectedRecipeUuid: this.#selectedRecipeUuid
+      selectedRecipeUuid: this.#selectedRecipeUuid,
+      actor: this.#actor
     });
 
     const preparedContext = {
       ...context,
       actor: actorContext,
+      bulk: this.#getActiveCraftTab()?.bulk ? await this.#prepareBulkContext() : null,
       craftTabs: this.#getCraftTabsContext(),
       recipeCategories: recipeList.categories,
       recipeSearch: this.#recipeSearch,
@@ -1172,12 +1464,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         busy: this.#busy,
         mode: this.#craftMode,
         recipeId: this.#selectedRecipeId,
+        resourceOptions: this.#craftResourceOptions,
         toolPickerNodeId: this.#craftToolPickerNodeId,
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
     const acquisition = acquisitionTarget ? await this.#prepareAcquisitionWaysContext(acquisitionTarget) : null;
     const usage = usageTarget ? await this.#prepareUsageCraftsContext(usageTarget) : null;
+    craft.canReturn = !this.#busy && Boolean(this.#getCraftReturnTab());
     if (acquisition) {
       craft.acquisition = acquisition;
       craft.canShowAcquisitionWays = false;
@@ -1200,6 +1494,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#updateActiveCraftTabTitle(selectedRecipe);
     this.#saveActiveCraftTabState();
     return {
+      bulk: this.#getActiveCraftTab()?.bulk ? await this.#prepareBulkContext() : null,
       recipe: acquisitionTarget || usageTarget || selectedRecipe ? {
         uuid: acquisitionTarget?.uuid ?? usageTarget?.uuid ?? selectedRecipe.uuid,
         name: acquisitionTarget
@@ -1230,10 +1525,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const availability = this.#actor ? getCraftAvailabilityIndex(this.#actor) : null;
     const entries = buildAcquisitionWayEntries(targetItem, targetProfile, allCandidateRecipes, this.#actor, availability);
 
-    entries.sort((left, right) => {
-      if (left.available !== right.available) return left.available ? -1 : 1;
-      return left.name.localeCompare(right.name, game.i18n.lang);
-    });
+    entries.sort(compareCraftRecipeAvailability);
     return {
       targetUuid: targetItem.uuid,
       targetName: String(targetItem.name ?? ""),
@@ -1256,17 +1548,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       entries = buildUsageCraftEntries(targetItem, targetProfile, candidates, this.#actor, availability);
     }
 
-    entries.sort((left, right) => {
-      if (left.available !== right.available) return left.available ? -1 : 1;
-      return left.name.localeCompare(right.name, game.i18n.lang);
-    });
+    entries.sort(compareCraftRecipeAvailability);
     return {
       title: isCompatibility
         ? (this.#usageKind === "ammo" ? "Подходящие боеприпасы" : "Подходящие модули")
         : "Показать в каких крафтах участвует",
       emptyMessage: isCompatibility
-        ? (this.#usageKind === "ammo" ? "Нет известных крафтов подходящих боеприпасов." : "Нет известных крафтов подходящих модулей.")
-        : "Нет известных крафтов, где используется этот предмет.",
+        ? (this.#usageKind === "ammo" ? "Нет крафтов подходящих боеприпасов." : "Нет крафтов подходящих модулей.")
+        : "Нет крафтов, где используется этот предмет.",
       summary: `${entries.length} ${isCompatibility ? "подходящих крафтов" : "крафтов с участием"}`,
       targetUuid: targetItem.uuid,
       targetName: String(targetItem.name ?? ""),
@@ -1291,6 +1580,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #activateCraftPanelControls() {
+    this.#bindBulkControls();
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
       if (button.dataset.craftModeBound === "true") return;
       button.dataset.craftModeBound = "true";
@@ -1299,7 +1589,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         if (this.#busy) return;
         const mode = normalizeCraftMode(event.currentTarget?.dataset?.craftMode);
         if (mode === this.#craftMode) return;
+        if (this.#getActiveCraftTab()?.bulk) { await this.#addCraftTab({ mode }); return; }
         this.#craftMode = mode;
+        this.#craftResourceOptions = {};
         this.#selectedRecipe = null;
         this.#acquisitionTargetUuid = "";
         this.#usageTargetUuid = "";
@@ -1353,10 +1645,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       button.dataset.acquisitionBackBound = "true";
       button.addEventListener("click", event => {
         event.preventDefault();
-        this.#acquisitionTargetUuid = "";
-        this.#usageTargetUuid = "";
-        this.#saveActiveCraftTabState();
-        void this.#renderPreservingWindowStack();
+        void this.#returnFromCraftTab();
       });
     });
     this.element?.querySelectorAll("[data-acquisition-recipe-uuid]").forEach(entry => {
@@ -1419,8 +1708,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!recipeButton || this.#busy) return;
       event.preventDefault();
       const recipeUuid = String(recipeButton.dataset.recipeUuid ?? "");
+      if (this.#getActiveCraftTab()?.bulk) {
+        this.openSelection({ mode: this.#craftMode, recipeSelectionUuid: recipeUuid });
+        void this.#renderPreservingWindowStack();
+        return;
+      }
       if (recipeUuid === this.#selectedRecipeUuid && !this.#acquisitionTargetUuid && !this.#usageTargetUuid) return;
       this.#selectedRecipeUuid = recipeUuid;
+      this.#craftResourceOptions = {};
       this.#selectedRecipe = null;
       this.#acquisitionTargetUuid = "";
       this.#usageTargetUuid = "";
@@ -1506,7 +1801,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       expandedKeys: this.#expandedRecipeNodes,
       mode: this.#craftMode,
       search: this.#recipeSearch,
-      selectedRecipeUuid: this.#selectedRecipeUuid
+      selectedRecipeUuid: this.#selectedRecipeUuid,
+      actor: this.#actor
     });
     const html = await foundry.applications.handlebars.renderTemplate(TEMPLATES.craftWindowRecipeList, {
       recipeCategories: recipeList.categories,
@@ -1523,6 +1819,22 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #activateCraftViewer() {
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
+    this.element?.querySelectorAll("[data-craft-embedded-toggle]").forEach(button => {
+      if (button.dataset.craftEmbeddedBound) return;
+      button.dataset.craftEmbeddedBound = "true";
+      const toggle = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (this.#busy) return;
+        const key = button.dataset.craftEmbeddedToggle;
+        this.#craftResourceOptions.selections ??= {};
+        this.#craftResourceOptions.selections[key] = this.#craftResourceOptions.selections[key] === false;
+        this.#saveActiveCraftTabState();
+        void this.#updateCraftPanel();
+      };
+      button.addEventListener("click", toggle);
+      button.addEventListener("keydown", event => { if (["Enter", " "].includes(event.key)) toggle(event); });
+    });
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     if (!workspace) return;
     workspace.addEventListener("contextmenu", event => this.#onCraftWorkspaceContextMenu(event));
@@ -1573,6 +1885,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #bindInventoryListeners() {
+    this.element?.addEventListener("click", event => {
+      const el = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
+      if (!el || !(event.shiftKey || event.ctrlKey) || !this._canDragDrop()) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      const item = this.#actor?.items.get(el.dataset.itemId);
+      if (item) void this.#addBulkItem(item, event, el.dataset);
+    }, { capture: true });
     const root = this.element?.querySelector("[data-search-root]");
     if (!root || root.dataset.craftInventoryBound) return;
     root.dataset.craftInventoryBound = "true";
@@ -1626,6 +1945,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _onDragOver(event) {
+    if (event.target?.closest?.("[data-bulk-drop]")) { event.preventDefault(); return; }
     event.stopPropagation();
     const zone = this.#getInventoryDropZone(event);
     if (!zone || !this._canDragDrop()) return;
@@ -1659,8 +1979,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!this._canDragDrop()) return null;
       const data = getDragEventData(event);
       if (data?.type !== "Item") return null;
-      const item = this.#actor?.items?.get(String(data.itemId ?? ""));
+      const item = this.#actor?.items?.get(String(data.itemId ?? ""))
+        ?? this.#actor?.items?.contents?.find(entry => entry.uuid === data.uuid);
       if (!item) return null;
+      if (event.target?.closest?.("[data-bulk-drop]")) {
+        if ((data.actorUuid ?? data.sourceActorUuid ?? item.parent?.uuid) !== this.#actorUuid) return null;
+        return await this.#addBulkItem(item, event, data);
+      }
       const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
       const sourceStackQuantity = Math.max(0, toInteger(data.stackQuantity));
       const itemData = item.toObject();
@@ -2397,8 +2722,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       menuOptions.push([`craft-open-${index}`, option.icon, option.label]);
     }
     if (item?.type === "gear") {
-      menuOptions.push(["show-acquisition", "fa-route", "Показать способы получения"]);
-      menuOptions.push(["show-usage", "fa-diagram-project", "Показать в каких крафтах участвует"]);
+      if (hasAcquisitionWaysForItem(item)) {
+        menuOptions.push(["show-acquisition", "fa-route", "Показать способы получения"]);
+      }
+      if (findUsageRecipesForItem(item).recipes.length) {
+        menuOptions.push(["show-usage", "fa-diagram-project", "Показать в каких крафтах участвует"]);
+      }
       menuOptions.push(...getCraftCompatibilityActions(item).map(option => [option.action, option.icon, option.label]));
     }
     if (getItemInteractionState(this.#actor, item).hasInteraction) {
@@ -2483,8 +2812,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       label: option.label
     }));
     if (item?.type === "gear") {
-      menuOptions.push({ action: "show-acquisition", icon: "fa-route", label: "Показать способы получения" });
-      menuOptions.push({ action: "show-usage", icon: "fa-diagram-project", label: "Показать в каких крафтах участвует" });
+      if (hasAcquisitionWaysForItem(item)) {
+        menuOptions.push({ action: "show-acquisition", icon: "fa-route", label: "Показать способы получения" });
+      }
+      if (findUsageRecipesForItem(item).recipes.length) {
+        menuOptions.push({ action: "show-usage", icon: "fa-diagram-project", label: "Показать в каких крафтах участвует" });
+      }
       menuOptions.push(...getCraftCompatibilityActions(item));
     }
     if (!menuOptions.length) return;
@@ -2519,24 +2852,22 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #showAcquisitionWaysForItem(item) {
     if (!item?.uuid) return undefined;
     this.#clearCraftContextOverlays();
-    this.#acquisitionTargetUuid = String(item.uuid);
-    this.#usageTargetUuid = "";
-    this.#craftToolPickerNodeId = "";
-    this.#craftViewportOverride = null;
-    this.#saveActiveCraftTabState();
-    return this.#renderPreservingWindowStack();
+    return this.#addCraftTab({
+      returnTabId: this.#getActiveCraftTab()?.id,
+      mode: this.#craftMode,
+      acquisitionTargetUuid: String(item.uuid)
+    });
   }
 
   #showUsageCraftsForItem(item, kind = "usage") {
     if (!item?.uuid) return undefined;
     this.#clearCraftContextOverlays();
-    this.#usageTargetUuid = String(item.uuid);
-    this.#usageKind = kind;
-    this.#acquisitionTargetUuid = "";
-    this.#craftToolPickerNodeId = "";
-    this.#craftViewportOverride = null;
-    this.#saveActiveCraftTabState();
-    return this.#renderPreservingWindowStack();
+    return this.#addCraftTab({
+      returnTabId: this.#getActiveCraftTab()?.id,
+      mode: this.#craftMode,
+      usageTargetUuid: String(item.uuid),
+      usageKind: kind
+    });
   }
 
   #clearCraftContextOverlays() {
@@ -2678,7 +3009,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #scheduleRefreshForActor(actor) {
     if (!actor || actor.uuid !== this.#actorUuid) return;
     invalidateCraftRecipeAvailabilityCaches();
-    if (this.#contentsTransfer.renderBatch.active) return;
+    if (this.#busy || this.#contentsTransfer.renderBatch.active) return;
     this.#renderRefresh?.();
   }
 
@@ -2738,6 +3069,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ? prepareCraftContext(recipe, actor, {
         mode: this.#craftMode,
         recipeId: this.#selectedRecipeId,
+        resourceOptions: this.#craftResourceOptions,
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext();
@@ -2747,7 +3079,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ? getCraftRepeatLimit(actor, repeatContext.requirements, repeatContext.toolRequirements, toolSelections)
       : 0;
     const repeatCount = this.#readCraftRepeatCount(repeatMax);
-    const validation = await validateCraftRequest(actor, recipe, this.#craftMode, toolSelections, this.#selectedRecipeId);
+    const validation = await validateCraftRequest(actor, recipe, this.#craftMode, toolSelections, this.#selectedRecipeId, this.#craftResourceOptions);
     if (!validation.valid) {
       ui.notifications.warn(validation.message);
       return undefined;
@@ -2786,7 +3118,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.#craftRepeatCount;
   }
 
-  async #resolveCraftLinkResults(actor, links = [], { createMessages = true, collector = null } = {}) {
+  async #resolveCraftLinkResults(actor, links = [], { createMessages = true, collector = null, mode = this.#craftMode } = {}) {
     const linkResults = [];
     const thresholdMode = isSkillThresholdMode(getCraftingSettings().craft.mode);
     for (const link of links) {
@@ -2817,7 +3149,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         animate: false,
         createMessage: createMessages,
         completionCollector: createMessages ? null : collector,
-        requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт"
+        requester: mode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт"
       });
       if (!outcome) return null;
       collector?.add(outcome);
@@ -2847,6 +3179,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       outputs: validation.outputs,
       outputNodeIds: validation.outputNodeIds,
       failureOutputs: validation.failureOutputs,
+      resourceOptions: foundry.utils.deepClone(this.#craftResourceOptions),
       linkResults
     };
   }
@@ -2870,7 +3203,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
             recipe,
             this.#craftMode,
             this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode),
-            this.#selectedRecipeId
+            this.#selectedRecipeId,
+            this.#craftResourceOptions
           );
         if (!validation.valid) {
           warning = validation.message || "Недостаточно ресурсов для следующей попытки.";
@@ -3099,16 +3433,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #getCraftViewport() {
     if (this.#craftViewportOverride) return this.#craftViewportOverride;
     const workspace = this.element?.querySelector("[data-craft-workspace]");
-    if (this.#selectedRecipe && workspace) return getCraftFitViewport(this.#selectedRecipe, this.#craftMode, workspace, this.#selectedRecipeId);
+    if (this.#selectedRecipe && workspace) return getCraftFitViewport(this.#selectedRecipe, this.#craftMode, workspace, this.#selectedRecipeId, this.#craftLinkData.nodes);
     return this.#selectedRecipe ? getCraftViewport(this.#selectedRecipe, this.#craftMode, this.#selectedRecipeId) : normalizeCraftViewport();
   }
 
   #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const world = this.element?.querySelector("[data-craft-world]");
-    const nodes = this.#selectedRecipe
-      ? getCraftNodesWithRoot(this.#selectedRecipe, this.#craftMode, this.#selectedRecipeId)
-      : [];
+    const nodes = this.#craftLinkData.nodes ?? [];
     const viewport = clampCraftViewportToVisibleNode(normalizeCraftViewport({ x, y, zoom }), workspace, nodes);
     this.#craftViewportOverride = viewport;
     this.#saveActiveCraftTabState();
@@ -3300,15 +3632,23 @@ function createCraftBatchSummary(requested = 0, mode = CRAFT_MODE_CREATE) {
   };
 }
 
-async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
+async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID, resourceOptions = {}) {
   mode = normalizeCraftMode(mode);
   if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
   if (!recipe) return { valid: false, message: "Рецепт не выбран." };
-  if (!actorKnowsCraftItem(actor, recipe)) {
+  if (!actorKnowsCraftItem(actor, recipe) && !(mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) {
     return { valid: false, message: game.i18n.localize("FALLOUTMAW.Craft.KnowledgeRequired") };
   }
 
   const craft = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId, randomizeBlocks: true });
+  if (mode === CRAFT_MODE_DISASSEMBLY && resourceOptions.sourceItemId) {
+    for (const requirement of craft.requirements) {
+      requirement.itemId = resourceOptions.sourceItemId;
+      requirement.owned = getItemQuantity(actor.items.get(resourceOptions.sourceItemId));
+    }
+    try { createCraftRequirementSpendPlan(actor, craft.requirements); }
+    catch (error) { return { valid: false, message: error.message }; }
+  }
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
   const links = prepareCraftOperationLinks(craft.links, craft.nodes);
   const unmetSkillThreshold = getUnmetCraftSkillThreshold(actor, links);
@@ -3350,6 +3690,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   const resolvedToolSelections = Object.fromEntries(Array.from(toolSpendPlan.selectedByRequirement.entries()).map(([key, instrument]) => [key, instrument.id]));
   const requirements = craft.requirements.map(requirement => ({
     key: requirement.key,
+    itemId: requirement.itemId,
     sourceUuid: requirement.sourceUuid,
     sourceKeys: requirement.sourceKeys,
     quantity: requirement.quantity
@@ -3373,37 +3714,116 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   };
 }
 
+async function applyBulkCraftOperations(actor, operations, expectedItems) {
+  if (!actor?.isOwner) throw new Error("Нет прав на разбор этим актёром.");
+  const requirements = new Map(), tools = new Map(), toolSelections = {}, outputs = new Map();
+  const settings = getCraftingSettings();
+  const recipes = new Set();
+  const embeddedOutputs = [];
+  const addQuantity = (map, key, entry) => {
+    const current = map.get(key);
+    if (current) current.quantity += entry.quantity;
+    else map.set(key, { ...entry });
+  };
+  for (const operation of operations) {
+    if (operation.actorUuid !== actor.uuid || operation.mode !== CRAFT_MODE_DISASSEMBLY) throw new Error("Некорректная операция разбора.");
+    if (!recipes.has(operation.recipeUuid)) {
+      const recipe = resolveWorldItemSync(operation.recipeUuid);
+      if (!recipe) throw new Error("Рецепт не найден.");
+      if (!actorKnowsCraftItem(actor, recipe) && !canUseOwnedDisassembly(actor, recipe)) throw new Error("Необходимо знание рецепта.");
+      recipes.add(operation.recipeUuid);
+    }
+    const hasFailureOutput = !operation.success && operation.failureOutputs?.length > 0;
+    const refund = !operation.success && !hasFailureOutput
+      ? getCraftFailureRefundPercent(settings, operation.linkResults?.map(result => result.resultKey)) : 0;
+    const spent = [];
+    for (const requirement of operation.requirements) {
+      const quantity = operation.success || hasFailureOutput ? requirement.quantity : calculateCraftConsumedQuantity(requirement.quantity, refund);
+      spent.push({ ...requirement, quantity });
+      const key = JSON.stringify([requirement.itemId, requirement.sourceUuid, requirement.sourceKeys, requirement.key]);
+      addQuantity(requirements, key, { ...requirement, quantity });
+    }
+    for (const tool of operation.toolRequirements ?? []) {
+      const selected = operation.toolSelections?.[tool.key];
+      const key = JSON.stringify([tool.toolKey, tool.toolClass, selected, selected ? "" : tool.key]);
+      addQuantity(tools, key, { ...tool, key });
+      if (selected) toolSelections[key] = selected;
+    }
+    const resources = prepareCraftDisassemblyResources(actor, spent,
+      (operation.success ? operation.outputs : operation.failureOutputs) ?? [], operation.repetitions ?? 1);
+    embeddedOutputs.push(...resources.embedded);
+    for (const output of resources.outputs) {
+      addQuantity(outputs, output.sourceUuid, output);
+    }
+  }
+  for (const requirement of requirements.values()) {
+    const item = actor.items.get(requirement.itemId);
+    if (item && (item.system?.locked || isNaturalRaceItem(item)
+      || actor.items.contents.some(child => getItemContainerParentId(child) === item.id))) throw new Error("Предмет недоступен для разбора.");
+  }
+  const spendPlan = createCraftRequirementSpendPlan(actor, [...requirements.values()]);
+  const toolPlan = createCraftToolRequirementSpendPlan(actor, [...tools.values()], toolSelections);
+  if (!toolPlan.valid) throw new Error(toolPlan.message);
+  const consumption = { updates: [...spendPlan.updates, ...toolPlan.updates], deletes: [...spendPlan.deletes, ...toolPlan.deletes] };
+  const specs = await getCraftOutputSpecs(null, CRAFT_MODE_DISASSEMBLY, [...outputs.values(), ...embeddedOutputs]);
+  const plan = planCraftDisassemblyPlacement(actor, specs, projectCraftInventoryState(actor, consumption), consumption);
+  if (!plan.valid) throw new Error(plan.message);
+  const mutation = { actor, expectedItems, updates: [...consumption.updates, ...plan.updates], deletes: consumption.deletes, creates: plan.creates };
+  const dropped = Boolean(plan.overflow?.length);
+  if (dropped) await commitInventoryWithDroppedItems(actor, mutation, plan.overflow, { reason: "bulk-disassembly" });
+  else await executeInventoryMutation(mutation, { reason: "bulk-disassembly" });
+  return { dropped };
+}
+
 async function applyCraftOperation(operation) {
   const actor = await resolveActor(operation.actorUuid);
   const recipe = resolveWorldItemSync(operation.recipeUuid);
   if (!actor?.isOwner) throw new Error("Нет прав на крафт этим актером.");
   if (!recipe) throw new Error("Рецепт не найден.");
+  const expectedItems = actor.items.contents.map(item => foundry.utils.deepClone(item.toObject?.() ?? item));
 
+  if (!actorKnowsCraftItem(actor, recipe) && !(operation.mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) throw new Error("Необходимо знание рецепта.");
   const craftingSettings = getCraftingSettings();
   const hasFailureOutput = !operation.success && operation.failureOutputs?.length > 0;
   const refundPercent = !operation.success && !hasFailureOutput
     ? getCraftFailureRefundPercent(craftingSettings, operation.linkResults?.map(result => result.resultKey))
     : 0;
-  const spendRequirements = operation.success || hasFailureOutput
+  let spendRequirements = operation.success || hasFailureOutput
     ? operation.requirements
     : operation.requirements.map(requirement => ({
       ...requirement,
       quantity: calculateCraftConsumedQuantity(requirement.quantity, refundPercent)
     }));
-  const spendPlan = createCraftRequirementSpendPlan(actor, spendRequirements);
+  let spendPlan = createCraftRequirementSpendPlan(actor, spendRequirements);
+  let preparedSpecs = null;
+  if (operation.mode !== CRAFT_MODE_DISASSEMBLY && operation.success) {
+    const embedded = prepareCraftEmbeddedCreation(actor, recipe, spendPlan, operation.recipeId, operation.resourceOptions);
+    spendRequirements = [...spendRequirements, ...embedded.requirements];
+    spendPlan = createCraftRequirementSpendPlan(actor, spendRequirements);
+    preparedSpecs = mergeCraftOutputSpecs(embedded.specs.map(spec => ({ ...spec,
+      data: createCraftOutputItemData({ uuid: recipe.uuid, toObject: () => foundry.utils.deepClone(spec.data) })
+    })));
+  } else if (operation.mode === CRAFT_MODE_DISASSEMBLY) {
+    const resources = prepareCraftDisassemblyResources(actor, spendRequirements,
+      (operation.success ? operation.outputs : operation.failureOutputs) ?? []);
+    preparedSpecs = await getCraftOutputSpecs(recipe, operation.mode, [...resources.outputs, ...resources.embedded], operation.recipeId);
+  }
   const toolSpendPlan = createCraftToolRequirementSpendPlan(actor, operation.toolRequirements, operation.toolSelections);
   if (!toolSpendPlan.valid) throw new Error(toolSpendPlan.message);
   const consumptionPlan = {
     updates: [...spendPlan.updates, ...toolSpendPlan.updates],
     deletes: [...spendPlan.deletes, ...toolSpendPlan.deletes]
   };
-  const outputPlan = operation.success
-    ? await createCraftOutputPlan(actor, recipe, operation.mode, operation.outputs, consumptionPlan, operation.recipeId)
+  const outputPlan = preparedSpecs
+    ? (operation.mode === CRAFT_MODE_DISASSEMBLY
+      ? planCraftDisassemblyPlacement(actor, preparedSpecs, projectCraftInventoryState(actor, consumptionPlan), consumptionPlan)
+      : planCraftOutputPlacement(actor, preparedSpecs, projectCraftInventoryState(actor, consumptionPlan)))
     : await createCraftFailureOutputPlan(actor, recipe, operation.mode, operation.failureOutputs, consumptionPlan, operation.recipeId);
   if (!outputPlan.valid) throw new Error(outputPlan.message);
 
-  await executeInventoryMutation({
+  const mutation = {
     actor,
+    expectedItems,
     updates: [
       ...spendPlan.updates,
       ...toolSpendPlan.updates,
@@ -3414,7 +3834,14 @@ async function applyCraftOperation(operation) {
       ...toolSpendPlan.deletes
     ],
     creates: outputPlan.creates ?? []
-  }, { reason: operation.success ? "craft" : "craft-failure" });
+  };
+  const reason = operation.success ? "craft" : "craft-failure";
+  const dropped = Boolean(outputPlan.overflow?.length);
+  if (dropped) {
+    await commitInventoryWithDroppedItems(actor, mutation, outputPlan.overflow, { reason });
+    if (!operation.suppressOverflowNotification) ui.notifications.warn("В инвентаре не хватило места, лишние предметы выброшены на землю.");
+  } else await executeInventoryMutation(mutation, { reason });
+  return { dropped };
 }
 
 async function spendCraftRequirements(actor, requirements = [], plan = null) {
@@ -3477,7 +3904,7 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
       updates.push({ _id: itemId, "system.quantity": remaining });
     }
   }
-  return { updates, deletes };
+  return { updates, deletes, consumedByItemId };
 }
 
 function createCraftToolRequirementSpendPlan(actor, requirements = [], selections = {}, index = null) {
@@ -3621,40 +4048,82 @@ async function createCraftFailureOutputPlan(actor, recipe, mode = CRAFT_MODE_CRE
   if (!failureOutputs?.length) return { valid: true, updates: [], creates: [] };
   const specs = [];
   for (const output of failureOutputs) {
+    if (Number(output.quantity) <= 0) continue;
     const source = resolveWorldItemSync(output.sourceUuid);
     if (!source) return { valid: false, message: "Результат при провале не найден." };
     specs.push({
-      data: createCraftOutputItemData(source, { mode }),
+      data: createCraftOutputItemData(source, { mode, emptyContents: true }),
       quantity: Math.max(1, toInteger(output.quantity) || 1)
     });
   }
   const outputSpecs = mergeCraftOutputSpecs(specs);
   const projectedItems = projectCraftInventoryState(actor, spendPlan ?? { updates: [], deletes: [] });
-  return planCraftOutputPlacement(actor, outputSpecs, projectedItems);
+  return mode === CRAFT_MODE_DISASSEMBLY
+    ? planCraftDisassemblyPlacement(actor, outputSpecs, projectedItems, spendPlan)
+    : planCraftOutputPlacement(actor, outputSpecs, projectedItems);
 }
 
 async function createCraftOutputPlan(actor, recipe, mode = CRAFT_MODE_CREATE, outputs = [], spendPlan = null, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
   const outputSpecs = await getCraftOutputSpecs(recipe, mode, outputs, recipeId);
   if (!outputSpecs.length) return { valid: true, updates: [], creates: [] };
   const projectedItems = projectCraftInventoryState(actor, spendPlan ?? { updates: [], deletes: [] });
-  const plan = planCraftOutputPlacement(actor, outputSpecs, projectedItems);
+  const plan = mode === CRAFT_MODE_DISASSEMBLY
+    ? planCraftDisassemblyPlacement(actor, outputSpecs, projectedItems, spendPlan)
+    : planCraftOutputPlacement(actor, outputSpecs, projectedItems);
   return plan;
+}
+
+function getCraftConsumedInputs(actor, requirements = []) {
+  const consumed = requirements.every(requirement => requirement.itemId)
+    ? requirements.reduce((map, requirement) => map.set(requirement.itemId, (map.get(requirement.itemId) ?? 0) + requirement.quantity), new Map())
+    : createCraftRequirementSpendPlan(actor, requirements).consumedByItemId;
+  return [...consumed].filter(([, quantity]) => quantity > 0)
+    .map(([id, quantity]) => ({ item: actor.items.get(id), quantity })).filter(input => input.item);
+}
+
+function prepareCraftDisassemblyResources(actor, requirements, outputs, repetitions = 1) {
+  const inputs = getCraftConsumedInputs(actor, requirements);
+  return {
+    inputs,
+    outputs: scaleCraftDisassemblyOutputs(outputs, inputs, repetitions),
+    embedded: getCraftEmbeddedReturns(inputs)
+  };
+}
+
+function prepareCraftEmbeddedCreation(actor, recipe, spendPlan, recipeId, options = {}) {
+  const occupiedParents = new Set((actor.items.contents ?? []).map(item => getItemContainerParentId(item)).filter(Boolean));
+  const inventory = getCraftAvailabilityIndex(actor).items.map(entry => entry.item)
+    .filter(item => !occupiedParents.has(item.id));
+  return planCraftEmbeddedCreation(recipe, inventory, {
+    quantity: getCraftRecipeOutputQuantity(recipe, recipeId),
+    consumed: spendPlan.consumedByItemId,
+    selections: options?.selections ?? {}
+  });
 }
 
 async function getCraftOutputSpecs(recipe, mode = CRAFT_MODE_CREATE, outputs = [], recipeId = DEFAULT_CRAFT_RECIPE_ID) {
   if (normalizeCraftMode(mode) !== CRAFT_MODE_DISASSEMBLY) {
     return mergeCraftOutputSpecs([{
-      data: createCraftOutputItemData(recipe, { mode }),
+      data: createCraftOutputItemData(recipe, { mode, emptyContents: true }),
       quantity: getCraftRecipeOutputQuantity(recipe, recipeId)
     }]);
   }
 
   const specs = [];
   for (const output of outputs) {
+    if (Number(output.quantity) <= 0) continue;
+    if (output.embedded && !output.data) throw new Error(`Не найден встроенный предмет: ${output.name}`);
+    if (output.data) {
+      specs.push({ quantity: output.quantity, data: createCraftOutputItemData({
+        uuid: output.sourceUuid,
+        toObject: () => foundry.utils.deepClone(output.data)
+      }, { mode }) });
+      continue;
+    }
     const source = resolveWorldItemSync(output.sourceUuid);
     if (!source) throw new Error("Результат разбора не найден.");
     specs.push({
-      data: createCraftOutputItemData(source, { mode }),
+      data: createCraftOutputItemData(source, { mode, emptyContents: true }),
       quantity: Math.max(1, toInteger(output.quantity) || 1)
     });
   }
@@ -3666,12 +4135,15 @@ function getCraftRecipeOutputQuantity(recipe, recipeId = DEFAULT_CRAFT_RECIPE_ID
   return Math.max(1, toInteger(root?.quantity) || toInteger(recipe?.system?.quantity) || 1);
 }
 
-function createCraftOutputItemData(source, { mode = CRAFT_MODE_CREATE } = {}) {
-  const data = createSourcedInventoryItemData(source);
+function createCraftOutputItemData(source, { mode = CRAFT_MODE_CREATE, emptyContents = false } = {}) {
+  const data = emptyContents
+    ? planCraftEmbeddedCreation(source, [], { quantity: 1 }).specs[0].data
+    : createSourcedInventoryItemData(source);
   delete data._id;
   delete data.id;
   delete data.folder;
   foundry.utils.setProperty(data, "system.equipped", false);
+  foundry.utils.setProperty(data, "system.stackParts", []);
   foundry.utils.setProperty(data, "system.container.parentId", ROOT_CONTAINER_ID);
   foundry.utils.setProperty(data, "system.placement.mode", "inventory");
   foundry.utils.setProperty(data, "system.placement.equipmentSlot", "");
@@ -3693,6 +4165,7 @@ function createCraftOutputItemData(source, { mode = CRAFT_MODE_CREATE } = {}) {
 function mergeCraftOutputSpecs(specs = []) {
   const merged = [];
   for (const spec of specs) {
+    if (Number(spec?.quantity) <= 0) continue;
     const quantity = Math.max(1, toInteger(spec?.quantity) || 1);
     const data = foundry.utils.deepClone(spec?.data ?? {});
     foundry.utils.setProperty(data, "system.quantity", 1);
@@ -3705,6 +4178,35 @@ function mergeCraftOutputSpecs(specs = []) {
     merged.push({ key, data, quantity });
   }
   return merged;
+}
+
+function planCraftDisassemblyPlacement(actor, outputSpecs = [], projectedItems = [], spendPlan = {}) {
+  const accepted = [], overflow = [];
+  const attempt = specs => {
+    const plan = planCraftOutputPlacement(actor, specs, projectedItems);
+    if (!plan.valid) return plan;
+    try {
+      validateActorInventoryState(actor, projectCraftInventoryState(actor, {
+        updates: [...(spendPlan?.updates ?? []), ...(plan.updates ?? [])],
+        deletes: spendPlan?.deletes ?? [], creates: plan.creates ?? []
+      }));
+    } catch (error) { return { valid: false, message: error.message }; }
+    return plan;
+  };
+  const complete = attempt(outputSpecs);
+  if (complete.valid) return { ...complete, overflow: [] };
+  let result = attempt([]);
+  for (const spec of outputSpecs) {
+    let low = 0, high = spec.quantity;
+    while (low < high) {
+      const quantity = Math.ceil((low + high) / 2);
+      const plan = attempt([...accepted, { ...spec, quantity }]);
+      if (plan.valid) { low = quantity; result = plan; } else high = quantity - 1;
+    }
+    if (low) accepted.push({ ...spec, quantity: low });
+    if (low < spec.quantity) overflow.push({ data: spec.data, quantity: spec.quantity - low });
+  }
+  return { ...result, overflow };
 }
 
 function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) {
@@ -3938,9 +4440,46 @@ async function applyCraftOutputPlan(actor, outputPlan = {}) {
   }, { reason: "craft-output" });
 }
 
-function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID, toolPickerNodeId = "", toolSelections = {} } = {}) {
+function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID, toolPickerNodeId = "", toolSelections = {}, resourceOptions = {} } = {}) {
   mode = normalizeCraftMode(mode);
   const data = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId });
+  data.embeddedChips = [];
+  data.embeddedOptional = mode !== CRAFT_MODE_DISASSEMBLY;
+  if (mode === CRAFT_MODE_DISASSEMBLY && resourceOptions.sourceItemId) {
+    for (const requirement of data.requirements) {
+      requirement.itemId = resourceOptions.sourceItemId;
+      requirement.owned = getItemQuantity(actor?.items.get(resourceOptions.sourceItemId));
+    }
+  }
+  let resourceError = "";
+  try {
+    const spendPlan = createCraftRequirementSpendPlan(actor, data.requirements);
+    if (mode === CRAFT_MODE_DISASSEMBLY) {
+      const resources = prepareCraftDisassemblyResources(actor, data.requirements, data.outputs);
+      const byNode = new Map(resources.outputs.flatMap(output => (output.nodeIds ?? []).map(id => [id, output])));
+      data.nodes = data.nodes.map(node => {
+        if (byNode.has(node.id)) {
+          const output = byNode.get(node.id);
+          return { ...node, quantity: output.quantity, quantityLabel: formatCraftYieldQuantity(output.quantity, output.fullQuantity) };
+        }
+        if (node.root && resources.inputs.length === 1) {
+          const source = resources.inputs[0].item;
+          return { ...node, tooltipUuid: source.uuid, quantityLabel: `${getItemQuantity(source)}/${node.quantity}` };
+        }
+        return node;
+      });
+      data.outputs = resources.outputs;
+      data.embeddedChips = resources.embedded;
+      if (resources.embedded.some(output => !output.data)) resourceError = "Не найден встроенный предмет";
+    } else {
+      data.embeddedChips = prepareCraftEmbeddedCreation(actor, recipe, spendPlan, recipeId, resourceOptions).chips;
+    }
+  } catch (error) {
+    resourceError = error.message;
+    if (mode !== CRAFT_MODE_DISASSEMBLY) data.embeddedChips = planCraftEmbeddedCreation(recipe, [], {
+      quantity: getCraftRecipeOutputQuantity(recipe, recipeId), selections: resourceOptions.selections
+    }).chips;
+  }
   const missingCount = data.requirements.filter(requirement => requirement.owned < requirement.quantity).length
     + data.toolRequirements.filter(requirement => requirement.owned < requirement.quantity).length;
   const checks = getCraftCheckSummaries(data.links);
@@ -3950,9 +4489,14 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     prepareCraftOperationLinks(data.links, data.nodes)
   );
   const toolPickerNode = data.nodes.find(node => node.id === toolPickerNodeId && node.toolRequirements?.length) ?? null;
+  const graph = layoutCraftEmbeddedItems(data.nodes, data.links, data.embeddedChips, mode);
+  data.nodes = graph.nodes.map(node => ({ ...node, style: buildCraftNodeStyle(node) }));
+  data.links = graph.links;
+  data.blocks = getCraftBlocks(data.nodes).map(block => ({ ...block, label: `Craft block ${block.id}`, style: buildCraftNodeStyle(block) }));
   return {
     mode,
     ...data,
+    embeddedBusy: busy,
     actionTitle: mode === CRAFT_MODE_DISASSEMBLY ? "Разобрать" : "Произвести крафт",
     actionIcon: mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
     nodes: data.nodes.map(node => ({
@@ -3961,12 +4505,12 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     })),
     toolPicker: null,
     checks,
-    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && (data.requirements.length || data.toolRequirements.length) && hasRequiredComponents && !unmetSkillThreshold && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
-    summary: unmetSkillThreshold
+    canCraft: Boolean((actorKnowsCraftItem(actor, recipe) || (mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) && actor?.isOwner && !busy && !resourceError && data.links.length && (data.requirements.length || data.toolRequirements.length) && hasRequiredComponents && !unmetSkillThreshold && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
+    summary: resourceError || (unmetSkillThreshold
       ? getCraftSkillThresholdMessage(unmetSkillThreshold, mode)
       : (missingCount
         ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов/инструментов: ${missingCount}`)
-        : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}, инструменты: ${data.toolRequirements.length}`))
+        : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}, инструменты: ${data.toolRequirements.length}`)))
   };
 }
 
@@ -4801,6 +5345,7 @@ function getIndexedCraftRequirementCandidates(index = null, requirement = {}) {
 
 function craftIndexedItemMatchesRequirement(indexedItem = {}, requirement = {}) {
   if (indexedItem.quantity <= 0) return false;
+  if (requirement.itemId && indexedItem.item?.id !== requirement.itemId) return false;
 
   const requirementKeys = new Set(Array.from(requirement.sourceKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
   const itemKeys = indexedItem.sourceKeys ?? new Set();
@@ -5108,8 +5653,8 @@ function getCraftViewport(item, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRA
   return normalizeCraftViewport(getCraftRecipeData(item, mode, recipeId)?.viewport ?? {});
 }
 
-function getCraftFitViewport(item, mode = CRAFT_MODE_CREATE, workspace = null, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
-  const nodes = getCraftNodesWithRoot(item, mode, recipeId);
+function getCraftFitViewport(item, mode = CRAFT_MODE_CREATE, workspace = null, recipeId = DEFAULT_CRAFT_RECIPE_ID, nodes = null) {
+  nodes ??= getCraftNodesWithRoot(item, mode, recipeId);
   const bounds = getCraftNodesBounds(nodes);
   const rect = workspace?.getBoundingClientRect?.();
   if (!bounds || !rect?.width || !rect?.height) return getCraftViewport(item, mode, recipeId);
@@ -6238,13 +6783,15 @@ function normalizeToolClass(value) {
   return Object.hasOwn(TOOL_CLASS_RANK, toolClass) ? toolClass : "D";
 }
 
-function prepareCraftRecipeCategories(recipes = [], { selectedRecipeUuid = "", search = "", expandedKeys = new Set(), mode = CRAFT_MODE_CREATE } = {}) {
+function prepareCraftRecipeCategories(recipes = [], { selectedRecipeUuid = "", search = "", expandedKeys = new Set(), mode = CRAFT_MODE_CREATE, actor = null } = {}) {
   mode = normalizeCraftMode(mode);
   const normalizedSearch = normalizeCraftSearchText(search);
   const matched = [];
   for (const recipe of recipes) {
     if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
-    const searchText = recipe.searchText ?? normalizeCraftSearchText(getCraftRecipeDisplayName(recipe));
+    const searchText = recipe.known === false
+      ? normalizeCraftSearchText(`${recipe.category} ${recipe.itemClass}`)
+      : recipe.searchText ?? normalizeCraftSearchText(getCraftRecipeDisplayName(recipe));
     if (normalizedSearch && !searchText.includes(normalizedSearch)) continue;
     matched.push(recipe);
   }
@@ -6257,11 +6804,15 @@ function prepareCraftRecipeCategories(recipes = [], { selectedRecipeUuid = "", s
 
   // Every matched recipe is materialized. Only collapsed folders are skipped,
   // and they are reopened by the user, so nothing is ever silently dropped.
-  const prepareRecipes = list => list.map(recipe => ({
+  const availability = actor ? getCraftAvailabilityIndex(actor) : null;
+  const prepareRecipes = list => list.map(recipe => prepareCraftRecipeDisplay({
     ...recipe,
-    missing: craftRecipeMissingCache.get(getCraftRecipeMissingCacheKey(mode, recipe.uuid)) ?? false,
+    unknown: recipe.known === false,
+    missing: recipe.known !== false && (actor
+      ? isCraftRecipeMissing(recipe, actor, mode, availability)
+      : craftRecipeMissingCache.get(getCraftRecipeMissingCacheKey(mode, recipe.uuid)) ?? false),
     selected: recipe.uuid === selectedRecipeUuid
-  }));
+  })).sort(compareCraftRecipeAvailability);
 
   const prepared = categories.map(category => {
     const categoryKey = craftCategoryExpansionKey(category.key);
@@ -6407,13 +6958,14 @@ async function getCraftRecipeSummaries(actor = null) {
   const bySourceUuid = new Map();
   const byUsageUuid = new Map();
   const byOutputUuid = new Map();
-  for (const itemUuid of knownUuids) {
+  for (const itemUuid of new Set([...knownUuids, ...(globalThis.game?.items?.contents ?? []).map(item => item.uuid)])) {
     const item = resolveWorldItemSync(itemUuid);
     if (!isCraftRecipeItem(item)) continue;
     const itemRecipes = getCraftRecipeCatalogEntries(item);
     for (const recipe of itemRecipes) {
       if (!hasCraftRecipeData(recipe)) continue;
       const summary = prepareRecipeSummary(item, recipe);
+      summary.known = knownUuids.has(item.uuid);
       recipes.push(summary);
       byUuid.set(summary.uuid, summary);
       for (const sourceKey of getCraftItemSourceProfile(item.uuid).sourceKeys) {
@@ -6507,7 +7059,7 @@ function prepareRecipeSummary(item, recipe = createDefaultCraftRecipeEntry(item)
       itemCategory: String(item.system?.itemCategory ?? ""),
       itemSubcategory: String(item.system?.itemSubcategory ?? ""),
       placement: item.system?.placement ?? {},
-      craft: recipe
+      craft: { ...recipe, disassemblyRequiresRecipe: Boolean(item.system?.craft?.disassemblyRequiresRecipe) }
     }
   };
   summary.itemClass = getCraftItemClass(item);
@@ -6690,4 +7242,9 @@ function waitForAnimationFrame() {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function canUseOwnedDisassembly(actor, recipe) {
+  if (!actor || !recipe || recipe.system?.craft?.disassemblyRequiresRecipe) return false;
+  return (actor.items?.contents ?? []).some(item => getItemQuantity(item) > 0 && craftItemMatchesRecipeSource(item, { itemUuid: recipe.itemUuid ?? recipe.uuid }));
 }

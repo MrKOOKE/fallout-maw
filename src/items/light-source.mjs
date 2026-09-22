@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { getSourceToggleIcon } from "../settings/accessors.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { FALLBACK_ICON, escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
@@ -687,7 +688,7 @@ function renderLightSourceEnergyDialogContent({ actor = null, token = null, item
         <div class="fallout-maw-reload-source-pane">
           <span>${escapeHTML(getLightSourceDisplayName(item))}</span>
           <button type="button" class="fallout-maw-reload-source-card active" data-light-source-dialog-toggle ${toggleDisabled ? "disabled" : ""}>
-            <img src="${escapeAttribute(normalizeImagePath("icons/svg/light.svg", FALLBACK_ICON))}" alt="">
+            <img src="${escapeAttribute(getSourceToggleIcon(active))}" alt="">
             <span>${escapeHTML(game.i18n.localize(active ? "FALLOUTMAW.Item.LightSourceToggleOff" : "FALLOUTMAW.Item.LightSourceToggleOn"))}</span>
           </button>
         </div>

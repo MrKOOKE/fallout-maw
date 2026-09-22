@@ -1661,6 +1661,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.element?.querySelector("[data-craft-recipe-select]"),
       event => this.#onCraftRecipeSelect(event)
     );
+    this.element?.querySelector("[data-disassembly-requires-recipe]")?.addEventListener("change", event => {
+      void this.item.update({ "system.craft.disassemblyRequiresRecipe": event.currentTarget.checked });
+    });
     this.element?.querySelector("[data-craft-add-recipe]")?.addEventListener("click", event => this.#onCraftAddRecipe(event));
     this.element?.querySelector("[data-craft-delete-recipe]")?.addEventListener("click", event => this.#onCraftDeleteRecipe(event));
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {

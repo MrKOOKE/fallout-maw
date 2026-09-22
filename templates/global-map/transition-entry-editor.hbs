@@ -1,4 +1,5 @@
 <div class="fallout-maw-global-map-form">
+  {{#if levels.length}}<div class="form-group"><label>Уровень</label><div class="form-fields"><select name="entry.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
   <div class="form-group">
     <label>Цвет связанной зоны</label>
     <div class="form-fields"><input type="color" name="entry.color" value="{{entry.entryColor}}"></div>

@@ -4,7 +4,7 @@ import { transferInventoryContentsBatch } from "../inventory/contents-batch.mjs"
 import { transferInventoryContents } from "../inventory/contents-transfer.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
-import { findFreeWeaponModuleSlot } from "../utils/weapon-modules.mjs";
+import { findFreeFunctionModuleSlot } from "../utils/weapon-modules.mjs";
 import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { planEquippedItemSwap } from "../inventory/equipment-swap.mjs";
@@ -4165,7 +4165,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const item = actor?.items?.get(String(element.dataset.itemId ?? ""));
       if (!actor || !item) continue;
       const matches = state.kind === "modules"
-        ? Boolean(findFreeWeaponModuleSlot(sourceItem, item))
+        ? Boolean(findFreeFunctionModuleSlot(sourceItem, item))
         : state.kind === "energy"
         ? isTradeEnergyCompatibleItem(sourceItem, item)
         : isTradeAmmoCompatibleItem(sourceItem, item);

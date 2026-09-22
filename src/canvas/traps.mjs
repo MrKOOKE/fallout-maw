@@ -1,3 +1,5 @@
+import { captureSceneCreationPoint, getSceneCreationLevels } from "./creation-levels.mjs";
+import { finalizeActiveItemActionPointCost } from "../utils/action-point-cost-limits.mjs";
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
@@ -469,7 +471,8 @@ async function handleTrapDetectionForToken(tile, token) {
   await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.attemptedDetectionActorUuids`]: Array.from(attempted) }, { render: false });
 
   const trapData = normalizeTrapData(trap.data);
-  const difficulty = Math.max(0, trapData.detection.difficulty + getTrapDetectionLightingDifficultyBonus(tile, trapData));
+  const level = (token?.document ?? token)?.level;
+  const difficulty = Math.max(0, trapData.detection.difficulty + getTrapDetectionLightingDifficultyBonus(tile, trapData, level));
   const skillKey = trapData.detection.skillKey;
   const outcome = await requestSkillCheck({
     actor,
@@ -686,7 +689,7 @@ async function onTrapPlacementPointerDown(event) {
   }
 
   const trapData = normalizeTrapData(getTrapFunction(item));
-  const apCost = Math.max(0, toInteger(trapData.actionPointCost));
+  const apCost = finalizeActiveItemActionPointCost(trapData.actionPointCost);
   if (!canSpendCombatActionPoints(actor, apCost, { label: "установки ловушки" })) return;
 
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
@@ -2186,6 +2189,7 @@ function getTrapViewerActor() {
 async function requestCreateTrapDocuments(request = {}) {
   const serialized = serializeTrapCreateRequest({
     ...request,
+    point: captureSceneCreationPoint(game.scenes?.get(request.sceneId), request.point),
     operationId: String(request.operationId ?? "").trim() || foundry.utils.randomID()
   });
   if (game.user?.isGM) return createTrapDocumentsNow(serialized, game.user.id);
@@ -2494,6 +2498,7 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
     height: tileDimensions.height,
     rotation,
     elevation: Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : 0,
+    levels: getSceneCreationLevels(scene, point),
     sort: getNextTileSort(scene),
     hidden: false,
     locked: true,
@@ -2560,7 +2565,7 @@ async function createTrapActivationDocuments(scene, tile, trapData, rect, clippe
     y: Math.round(triggerRect.y + (triggerRect.height / 2))
   };
   const detectionRadius = metersToPixels(normalizedTrapData.detection.radiusMeters, scene, ownerActorUuid);
-  const levelId = getRegionRestrictionLevelId(scene);
+  const levels = getSceneCreationLevels(scene, tile);
   const regionData = [];
   if (detectionRadius > 0) {
     regionData.push({
@@ -2574,8 +2579,8 @@ async function createTrapActivationDocuments(scene, tile, trapData, rect, clippe
         gridBased: false
       }],
       elevation: { bottom: null, top: null },
-      levels: levelId ? [levelId] : [],
-      restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
+      levels,
+      restriction: { enabled: levels.length > 0, type: "move", priority: 0 },
       visibility: CONST.REGION_VISIBILITY.LAYER,
       highlightMode: "shapes",
       displayMeasurements: false,
@@ -2598,8 +2603,8 @@ async function createTrapActivationDocuments(scene, tile, trapData, rect, clippe
       origin: null
     })),
     elevation: { bottom: null, top: null },
-    levels: levelId ? [levelId] : [],
-    restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
+    levels,
+    restriction: { enabled: levels.length > 0, type: "move", priority: 0 },
     visibility: CONST.REGION_VISIBILITY.LAYER,
     highlightMode: "shapes",
     displayMeasurements: false,
@@ -2804,7 +2809,7 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
   const durationSeconds = Math.max(0, toInteger(trapData.effect.regionDurationSeconds));
   if (!radiusPixels || durationSeconds <= 0) return null;
 
-  const levelId = getRegionRestrictionLevelId(scene);
+  const levels = getSceneCreationLevels(scene, tile);
   const centerElevation = Number.isFinite(Number(center?.elevation)) ? Number(center.elevation) : 0;
   const created = await scene.createEmbeddedDocuments("Region", [{
     name: `${tile.name}: область`,
@@ -2817,8 +2822,8 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
       gridBased: false
     }],
     elevation: getSphericalRegionElevation(centerElevation, radiusPixels, scene),
-    levels: levelId ? [levelId] : [],
-    restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
+    levels,
+    restriction: { enabled: levels.length > 0, type: "move", priority: 0 },
     visibility: CONST.REGION_VISIBILITY.ALWAYS,
     highlightMode: "shapes",
     displayMeasurements: false,
@@ -3490,11 +3495,11 @@ function normalizeTrapDetectionConditions(conditions = []) {
   ));
 }
 
-function getTrapDetectionLightingDifficultyBonus(tile, trapData) {
+function getTrapDetectionLightingDifficultyBonus(tile, trapData, level) {
   const condition = trapData?.detection?.conditions
     ?.find(entry => entry.type === TRAP_DETECTION_LIGHTING_CONDITION);
   if (!condition?.thresholds?.length) return 0;
-  const illuminationPercent = getTrapIlluminationPercent(tile);
+  const illuminationPercent = getTrapIlluminationPercent(tile, level);
   return condition.thresholds.reduce((bonus, threshold) => (
     illuminationPercent <= threshold.illuminationPercent
       ? Math.max(bonus, threshold.difficultyBonus)
@@ -3502,11 +3507,11 @@ function getTrapDetectionLightingDifficultyBonus(tile, trapData) {
   ), 0);
 }
 
-function getTrapIlluminationPercent(tile) {
-  const samples = getTrapVisibilityTestPoints(tile).map(point => analyzeLightingPoint(point));
+function getTrapIlluminationPercent(tile, level) {
+  const samples = getTrapVisibilityTestPoints(tile).map(point => analyzeLightingPoint({ ...point, level }));
   const brightest = samples.reduce(
     (best, sample) => sample.effectiveDarkness < best.effectiveDarkness ? sample : best,
-    samples[0] ?? analyzeLightingPoint(getTileCenter(tile))
+    samples[0] ?? analyzeLightingPoint({ ...getTileCenter(tile), level })
   );
   return Math.max(0, Math.min(100, Math.round((1 - brightest.effectiveDarkness) * 100)));
 }
@@ -3676,6 +3681,7 @@ function getTokenCenter(token) {
 }
 
 function getTrapPlacementRectFromPoint(point, trapData, scene, rotation = 0) {
+  point = captureSceneCreationPoint(scene, point);
   const dimensions = getTrapPlacementDimensions(trapData, scene, rotation);
   const width = dimensions.width;
   const height = dimensions.height;
@@ -3685,7 +3691,8 @@ function getTrapPlacementRectFromPoint(point, trapData, scene, rotation = 0) {
     y: Math.round(center.y - (height / 2)),
     width,
     height,
-    elevation: Number(point?.elevation) || 0
+    elevation: Number(point?.elevation) || 0,
+    level: point.level
   };
 }
 
@@ -3983,11 +3990,6 @@ function getNextTileSort(scene) {
   return Math.max(0, ...(scene?.tiles?.contents ?? []).map(tile => Number(tile.sort) || 0)) + 1;
 }
 
-function getRegionRestrictionLevelId(scene) {
-  if (canvas.scene?.id === scene?.id && canvas.level?.id) return canvas.level.id;
-  return scene?._view ?? scene?.initialLevel?.id ?? scene?.firstLevel?.id ?? "";
-}
-
 async function consumeTrapItem(item, { documentOptions = {} } = {}) {
   if (!item || getItemQuantity(item) <= 0) {
     throw new Error("The source trap Item is no longer available.");
@@ -4020,6 +4022,7 @@ function serializeTrapCreateRequest(request = {}) {
 
 function serializePoint(point = {}) {
   return {
+    level: point?.level,
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0,
     elevation: Number(point?.elevation) || 0

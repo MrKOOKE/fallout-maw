@@ -239,8 +239,8 @@ export function collectStealthMovementInterruptions({ tokenDocument, movement, o
         const previous = segmentSamples[segmentIndex - 1];
         const current = segmentSamples[segmentIndex];
         if (collectAll) routeSteps.push(current);
-        const previousPoint = normalizePoint(previous?.point, tokenDocument.elevation);
-        const currentPoint = normalizePoint(current?.point, tokenDocument.elevation);
+        const previousPoint = normalizePoint(previous?.point, tokenDocument.elevation, previous?.waypoint?.level ?? tokenDocument.level);
+        const currentPoint = normalizePoint(current?.point, tokenDocument.elevation, current?.waypoint?.level ?? tokenDocument.level);
         const rawSegmentCost = getStealthMovementSegmentDistance(previous, current);
         const movementCost = calculateCombatMovementCostTrancheDelta(
           movementCostProfile,
@@ -334,8 +334,8 @@ function collectUniqueStealthMovementPoints(tokenDocument, routeSamples) {
     );
     for (const sample of segmentSamples) {
       if (!sample?.point) continue;
-      const point = normalizeStealthDetectionTargetPoint(sample.point, tokenDocument?.elevation);
-      points.set(`${point.x}:${point.y}:${point.elevation}`, point);
+      const point = normalizeStealthDetectionTargetPoint({ ...sample.point, level: sample.waypoint?.level ?? tokenDocument?.level }, tokenDocument?.elevation);
+      points.set(`${point.x}:${point.y}:${point.elevation}:${point.level ?? ""}`, point);
     }
   }
   return [...points.values()];
@@ -367,7 +367,7 @@ function normalizeStealthDetectionTargetPoint(point, elevation) {
     && typeof grid?.getOffset === "function"
     && typeof grid?.getCenterPoint === "function"
   ) {
-    normalized = normalizePoint(grid.getCenterPoint(grid.getOffset(normalized)), normalized.elevation);
+    normalized = normalizePoint(grid.getCenterPoint(grid.getOffset(normalized)), normalized.elevation, normalized.level);
   }
   return normalized;
 }

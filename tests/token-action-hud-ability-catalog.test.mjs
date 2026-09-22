@@ -16,21 +16,21 @@ test("HUD ability categories start collapsed and preserve explicitly expanded ca
   assert.match(template, /{{#if open}}open{{\/if}}/);
 });
 
-test("HUD ability category blocks use a two-column grid", () => {
+test("HUD active and passive groups use independent columns and scroll containers", () => {
   assert.match(
     styles,
-    /\.fallout-maw-token-hud-ability-section\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s
+    /\.fallout-maw-token-hud-popup\.abilities\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s
   );
   assert.match(
     styles,
-    /\.fallout-maw-token-hud-ability-section-title\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s
+    /\.fallout-maw-token-hud-ability-section\s*\{[^}]*max-height:\s*var\(--fallout-maw-token-hud-popup-max-height\)[^}]*overflow:\s*hidden auto[^}]*scrollbar-gutter:\s*stable/s
   );
 });
 
 test("HUD ability categories keep their summaries below upward-opening ability lists", () => {
   assert.match(
     styles,
-    /\.fallout-maw-token-hud-ability-section\s*\{[^}]*align-items:\s*end/s
+    /\.fallout-maw-token-hud-ability-section\s*\{[^}]*align-self:\s*end/s
   );
   assert.match(
     styles,

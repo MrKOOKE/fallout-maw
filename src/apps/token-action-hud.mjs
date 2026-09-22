@@ -2,15 +2,18 @@ import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotC
 ﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
+import { calculateCurrencyAmount } from "../utils/currency-input.mjs";
 import { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
+  getCurrencySettings,
   getActorNeedSettings,
   getDamageTypeSettings,
   getLevelSettings,
   getResourceSettings,
   getSkillSettings,
   getSystemActionSettings,
+  getSourceToggleIcon,
   getTokenActionHudIcons
 } from "../settings/accessors.mjs";
 import {
@@ -571,6 +574,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
+      gmAwardCurrency: TokenActionHud.#onGmAwardCurrency,
       gmManageRecipeKnowledge: TokenActionHud.#onGmManageRecipeKnowledge,
       endCombatTurn: TokenActionHud.#onEndCombatTurn,
       openSettings: TokenActionHud.#onOpenSettings,
@@ -1045,6 +1049,38 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (!game.user?.isGM) return undefined;
     await openRecipeKnowledgeManager(getSelectedHudActors());
+    return this.render({ force: true });
+  }
+
+  static async #onGmAwardCurrency(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return;
+    const actors = getSelectedHudActors();
+    const currencies = getCurrencySettings();
+    if (!actors.length || !currencies.length) return;
+    const formData = await DialogV2.input({
+      window: { title: "Выдать валюту" },
+      content: `
+        <label class="fallout-maw-stacked-field">
+          <span>Валюта</span>
+          <select name="currency">${currencies.map(currency => `<option value="${escapeAttribute(currency.key)}">${escapeHTML(currency.label)}</option>`).join("")}</select>
+        </label>
+        <label class="fallout-maw-stacked-field">
+          <span>Сумма каждому</span>
+          <input type="number" name="amount" value="0" min="0" step="1" autofocus>
+        </label>
+      `,
+      ok: { label: "Выдать", icon: "fa-solid fa-coins", callback: (_event, button) => new FormDataExtended(button.form).object },
+      position: { width: 360 },
+      rejectClose: false
+    });
+    if (!formData || !game.user?.isGM) return;
+    const currency = getCurrencySettings().find(entry => entry.key === formData.currency);
+    const amount = Number(formData.amount);
+    if (!currency || !Number.isSafeInteger(amount) || amount <= 0) return;
+    const updates = actors.map(actor => ({ actor, amount: calculateCurrencyAmount(`+${amount}`, actor.system?.currencies?.[currency.key]) }));
+    if (updates.some(update => update.amount === null)) return ui.notifications.warn("Слишком большая сумма валюты.");
+    for (const update of updates) await update.actor.update({ [`system.currencies.${currency.key}`]: update.amount });
     return this.render({ force: true });
   }
 
@@ -2896,7 +2932,7 @@ function prepareSystemActionButtons(hudIcons = {}) {
   const campAction = {
     key: "camp",
     label: "Лагерь",
-    img: "icons/environment/settlement/tent.webp"
+    img: normalizeImagePath(hudIcons.activeActions?.camp, "icons/environment/settlement/tent.webp")
   };
   const configuredActions = getSystemActionSettings()
     .filter(action => action.key !== "stealth")
@@ -3647,7 +3683,7 @@ function prepareLightSourceActionRow(item = null, token = null, forceDisabled = 
       toggleable: true,
       toggled: active,
       disabled: forceDisabled || !canToggleOn,
-      img: normalizeImagePath(hudIcons.weaponActions?.[active ? "lightOff" : "lightOn"], "icons/svg/light.svg")
+      img: getSourceToggleIcon(active, hudIcons)
     }
   ];
   if (itemManagesEnergySources(item)) {

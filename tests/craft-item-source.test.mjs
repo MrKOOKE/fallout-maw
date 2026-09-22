@@ -130,3 +130,21 @@ test("material and disassembly matching reject sibling items with the same ances
   assert.equal(runtime.craftIndexedItemMatchesRequirement({ sourceKeys: getCraftItemSourceKeys(bagCopy) }, requirement), true);
   assert.equal(runtime.craftIndexedItemMatchesRequirement({ sourceKeys: getCraftItemSourceKeys(rigCopy) }, requirement), false);
 });
+
+test("unknown owned disassembly is accessible without revealing catalog creation or restricted disassembly", async () => {
+  const recipe = worldItem("junk", "Хлам");
+  setWorldItems([recipe]);
+  const owner = actor();
+  const copy = { ...createSourcedInventoryItemData(recipe), id: "owned", parent: owner, uuid: "Actor.diego.Item.owned" };
+  owner.items = { contents: [copy] };
+  const runtime = createCraftMenuRuntime();
+  assert.equal(runtime.canUseOwnedDisassembly(owner, recipe), true);
+  assert.deepEqual((await runtime.getCraftWindowOpenOptionsForItem(copy)).map(x => x.mode), ["disassembly"]);
+  assert.deepEqual(await runtime.getCraftWindowOpenOptionsForItem(recipe, owner), []);
+  assert.deepEqual(await runtime.getCraftWindowOpenOptionsForItem(recipe, null), []);
+  assert.equal((await runtime.getCraftRecipeSummaries(owner))[0].known, false);
+  recipe.system.craft.disassemblyRequiresRecipe = true;
+  assert.equal(runtime.canUseOwnedDisassembly(owner, recipe), false);
+  const fresh = createCraftMenuRuntime();
+  assert.deepEqual(await fresh.getCraftWindowOpenOptionsForItem(copy), []);
+});

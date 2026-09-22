@@ -1,11 +1,13 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
+import { isLegacyResearchProgress } from "../settings/research.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { applyResearchTime, finalizeResearch, getResearchCheckCount } from "./research.mjs";
 import {
   RESEARCH_DEFAULT_DIFFICULTY,
   formatResearchValue,
+  normalizeResearchProgressPerSuccess,
   getResearchById
 } from "./storage.mjs";
 
@@ -22,7 +24,9 @@ export async function openCreateResearchDialog(actor) {
 
   const content = await renderTemplate(TEMPLATES.research.createDialog, {
     skills,
+    fixedProgress: !isLegacyResearchProgress(),
     defaults: {
+      progressPerSuccess: 1,
       difficulty: RESEARCH_DEFAULT_DIFFICULTY
     }
   });
@@ -56,7 +60,8 @@ export async function openManageResearchDialog(actor, researchId) {
   if (!research) return null;
 
   const content = await renderTemplate(TEMPLATES.research.manageDialog, {
-    research,
+    research: { ...research, progressPerSuccess: normalizeResearchProgressPerSuccess(research.progressPerSuccess) },
+    fixedProgress: !isLegacyResearchProgress(),
     skills: buildSkillOptions(research.skillKey)
   });
 
@@ -132,10 +137,12 @@ export async function openResearchTimeDialog(actor, researchId) {
   if (!research) return null;
 
   const content = await renderTemplate(TEMPLATES.research.timeDialog, {
+    fixedProgress: !isLegacyResearchProgress(),
     research: {
       ...research,
       progressLabel: formatResearchValue(research.progress),
       targetLabel: formatResearchValue(research.target),
+      progressPerSuccessLabel: formatResearchValue(normalizeResearchProgressPerSuccess(research.progressPerSuccess)),
       difficulty: Math.max(0, toInteger(research.difficulty))
     }
   });
@@ -212,6 +219,9 @@ function normalizeResearchFormData(data = {}) {
     name: String(data.name ?? "").trim(),
     skillKey: String(data.skillKey ?? "").trim(),
     progress: Number(data.progress) || 0,
+    ...(data.progressPerSuccess !== undefined
+      ? { progressPerSuccess: normalizeResearchProgressPerSuccess(data.progressPerSuccess) }
+      : {}),
     target: Math.max(1, Number(data.target) || 1),
     difficulty: Math.max(0, toInteger(data.difficulty ?? RESEARCH_DEFAULT_DIFFICULTY))
   };

@@ -261,7 +261,15 @@ export function registerAbilityEffectHooks() {
     "updateRegionBehavior",
     "deleteRegionBehavior"
   ]) {
-    Hooks.on(hookName, document => queueRegionPresenceSceneEffectSync(document));
+    Hooks.on(hookName, document => {
+      queueRegionPresenceSceneEffectSync(document);
+      const region = document?.documentName === "RegionBehavior" ? document.parent : document;
+      if (region?.parent?.id !== globalThis.canvas?.scene?.id) return;
+      // Unviewed levels have no darkness meshes and need not emit a native
+      // lightingRefresh when their regions change.
+      invalidateAbilityConditionLightingCache();
+      queueIlluminationConditionEffectSync();
+    });
   }
   Hooks.on("createActiveEffect", (effect, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
@@ -2042,7 +2050,7 @@ function isAuraTokenUpdateRelevant(changes = {}) {
 
 function isAuraTokenPositionUpdate(changes = {}) {
   const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
-  return paths.some(path => ["x", "y", "elevation"].includes(path));
+  return paths.some(path => ["x", "y", "elevation", "level"].includes(path));
 }
 
 async function deleteItemFreeSettingsEffects(actor, itemId = "", sourceItemUuid = "") {

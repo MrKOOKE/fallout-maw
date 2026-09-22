@@ -1,5 +1,41 @@
 <section class="fallout-maw-craft-window-craft">
-  {{#if recipe}}
+  {{#if bulk}}
+  <header class="fallout-maw-craft-window-toolbar">
+    <div class="fallout-maw-bulk-heading"><strong>Массовый разбор</strong><span>Сложность: {{bulk.difficulty}}</span></div>
+    <div class="fallout-maw-craft-window-actions">
+      <button type="button" data-bulk-clear {{#if bulk.busy}}disabled{{/if}}>Очистить</button>
+      <button type="button" data-bulk-run {{#unless bulk.canRun}}disabled{{/unless}}>Разобрать</button>
+    </div>
+  </header>
+  <div class="fallout-maw-bulk-body">
+    <section class="fallout-maw-bulk-bin" data-bulk-drop aria-label="Предметы для массового разбора">
+      <h2>Предметы для разбора</h2>
+      <div class="fallout-maw-bulk-grid">
+        {{#each bulk.rows}}
+        <article class="fallout-maw-bulk-item {{#if error}}invalid{{/if}}">
+          <img src="{{img}}" alt="{{name}}">
+          <div><strong>{{name}}</strong>
+            <button type="button" data-bulk-quantity="{{itemId}}" {{#if ../bulk.busy}}disabled{{/if}}>{{quantity}} шт.</button>
+            {{#if hasVariants}}<select data-bulk-recipe="{{itemId}}" aria-label="Вариант разбора" {{#if ../bulk.busy}}disabled{{/if}}>{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select>{{/if}}
+            {{#if error}}<span class="fallout-maw-bulk-error">{{error}}</span>{{/if}}
+          </div>
+          <button type="button" data-bulk-remove="{{itemId}}" aria-label="Убрать из разбора" {{#if ../bulk.busy}}disabled{{/if}}><i class="fa-solid fa-xmark"></i></button>
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">Перетащите предметы сюда. Shift+ЛКМ — вся пачка, Ctrl+ЛКМ — выбрать количество.</p>
+        {{/each}}
+      </div>
+    </section>
+    <section class="fallout-maw-bulk-results">
+      <h2>{{#if bulk.randomOutputs}}Возможный результат при успехе{{else}}Результат при успехе{{/if}}</h2>
+      <div class="fallout-maw-bulk-grid">
+        {{#each bulk.outputs}}
+        <article class="fallout-maw-bulk-item" data-tooltip-uuid="{{uuid}}"><img src="{{img}}" alt="{{name}}"><strong>{{name}}</strong><b>{{quantityLabel}}</b></article>
+        {{/each}}
+      </div>
+    </section>
+  </div>
+  {{else if recipe}}
   <header class="fallout-maw-craft-window-toolbar">
     <div class="fallout-maw-craft-window-title">
       <img src="{{recipe.img}}" alt="{{recipe.name}}" data-tooltip-uuid="{{recipe.uuid}}">
@@ -12,12 +48,12 @@
     </div>
     <div class="fallout-maw-craft-window-actions">
       {{#if craft.acquisition}}
-      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к схеме">
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к исходной вкладке" {{#unless craft.canReturn}}disabled{{/unless}}>
         <i class="fa-solid fa-arrow-left"></i>
         <span>Вернуться</span>
       </button>
       {{else if craft.usage}}
-      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к схеме">
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к исходной вкладке" {{#unless craft.canReturn}}disabled{{/unless}}>
         <i class="fa-solid fa-arrow-left"></i>
         <span>Вернуться</span>
       </button>
@@ -48,7 +84,7 @@
     {{#if craft.acquisition.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.acquisition.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" {{#if unknown}}aria-disabled="true" aria-label="Неизвестный рецепт"{{else}}data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0"{{/if}}>
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -89,7 +125,7 @@
     {{#if craft.usage.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.usage.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" {{#if unknown}}aria-disabled="true" aria-label="Неизвестный рецепт"{{else}}data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0"{{/if}}>
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -116,9 +152,10 @@
       <div class="fallout-maw-craft-block readonly" data-craft-block-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-label="{{label}}"></div>
       {{/each}}
       {{#each craft.nodes}}
-      <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if isToolRequirement}}tool-requirement{{/if}} {{#if toolPickerOpen}}selected{{/if}} {{#if missing}}missing{{/if}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" {{#if isToolRequirement}}data-craft-tool-node="true" data-search-actor-uuid="{{tooltipActorUuid}}" data-tooltip-item="{{tooltipItemId}}"{{else}}data-tooltip-uuid="{{tooltipUuid}}"{{/if}} style="{{style}}">
+      <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if isToolRequirement}}tool-requirement{{/if}} {{#if toolPickerOpen}}selected{{/if}} {{#if missing}}missing{{/if}} {{#if embeddedOptional}}embedded-optional {{#unless embeddedEnabled}}embedded-disabled{{/unless}}{{/if}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" {{#if isToolRequirement}}data-craft-tool-node="true" data-search-actor-uuid="{{tooltipActorUuid}}" data-tooltip-item="{{tooltipItemId}}"{{else}}data-tooltip-uuid="{{tooltipUuid}}"{{/if}} {{#if embeddedOptional}}data-craft-embedded-toggle="{{embeddedKey}}" role="button" tabindex="0" aria-label="{{name}}" aria-pressed="{{embeddedEnabled}}" aria-disabled="{{../craft.embeddedBusy}}"{{/if}} style="{{style}}">
         <span class="fallout-maw-craft-node-image">
           <img src="{{img}}" alt="{{name}}">
+          {{#if embeddedOptional}}<span class="fallout-maw-craft-embedded-check" aria-hidden="true"><i class="fa-regular {{#if embeddedEnabled}}fa-square-check{{else}}fa-square{{/if}}"></i></span>{{/if}}
           <span class="fallout-maw-craft-node-quantity">{{quantityLabel}}</span>
         </span>
         {{#if toolPickerOpen}}

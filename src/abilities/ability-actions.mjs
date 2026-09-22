@@ -1,3 +1,4 @@
+import { finalizeAttackActionPointCost } from "../utils/action-point-cost-limits.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
@@ -305,10 +306,10 @@ export function getConfiguredActionPointCost(actor, weapon, actionKey, weaponFun
   const action = normalizeAbilityAction(actionSource);
   if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.none) return 0;
   if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed) {
-    return Math.max(0, Math.trunc(Number(action.fixedActionPointCost) || 0));
+    return finalizeAttackActionPointCost(Math.trunc(Number(action.fixedActionPointCost) || 0), actionKey);
   }
   const actual = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
-  return Math.max(0, Math.ceil(actual * Math.max(0, Number(action.actualActionPointCostPercent) || 0) / 100));
+  return finalizeAttackActionPointCost(actual * Math.max(0, Number(action.actualActionPointCostPercent) || 0) / 100, actionKey);
 }
 
 export function buildAbilityActionPointCostLine(actor, amount = 0) {

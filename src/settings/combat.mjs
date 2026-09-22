@@ -22,6 +22,8 @@ const ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODE_VALUES = new Set(
 
 export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
   activeEffectDisplay: ACTIVE_EFFECT_DISPLAY_MODES.hover,
+  minimumAttackActionPointCost: 1,
+  minimumActiveItemActionPointCost: 1,
   turnOrder: Object.freeze({
     scheme: "block"
   }),
@@ -94,6 +96,8 @@ export function normalizeCombatSettings(value = {}) {
 
   return {
     activeEffectDisplay: normalizeActiveEffectDisplayMode(source.activeEffectDisplay),
+    minimumAttackActionPointCost: normalizeNonNegativeInteger(source.minimumAttackActionPointCost, 1),
+    minimumActiveItemActionPointCost: normalizeNonNegativeInteger(source.minimumActiveItemActionPointCost, 1),
     turnOrder: {
       scheme: TURN_ORDER_SCHEMES.has(source.turnOrder?.scheme)
         ? source.turnOrder.scheme

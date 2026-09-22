@@ -1,3 +1,4 @@
+import { captureSceneCreationPoint, getSceneCreationLevels } from "./creation-levels.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { withSystemEventRoot } from "../events/foundry-world-events.mjs";
 import {
@@ -492,7 +493,7 @@ function onPlacementKeyDown(event) {
 async function finishLightNetworkInteractionPlacement(event) {
   const placement = activePlacement;
   if (!placement || !canvas?.scene) return;
-  const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+  const point = captureSceneCreationPoint(canvas.scene, canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY }));
   const size = getSceneGridSize(canvas.scene);
   const center = getSnappedTileCenter(point, canvas.scene, size, size);
   const enabled = isLightNetworkEnabled({
@@ -508,7 +509,8 @@ async function finishLightNetworkInteractionPlacement(event) {
     y: Math.round(center.y),
     width: size,
     height: size,
-    elevation: 0,
+    elevation: point.elevation,
+    levels: getSceneCreationLevels(canvas.scene, point),
     texture: {
       src: image,
       anchorX: 0.5,

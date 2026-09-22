@@ -81,6 +81,7 @@ test("result cards preserve recipe selection and availability, excluding disasse
     ${productionFunction("hasCraftRecipeDataForMode")}
     ${productionFunction("getCraftRecipeDisplayName")}
     ${productionFunction("buildCompatibleCraftEntries")}
+    ${productionFunction("prepareCraftRecipeDisplay")}
     return buildCompatibleCraftEntries;
   `)(filterCompatibleCraftRecipes, hasCraftKnowledgeLayoutData, runtime.getCraftRecipeCategory);
   const recipe = id => ({
@@ -95,23 +96,121 @@ test("result cards preserve recipe selection and availability, excluding disasse
   ]);
   assert.equal(cards[0].name, "Round (10х)");
   assert.equal(cards[1].recipeName, "alternate");
+  const unknown = { ...recipe("unknown"), known: false };
+  const concealed = create(weapon(), "ammo", [unknown], {}, new Set());
+  assert.equal(concealed.length, 1);
+  assert.equal(concealed[0].unknown, true);
+  assert.equal(concealed[0].available, false);
+  assert.equal(concealed[0].recipeSelectionUuid, "");
+  assert.equal(concealed[0].tooltipUuid, "");
+  assert.notEqual(concealed[0].name, unknown.name);
 });
 
-test("compatibility opens the usage list without changing recipe search or expanded folders", () => {
-  const method = source.match(/  #showUsageCraftsForItem\([^]*?\n  \}/)?.[0];
-  assert.ok(method);
-  const TestWindow = new Function(`return class {
-    #usageTargetUuid = ""; #usageKind = "usage"; #acquisitionTargetUuid = "old";
-    #craftToolPickerNodeId = "old"; #craftViewportOverride = {};
-    #recipeSearch = "laser"; #expandedRecipeNodes = new Set(["c:Weapons"]);
-    #clearCraftContextOverlays() {} #saveActiveCraftTabState() {} #renderPreservingWindowStack() { return true; }
-    ${method}
-    open(item, kind) { return this.#showUsageCraftsForItem(item, kind); }
-    state() { return [this.#usageTargetUuid, this.#usageKind, this.#acquisitionTargetUuid, this.#recipeSearch, [...this.#expandedRecipeNodes]]; }
-  }`)();
-  const window = new TestWindow();
-  for (const kind of ["ammo", "modules", undefined]) {
-    assert.equal(window.open(weapon(), kind), true);
-    assert.deepEqual(window.state(), ["Item.weapon", kind ?? "usage", "", "laser", ["c:Weapons"]]);
+test("catalog includes unknown world recipes and learning changes their visibility without granting other recipes", async () => {
+  const items = ["first", "second"].map(id => ({
+    ...gear(id, {}), documentName: "Item",
+    system: { craft: { nodes: [{ id: "root", root: true }, { id: "material", itemUuid: "Item.material" }],
+      links: [{ from: "material", to: "root" }] } }
+  }));
+  game.items.contents = items;
+  const actor = { uuid: "Actor.learning", known: [], getFlag() { return this.known; } };
+  const runtime = createCraftMenuRuntime();
+  const hidden = await runtime.getCraftRecipeSummaries(actor);
+  assert.equal(hidden.length, 2);
+  assert.ok(hidden.every(recipe => recipe.known === false));
+  assert.deepEqual(await runtime.getCraftWindowOpenOptionsForItem(items[0], actor), []);
+  actor.known = [items[0].uuid];
+  const learned = await runtime.getCraftRecipeSummaries(actor);
+  assert.equal(learned.find(recipe => recipe.itemUuid === items[0].uuid).known, true);
+  assert.equal(learned.find(recipe => recipe.itemUuid === items[1].uuid).known, false);
+  assert.equal((await runtime.getCraftWindowOpenOptionsForItem(items[0], actor)).length, 1);
+  assert.deepEqual(await runtime.getCraftWindowOpenOptionsForItem(items[1], actor), []);
+});
+
+function createTabRuntime() {
+  const methods = ["createCraftTab", "ensureCraftTabs", "getActiveCraftTab", "saveActiveCraftTabState",
+    "loadCraftTabState", "addCraftTab", "selectCraftTab", "closeCraftTab", "getCraftReturnTab",
+    "returnFromCraftTab", "showUsageCraftsForItem", "showAcquisitionWaysForItem", "openSelection"];
+  const implementations = methods.map(name => {
+    const match = source.match(new RegExp(`  #?${name}\\([^]*?\\n  \\}`));
+    assert.ok(match, name);
+    return match[0].replaceAll("#", "");
+  }).join("\n");
+  let id = 0;
+  return new Function("foundry", `
+    const DEFAULT_CRAFT_RECIPE_ID = "recipe1", DEFAULT_CRAFT_TAB_NAME = "Craft";
+    const toInteger = value => Math.trunc(Number(value) || 0);
+    const normalizeCraftMode = value => value === "disassembly" ? value : "craft";
+    const parseCraftRecipeSelectionUuid = () => ({ recipeId: "recipe1" });
+    return new class {
+      craftTabs = []; activeCraftTabId = ""; busy = false;
+      updateCraftTabTitle() {} updateActiveCraftTabTitle() {}
+      clearCraftContextOverlays() {} clearInventoryTooltip() {}
+      renderPreservingWindowStack() { return true; }
+      ${implementations}
+    };
+  `)({ utils: { deepClone: structuredClone, randomID: () => `tab-${++id}` } });
+}
+
+test("every related-craft search opens a separate tab and return restores the original state", () => {
+  for (const kind of ["ammo", "modules", "usage", "acquisition"]) {
+    const window = createTabRuntime();
+    window.ensureCraftTabs();
+    const origin = window.activeCraftTabId;
+    window.selectedRecipeUuid = "Item.original::recipe:recipe1";
+    window.craftMode = "disassembly";
+    window.recipeSearch = "laser";
+    window.expandedRecipeNodes = new Set(["c:Weapons"]);
+    window.craftViewportOverride = { x: 25, y: 40, zoom: 2 };
+    window.craftRepeatCount = 3;
+    const open = kind === "acquisition" ? window.showAcquisitionWaysForItem : window.showUsageCraftsForItem;
+    assert.equal(open.call(window, weapon(), kind), true);
+    assert.equal(window.craftTabs.length, 2);
+    assert.notEqual(window.activeCraftTabId, origin);
+    assert.equal(window.getCraftReturnTab().id, origin);
+    assert.equal(kind === "acquisition" ? window.acquisitionTargetUuid : window.usageTargetUuid, "Item.weapon");
+    assert.equal(window.selectedRecipeUuid, "");
+    assert.equal(window.returnFromCraftTab(), true);
+    assert.equal(window.craftTabs.length, 1);
+    assert.equal(window.activeCraftTabId, origin);
+    assert.equal(window.selectedRecipeUuid, "Item.original::recipe:recipe1");
+    assert.equal(window.craftMode, "disassembly");
+    assert.equal(window.recipeSearch, "laser");
+    assert.deepEqual([...window.expandedRecipeNodes], ["c:Weapons"]);
+    assert.deepEqual(window.craftViewportOverride, { x: 25, y: 40, zoom: 2 });
+    assert.equal(window.craftRepeatCount, 3);
   }
+});
+
+test("nested search returns to its exact origin and missing origins disable return", () => {
+  const window = createTabRuntime();
+  window.ensureCraftTabs();
+  const root = window.activeCraftTabId;
+  window.showUsageCraftsForItem(weapon(), "ammo");
+  const ammoTab = window.activeCraftTabId;
+  window.showUsageCraftsForItem(weapon(), "modules");
+  assert.equal(window.getCraftReturnTab().id, ammoTab);
+  window.returnFromCraftTab();
+  assert.equal(window.activeCraftTabId, ammoTab);
+  assert.equal(window.usageKind, "ammo");
+  window.addCraftTab();
+  const unrelated = window.activeCraftTabId;
+  window.selectCraftTab(ammoTab);
+  window.closeCraftTab(root);
+  assert.equal(window.getCraftReturnTab(), null);
+  assert.equal(window.returnFromCraftTab(), undefined);
+  assert.equal(window.activeCraftTabId, ammoTab);
+  assert.deepEqual(window.craftTabs.map(tab => tab.id), [ammoTab, unrelated]);
+});
+
+test("opening a result recipe preserves its search tab", () => {
+  const window = createTabRuntime();
+  window.showUsageCraftsForItem(weapon(), "ammo");
+  const searchTab = window.activeCraftTabId;
+  window.openSelection({ recipeSelectionUuid: "Item.round::recipe:recipe1" });
+  assert.equal(window.craftTabs.length, 3);
+  assert.notEqual(window.activeCraftTabId, searchTab);
+  window.selectCraftTab(searchTab);
+  assert.equal(window.usageKind, "ammo");
+  assert.equal(window.usageTargetUuid, "Item.weapon");
 });

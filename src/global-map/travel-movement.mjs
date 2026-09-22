@@ -1,3 +1,4 @@
+import { getMapTokenLevelId, isMapAreaOnLevel } from "./levels.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { GLOBAL_MAP_SOCKET, TRAVEL_GROUP_FLAG } from "./constants.mjs";
 import { cellKey, getCellPath, pointToCell } from "./geometry.mjs";
@@ -48,8 +49,8 @@ export function getTravelMovementPreview(token = null, waypoint = null) {
   }
   positions.reverse();
   const cells = cellsFromPositions(tokenDocument.parent, tokenDocument, positions);
-  const blocked = findImpassableEntry(tokenDocument.parent, cells);
-  const metrics = calculateTravelMetrics(tokenDocument.parent, cells, localArmedMovement?.speedKmh);
+  const blocked = findImpassableEntry(tokenDocument.parent, cells, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
+  const metrics = calculateTravelMetrics(tokenDocument.parent, cells, localArmedMovement?.speedKmh, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
   return {
     blocked,
     distanceKm: metrics.distanceKm,
@@ -180,7 +181,7 @@ function handleDisarmRequest(payload) {
 function validateArmedTravelMovement(tokenDocument, movement) {
   if (!isTravelMovementArmed(tokenDocument)) return undefined;
   const cells = movementCells(tokenDocument.parent, tokenDocument, movement, "pending");
-  const blocked = findImpassableEntry(tokenDocument.parent, cells);
+  const blocked = findImpassableEntry(tokenDocument.parent, cells, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
   if (blocked) {
     ui.notifications.warn(`Вход в местность «${blocked.name || "Непроходимая местность"}» запрещён.`);
     void disarmTravelMovement();
@@ -205,11 +206,11 @@ async function processCompletedTravelMovement(tokenDocument, movement, _operatio
   const finished = await movement.finished;
   if (!finished) return emitMovementComplete(user.id, "Перемещение группы отменено.");
   const cells = movementCells(tokenDocument.parent, tokenDocument, movement, "passed");
-  const blocked = findImpassableEntry(tokenDocument.parent, cells);
+  const blocked = findImpassableEntry(tokenDocument.parent, cells, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
   if (blocked) return emitMovementComplete(user.id, "Маршрут пересекает непроходимую местность; время не изменено.");
   const speedKmh = await calculateTravelGroupSpeed(tokenDocument.actor);
   if (!(speedKmh > 0)) return emitMovementComplete(user.id, "Скорость группы равна нулю; время не изменено.");
-  const { seconds, distanceKm } = calculateTravelMetrics(tokenDocument.parent, cells, speedKmh);
+  const { seconds, distanceKm } = calculateTravelMetrics(tokenDocument.parent, cells, speedKmh, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
   await withSystemEventRoot({
     kind: "travelMovement",
     operationId: `travel-movement:${tokenDocument.parent.id}:${tokenDocument.id}:${foundry.utils.randomID()}`,
@@ -273,9 +274,9 @@ function positionToTokenCell(scene, tokenDocument, position) {
   });
 }
 
-function findImpassableEntry(scene, cells = []) {
+function findImpassableEntry(scene, cells = [], levelId) {
   if (cells.length < 2) return null;
-  const terrainByCell = buildTerrainCellMap(scene);
+  const terrainByCell = buildTerrainCellMap(scene, levelId);
   for (const cell of cells.slice(1)) {
     const terrain = terrainByCell.get(cellKey(cell));
     if ((Number(terrain?.difficulty) || 0) >= 100) return terrain;
@@ -283,9 +284,9 @@ function findImpassableEntry(scene, cells = []) {
   return null;
 }
 
-function calculateTravelMetrics(scene, cells = [], speedKmh = 0) {
+function calculateTravelMetrics(scene, cells = [], speedKmh = 0, levelId) {
   if (cells.length < 2 || !(speedKmh > 0)) return { distanceKm: 0, seconds: 0 };
-  const terrainByCell = buildTerrainCellMap(scene);
+  const terrainByCell = buildTerrainCellMap(scene, levelId);
   let hours = 0;
   let distanceKm = 0;
   for (let index = 0; index < cells.length - 1; index += 1) {
@@ -300,9 +301,10 @@ function calculateTravelMetrics(scene, cells = [], speedKmh = 0) {
   return { distanceKm, seconds: Math.ceil(hours * 3600) };
 }
 
-function buildTerrainCellMap(scene) {
+function buildTerrainCellMap(scene, levelId) {
   const map = new Map();
   for (const terrain of getSceneState(scene).terrains ?? []) {
+    if (!isMapAreaOnLevel(scene, terrain, levelId)) continue;
     for (const key of terrain.cells ?? []) map.set(String(key), terrain);
   }
   return map;

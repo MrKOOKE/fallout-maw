@@ -182,15 +182,17 @@ export function getTokenCenter(token) {
   return {
     x: Number(center?.x) || 0,
     y: Number(center?.y) || 0,
-    elevation: Number(center?.elevation ?? token?.document?.elevation) || 0
+    elevation: Number(center?.elevation ?? token?.document?.elevation) || 0,
+    ...(token?.document?.level !== undefined ? { level: token.document.level } : {})
   };
 }
 
-export function normalizePoint(point, elevation = 0) {
+export function normalizePoint(point, elevation = 0, level = point?.level) {
   return {
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0,
-    elevation: Number(point?.elevation ?? elevation) || 0
+    elevation: Number(point?.elevation ?? elevation) || 0,
+    ...(level !== undefined ? { level } : {})
   };
 }
 

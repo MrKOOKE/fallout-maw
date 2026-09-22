@@ -1,7 +1,13 @@
 import { localize } from "../utils/i18n.mjs";
+import { isLegacyResearchProgress } from "../settings/research.mjs";
 import { clampNumber, toInteger } from "../utils/numbers.mjs";
 
 export const RESEARCH_DEFAULT_DIFFICULTY = 60;
+
+export function normalizeResearchProgressPerSuccess(value = 1) {
+  const numeric = Number(value ?? 1);
+  return Number.isFinite(numeric) ? roundResearchValue(numeric) : 1;
+}
 
 export function prepareResearchForStorage(research = {}, { generateId = true } = {}) {
   const target = Math.max(1, Number(research.target) || 1);
@@ -12,6 +18,7 @@ export function prepareResearchForStorage(research = {}, { generateId = true } =
     name: String(research.name ?? "").trim() || localize("FALLOUTMAW.Common.Untitled"),
     skillKey: String(research.skillKey ?? "").trim(),
     progress: clampResearchProgress(research.progress, target),
+    progressPerSuccess: normalizeResearchProgressPerSuccess(research.progressPerSuccess),
     target,
     difficulty: Math.max(0, toInteger(research.difficulty ?? RESEARCH_DEFAULT_DIFFICULTY)),
     type: String(research.type ?? "").trim(),
@@ -41,6 +48,8 @@ export function prepareResearchesForDisplay(researches = [], skillSettings = [],
       ...research,
       progress,
       progressLabel: formatResearchValue(progress),
+      fixedProgress: !isLegacyResearchProgress(),
+      progressPerSuccessLabel: formatResearchValue(research.progressPerSuccess),
       targetLabel: formatResearchValue(research.target),
       difficulty: Math.max(0, toInteger(research.difficulty)),
       skillLabel: skillLabels.get(research.skillKey) || localize("FALLOUTMAW.Research.UnassignedSkill"),
@@ -62,9 +71,14 @@ export function roundResearchValue(value) {
 }
 
 export function formatResearchValue(value) {
-  const numeric = roundResearchValue(value);
+  const numeric = roundSignedResearchValue(value);
   if (Number.isInteger(numeric)) return String(numeric);
   return numeric.toFixed(2).replace(/\.?0+$/, "");
+}
+
+export function roundSignedResearchValue(value) {
+  const numeric = Number(value) || 0;
+  return Math.sign(numeric) * roundResearchValue(Math.abs(numeric));
 }
 
 function normalizeResearchRewards(rewards = []) {

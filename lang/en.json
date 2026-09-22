@@ -2053,6 +2053,8 @@
     },
     "Research": {
       "Title": "Research",
+      "ProgressPerSuccess": "Progress per success",
+      "LegacyProgress": "Research: legacy skill-based progress",
       "ApplyTime": "Apply Time",
       "Completed": "Completed",
       "CompletedChatMessage": "{actor} completed research \"{name}\".",
@@ -2286,6 +2288,8 @@
       },
       "Combat": {
         "Title": "Combat Settings",
+        "MinimumAttackActionPointCost": "Minimum attack action cost",
+        "MinimumActiveItemActionPointCost": "Minimum active item cost",
         "DodgeEnabled": "Use dodge as a resource",
         "DodgeAttackCostPercent": "Cost per attack, % of maximum dodge",
         "DodgeBurstMultiplier": "Burst multiplier",
@@ -2546,7 +2550,7 @@
       "ResearchCreated": "Research created.",
       "ResearchCompleted": "{actor} completed research \"{name}\".",
       "ResearchDeleted": "Research deleted.",
-      "ResearchProgressApplied": "{name}: +{gain} progress, {progress}/{target}, checks {checks}.",
+      "ResearchProgressApplied": "{name}: {gain} progress, {progress}/{target}, checks {checks}.",
       "ResearchSkillMissing": "No usable skill is assigned to this research.",
       "ResearchTimeRequired": "Set at least 30 minutes of research time.",
       "ResearchUpdated": "Research updated.",

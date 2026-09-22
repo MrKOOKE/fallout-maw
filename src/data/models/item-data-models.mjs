@@ -1387,6 +1387,7 @@ function weaponDamageTypeField() {
 
 function craftRecipeField() {
   return new SchemaField({
+    disassemblyRequiresRecipe: new BooleanField({ required: true, initial: false }),
     mode: new StringField({ required: true, blank: false, choices: ["craft", "disassembly"], initial: "craft" }),
     nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
     links: new ArrayField(craftLinkField(), { required: true, initial: [] }),

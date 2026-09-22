@@ -1,3 +1,5 @@
+import { captureSceneCreationPoint, getSceneCreationLevelId } from "../canvas/creation-levels.mjs";
+import { finalizeAttackActionPointCost } from "../utils/action-point-cost-limits.mjs";
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { mergeSkillCheckResultPolicies } from "../rolls/skill-check-result-policy.mjs";
@@ -3793,7 +3795,7 @@ async function validateCommandedAbilityAuthority({
     let expectedActionPointCost = 0;
     if (isActorInActiveCombat(tokenDocument.actor)) {
       if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed) {
-        expectedActionPointCost = Math.max(0, toInteger(action.fixedActionPointCost));
+        expectedActionPointCost = finalizeAttackActionPointCost(toInteger(action.fixedActionPointCost), actionKey);
       } else if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual) {
         const actual = getWeaponActionPointCost(
           tokenDocument.actor,
@@ -3801,9 +3803,9 @@ async function validateCommandedAbilityAuthority({
           actionKey,
           String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
         );
-        expectedActionPointCost = Math.max(0, Math.ceil(
-          actual * Math.max(0, Number(action.actualActionPointCostPercent) || 0) / 100
-        ));
+        expectedActionPointCost = finalizeAttackActionPointCost(
+          actual * Math.max(0, Number(action.actualActionPointCostPercent) || 0) / 100, actionKey
+        );
       }
     }
     if (Math.max(0, toInteger(selection?.actionPointCost)) !== expectedActionPointCost) return false;
@@ -8736,7 +8738,7 @@ export class WeaponAttackController {
       name: this.weapon.name
         ? `${this.weapon.name}: ${game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName")}`
         : game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
-      center: serializePoint(geometry.end),
+      center: serializePoint(captureSceneCreationPoint(canvas.scene, geometry.end, this.token)),
       radiusPixels: metersToPixels(settings.radiusMeters),
       color: getVolleyRegionColor(settings.damageEntries),
       damageEntries: settings.damageEntries,
@@ -10502,7 +10504,7 @@ async function createVolleyDamageRegionNow(regionData = {}) {
   const durationSeconds = Math.max(0, toInteger(regionData.durationSeconds));
   const delaySeconds = Math.max(0, toInteger(regionData.delaySeconds));
   if (durationSeconds <= 0) return null;
-  const levelId = getRegionRestrictionLevelId(scene);
+  const levelId = getSceneCreationLevelId(scene, regionData.center, regionData);
   const centerElevation = Number.isFinite(Number(center.elevation)) ? Number(center.elevation) : 0;
 
   const created = await scene.createEmbeddedDocuments("Region", [{
@@ -10555,7 +10557,7 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
   );
   if (isDelayedThrownItemWorldOperationCancelled(delayedThrownItemId)) return null;
 
-  const levelId = getRegionRestrictionLevelId(scene);
+  const levelId = getSceneCreationLevelId(scene, scene.tokens?.get(attachmentTokenId), regionData, explosions[0]?.center);
   const shapes = explosions.map(explosion => ({
     type: "circle",
     x: Number(explosion.center.x) || 0,
@@ -10963,7 +10965,10 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
     dodgeExposure.begin(getWeaponDodgeAttackMultiplier(String(source.actionKey ?? "")));
 
     for (const [index, explosion] of explosions.entries()) {
-      const center = getDelayedVolleyRegionShapeCenter(shapes[index], explosion.center);
+      const center = {
+        ...getDelayedVolleyRegionShapeCenter(shapes[index], explosion.center),
+        level: getSceneCreationLevelId(scene, region)
+      };
       const geometry = {
         type: VOLLEY_ACTION_KEY,
         origin: center,
@@ -11175,11 +11180,6 @@ function getDelayedVolleyRegionShapeCenter(shape = null, fallback = null) {
     y: Number(origin?.y ?? shape?.y ?? fallback?.y) || 0,
     elevation: Number(fallback?.elevation) || 0
   });
-}
-
-function getRegionRestrictionLevelId(scene) {
-  if (canvas.scene?.id === scene?.id && canvas.level?.id) return canvas.level.id;
-  return scene?._view ?? scene?.initialLevel?.id ?? scene?.firstLevel?.id ?? "";
 }
 
 function getResponsibleGM() {
@@ -11402,6 +11402,7 @@ function deserializeTrajectory(trajectory = {}) {
 
 function serializePoint(point) {
   const data = {
+    level: point?.level,
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0
   };
@@ -11411,6 +11412,7 @@ function serializePoint(point) {
 
 function deserializePoint(point) {
   const data = {
+    level: point?.level,
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0
   };
@@ -11851,7 +11853,7 @@ export function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctio
   const modifiedCost = contextual.actionCost ?? preparedCost;
   const postureBonus = contextual.postureCost ?? preparedPostureBonus;
   const atRandomReduction = getActorAtRandomActionPointCostReduction(actor, actionKey);
-  return Math.max(0, Math.ceil(modifiedCost + postureBonus - atRandomReduction));
+  return finalizeAttackActionPointCost(modifiedCost + postureBonus - atRandomReduction, actionKey);
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "", context = {}) {
@@ -11965,7 +11967,7 @@ async function commitWeaponActionPointSpend(actor, weapon, actionKey, weaponFunc
   const configuredCost = hasResolvedCost ? Number(resolvedCost) : Number.NaN;
   const cost = spendActionPoints && isCombatActionPointSpendingActive(actor)
     ? Number.isFinite(configuredCost)
-      ? Math.max(0, configuredCost)
+      ? finalizeAttackActionPointCost(configuredCost, actionKey)
       : getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, resolvedContext)
     : 0;
   let transaction = { spent: 0, receipt: null, events: [] };
@@ -12521,7 +12523,7 @@ async function createSpentQuantityItemTile({
   return createThrownItemTile({
     sceneId: canvas.scene?.id ?? "",
     itemData,
-    point,
+    point: captureSceneCreationPoint(canvas.scene, point, token),
     sourceActorUuid: token?.actor?.uuid ?? "",
     sourceItemUuid,
     delayedThrownItemId,
@@ -14229,7 +14231,7 @@ function buildDelayedVolleyExplosionRegionRequest({
       snapshotContext
     );
     return {
-      center: serializePoint(geometry.end),
+      center: serializePoint(captureSceneCreationPoint(game.scenes?.get(sceneId) ?? canvas.scene, geometry.end, attackerToken)),
       ...explosionDistanceContext,
       radiusPixels: Math.max(1, Number(geometry.radiusPixels) || 1),
       damageAmount: applyCriticalDamageSnapshot(normalizedBaseDamage, criticalDamageSnapshot),

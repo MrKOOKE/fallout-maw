@@ -2,6 +2,12 @@
   <section class="fallout-maw-panel">
     <h2>{{research.name}}</h2>
     <dl class="fallout-maw-research-time-breakdown">
+      {{#if fixedProgress}}
+      <div>
+        <dt>{{localize "FALLOUTMAW.Research.ProgressPerSuccess"}}</dt>
+        <dd>{{research.progressPerSuccessLabel}}</dd>
+      </div>
+      {{/if}}
       <div>
         <dt>{{localize "FALLOUTMAW.Research.Progress"}}</dt>
         <dd>{{research.progressLabel}} / {{research.targetLabel}}</dd>

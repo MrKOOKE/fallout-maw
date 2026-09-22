@@ -82,14 +82,16 @@ export function getIlluminationLevelChoices(selected = "") {
 function getActorLighting(actor, context = {}) {
   const token = resolveActorToken(actor, [context?.actorToken, context?.targetToken]);
   if (!token) return null;
-  const cached = tokenLightingCache.get(token);
-  if (cached?.revision === lightingRevision) return cached.value;
+  // The shared cache includes the token's footprint and level and is also
+  // invalidated by Region changes. Do not let this derived cache hide them.
   const measurement = analyzeTokenLighting(token);
+  const cached = tokenLightingCache.get(token);
+  if (cached?.revision === lightingRevision && cached.darkness === measurement.effectiveDarkness) return cached.value;
   const value = {
     illuminationPercent: clampPercent(measurement.illuminationPercent),
     illuminationLevel: getStealthDifficultyThresholdKey(measurement.effectiveDarkness)
   };
-  tokenLightingCache.set(token, { revision: lightingRevision, value });
+  tokenLightingCache.set(token, { revision: lightingRevision, darkness: measurement.effectiveDarkness, value });
   return value;
 }
 

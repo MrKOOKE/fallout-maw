@@ -1,6 +1,7 @@
 import {
   ITEM_FUNCTIONS,
   getConditionWeakeningData,
+  getDamageMitigationFunction,
   getModuleFunction,
   getEnabledWeaponFunctions,
   getWeaponFunctionById,
@@ -112,13 +113,33 @@ export function isModuleItemCompatibleWithSlot(itemOrData = null, slot = {}, tar
 
 /** Choose a real, vacant slot; unresolved UUIDs still reserve their slots. */
 export function findFreeWeaponModuleSlot(weapon = null, moduleItem = null) {
-  if (weapon === moduleItem || (weapon?.uuid && weapon.uuid === moduleItem?.uuid)) return null;
   if (!isFunctionModuleItem(moduleItem, ITEM_FUNCTIONS.weapon)) return null;
-  for (const entry of getEnabledWeaponFunctions(weapon, { ignoreBroken: true })) {
-    if (!entry.canHaveModuleSlots) continue;
+  return findFreeFunctionModuleSlot(weapon, moduleItem);
+}
+
+export function getModuleSlotFunctionEntries(item = null) {
+  const entries = getEnabledWeaponFunctions(item, { ignoreBroken: true })
+    .filter(entry => entry.canHaveModuleSlots)
+    .map(entry => ({ ...entry, targetFunction: ITEM_FUNCTIONS.weapon }));
+  if (hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation, { ignoreBroken: true })) {
+    entries.push({
+      id: ITEM_FUNCTIONS.damageMitigation,
+      targetFunction: ITEM_FUNCTIONS.damageMitigation,
+      canHaveModuleSlots: true,
+      data: getDamageMitigationFunction(item)
+    });
+  }
+  return entries;
+}
+
+export function findFreeFunctionModuleSlot(item = null, moduleItem = null) {
+  if (item === moduleItem || (item?.uuid && item.uuid === moduleItem?.uuid)) return null;
+  if (!hasItemFunction(moduleItem, ITEM_FUNCTIONS.module, { ignoreBroken: true })) return null;
+  for (const entry of getModuleSlotFunctionEntries(item)) {
+    if (!isFunctionModuleItem(moduleItem, entry.targetFunction)) continue;
     const slots = getWeaponModuleSlots(entry.data);
     const slotIndex = slots.findIndex(slot => !slot.itemUuid && !slot.itemData?.system
-      && isModuleItemCompatibleWithSlot(moduleItem, slot));
+      && isModuleItemCompatibleWithSlot(moduleItem, slot, entry.targetFunction));
     if (slotIndex >= 0) return { entry, slots, slotIndex };
   }
   return null;

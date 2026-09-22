@@ -270,12 +270,12 @@ test("posture is added before at-random and final rounding clamps the result", (
     "aimedShot"
   );
 
-  assert.equal(result.cost, 0);
+  assert.equal(result.cost, 1);
   assert.deepEqual(result.sources.map(source => source.kind), ["posture", "ability", "calculation"]);
   assert.deepEqual(result.sources.flatMap(source => source.steps).map(step => [step.before, step.after]), [
     [5, 6.5],
     [6.5, -3.5],
-    [-3.5, 0]
+    [-3.5, 1]
   ]);
   assertContinuousTrace(result);
 });

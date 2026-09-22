@@ -211,6 +211,7 @@ export function buildPhantomTokenData(sourceToken, phantomActor, phantomData = {
     x: Number(sourceToken?.x) || 0,
     y: Number(sourceToken?.y) || 0,
     elevation: Number(sourceToken?.elevation) || 0,
+    level: sourceToken?._source?.level ?? sourceToken?.level,
     width: Math.max(0.5, Number(sourceToken?.width) || 1),
     height: Math.max(0.5, Number(sourceToken?.height) || 1),
     depth: Math.max(0, Number(sourceToken?.depth) || 1),

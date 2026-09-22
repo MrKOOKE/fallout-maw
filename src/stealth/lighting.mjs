@@ -11,6 +11,7 @@ const TOKEN_CACHE_POINT_LIMIT = 64;
 
 const pointLightingCache = new Map();
 const tokenLightingCache = new Map();
+let darknessBehaviorCache = new WeakMap();
 const cacheObjectIds = new WeakMap();
 const cacheStatistics = {
   pointHits: 0,
@@ -23,7 +24,9 @@ const cacheStatistics = {
 let nextCacheObjectId = 1;
 
 export function analyzeTokenLighting(token, { position } = {}) {
-  const points = getTokenLightingPoints(token, position).map(point => normalizeLightingPoint(point));
+  const document = token?.document ?? token;
+  const level = position?.level ?? document?.level;
+  const points = getTokenLightingPoints(token, position).map(point => normalizeLightingPoint({ ...point, level }));
   const cacheKey = getTokenLightingCacheKey(token, points, globalThis.canvas);
   if (cacheKey) {
     const cached = getLruEntry(tokenLightingCache, cacheKey);
@@ -66,13 +69,10 @@ export function analyzeLightingPoint(point) {
   }
   cacheStatistics.pointMisses += 1;
 
-  const baseDarkness = clampAlpha(
-    activeCanvas?.effects?.getDarknessLevel?.(elevatedPoint)
-      ?? activeCanvas?.environment?.darknessLevel
-      ?? activeCanvas?.scene?.environment?.darknessLevel
-      ?? 0
-  );
-  const darknessSourcePenalty = activeCanvas?.effects?.testInsideDarkness?.(elevatedPoint) ? 1 : baseDarkness;
+  const baseDarkness = getPointDarknessLevel(elevatedPoint, activeCanvas);
+  const darknessSourcePenalty = activeCanvas?.effects?.testInsideDarkness?.(elevatedPoint, {
+    condition: source => isSourceInLevel(source, elevatedPoint.level, activeCanvas)
+  }) ? 1 : baseDarkness;
   const light = getPointLightIntensity(elevatedPoint, baseDarkness, activeCanvas);
   const analysis = {
     baseDarkness,
@@ -91,6 +91,7 @@ export function analyzeLightingPoint(point) {
 export function invalidateLightingAnalysisCache() {
   pointLightingCache.clear();
   tokenLightingCache.clear();
+  darknessBehaviorCache = new WeakMap();
   cacheStatistics.invalidations += 1;
 }
 
@@ -142,7 +143,8 @@ function getTokenCenter(token) {
   return {
     x: Number(center?.x) || 0,
     y: Number(center?.y) || 0,
-    elevation: Number(center?.elevation ?? document?.elevation) || 0
+    elevation: Number(center?.elevation ?? document?.elevation) || 0,
+    level: document?.level
   };
 }
 
@@ -150,7 +152,8 @@ function normalizeLightingPoint(point) {
   return {
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0,
-    elevation: Number(point?.elevation) || 0
+    elevation: Number(point?.elevation) || 0,
+    level: getLevelId(point?.level ?? globalThis.canvas?.level)
   };
 }
 
@@ -159,7 +162,8 @@ function getLightingPointCacheKey(point, activeCanvas) {
     getSceneCacheKey(activeCanvas),
     getNumberCacheKey(point.x),
     getNumberCacheKey(point.y),
-    getNumberCacheKey(point.elevation)
+    getNumberCacheKey(point.elevation),
+    point.level
   ]);
 }
 
@@ -172,7 +176,8 @@ function getTokenLightingCacheKey(token, points, activeCanvas) {
     points.map(point => [
       getNumberCacheKey(point.x),
       getNumberCacheKey(point.y),
-      getNumberCacheKey(point.elevation)
+      getNumberCacheKey(point.elevation),
+      point.level
     ])
   ]);
 }
@@ -223,6 +228,61 @@ function cloneLightingAnalysis(analysis) {
   return { ...analysis };
 }
 
+function getLevelId(level) {
+  return typeof level === "string" ? level : (level?.id ?? null);
+}
+
+/**
+ * V14's effects.getDarknessLevel reads viewed meshes and their last-rendered
+ * uniforms. Gameplay must also work before rendering and for a token whose
+ * level differs from the GM's view. Use the same behavior formulas and overlap
+ * rule as AdjustDarknessLevelRegionShader/IlluminationEffectsLayer instead.
+ */
+function getPointDarknessLevel(point, activeCanvas) {
+  const scene = activeCanvas?.scene;
+  const sceneDarkness = clampAlpha(activeCanvas?.environment?.darknessLevel ?? scene?.environment?.darknessLevel);
+  if (!scene?.regions) {
+    return clampAlpha(activeCanvas?.effects?.getDarknessLevel?.(point) ?? sceneDarkness);
+  }
+  let entries = darknessBehaviorCache.get(scene);
+  if (!entries) {
+    entries = [];
+    for (const region of scene.regions.values?.() ?? scene.regions.contents ?? scene.regions) {
+      for (const behavior of region.behaviors?.values?.() ?? region.behaviors?.contents ?? region.behaviors ?? []) {
+        if (behavior.type === "adjustDarknessLevel") entries.push({ region, behavior });
+      }
+    }
+    darknessBehaviorCache.set(scene, entries);
+  }
+  let darkness = null;
+  for (const { region, behavior } of entries) {
+    if (region.hidden || behavior.disabled || behavior.active === false) continue;
+    if (point.level && region.includedInLevel?.(point.level) === false) continue;
+    if (!region.testPoint?.(point)) continue;
+    const modifier = clampAlpha(behavior.system?.modifier);
+    let adjusted;
+    switch (Number(behavior.system?.mode)) {
+      case 0: adjusted = modifier; break;
+      case 1: adjusted = sceneDarkness * (1 - modifier); break;
+      case 2: adjusted = 1 - ((1 - sceneDarkness) * (1 - modifier)); break;
+      default: continue;
+    }
+    // Foundry sorts meshes so the lightest overlapping region wins. Each
+    // adjustment uses scene darkness, not the result of the previous region.
+    darkness = Math.min(darkness ?? adjusted, adjusted);
+  }
+  return clampAlpha(darkness ?? sceneDarkness);
+}
+
+function isSourceInLevel(source, levelId, activeCanvas) {
+  if (!levelId) return true;
+  const document = source?.object?.document;
+  if (typeof document?.includedInLevel === "function") return document.includedInLevel(levelId);
+  const sourceLevel = getLevelId(source?.level ?? source?.data?.level);
+  if (!sourceLevel || sourceLevel === levelId) return true;
+  return activeCanvas?.scene?.levels?.get?.(levelId)?.visibility?.levels?.has?.(sourceLevel) === true;
+}
+
 function getPointLightIntensity(point, baseDarkness, activeCanvas) {
   let intensity = getGlobalLightIntensity(point, baseDarkness, activeCanvas);
   let localIntensity = 0;
@@ -230,6 +290,7 @@ function getPointLightIntensity(point, baseDarkness, activeCanvas) {
   const lightSources = activeCanvas?.effects?.lightSources;
   for (const source of lightSources?.values?.() ?? lightSources ?? []) {
     if (!source?.active || isGlobalLightSource(source)) continue;
+    if (!isSourceInLevel(source, point.level, activeCanvas)) continue;
     if (!source.testPoint?.(point)) continue;
     localDispersion = 1;
     const sourceIntensity = getLocalLightIntensity(source, point);
@@ -246,11 +307,16 @@ function getPointLightIntensity(point, baseDarkness, activeCanvas) {
 function getGlobalLightIntensity(point, baseDarkness, activeCanvas) {
   const globalLightSource = activeCanvas?.environment?.globalLightSource;
   if (!globalLightSource?.active) return 0;
+  // The environment source can retain another level while the viewed level
+  // changes. Apply the same membership gate used for local light sources.
+  if (!isSourceInLevel(globalLightSource, point.level, activeCanvas)) return 0;
   const darkness = globalLightSource.data?.darkness ?? {};
   const minimum = Number(darkness.min) || 0;
   const maximum = Number.isFinite(Number(darkness.max)) ? Number(darkness.max) : 1;
   if (baseDarkness < minimum || baseDarkness > maximum) return 0;
-  return activeCanvas?.effects?.testInsideLight?.(point, { condition: source => isGlobalLightSource(source) }) ? 1 : 0;
+  // Core global light has no spatial boundary: its local darkness threshold
+  // is the test. Calling testInsideLight would query the viewed meshes again.
+  return 1;
 }
 
 function getLocalLightIntensity(source, point) {

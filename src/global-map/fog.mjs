@@ -1,3 +1,4 @@
+import { getMapTokenLevelId, isMapAreaOnLevel } from "./levels.mjs";
 import { GLOBAL_MAP_SOCKET } from "./constants.mjs";
 import {
   buildGlobalMapDiscoveryEvents,
@@ -467,11 +468,11 @@ async function discoverVisibleObjects() {
     .map(location => location.id)
     .filter(id => !knownLocations.has(id));
   const transitionIds = state.transitions
-    .filter(transition => !transition.hidden && isCellsVisible(scene, state, transition.cells))
+    .filter(transition => !transition.hidden && isMapAreaOnLevel(scene, transition) && isCellsVisible(scene, state, transition.cells))
     .map(transition => transition.id)
     .filter(id => !knownTransitions.has(id));
   const exitZoneIds = state.locationExitZones
-    .filter(exit => !exit.hidden && (exit.alwaysDiscovered || isCellsVisible(scene, state, exit.cells)))
+    .filter(exit => !exit.hidden && isMapAreaOnLevel(scene, exit) && (exit.alwaysDiscovered || isCellsVisible(scene, state, exit.cells)))
     .map(exit => exit.id)
     .filter(id => !knownExits.has(id));
   if (!locationIds.length && !transitionIds.length && !exitZoneIds.length) return;
@@ -685,6 +686,7 @@ function userHasNearbyOwnedToken(user, scene, state, entry, kind) {
   const wanted = new Set(keys);
   return (scene.tokens?.contents ?? []).some(token => {
     if (!token.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) return false;
+    if (kind !== "location" && !isMapAreaOnLevel(scene, entry, getMapTokenLevelId(scene, token))) return false;
     const center = pointToCell(scene, tokenCenter(token, scene));
     if (!center) return false;
     if (state.fog.mode === "cells") {

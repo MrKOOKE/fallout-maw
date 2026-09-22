@@ -5,6 +5,7 @@ import {
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FIRST_AID_ACTION_POINT_COST_EFFECT_KEY } from "./first-aid-effect-keys.mjs";
+import { finalizeActiveItemActionPointCost } from "../utils/action-point-cost-limits.mjs";
 
 const GENERAL_ACTION_POINT_COST_EFFECT_KEY = "system.costs.action";
 
@@ -15,9 +16,9 @@ export function getFirstAidActionPointCost(actor = null, firstAid = {}, context 
     baseCost,
     getActionCostModifierState(actor, { actionKey: "firstAid" })
   );
-  if (!actor || !context) return preparedCost;
+  if (!actor || !context) return finalizeActiveItemActionPointCost(preparedCost);
 
-  return Math.max(0, Math.ceil(getContextualAbilityChangeValue(
+  return finalizeActiveItemActionPointCost(getContextualAbilityChangeValue(
     actor,
     FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
     {
@@ -25,5 +26,5 @@ export function getFirstAidActionPointCost(actor = null, firstAid = {}, context 
       baseValue: preparedCost,
       alternateKeys: [GENERAL_ACTION_POINT_COST_EFFECT_KEY]
     }
-  )));
+  ));
 }

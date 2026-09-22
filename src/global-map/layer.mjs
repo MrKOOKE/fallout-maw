@@ -39,6 +39,7 @@ import {
 } from "./storage.mjs";
 import { canCreateChildLocations } from "./structure.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
+import { getViewedMapLevelId, isMapAreaOnLevel } from "./levels.mjs";
 
 const InteractionLayer = foundry.canvas.layers.InteractionLayer;
 
@@ -160,6 +161,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       if (!assertSupportedGrid()) return this.setMode("select");
       this.editor = new TerrainEditor(canvas.scene, {
         ...DEFAULT_TERRAIN,
+        levelId: getViewedMapLevelId(canvas.scene),
         id: foundry.utils.randomID(),
         cells: []
       }, { isNew: true });
@@ -168,6 +170,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       if (!assertSupportedGrid()) return this.setMode("select");
       this.editor = new TransitionEditor(canvas.scene, {
         ...DEFAULT_TRANSITION,
+        levelId: getViewedMapLevelId(canvas.scene),
         id: foundry.utils.randomID(),
         cells: []
       }, { isNew: true });
@@ -180,6 +183,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       }
       this.editor = new LocationExitEditor(canvas.scene, {
         ...DEFAULT_LOCATION_EXIT,
+        levelId: getViewedMapLevelId(canvas.scene),
         id: foundry.utils.randomID(),
         cells: []
       }, { isNew: true });
@@ -194,9 +198,10 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       ui.notifications.warn("Зоны выхода редактируются только на сцене локации.");
       return false;
     }
-    const exits = getSceneState(canvas.scene).locationExitZones.filter(entry => entry.cells?.length);
+    const exits = getSceneState(canvas.scene).locationExitZones.filter(entry => entry.cells?.length && isMapAreaOnLevel(canvas.scene, entry));
     const base = exits[0] ?? {
       ...DEFAULT_LOCATION_EXIT,
+      levelId: getViewedMapLevelId(canvas.scene),
       id: foundry.utils.randomID(),
       cells: []
     };
@@ -276,6 +281,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     this.mode = "entryDraw";
     this.editor = new TransitionEntryEditor(sourceScene, {
       ...transition,
+      entryLevelId: transition.entryCells?.length ? transition.entryLevelId : getViewedMapLevelId(canvas.scene),
       entryColor: transition.entryColor
         || (transition.entryCells?.length ? transition.color : DEFAULT_LOCATION_EXIT.color)
     });
@@ -489,7 +495,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const key = cellKey(pointToCell(canvas.scene, point));
     const zone = [...getSceneState(canvas.scene).locationExitZones]
       .reverse()
-      .find(entry => !entry.hidden && entry.cells?.includes(key));
+      .find(entry => !entry.hidden && isMapAreaOnLevel(canvas.scene, entry) && entry.cells?.includes(key));
     if (!zone) return false;
     const selection = foundry.utils.deepClone(this.arrivalSelection);
     const validExitZoneIds = Array.isArray(selection.validExitZoneIds) ? selection.validExitZoneIds : [];
@@ -530,7 +536,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       : kind === "transition"
         ? state.transitions
         : state.locationExitZones;
-    const entry = [...collection].reverse().find(candidate => candidate.cells?.includes(key));
+    const entry = [...collection].reverse().find(candidate => isMapAreaOnLevel(canvas.scene, candidate) && candidate.cells?.includes(key));
     if (!entry) return;
     await this.editor?.close?.();
     this.editor = kind === "terrain"
@@ -543,6 +549,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
 
   async #paintWorkingCells(point, event) {
     if (!this.editor?.data || !assertSupportedGrid()) return;
+    if (!isMapAreaOnLevel(canvas.scene, this.editor.data, undefined, this.mode === "entryDraw" ? "entryLevelId" : "levelId")) return;
     const center = pointToCell(canvas.scene, point);
     if (!center) return;
     const radius = Math.max(1, Number(this.editor.data.brushRadius) || 1);
@@ -617,6 +624,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const entries = getSceneState(canvas.scene)[collection] ?? [];
     return [...entries].reverse().find(entry => {
       if (!entry?.id || ignoredIds.has(entry.id)) return false;
+      if (!isMapAreaOnLevel(canvas.scene, entry)) return false;
       if (pending?.get(entry.id)?.has(key)) return false;
       return (entry.cells ?? []).includes(key);
     }) ?? null;
@@ -814,6 +822,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const activeTerrainId = this.editor instanceof TerrainEditor ? this.editor.data?.id : null;
     const pending = this.pendingAreaOverwrites.terrains;
     for (const terrain of terrains) {
+      if (!isMapAreaOnLevel(canvas.scene, terrain)) continue;
       if (terrain.id === activeTerrainId) continue;
       const graphic = new PIXI.LegacyGraphics();
       graphic.zIndex = 10;
@@ -829,6 +838,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const activeTransitionId = this.editor instanceof TransitionEditor && this.mode !== "entryDraw" ? this.editor.data?.id : null;
     const pending = this.pendingAreaOverwrites.transitions;
     for (const transition of transitions) {
+      if (!isMapAreaOnLevel(canvas.scene, transition)) continue;
       if (transition.id === activeTransitionId) continue;
       if (!game.user.isGM && (transition.hidden || !discovered.has(transition.id))) continue;
       const graphic = new PIXI.LegacyGraphics();
@@ -854,6 +864,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       ? !isControllingAnyToken() && getSceneState(canvas.scene).fog.hiddenLocationsInPlay !== false
       : false;
     for (const exit of exits) {
+      if (!isMapAreaOnLevel(canvas.scene, exit)) continue;
       if (activeIds.has(exit.id)) continue;
       if (validArrivalExitIds.size && !validArrivalExitIds.has(exit.id)) continue;
       if (this.arrivalSelection) {
@@ -884,6 +895,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     for (const sourceScene of game.scenes?.contents ?? []) {
       for (const transition of getSceneState(sourceScene).transitions) {
         if (transition.targetSceneId !== targetSceneId || !transition.entryCells?.length) continue;
+        if (!isMapAreaOnLevel(canvas.scene, transition, undefined, "entryLevelId")) continue;
         if (!game.user.isGM && transition.hidden) continue;
         if (sourceScene.id === activeSourceSceneId && transition.id === activeTransitionId) continue;
         const cells = transition.entryCells.map(parseCellKey).filter(Boolean);
@@ -898,6 +910,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   }
 
   #drawWorkingData() {
+    if (!isMapAreaOnLevel(canvas.scene, this.editor?.data, undefined, this.mode === "entryDraw" ? "entryLevelId" : "levelId")) return;
     const workingCells = this.mode === "entryDraw" ? this.editor?.data?.entryCells : this.editor?.data?.cells;
     if (!workingCells?.length && !this.brushPreviewCells.length) return;
     const color = this.mode === "entryDraw"

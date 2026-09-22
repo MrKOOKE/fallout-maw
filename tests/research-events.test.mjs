@@ -7,6 +7,19 @@ import {
   normalizeResearchCheckSummary
 } from "../src/research/events.mjs";
 
+test("research events retain negative gains and batch totals", () => {
+  const payload = buildResearchEventPayload({
+    beforeResearch: { progress: 5, target: 20 },
+    afterResearch: { progress: 1.5, target: 20 },
+    gain: -3.5,
+    checkSummary: { checks: 1, counts: { criticalFailure: 1 }, totalGain: -3.5 }
+  });
+  assert.equal(payload.data.gain, -3.5);
+  assert.equal(payload.delta.progress, -3.5);
+  assert.equal(payload.delta.gain, -3.5);
+  assert.equal(payload.data.checkSummary.totalGain, -3.5);
+});
+
 test("research progress payload carries actual progress, target, gain, completion and check context", () => {
   const payload = buildResearchEventPayload({
     actorUuid: "Actor.researcher",

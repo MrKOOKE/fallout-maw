@@ -26,6 +26,7 @@ import {
 } from "./structure.mjs";
 import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
 import { resetCellFog } from "./fog.mjs";
+import { getMapAreaLevelId, getMapLevelChoices } from "./levels.mjs";
 
 const TEMPLATE_ROOT = "systems/fallout-maw/templates/global-map";
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
@@ -93,7 +94,12 @@ class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
   #syncLivePreview() {
     if (!this.form) return;
     const formData = new foundry.applications.ux.FormDataExtended(this.form);
+    const previousLevel = this.data.levelId;
+    const previousEntryLevel = this.data.entryLevelId;
     this._applyLiveValues(getExpandedFormData(formData));
+    if (previousLevel !== this.data.levelId || previousEntryLevel !== this.data.entryLevelId) {
+      canvas.falloutMaWGlobalMap?.clearPendingAreaOverwrites?.();
+    }
     this._refreshLivePreview();
   }
 
@@ -355,6 +361,7 @@ function getDropEventData(event) {
 export class TerrainEditor extends GlobalMapEditorBase {
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_TERRAIN, ...data }, options);
+    this.data.levelId = getMapAreaLevelId(scene, this.data);
     this.isNew = Boolean(options.isNew);
   }
 
@@ -369,7 +376,7 @@ export class TerrainEditor extends GlobalMapEditorBase {
   };
 
   async _prepareContext() {
-    return { terrain: this.data, canDelete: !this.isNew };
+    return { terrain: this.data, canDelete: !this.isNew, levels: getMapLevelChoices(this.scene, this.data) };
   }
 
   async _processFormData(_event, _form, formData) {
@@ -397,6 +404,7 @@ export class TerrainEditor extends GlobalMapEditorBase {
   _applyLiveValues(values) {
     const terrain = values.terrain ?? {};
     Object.assign(this.data, {
+      levelId: String(terrain.levelId ?? this.data.levelId),
       name: String(terrain.name ?? this.data.name),
       color: String(terrain.color || "#4a90d9"),
       difficulty: Number(terrain.difficulty) || 0,
@@ -416,6 +424,7 @@ export class TerrainEditor extends GlobalMapEditorBase {
 export class LocationExitEditor extends GlobalMapEditorBase {
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_LOCATION_EXIT, ...data }, options);
+    this.data.levelId = getMapAreaLevelId(scene, this.data);
     this.isNew = Boolean(options.isNew);
     this.replaceIds = Array.from(new Set(options.replaceIds ?? [this.data.id].filter(Boolean)));
   }
@@ -431,7 +440,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
   };
 
   async _prepareContext() {
-    return { exit: this.data, canDelete: !this.isNew };
+    return { exit: this.data, canDelete: !this.isNew, levels: getMapLevelChoices(this.scene, this.data) };
   }
 
   async _processFormData(_event, _form, formData) {
@@ -464,6 +473,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
   _applyLiveValues(values) {
     const exit = values.exit ?? {};
     Object.assign(this.data, {
+      levelId: String(exit.levelId ?? this.data.levelId),
       name: String(exit.name ?? this.data.name),
       color: String(exit.color || DEFAULT_LOCATION_EXIT.color),
       brushRadius: Math.max(1, Math.round(Number(exit.brushRadius) || 1)),
@@ -563,6 +573,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
 
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_TRANSITION, ...data }, options);
+    this.data.levelId = getMapAreaLevelId(scene, this.data);
     this.isNew = Boolean(options.isNew);
   }
 
@@ -597,6 +608,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
     const targetScene = this.data.targetSceneId ? game.scenes?.get(this.data.targetSceneId) : null;
     return {
       transition: this.data,
+      levels: getMapLevelChoices(this.scene, this.data),
       canDelete: !this.isNew,
       canConfigureEntry: !this.isNew && Boolean(targetScene),
       targetSceneName: targetScene?.name ?? ""
@@ -644,6 +656,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
   _applyLiveValues(values) {
     const transition = values.transition ?? {};
     Object.assign(this.data, {
+      levelId: String(transition.levelId ?? this.data.levelId),
       name: String(transition.name ?? this.data.name),
       color: String(transition.color || "#7c4dff"),
       hidden: readCheckboxValue(transition.hidden),
@@ -712,6 +725,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
 export class TransitionEntryEditor extends GlobalMapEditorBase {
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_TRANSITION, ...data }, options);
+    this.data.entryLevelId = getMapAreaLevelId(game.scenes?.get(this.data.targetSceneId), this.data, "entryLevelId");
   }
 
   static DEFAULT_OPTIONS = {
@@ -729,7 +743,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
   };
 
   async _prepareContext() {
-    return { entry: this.data, hasCells: Boolean(this.data.entryCells?.length) };
+    return { entry: this.data, hasCells: Boolean(this.data.entryCells?.length), levels: getMapLevelChoices(game.scenes?.get(this.data.targetSceneId), this.data, "entryLevelId") };
   }
 
   async _processFormData(_event, _form, formData) {
@@ -738,6 +752,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
     if (!stored) return ui.notifications.warn("Исходный переход не найден.");
     const transition = {
       ...stored,
+      entryLevelId: String(values.levelId ?? this.data.entryLevelId),
       entryColor: String(values.color || this.data.entryColor || stored.color || DEFAULT_LOCATION_EXIT.color),
       brushRadius: Math.max(1, Math.round(Number(values.brushRadius) || 1)),
       entryCells: Array.from(new Set(this.data.entryCells ?? []))
@@ -754,6 +769,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
   _applyLiveValues(values) {
     const entry = values.entry ?? {};
     Object.assign(this.data, {
+      entryLevelId: String(entry.levelId ?? this.data.entryLevelId),
       entryColor: String(entry.color || this.data.color || DEFAULT_LOCATION_EXIT.color),
       brushRadius: Math.max(1, Math.round(Number(entry.brushRadius) || 1))
     });

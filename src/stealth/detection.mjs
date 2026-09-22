@@ -85,7 +85,8 @@ export function buildObserverDetectionZone(observerToken, {
   ) return null;
   const maxRange = evaluateStealthDetectionRange(observerToken.actor, settings);
   const maxPixels = sceneDistanceToPixels(maxRange);
-  const center = normalizePoint(origin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+  const center = normalizePoint(origin ?? getTokenCenter(observerToken), observerToken.document?.elevation,
+    origin?.level ?? observerToken.document?.level);
   const contactLevel = getGridOffsetElevation(activeCanvas.grid?.getOffset?.(center));
   const cacheKey = getDetectionZoneCacheKey(observerToken, center, settings, maxRange);
   const cached = readCache(detectionZoneCache, cacheKey);
@@ -183,7 +184,8 @@ export function createStealthDetectionPointTester(observerToken, observerOrigin,
     || (!skipObserverValidation && isStealthObserverIncapacitated(observerToken))
     || !activeCanvas?.ready
   ) return { setOrigin: () => undefined, test: () => false, destroy: () => undefined };
-  let origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+  let origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation,
+    observerOrigin?.level ?? observerToken.document?.level);
   const baseRange = preparedBaseRange === undefined
     ? evaluateStealthDetectionRange(observerToken.actor, settings)
     : Math.max(0, Number(preparedBaseRange) || 0);
@@ -197,11 +199,13 @@ export function createStealthDetectionPointTester(observerToken, observerOrigin,
 
   return {
     setOrigin(nextOrigin) {
-      const normalized = normalizePoint(nextOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+      const normalized = normalizePoint(nextOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation,
+        nextOrigin?.level ?? observerToken.document?.level);
       if (
         normalized.x === origin.x
         && normalized.y === origin.y
         && normalized.elevation === origin.elevation
+        && normalized.level === origin.level
       ) return;
       origin = normalized;
       lastPoint = null;
@@ -218,7 +222,7 @@ export function createStealthDetectionPointTester(observerToken, observerOrigin,
         && activeCanvas.grid?.getOffset
         && activeCanvas.grid?.getCenterPoint
       ) {
-        point = normalizePoint(activeCanvas.grid.getCenterPoint(activeCanvas.grid.getOffset(point)), origin.elevation);
+        point = normalizePoint(activeCanvas.grid.getCenterPoint(activeCanvas.grid.getOffset(point)), origin.elevation, point.level);
       }
       const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
       const maxRange = baseRange + normalizedRangeBonus;
@@ -228,6 +232,7 @@ export function createStealthDetectionPointTester(observerToken, observerOrigin,
         && lastPoint.x === point.x
         && lastPoint.y === point.y
         && lastPoint.elevation === point.elevation
+        && lastPoint.level === point.level
         && lastRangeBonus === normalizedRangeBonus
       ) return lastResult;
       const cacheKey = getDetectionPointCacheKey(
@@ -649,7 +654,7 @@ function measureDetectionPath(
     const attenuatedDistance = Math.max(0, segmentDistance - unaidedDistance);
     const rawSmokeCostFactor = getSmokeCostFactor(smokePath, previousRatio, ratio, segmentDistance);
     const lighting = attenuatedDistance > 0 || rawSmokeCostFactor > 0
-      ? analyzeLightingPoint(point)
+      ? analyzeLightingPoint({ ...point, level: origin.level ?? observerToken?.document?.level })
       : null;
     const smokeCostFactor = applySmokeDispersion(rawSmokeCostFactor, lighting?.smokeDispersion ?? 0);
     consume(unaidedDistance, 1 + smokeCostFactor);
@@ -828,6 +833,7 @@ function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
     normalizeExactCacheNumber(origin.x),
     normalizeExactCacheNumber(origin.y),
     normalizeExactCacheNumber(origin.elevation),
+    origin.level ?? observerToken.document?.level ?? "",
     getObserverSightCacheSignature(observerToken),
     Math.round(maxRange * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
@@ -852,6 +858,8 @@ function getDetectionPointCacheKey(observerToken, origin, point, settings, baseR
     normalizeExactCacheNumber(point.y),
     normalizeExactCacheNumber(origin.elevation),
     normalizeExactCacheNumber(point.elevation),
+    origin.level ?? observerToken.document?.level ?? "",
+    point.level ?? "",
     getObserverSightCacheSignature(observerToken),
     Math.round(baseRange * 100),
     Math.round(rangeBonus * 100),

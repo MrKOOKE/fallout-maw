@@ -72,6 +72,9 @@
 
           <div class="fallout-maw-research-meta">
             <span>{{localize "FALLOUTMAW.Research.Progress"}}: {{progressLabel}} / {{targetLabel}}</span>
+            {{#if fixedProgress}}
+            <span>{{localize "FALLOUTMAW.Research.ProgressPerSuccess"}}: {{progressPerSuccessLabel}}</span>
+            {{/if}}
             <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}: {{difficulty}}</span>
             <span>{{localize "FALLOUTMAW.SkillCheck.SkillValue"}}: {{skillValue}}</span>
           </div>

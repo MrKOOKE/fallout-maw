@@ -17,6 +17,12 @@
         <span>{{localize "FALLOUTMAW.Research.Target"}}</span>
         <input type="number" name="target" value="100" min="1" step="1">
       </label>
+      {{#if fixedProgress}}
+      <label>
+        <span>{{localize "FALLOUTMAW.Research.ProgressPerSuccess"}}</span>
+        <input type="number" name="progressPerSuccess" value="{{defaults.progressPerSuccess}}" min="0" step="0.01">
+      </label>
+      {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}</span>
         <input type="number" name="difficulty" value="{{defaults.difficulty}}" min="0" step="1">

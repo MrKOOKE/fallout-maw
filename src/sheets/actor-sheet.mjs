@@ -5,6 +5,7 @@ import { uninstallInventoryModule } from "../utils/inventory-module-slots.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { InventoryBlockLayout } from "../utils/inventory-block-layout.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
+import { CurrencyInputController } from "../utils/currency-input.mjs";
 import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
@@ -401,6 +402,7 @@ let responsiveHorizontalTooltipListenersActive = false;
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
+  #currencyInputs = new CurrencyInputController();
   #actorNameDraft = null;
   #activeLimbKey = "";
   #limbPopover = new LimbPopoverController();
@@ -793,6 +795,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateCreatureSelectors();
     this.#activateActorNameInput();
     this.#activateInventoryInteractions();
+    this.#currencyInputs.bind(this.element, {
+      actor: this.actor,
+      canEdit: () => Boolean(this.isEditable && this.actor?.isOwner),
+      onError: error => ui.notifications.error(error.message || "Не удалось изменить сумму валюты.")
+    });
     this.#activateWeaponSlotAspectSizing();
     this.#inventoryBlockLayout.bind(this.element?.querySelector(".fallout-maw-inventory-tab"));
     this.#contentsTransfer.bind(this.element, {
@@ -821,6 +828,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   _onClose(options) {
+    this.#currencyInputs.destroy();
     this.#moduleDropPreview.destroy();
     super._onClose(options);
     this.#unbindViewportResize();
@@ -3350,7 +3358,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   _onChangeForm(formConfig, event) {
-    if (event?.target?.closest?.("[data-actor-name-input]")) return undefined;
+    if (event?.target?.closest?.("[data-actor-name-input], [data-currency-editor]")) return undefined;
     return super._onChangeForm(formConfig, event);
   }
 

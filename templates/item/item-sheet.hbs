@@ -8130,6 +8130,9 @@
     </button>
     {{/if}}
   </div>
+  {{#if (eq craft.mode "disassembly")}}
+  <label class="fallout-maw-craft-knowledge-toggle"><input type="checkbox" data-disassembly-requires-recipe {{checked system.craft.disassemblyRequiresRecipe}}> Разбор доступен только при знании рецепта</label>
+  {{/if}}
   <div class="fallout-maw-craft-editor fallout-maw-craft-mode-{{craft.mode}}" data-craft-workspace style="{{craft.viewportStyle}}">
     <div class="fallout-maw-craft-world" data-craft-world style="{{craft.viewportStyle}}">
       <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>

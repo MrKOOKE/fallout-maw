@@ -596,6 +596,7 @@ function researchField() {
     name: new StringField({ required: true, blank: true, initial: "" }),
     skillKey: new StringField({ required: true, blank: true, initial: "" }),
     progress: new NumberField({ required: true, min: 0, initial: 0 }),
+    progressPerSuccess: new NumberField({ required: true, min: 0, initial: 1 }),
     target: new NumberField({ required: true, min: 1, initial: 1 }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
     type: new StringField({ required: true, blank: true, initial: "" }),

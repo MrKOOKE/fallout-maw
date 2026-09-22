@@ -32,7 +32,7 @@ const groupingImplementations = groupingNames.map(name => {
 
 export function createCraftMenuRuntime() {
   const names = [
-    "getCraftWindowOpenOptionsForItem", "getCraftRecipeSummaries", "findCraftRecipesForItem",
+    "canUseOwnedDisassembly", "getCraftWindowOpenOptionsForItem", "getCraftRecipeSummaries", "findCraftRecipesForItem",
     "getCraftItemSourceProfile", "getCraftItemMatchProfile", "collectCraftCatalogCandidates",
     "buildCraftOpenOptionsForMode", "craftItemMatchesRecipeSource", "craftRequirementMatchesItem",
     "craftItemMatchesRequirement", "craftIndexedItemMatchesRequirement",
@@ -41,7 +41,7 @@ export function createCraftMenuRuntime() {
     "getCraftRecipeSelectionUuid", "indexCraftRecipeReferences", "getCraftNodeSourceUuid",
     "addRecipeToCraftSourceIndexBucket", "getCraftRecipeCategory", "getCraftRecipeDisplayName",
     "normalizeCraftSearchText", "normalizeCraftMode", "setsIntersect",
-    "prepareCraftRecipeCategories"
+    "prepareCraftRecipeCategories", "prepareCraftRecipeDisplay", "compareCraftRecipeAvailability"
   ];
   const implementations = names.map(name => {
     const match = source.match(functionPattern(name));
@@ -83,9 +83,11 @@ export function createCraftMenuRuntime() {
     const craftSourceProfileCache = new Map();
     ${groupingImplementations}
     ${implementations}
-    return { getCraftWindowOpenOptionsForItem, craftRequirementMatchesItem,
+    return { canUseOwnedDisassembly, getCraftWindowOpenOptionsForItem, craftRequirementMatchesItem,
       craftItemMatchesRequirement, craftIndexedItemMatchesRequirement, getCraftRecipeCategory,
       prepareCraftRecipeCategories, prepareRecipeSummary, getCraftRecipeSummaries, getCraftItemClass,
+      prepareCraftRecipeDisplay, compareCraftRecipeAvailability,
+      setRecipeMissing: (uuid, missing, mode = "craft") => craftRecipeMissingCache.set(getCraftRecipeMissingCacheKey(mode, uuid), missing),
       craftRecipeExpansionKeys, setItemCategories: categories => { itemCategorySettings.categories = categories ?? []; } };
   `
   )(

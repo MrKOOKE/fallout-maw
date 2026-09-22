@@ -51,6 +51,27 @@ function createRuntime({ categories = ITEM_CATEGORIES } = {}) {
   return runtime;
 }
 
+test("recipe rows put craftable before missing and conceal unknown recipes last", () => {
+  const runtime = createRuntime();
+  const make = name => summary({ name, category: "Оружие", subcategory: "Пистолет", itemClass: "D" });
+  const unknown = { ...make("A secret prototype"), known: false };
+  const missing = { ...make("B missing components"), known: true };
+  const ready = { ...make("Z ready to craft"), known: true };
+  runtime.setRecipeMissing(missing.uuid, true);
+  const expandedKeys = new Set(["c:Оружие", "s:Оружие:Пистолет", "f:Оружие:Пистолет:D"]);
+  const result = runtime.prepareCraftRecipeCategories([unknown, missing, ready], { expandedKeys });
+  const rows = result.categories[0].subcategories.find(entry => entry.rawSubcategory === "Пистолет").classFolders[0].recipes;
+  assert.equal(rows[0].uuid, ready.uuid);
+  assert.equal(rows[1].uuid, missing.uuid);
+  assert.equal(rows[2].unknown, true);
+  assert.equal(rows[2].uuid, "");
+  assert.equal(rows[2].tooltipUuid, "");
+  assert.equal(rows[2].itemUuid, "");
+  assert.notEqual(rows[2].name, unknown.name);
+  assert.notEqual(rows[2].img, unknown.img);
+  assert.deepEqual(runtime.prepareCraftRecipeCategories([unknown], { search: "secret prototype" }).categories, []);
+});
+
 /**
  * Regression guard: the sandbox supplies the module's imports itself, so a
  * production function calling something that was never imported used to run

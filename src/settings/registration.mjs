@@ -69,6 +69,7 @@ import {
   FACTION_MATRIX_SETTING,
   FACTION_SETTINGS_SETTING,
   HACKING_SETTINGS_SETTING,
+  RESEARCH_LEGACY_PROGRESS_SETTING,
   ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
   SETTINGS_PRESET_STATE_SETTING,
@@ -123,6 +124,16 @@ import { syncLoadedActorNaturalRaceItems } from "../races/natural-items.mjs";
 export function registerSystemSettings() {
   registerRulesProfileTools();
   registerPersonalGeneratorSettings();
+
+  game.settings.register(FALLOUT_MAW.id, RESEARCH_LEGACY_PROGRESS_SETTING, {
+    name: "FALLOUTMAW.Research.LegacyProgress",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    preset: true,
+    default: getMainPresetDefault(RESEARCH_LEGACY_PROGRESS_SETTING, false),
+    onChange: refreshPreparedActors
+  });
 
   game.settings.register(FALLOUT_MAW.id, DOCUMENT_MIGRATION_VERSION_SETTING, {
     name: "Document Migration Version",

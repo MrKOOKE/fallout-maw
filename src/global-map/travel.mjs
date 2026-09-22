@@ -2,6 +2,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { GLOBAL_MAP_SOCKET, LOCATION_ENTRY_MODES, TRAVEL_GROUP_TOKEN_FLAG } from "./constants.mjs";
 import { cellKey, getLocationCells, pointToCell, tokenCenter, tokenTopLeftAtCell } from "./geometry.mjs";
 import { getSceneState } from "./storage.mjs";
+import { getMapTokenLevelId, isMapAreaOnLevel, getMapAreaLevelId } from "./levels.mjs";
 import {
   isSystemEventCancelled,
   systemEventParticipant,
@@ -215,8 +216,9 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
   const key = cellKey(currentCell);
   const state = getSceneState(scene);
   const candidates = [];
+  const levelId = getMapTokenLevelId(scene, tokenDocument, position);
   for (const transition of state.transitions) {
-    if (!transition.hidden && transition.cells?.includes(key)) {
+    if (!transition.hidden && isMapAreaOnLevel(scene, transition, levelId) && transition.cells?.includes(key)) {
       candidates.push({
         key: `transition:${transition.id}`,
         kind: "transition",
@@ -225,7 +227,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
       });
     }
   }
-  for (const linkedTransition of findLinkedTransitionEntries(scene, key)) {
+  for (const linkedTransition of findLinkedTransitionEntries(scene, key, levelId)) {
     candidates.push({
       key: `linkedTransition:${linkedTransition.scene.id}:${linkedTransition.transition.id}`,
       kind: "linkedTransition",
@@ -234,7 +236,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
     });
   }
   for (const exit of state.locationExitZones) {
-    if (exit.hidden || !exit.cells?.includes(key)) continue;
+    if (exit.hidden || !isMapAreaOnLevel(scene, exit, levelId) || !exit.cells?.includes(key)) continue;
     candidates.push({
       key: `locationExit:${exit.id}`,
       kind: "locationExit",
@@ -278,11 +280,16 @@ async function performTransitionTravel(payload) {
   if (!originScene || !transition || transition.hidden) return emitTravelError(payload, "Переход не найден.");
   const targetScene = transition.targetSceneId ? game.scenes?.get(transition.targetSceneId) : null;
   if (!targetScene) return emitTravelError(payload, "Целевая сцена не найдена.");
+  if ((payload.tokenIds ?? []).some(id => {
+    const token = originScene.tokens?.get(id);
+    return token && !isMapAreaOnLevel(originScene, transition, getMapTokenLevelId(originScene, token));
+  })) return emitTravelError(payload, "Переход находится на другом уровне.");
   return performTravel({
     ...payload,
     originScene,
     targetScene,
-    anchorCells: transition.entryCells ?? []
+    anchorCells: transition.entryCells ?? [],
+    targetLevelId: getMapAreaLevelId(targetScene, transition, "entryLevelId")
   });
 }
 
@@ -294,7 +301,9 @@ async function performDirectTravel(payload) {
   if (!requestingUser?.isGM && !isAuthorizedDirectTarget(originScene, targetScene, payload)) {
     return emitTravelError(payload, "Этот переход не связан с целевой сценой.");
   }
-  return performTravel({ ...payload, originScene, targetScene, anchorCells: payload.anchorCells ?? [] });
+  const linkedTransition = getSceneState(targetScene).transitions.find(entry => entry.id === payload.linkedTransitionId && entry.targetSceneId === originScene.id);
+  return performTravel({ ...payload, originScene, targetScene, anchorCells: payload.anchorCells ?? [],
+    targetLevelId: getMapAreaLevelId(targetScene, linkedTransition) });
 }
 
 async function performTravel(args) {
@@ -389,7 +398,7 @@ async function performTravel(args) {
   });
 }
 
-async function performTravelNow({ originScene, targetScene, tokenIds, requestingUserId, requestId, anchorCells, chainRef = null }) {
+async function performTravelNow({ originScene, targetScene, tokenIds, requestingUserId, requestId, anchorCells, targetLevelId = "", chainRef = null }) {
   const requestingUser = game.users?.get(requestingUserId);
   const tokenDocuments = (tokenIds ?? [])
     .map(id => originScene.tokens?.get(id))
@@ -403,7 +412,8 @@ async function performTravelNow({ originScene, targetScene, tokenIds, requesting
     const data = token.toObject();
     const cell = selectAnchorCell(anchorCells, index, targetScene);
     const position = tokenTopLeftAtCell(targetScene, data, cell, index);
-    return { x: position.x, y: position.y };
+    const level = targetScene.levels?.get?.(targetLevelId);
+    return { x: position.x, y: position.y, ...(level ? { level: level.id, elevation: level.elevation.base } : {}) };
   });
   const carrierTokens = tokenDocuments.filter(token => isTravelGroupCarrierActor(token.actor));
   const actorUpdates = Array.from(new Map(carrierTokens.map(token => [token.actor?.id, token.actor])).values())
@@ -442,6 +452,7 @@ async function performTravelNow({ originScene, targetScene, tokenIds, requesting
     action: "globalMap.travel.complete",
     requestId,
     targetSceneId: targetScene.id,
+    targetLevelId,
     viewerUserIds,
     activateTokenControls: Boolean(controlTokenIds.length),
     controlTokenIds
@@ -464,7 +475,9 @@ async function completeTravelForCurrentViewer(payload = {}) {
     queueTravelViewRetry(waiterKey, payload);
     return true;
   }
-  if (canvas.scene?.id !== scene.id) await scene.view();
+  if (canvas.scene?.id !== scene.id || (payload.targetLevelId && canvas.level?.id !== payload.targetLevelId)) {
+    await scene.view(payload.targetLevelId ? { level: payload.targetLevelId } : {});
+  }
   if (canvas.loading || canvas.scene?.id !== scene.id || !canvas.ready) {
     queueTravelViewRetry(waiterKey, payload);
     return true;
@@ -574,7 +587,7 @@ function canUserMoveToken(user, token) {
   return Boolean(user?.isGM || token.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER));
 }
 
-function findLinkedTransitionEntries(scene, key) {
+function findLinkedTransitionEntries(scene, key, levelId) {
   if (!scene || !key) return [];
   return (game.scenes?.contents ?? []).flatMap(sourceScene => {
     if (!sourceScene || sourceScene.id === scene.id) return [];
@@ -582,6 +595,7 @@ function findLinkedTransitionEntries(scene, key) {
       .filter(entry =>
         !entry.hidden
         && entry.targetSceneId === scene.id
+        && isMapAreaOnLevel(scene, entry, levelId, "entryLevelId")
         && Array.isArray(entry.entryCells)
         && entry.entryCells.includes(key)
       )
@@ -601,7 +615,7 @@ function isAuthorizedDirectTarget(originScene, targetScene, payload = {}) {
   const triggerTokenId = payload.triggerTokenId ?? payload.tokenIds?.[0];
   const token = originScene.tokens?.get(triggerTokenId);
   const cell = token ? pointToCell(originScene, tokenCenter(token, originScene)) : null;
-  return Boolean(cell && linkedTransition.entryCells.includes(cellKey(cell)));
+  return Boolean(cell && isMapAreaOnLevel(originScene, linkedTransition, getMapTokenLevelId(originScene, token), "entryLevelId") && linkedTransition.entryCells.includes(cellKey(cell)));
 }
 
 function emitTravelError(payload, message) {
