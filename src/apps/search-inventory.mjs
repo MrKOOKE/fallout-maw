@@ -419,6 +419,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #contentsTransfer = new InventoryTransferMode();
   #moduleDropPreview = new WeaponModuleDropPreview();
   #butcheringInProgress = false;
+  #quickDisassemblyInProgress = false;
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #hookIds = [];
@@ -642,6 +643,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const canInteract = this.#canInteract();
     const isTrade = this.#isTradeMode();
+    const canQuickDisassemble = !isTrade && canInteract && (await (await import("./craft-window.mjs"))
+      .getQuickDisassemblyItems(this.#searchedActor, this.#searcherActor)).some(item => isSearchTransferableItem(item));
     const canButcher = !isTrade
       && canInteract
       && canStartActorButchering(this.#searchedActor);
@@ -658,6 +661,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ...context,
       canInteract,
       canButcher,
+      canQuickDisassemble,
       isTrade,
       isObserver: isTrade && this.#tradeRole === TRADE_ROLE_OBSERVER,
       trade: tradeContext,
@@ -2467,6 +2471,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return;
     }
 
+    const quickButton = event.target?.closest?.("[data-search-quick-disassembly]");
+    if (quickButton && this.element?.contains(quickButton)) {
+      event.preventDefault(); event.stopPropagation();
+      await this.#quickDisassemble(this.#searchedActor);
+      return;
+    }
+
     const butcheringButton = event.target?.closest?.("[data-search-butchering]");
     if (butcheringButton && this.element?.contains(butcheringButton)) {
       await this.#onButcheringClick(event, butcheringButton);
@@ -2603,7 +2614,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     });
   }
 
-  #showTradeInventoryContextMenu(actor, item, event, { stackIndex = 0, stackQuantity = 0, sourceWholeStack = false } = {}) {
+  async #showTradeInventoryContextMenu(actor, item, event, { stackIndex = 0, stackQuantity = 0, sourceWholeStack = false } = {}) {
     if (!this.#isTradeMode() || this.#tradeOffers.completed || !actor || !item) return;
     this.#clearInventoryTooltip({ force: true });
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
@@ -2612,6 +2623,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const menuOptions = [
       ["offer", "fa-cart-plus", "В предложение", !canOffer]
     ];
+    const { getQuickDisassemblyItems } = await import("./craft-window.mjs");
+    if (this.#canQuickDisassembleTradeItem(actor, item) && (await getQuickDisassemblyItems(actor)).some(entry => entry.id === item.id)) {
+      menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+    }
     if (canHighlightTradeAmmoCompatibility(item)) {
       menuOptions.push(["highlightAmmo", "fa-crosshairs", "Подходящие боеприпасы"]);
     }
@@ -2652,11 +2667,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "highlightAmmo") return this.#setTradeCompatibilityHighlight("ammo", actor, item);
       if (action === "highlightModules") return this.#setTradeCompatibilityHighlight("modules", actor, item);
       if (action === "highlightEnergy") return this.#setTradeCompatibilityHighlight("energy", actor, item);
+      if (action === "quick-disassemble") return this.#quickDisassembleTradeItem(actor, [item.id]);
       return undefined;
     });
   }
 
-  #showInventoryContextMenu(actor, item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
+  async #showInventoryContextMenu(actor, item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
     this.#clearInventoryTooltip({ force: true });
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
 
@@ -2674,6 +2690,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
       : getItemQuantity(item);
     const menuOptions = [];
+    const { getQuickDisassemblyItems } = await import("./craft-window.mjs");
+    if (!isButcheringItem && (await getQuickDisassemblyItems(actor, this.#searcherActor)).some(entry => entry.id === item.id)
+      && isSearchTransferableItem(item)) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
 
     if (isButcheringItem) {
       menuOptions.push(["takeButchering", "fa-hand", "Забрать"]);
@@ -2730,6 +2749,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!action) return;
       clickEvent.preventDefault();
       menu.remove();
+      if (action === "quick-disassemble") return this.#quickDisassemble(actor, [item.id]);
       if (action === "takeButchering") return this.#takeButcheringItem(actor, item);
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openSearchContainerSheet(item);
@@ -3176,12 +3196,42 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const app = new FalloutMaWContainerSheet({
       document: item,
       evaluatingActorUuid,
+      quickDisassemblyHandler: this.#isTradeMode()
+        ? (actor, ids) => this.#quickDisassembleTradeItem(actor, ids)
+        : (actor, ids) => this.#quickDisassemble(actor, ids),
+      canQuickDisassembleItem: (actor, candidate) => this.#isTradeMode()
+        ? this.#canQuickDisassembleTradeItem(actor, candidate) : this.#canInteract(),
       searchTransferHandler: payload => this.#executeContainerSheetTransfer(payload),
       contentsTransferOptions: this.#getContentsTransferOptions(item.parent)
     });
     await app.render({ force: true });
     app.bringToFront();
     return app;
+  }
+
+  #canQuickDisassembleTradeItem(actor, item) {
+    if (!item || !this.#canInteract() || !actor?.isOwner || actor.uuid !== this.#getLocalTradeActorUuid()
+      || this.#tradeOffers.completed || this.#tradeRole === TRADE_ROLE_OBSERVER) return false;
+    const offered = new Set(TRADE_OFFER_SIDES.flatMap(side => (this.#tradeOffers[side]?.items ?? []).map(entry => entry.itemId)));
+    const visited = new Set();
+    for (let current = item; current; current = actor.items.get(getItemContainerParentId(current))) {
+      if (visited.has(current.id) || offered.has(current.id)) return false;
+      visited.add(current.id);
+    }
+    return true;
+  }
+
+  async #quickDisassembleTradeItem(actor, itemIds) {
+    if (this.#quickDisassemblyInProgress || itemIds.some(id => !this.#canQuickDisassembleTradeItem(actor, actor.items.get(id)))) return;
+    this.#quickDisassemblyInProgress = true;
+    try {
+      const { quickDisassembleItems, notifyQuickDisassemblyResult } = await import("./craft-window.mjs");
+      notifyQuickDisassemblyResult(await quickDisassembleItems({ actor, itemIds }));
+    } catch (error) { ui.notifications.warn(error.message); }
+    finally {
+      this.#quickDisassemblyInProgress = false;
+      await this.#renderPreservingWindowStack();
+    }
   }
 
   async #executeContainerSheetTransfer(payload = {}) {
@@ -3944,6 +3994,22 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
+  async #quickDisassemble(actor, itemIds = null) {
+    if (!this.#canInteract() || this.#isTradeMode() || this.#quickDisassemblyInProgress) return;
+    this.#quickDisassemblyInProgress = true;
+    for (const button of this.element?.querySelectorAll("[data-search-quick-disassembly]") ?? []) button.disabled = true;
+    try {
+      const payload = { searcherActorUuid: this.#searcherActorUuid, searchedActorUuid: this.#searchedActorUuid, actorUuid: actor.uuid, itemIds };
+      const gm = getResponsibleGM();
+      const result = game.user?.isGM && (!gm || gm.id === game.user.id)
+        ? await enqueueSearchInventoryOperation(() => performSearchQuickDisassembly(payload, game.user.id))
+        : await requestSearchInventorySocket("quickDisassembly", payload, gm);
+      const { notifyQuickDisassemblyResult } = await import("./craft-window.mjs");
+      notifyQuickDisassemblyResult(result);
+    } catch (error) { ui.notifications.warn(error.message || "Разбор не выполнен."); }
+    finally { this.#quickDisassemblyInProgress = false; await this.#renderPreservingWindowStack(); }
+  }
+
   async #onButcheringClick(event, button) {
     event.preventDefault();
     event.stopPropagation();
@@ -4648,6 +4714,23 @@ function getTradeCatalogItemFootprint(item = null, columns = TRADE_OFFER_DEFAULT
   const width = Math.max(1, toInteger(placement.rotated ? placement.height : placement.width) || 1);
   const height = Math.max(1, toInteger(placement.rotated ? placement.width : placement.height) || 1);
   return { width: Math.min(width, gridColumns), height, rotated: false };
+}
+
+async function performSearchQuickDisassembly(payload = {}, requesterUserId = "") {
+  const requester = game.users?.get(requesterUserId);
+  if (!requester) throw new Error("Пользователь не найден.");
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  const actor = await resolveActor(payload.actorUuid);
+  if (!searcherActor || !searchedActor || !actor) throw new Error("Актёр не найден.");
+  if (isTradePayload(payload)) throw new Error("Быстрый разбор недоступен во время торговли.");
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+  if (![searcherActor.uuid, searchedActor.uuid].includes(actor.uuid)) throw new Error("Предметы не относятся к этому обыску.");
+  const { getQuickDisassemblyItems, quickDisassembleItems } = await import("./craft-window.mjs");
+  if (payload.itemIds != null && !Array.isArray(payload.itemIds)) throw new Error("Неверный список предметов.");
+  const candidates = (await getQuickDisassemblyItems(actor, searcherActor)).filter(item => isSearchTransferableItem(item));
+  const itemIds = candidates.filter(item => !payload.itemIds || payload.itemIds.includes(item.id)).map(item => item.id);
+  return quickDisassembleItems({ actor, skillActor: searcherActor, itemIds });
 }
 
 async function performActorButchering(payload = {}, requesterUserId = "") {
@@ -9977,7 +10060,7 @@ async function requestSearchInventorySocket(action, payload = {}, gm = getRespon
     const timeout = window.setTimeout(() => {
       pendingSearchInventorySocketRequests.delete(requestId);
       reject(new Error("GM did not answer search inventory request."));
-    }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
+    }, action === "quickDisassembly" ? 120000 : SEARCH_INVENTORY_SOCKET_TIMEOUT);
     pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
   });
 
@@ -10285,6 +10368,10 @@ async function handleSearchInventorySocketMessage(message = {}) {
     } else if (message.action === "transferCurrency") {
       result = await enqueueSearchInventoryOperation(
         () => performSearchCurrencyTransfer(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "quickDisassembly") {
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchQuickDisassembly(message.payload ?? {}, message.requesterUserId ?? "")
       );
     } else if (message.action === "butcherActor") {
       result = await enqueueSearchInventoryOperation(

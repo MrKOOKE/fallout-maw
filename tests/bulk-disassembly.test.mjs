@@ -252,13 +252,13 @@ function bulkCommitFixture({ overflow = false, failedCommit = false, requires = 
     actorKnowsCraftItem: () => false, canUseOwnedDisassembly: () => !requires,
     getCraftFailureRefundPercent: () => 50, calculateCraftConsumedQuantity: (q, refund) => Math.ceil(q * (100-refund) / 100),
     isNaturalRaceItem: () => false, getItemContainerParentId: () => "",
-    createCraftRequirementSpendPlan: (_actor, reqs) => { calls.requirements = reqs; return { updates: [{ _id: "input", quantity: 0 }], deletes: [] }; },
-    createCraftToolRequirementSpendPlan: (_actor, reqs, selected) => { calls.tools = reqs; calls.selections = selected; return { valid: true, updates: [], deletes: [] }; },
+    createCraftRequirementSpendPlan: (_actor, reqs) => { calls.sourceActor = _actor; calls.requirements = reqs; return { updates: [{ _id: "input", quantity: 0 }], deletes: [] }; },
+    createCraftToolRequirementSpendPlan: (_actor, reqs, selected) => { calls.skillActor = _actor; calls.tools = reqs; calls.selections = selected; return { valid: true, updates: [{ _id: "tool", "system.supply.value": 2 }], deletes: [] }; },
     getCraftOutputSpecs: async (_recipe, _mode, outputs) => { calls.outputs = outputs; return outputs; },
     projectCraftInventoryState: () => [],
     planCraftDisassemblyPlacement: (_actor, outputs) => { calls.plans++; return { valid: true, updates: [], creates: overflow ? [] : outputs, overflow: overflow ? outputs : [] }; },
     executeInventoryMutation: async mutation => { calls.writes++; calls.mutation = mutation; if (failedCommit) throw new Error("commit failed"); },
-    commitInventoryWithDroppedItems: async (_actor, mutation, drops) => { calls.writes++; calls.mutation = mutation; calls.drops = drops; if (failedCommit) throw new Error("commit failed"); }
+    commitInventoryWithDroppedItems: async (_actor, mutation, drops, options) => { calls.dropOptions = options; calls.writes++; calls.mutation = mutation; calls.drops = drops; if (failedCommit) throw new Error("commit failed"); }
   });
   const operation = (extra = {}) => ({ actorUuid: actor.uuid, recipeUuid: "Item.recipe", mode: "disassembly", success: true,
     requirements: [{ itemId: "input", sourceUuid: "Item.input", key: "root", quantity: 3 }],
@@ -296,5 +296,22 @@ test("restricted recipes and failed commits never report successful batch comple
     const { actor, calls, operation, run } = bulkCommitFixture(options);
     await assert.rejects(run(actor, [operation()], []), options.requires ? /знание/ : /commit failed/);
     if (options.requires) assert.equal(calls.writes, 0);
+  }
+});
+
+test("search disassembly commits output to the source and spends the searcher's tools atomically", async () => {
+  for (const overflow of [false, true]) {
+    const { actor, calls, operation, run } = bulkCommitFixture({ overflow });
+    const skillActor = { uuid: "Actor.searcher", isOwner: true };
+    const expectedToolItems = [{ _id: "tool", system: { supply: { value: 4 } } }];
+    const snapshot = [{ _id: "input" }];
+    await run(actor, [operation()], snapshot, { skillActor, expectedToolItems });
+    assert.equal(calls.sourceActor, actor); assert.equal(calls.skillActor, skillActor);
+    const [sourcePlan, toolPlan] = overflow ? [calls.mutation, ...calls.dropOptions.additionalMutations] : calls.mutation;
+    assert.equal(sourcePlan.actor, actor); assert.equal(sourcePlan.expectedItems, snapshot);
+    assert.equal(sourcePlan.updates.some(u => u._id === "tool"), false);
+    assert.equal(toolPlan.actor, skillActor); assert.equal(toolPlan.expectedItems, expectedToolItems);
+    assert.deepEqual(toolPlan.updates, [{ _id: "tool", "system.supply.value": 2 }]);
+    assert.equal(calls.writes, 1);
   }
 });

@@ -53,6 +53,7 @@ import {
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { getDroppedWorldItems } from "../utils/document-drop.mjs";
+import { getPersonalGeneratorSupplies } from "../utils/personal-generator-supplies.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -275,12 +276,13 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   #interactionAbort = null;
   #draggingEntry = null;
   #activeDragPayload = null;
+  #createdBlockId = null;
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-personal-generator",
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-personal-generator"],
     tag: "form",
-    position: { width: 920 },
+    position: { width: 920, height: 760 },
     window: { resizable: true },
     form: {
       handler: PersonalGeneratorApplication.#handleFormSubmit,
@@ -290,7 +292,6 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     actions: {
       createItemBlock: this.#onCreateItemBlock,
       deleteItemBlock: this.#onDeleteItemBlock,
-      createItemEntry: this.#onCreateItemEntry,
       deleteItemEntry: this.#onDeleteItemEntry,
       browseImage: this.#onBrowseImage,
       removeImage: this.#onRemoveImage,
@@ -305,7 +306,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   };
 
   static PARTS = {
-    body: { template: TEMPLATES.personalGenerator }
+    body: { template: TEMPLATES.personalGenerator, scrollable: [".fallout-maw-pg-scroll"] }
   };
 
   get title() {
@@ -360,6 +361,23 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     this.#activateInteractionListeners();
     this.#syncAllPickModeFields();
     this.#syncChainLinkDisplay();
+    this.#revealCreatedBlock();
+  }
+
+  #revealCreatedBlock() {
+    if (!this.#createdBlockId) return;
+    const block = Array.from(this.element.querySelectorAll("[data-pg-block]"))
+      .find(row => row.dataset.blockId === this.#createdBlockId);
+    this.#createdBlockId = null;
+    const scroll = this.element.querySelector(".fallout-maw-pg-scroll");
+    if (!block || !scroll) return;
+    const bounds = block.getBoundingClientRect();
+    const viewport = scroll.getBoundingClientRect();
+    if (bounds.height > viewport.height || bounds.top < viewport.top) scroll.scrollTop += bounds.top - viewport.top;
+    else if (bounds.bottom > viewport.bottom) scroll.scrollTop += bounds.bottom - viewport.bottom;
+    const name = block.querySelector("[data-field='name']");
+    name?.focus({ preventScroll: true });
+    name?.select();
   }
 
   async _onClose(options) {
@@ -385,10 +403,13 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return this.#saveCurrentConfig({ fromForm: true });
   }
 
-  static async #onCreateItemBlock(event) {
+  static async #onCreateItemBlock(event, target) {
     event.preventDefault();
+    const insertionIndex = getItemBlockInsertionIndex(this.element, target.getBoundingClientRect().top);
     this.#config = this.#readConfigFromForm();
-    this.#config.items.blocks.push(createItemBlock());
+    const block = createItemBlock();
+    this.#config.items.blocks.splice(insertionIndex, 0, block);
+    this.#createdBlockId = block.id;
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -399,16 +420,6 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     if (blockIndex < 0) return undefined;
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks.splice(blockIndex, 1);
-    await this.#saveCurrentConfig();
-    return this.render({ force: true });
-  }
-
-  static async #onCreateItemEntry(event, target) {
-    event.preventDefault();
-    const blockIndex = getRowIndex(target, "[data-pg-block]");
-    if (blockIndex < 0) return undefined;
-    this.#config = this.#readConfigFromForm();
-    this.#config.items.blocks[blockIndex]?.entries.push(createItemEntry());
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -572,6 +583,9 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     if (!droppedItems.length) return undefined;
 
     this.#config = this.#readConfigFromForm();
+    if (event.shiftKey) {
+      droppedItems.push(...getPersonalGeneratorSupplies(droppedItems, this.#config.items.blocks[blockIndex]?.entries));
+    }
     this.#config.items.blocks[blockIndex]?.entries.push(...droppedItems.map(createItemEntryFromItem));
     await this.#saveCurrentConfig();
     return this.render({ force: true });
@@ -1381,8 +1395,7 @@ async function rollPersonalItemBlocks(itemsConfig = {}) {
   const blocks = Array.isArray(itemsConfig.blocks) ? itemsConfig.blocks : [];
   if (!blocks.length) return output;
 
-  const selectedBlocks = selectBlocksFromExclusionGroups(blocks, buildExclusionGroups(blocks));
-  for (const block of selectedBlocks) {
+  for (const block of blocks) {
     const entries = normalizeItemEntries(block.entries).filter(entry => entry.kind === "ability" ? (entry.sourceId || entry.uuid) : entry.uuid);
     if (!entries.length) continue;
 
@@ -1825,9 +1838,6 @@ function normalizeItemBlock(block = {}) {
     pick: String(block.pick ?? block.maxPick ?? 0).trim(),
     pickMode: normalizePickMode(block.pickMode ?? block.mode),
     pickCurrency: enabledCurrencyKeys.has(pickCurrency) ? pickCurrency : getDefaultCurrencyKey(),
-    exclusions: (Array.isArray(block.exclusions) ? block.exclusions : [])
-      .map(id => String(id ?? "").trim())
-      .filter(Boolean),
     entries: normalizeItemEntries(block.entries)
   };
 }
@@ -1861,6 +1871,15 @@ function normalizeItemEntries(entries = []) {
   });
 }
 
+function getItemBlockInsertionIndex(root, anchorY) {
+  const blocks = Array.from(root.querySelectorAll("[data-pg-block]"));
+  const index = blocks.findIndex(block => {
+    const bounds = block.getBoundingClientRect();
+    return anchorY < (bounds.top + bounds.bottom) / 2;
+  });
+  return index < 0 ? blocks.length : index;
+}
+
 function createItemBlock() {
   return normalizeItemBlock({
     id: foundry.utils.randomID(),
@@ -1868,8 +1887,7 @@ function createItemBlock() {
     pick: "1",
     pickMode: "count",
     pickCurrency: getDefaultCurrencyKey(),
-    entries: [],
-    exclusions: []
+    entries: []
   });
 }
 
@@ -2334,39 +2352,6 @@ async function restoreHealthIfAlive(actor) {
   if (current > 0 && max > 0 && current < max) await actor.update({ "system.resources.health.value": max });
 }
 
-function buildExclusionGroups(blocks) {
-  const blockMap = new Map(blocks.map(block => [String(block.id), block]));
-  const processed = new Set();
-  const groups = [];
-  for (const block of blocks) {
-    const id = String(block.id ?? "");
-    if (!id || processed.has(id)) continue;
-    const group = new Set([id]);
-    const queue = [...(block.exclusions ?? [])];
-    while (queue.length) {
-      const nextId = String(queue.shift() ?? "");
-      if (!nextId || group.has(nextId)) continue;
-      group.add(nextId);
-      const nextBlock = blockMap.get(nextId);
-      if (nextBlock) queue.push(...(nextBlock.exclusions ?? []));
-    }
-    for (const member of group) processed.add(member);
-    groups.push(Array.from(group));
-  }
-  for (const block of blocks) {
-    const id = String(block.id ?? "");
-    if (id && !processed.has(id)) groups.push([id]);
-  }
-  return groups;
-}
-
-function selectBlocksFromExclusionGroups(blocks, groups) {
-  const blockMap = new Map(blocks.map(block => [String(block.id), block]));
-  return groups
-    .map(group => blockMap.get(pickRandom(group)))
-    .filter(Boolean);
-}
-
 function createEntrySelectionGroups(entries) {
   const groups = [];
   const chains = new Map();
@@ -2607,7 +2592,6 @@ function readItemBlocks(form, previousBlocks = []) {
       pick: String(block.querySelector("[data-field='pick']")?.value ?? "1").trim(),
       pickMode,
       pickCurrency,
-      exclusions: Array.isArray(previous?.exclusions) ? [...previous.exclusions] : [],
       entries: Array.from(block.querySelectorAll("[data-pg-entry]")).map(readEntryElementData)
     };
   });

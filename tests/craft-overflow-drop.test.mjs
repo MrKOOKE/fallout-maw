@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 const source = fs.readFileSync(new URL("../src/items/dropped-items.mjs", import.meta.url), "utf8");
-function fixture({ failCommit=false, failStage=0, owner=true }={}) {
+function fixture({ failCommit=false, failStage=0, owner=true, gm=false }={}) {
   const events=[]; const actor={uuid:"Actor.a",testUserPermission:()=>owner};const token={id:"token"};const scene={tokens:{get:()=>token}};
   let index=0;
   const deps={
-    game:{ users:{get:()=>({isGM:false})},scenes:{get:()=>scene}},resolveDroppedActor:async()=>actor,
+    game:{ users:{get:()=>({isGM:gm})},scenes:{get:()=>scene}},resolveDroppedActor:async uuid=>uuid==="Actor.tool" ? {uuid} : actor,
     doesTokenRepresentActor:()=>true,getActorDropPosition:()=>({x:10,y:20}),
     foundry:{utils:{randomID:()=>`entry${++index}`}},normalizeDroppedItemData:(data,quantity)=>({...data,quantity}),toInteger:Number,
     addDroppedItemsToScene:async(_actor,entries)=>{if(failStage)throw new Error("stage failed");for(const entry of entries)events.push(["drop",entry.entryId,entry.quantity]);return {id:"tile"};},
@@ -37,4 +37,16 @@ test("failed batch ground write does not consume the inputs",async()=>{
 });
 test("players cannot perform overflow mutations on actors they do not own",async()=>{
   const {run,events,payload}=fixture({owner:false});await assert.rejects(run(payload,"player"),/Нет прав/);assert.deepEqual(events,[]);
+});
+
+test("only GM may attach tool mutations and both actors commit together before reporting overflow", async () => {
+  for (const gm of [false, true]) {
+    const {run,events,payload}=fixture({gm});
+    payload.additionalMutations=[{actorUuid:"Actor.tool",updates:[{_id:"tool","system.supply.value":2}],deletes:[],expectedItems:[{_id:"tool"}]}];
+    if (!gm) { await assert.rejects(run(payload,"player"),/мастер/); assert.deepEqual(events,[]); continue; }
+    await run(payload,"gm");
+    const plans=events.find(e=>e[0]==="commit")[1];
+    assert.equal(plans.length,2); assert.equal(plans[0].actor.uuid,"Actor.a"); assert.equal(plans[1].actor.uuid,"Actor.tool");
+    assert.deepEqual(plans[1].expectedItems,[{_id:"tool"}]);
+  }
 });

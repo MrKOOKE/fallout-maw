@@ -3517,11 +3517,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       });
       return;
     }
-    const { getCraftWindowOpenOptionsForItem, openCraftWindow } = await import("../apps/craft-window.mjs");
+    const { getCraftWindowOpenOptionsForItem, openCraftWindow, getQuickDisassemblyItems, quickDisassembleItems, notifyQuickDisassemblyResult } = await import("../apps/craft-window.mjs");
     if (canShowSuitableWeaponModules(item)) {
       menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
     }
     const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
+    if ((await getQuickDisassemblyItems(this.actor)).some(entry => entry.id === item.id)) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
@@ -3568,6 +3569,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openContainerSheet(item);
       if (action === "suitableModules") return this.#moduleDropPreview.highlightModules(item);
+      if (action === "quick-disassemble") {
+        try { notifyQuickDisassemblyResult(await quickDisassembleItems({ actor: this.actor, itemIds: [item.id] })); }
+        catch (error) { ui.notifications.warn(error.message); }
+        return;
+      }
       if (action.startsWith("craft-open-")) {
         const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
         if (!option) return undefined;

@@ -97,6 +97,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #foregroundListenerDocument = null;
   #foregroundPointerDownHandler = null;
   #searchTransferHandler = null;
+  #quickDisassemblyHandler = null;
+  #canQuickDisassembleItem = null;
   #searchTransferId = "";
 
   static DEFAULT_OPTIONS = {
@@ -123,11 +125,15 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   constructor(options = {}) {
     const {
       searchTransferHandler = null,
+      quickDisassemblyHandler = null,
+      canQuickDisassembleItem = null,
       contentsTransferOptions = null,
       ...sheetOptions
     } = options;
     super(sheetOptions);
     this.#contentsTransferOptions = contentsTransferOptions;
+    this.#quickDisassemblyHandler = typeof quickDisassemblyHandler === "function" ? quickDisassemblyHandler : null;
+    this.#canQuickDisassembleItem = typeof canQuickDisassembleItem === "function" ? canQuickDisassembleItem : null;
     this.#searchTransferHandler = typeof searchTransferHandler === "function" ? searchTransferHandler : null;
     if (this.#searchTransferHandler) {
       this.#searchTransferId = foundry.utils.randomID();
@@ -1405,7 +1411,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
 
-  #onItemContextMenu(event) {
+  async #onItemContextMenu(event) {
     event.preventDefault();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
     if (!item) return;
@@ -1419,6 +1425,13 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
     const menuOptions = [];
+    const { getQuickDisassemblyItems, quickDisassembleItems, notifyQuickDisassemblyResult } = await import("../apps/craft-window.mjs");
+    const skillActor = await this.#resolveItemTooltipEvaluatingActor(this.actor);
+    const canDisassemble = this.#searchTransferHandler ? Boolean(this.#quickDisassemblyHandler) : this.actor?.isOwner;
+    if (canDisassemble && (!this.#canQuickDisassembleItem || this.#canQuickDisassembleItem(this.actor, item))
+      && (await getQuickDisassemblyItems(this.actor, skillActor)).some(entry => entry.id === item.id)) {
+      menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+    }
     if (game.user?.isGM) {
       menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
     }
@@ -1465,6 +1478,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
           document: item,
           evaluatingActorUuid: this.options?.evaluatingActorUuid ?? "",
           contentsTransferOptions: this.#contentsTransferOptions,
+          quickDisassemblyHandler: this.#quickDisassemblyHandler,
+          canQuickDisassembleItem: this.#canQuickDisassembleItem,
           searchTransferHandler: this.#searchTransferHandler
         });
         await app.render({ force: true });
@@ -1472,6 +1487,12 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         return app;
       }
       if (action === "interact") return openItemInteractionDialog({ actor: this.actor, item, application: this });
+      if (action === "quick-disassemble") {
+        if (this.#quickDisassemblyHandler) return this.#quickDisassemblyHandler(this.actor, [item.id]);
+        try { notifyQuickDisassemblyResult(await quickDisassembleItems({ actor: this.actor, itemIds: [item.id] })); }
+        catch (error) { ui.notifications.warn(error.message); }
+        return;
+      }
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "rotate") return this.#rotateInventoryItem(item);
       if (action === "split") return this.#splitInventoryItem(item, { stackIndex, stackQuantity: selectedQuantity });

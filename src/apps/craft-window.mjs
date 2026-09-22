@@ -72,6 +72,8 @@ import {
   getItemStackPartQuantity,
   getItemTotalWeight,
   isContainerItem,
+  isItemLocked,
+  isItemInButcheringStorage,
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
   resetInventoryHoverCheckerCache,
@@ -553,6 +555,45 @@ export async function getCraftWindowOpenOptionsForItem(item, actor = item?.paren
   return [...createOptions, ...disassemblyOptions.map(option => ({ ...option, sourceItemId: item.parent === actor ? item.id : "" }))];
 }
 
+const quickDisassemblyActors = new Set();
+
+export async function getQuickDisassemblyItems(actor, skillActor = actor) {
+  await getCraftRecipeSummaries(skillActor);
+  const items = actor?.items?.contents ?? [];
+  const byId = new Map(items.map(item => [item.id, item]));
+  const containers = new Set(items.map(getItemContainerParentId));
+  return items.filter(item => {
+    if (item.type !== "gear" || !getItemQuantity(item) || isNaturalRaceItem(item) || containers.has(item.id)) return false;
+    const visited = new Set();
+    for (let current = item; current; current = byId.get(getItemContainerParentId(current))) {
+      if (visited.has(current.id) || isItemLocked(current) || isItemInButcheringStorage(current)
+        || current.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE) return false;
+      visited.add(current.id);
+    }
+    const recipes = findCraftRecipesForItem(item);
+    return !recipes.some(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_CREATE))
+      && recipes.some(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY)
+        && (!recipe.system?.craft?.disassemblyRequiresRecipe || actorKnowsCraftItem(skillActor, resolveCraftRecipeSelection(recipe.uuid).item)));
+  });
+}
+
+export function notifyQuickDisassemblyResult(result) {
+  if (!result) return;
+  if (result.dropped) ui.notifications.warn("В инвентаре не хватило места, лишние предметы выброшены на землю.");
+  ui.notifications.info(`Быстрый разбор: выполнено ${result.completed}${result.skipped?.length ? `, пропущено ${result.skipped.length}` : ""}`);
+  if (result.skipped?.length) ui.notifications.warn(result.skipped.map(entry => `${entry.name}: ${entry.reason}`).join("; "));
+}
+
+export async function quickDisassembleItems({ actor, skillActor = actor, itemIds = null } = {}) {
+  if (!actor?.isOwner || !skillActor?.isOwner) throw new Error("Нет прав на разбор.");
+  const ids = [...new Set([actor.uuid, skillActor.uuid])];
+  if (ids.some(id => quickDisassemblyActors.has(id))) throw new Error("Разбор уже выполняется.");
+  ids.forEach(id => quickDisassemblyActors.add(id));
+  try {
+    return await CraftWindowApplication.runQuickDisassembly({ actor, skillActor, itemIds });
+  } finally { ids.forEach(id => quickDisassemblyActors.delete(id)); }
+}
+
 class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #contentsTransfer = new InventoryTransferMode();
   #actorUuid = "";
@@ -679,6 +720,66 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#actorUuid = actorUuid;
     this.#actor = actor ?? null;
     this.#ensureCraftTabs();
+  }
+
+  static async runQuickDisassembly({ actor, skillActor, itemIds }) {
+    const app = new CraftWindowApplication();
+    app.#craftMode = CRAFT_MODE_DISASSEMBLY;
+    const eligible = await getQuickDisassemblyItems(actor, skillActor);
+    const selected = itemIds ? eligible.filter(item => itemIds.includes(item.id)) : eligible;
+    if (!selected.length) throw new Error("Нет предметов для быстрого разбора.");
+    const expectedItems = actor.items.contents.map(item => item.toObject());
+    const expectedToolItems = skillActor === actor ? expectedItems : skillActor.items.contents.map(item => item.toObject());
+    const collector = createSkillCheckBatchCollector({ requester: "Разбор", title: "Быстрый разбор" });
+    const operations = [], skipped = [], reservedTools = [], toolSelections = {};
+    let completed = 0;
+    try {
+      for (const item of selected) {
+        const candidates = findCraftRecipesForItem(item).filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY));
+        let chosen = null, problem = "Нет доступного разбора";
+        for (const candidate of candidates) {
+          const { item: recipe, recipeId } = resolveCraftRecipeSelection(candidate.uuid);
+          const validation = await validateCraftRequest(actor, recipe, CRAFT_MODE_DISASSEMBLY, {}, recipeId, { sourceItemId: item.id, skillActor });
+          if (!validation.valid) { problem = validation.message; continue; }
+          const quantity = validation.requirements.reduce((sum, req) => sum + req.quantity, 0);
+          const repeats = Math.floor(getItemQuantity(item) / quantity);
+          if (!repeats) continue;
+          const tools = validation.toolRequirements.map(tool => ({ ...tool, key: `${item.id}:${tool.key}`, quantity: tool.quantity * repeats }));
+          const choices = Object.fromEntries(Object.entries(validation.toolSelections).map(([key, id]) => [`${item.id}:${key}`, id]));
+          const plan = createCraftToolRequirementSpendPlan(skillActor, [...reservedTools, ...tools], { ...toolSelections, ...choices });
+          if (!plan.valid) { problem = plan.message; continue; }
+          if (actor === skillActor && Object.values(choices).some(id => selected.some(entry => entry.id === id))) {
+            problem = "Инструмент также выбран для разбора"; continue;
+          }
+          reservedTools.push(...tools); Object.assign(toolSelections, choices);
+          chosen = { recipe, recipeId, validation, repeats }; break;
+        }
+        if (!chosen) { skipped.push({ name: item.name, reason: problem }); continue; }
+        const { recipe, recipeId, validation, repeats } = chosen;
+        const randomOutputs = getCraftNodesWithRootLite(recipe, CRAFT_MODE_DISASSEMBLY, recipeId).some(node => !node.root && Number(node.blockLimit) > 0);
+        const repetitions = isSkillThresholdMode(getCraftingSettings().craft.mode) && !randomOutputs ? repeats : 1;
+        for (let attempt = 0; attempt < repeats; attempt += repetitions) {
+          const current = attempt === 0 ? validation : await validateCraftRequest(actor, recipe, CRAFT_MODE_DISASSEMBLY, validation.toolSelections, recipeId, { sourceItemId: item.id, skillActor });
+          if (!current.valid) throw new Error(current.message);
+          const results = await app.#resolveCraftLinkResults(skillActor, current.links, { createMessages: false, collector, mode: CRAFT_MODE_DISASSEMBLY });
+          if (!results) throw new Error("Проверка разбора отменена");
+          const operation = { ...app.#buildCraftOperation(actor, recipe, current, results), recipeId, repetitions };
+          if (repetitions > 1) for (const key of ["requirements", "toolRequirements", "outputs", "failureOutputs"]) {
+            operation[key] = (operation[key] ?? []).map(entry => ({ ...entry, quantity: entry.quantity * repetitions }));
+          }
+          operations.push(operation);
+        }
+        completed += repeats;
+      }
+      if (!operations.length) throw new Error(skipped[0]?.reason || "Нет доступного разбора.");
+      const result = await applyBulkCraftOperations(actor, operations, expectedItems, { skillActor, expectedToolItems });
+      invalidateCraftRecipeAvailabilityCaches();
+      if (collector.size) {
+        try { await collector.publish({ forceBatch: true }); }
+        catch (error) { console.error(`${SYSTEM_ID} | Quick disassembly chat failed`, error); }
+      }
+      return { completed, skipped, dropped: Boolean(result?.dropped) };
+    } finally { await collector.abort(); }
   }
 
   async #openBulk() {
@@ -2710,6 +2811,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
     const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item, this.#actor);
+    const canQuickDisassemble = (await getQuickDisassemblyItems(this.#actor)).some(entry => entry.id === item.id);
     const menuOptions = [];
 
     if (game.user?.isGM) {
@@ -2718,6 +2820,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (canQuickDisassemble) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
     for (const [index, option] of craftOpenOptions.entries()) {
       menuOptions.push([`craft-open-${index}`, option.icon, option.label]);
     }
@@ -2776,6 +2879,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openCraftContainerSheet(item);
+      if (action === "quick-disassemble") {
+        try { notifyQuickDisassemblyResult(await quickDisassembleItems({ actor: this.#actor, itemIds: [item.id] })); }
+        catch (error) { ui.notifications.warn(error.message); }
+        return;
+      }
       if (action.startsWith("craft-open-")) {
         const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
         if (!option) return undefined;
@@ -3634,13 +3742,14 @@ function createCraftBatchSummary(requested = 0, mode = CRAFT_MODE_CREATE) {
 
 async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID, resourceOptions = {}) {
   mode = normalizeCraftMode(mode);
+  const skillActor = resourceOptions.skillActor ?? actor;
   if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
   if (!recipe) return { valid: false, message: "Рецепт не выбран." };
-  if (!actorKnowsCraftItem(actor, recipe) && !(mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) {
+  if (!actorKnowsCraftItem(skillActor, recipe) && !(mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) {
     return { valid: false, message: game.i18n.localize("FALLOUTMAW.Craft.KnowledgeRequired") };
   }
 
-  const craft = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId, randomizeBlocks: true });
+  const craft = getCraftRenderData(recipe, skillActor, mode, { toolSelections, recipeId, randomizeBlocks: true });
   if (mode === CRAFT_MODE_DISASSEMBLY && resourceOptions.sourceItemId) {
     for (const requirement of craft.requirements) {
       requirement.itemId = resourceOptions.sourceItemId;
@@ -3651,7 +3760,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   }
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
   const links = prepareCraftOperationLinks(craft.links, craft.nodes);
-  const unmetSkillThreshold = getUnmetCraftSkillThreshold(actor, links);
+  const unmetSkillThreshold = getUnmetCraftSkillThreshold(skillActor, links);
   if (unmetSkillThreshold) {
     return { valid: false, message: getCraftSkillThresholdMessage(unmetSkillThreshold, mode) };
   }
@@ -3685,7 +3794,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
     toolClass: requirement.toolClass,
     quantity: requirement.quantity
   }));
-  const toolSpendPlan = createCraftToolRequirementSpendPlan(actor, toolRequirements, toolSelections);
+  const toolSpendPlan = createCraftToolRequirementSpendPlan(skillActor, toolRequirements, toolSelections);
   if (!toolSpendPlan.valid) return { valid: false, message: toolSpendPlan.message };
   const resolvedToolSelections = Object.fromEntries(Array.from(toolSpendPlan.selectedByRequirement.entries()).map(([key, instrument]) => [key, instrument.id]));
   const requirements = craft.requirements.map(requirement => ({
@@ -3714,8 +3823,8 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   };
 }
 
-async function applyBulkCraftOperations(actor, operations, expectedItems) {
-  if (!actor?.isOwner) throw new Error("Нет прав на разбор этим актёром.");
+async function applyBulkCraftOperations(actor, operations, expectedItems, { skillActor = actor, expectedToolItems = null } = {}) {
+  if (!actor?.isOwner || !skillActor?.isOwner) throw new Error("Нет прав на разбор этим актёром.");
   const requirements = new Map(), tools = new Map(), toolSelections = {}, outputs = new Map();
   const settings = getCraftingSettings();
   const recipes = new Set();
@@ -3730,7 +3839,7 @@ async function applyBulkCraftOperations(actor, operations, expectedItems) {
     if (!recipes.has(operation.recipeUuid)) {
       const recipe = resolveWorldItemSync(operation.recipeUuid);
       if (!recipe) throw new Error("Рецепт не найден.");
-      if (!actorKnowsCraftItem(actor, recipe) && !canUseOwnedDisassembly(actor, recipe)) throw new Error("Необходимо знание рецепта.");
+      if (!actorKnowsCraftItem(skillActor, recipe) && !canUseOwnedDisassembly(actor, recipe)) throw new Error("Необходимо знание рецепта.");
       recipes.add(operation.recipeUuid);
     }
     const hasFailureOutput = !operation.success && operation.failureOutputs?.length > 0;
@@ -3762,16 +3871,18 @@ async function applyBulkCraftOperations(actor, operations, expectedItems) {
       || actor.items.contents.some(child => getItemContainerParentId(child) === item.id))) throw new Error("Предмет недоступен для разбора.");
   }
   const spendPlan = createCraftRequirementSpendPlan(actor, [...requirements.values()]);
-  const toolPlan = createCraftToolRequirementSpendPlan(actor, [...tools.values()], toolSelections);
+  const toolPlan = createCraftToolRequirementSpendPlan(skillActor, [...tools.values()], toolSelections);
   if (!toolPlan.valid) throw new Error(toolPlan.message);
-  const consumption = { updates: [...spendPlan.updates, ...toolPlan.updates], deletes: [...spendPlan.deletes, ...toolPlan.deletes] };
+  const sameActor = skillActor.uuid === actor.uuid;
+  const consumption = { updates: [...spendPlan.updates, ...(sameActor ? toolPlan.updates : [])], deletes: [...spendPlan.deletes, ...(sameActor ? toolPlan.deletes : [])] };
+  const additionalMutations = sameActor ? [] : [{ actor: skillActor, expectedItems: expectedToolItems, updates: toolPlan.updates, deletes: toolPlan.deletes }];
   const specs = await getCraftOutputSpecs(null, CRAFT_MODE_DISASSEMBLY, [...outputs.values(), ...embeddedOutputs]);
   const plan = planCraftDisassemblyPlacement(actor, specs, projectCraftInventoryState(actor, consumption), consumption);
   if (!plan.valid) throw new Error(plan.message);
   const mutation = { actor, expectedItems, updates: [...consumption.updates, ...plan.updates], deletes: consumption.deletes, creates: plan.creates };
   const dropped = Boolean(plan.overflow?.length);
-  if (dropped) await commitInventoryWithDroppedItems(actor, mutation, plan.overflow, { reason: "bulk-disassembly" });
-  else await executeInventoryMutation(mutation, { reason: "bulk-disassembly" });
+  if (dropped) await commitInventoryWithDroppedItems(actor, mutation, plan.overflow, { reason: "bulk-disassembly", additionalMutations });
+  else await executeInventoryMutation(additionalMutations.length ? [mutation, ...additionalMutations] : mutation, { reason: "bulk-disassembly" });
   return { dropped };
 }
 

@@ -230,6 +230,7 @@ body #prosemirror-dropdown {
 }
 
 .fallout-maw-personal-generator-body,
+.fallout-maw-pg-scroll,
 .fallout-maw-pg-block-list,
 .fallout-maw-pg-entry-list,
 .fallout-maw-pg-name-block-list {
@@ -11430,6 +11431,33 @@ html.fallout-maw-token-action-hud-open #hotbar {
   width: var(--fallout-maw-token-hud-actions-width);
 }
 
+.application.fallout-maw-personal-generator .window-content {
+  overflow: hidden;
+}
+
+.fallout-maw-personal-generator-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fallout-maw-pg-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.fallout-maw-pg-scroll > .fallout-maw-panel {
+  flex-shrink: 0;
+}
+
+.fallout-maw-pg-block-footer {
+  flex: 0 0 auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--fallout-maw-border);
+}
+
 .fallout-maw-token-hud-ability-section {
   align-self: end;
   box-sizing: border-box;
@@ -17412,6 +17440,8 @@ label.checkbox.fallout-maw-ability-change-choice {
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-actor-title .fallout-maw-title-display {
+  flex: 1;
+  min-width: 0;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -17424,6 +17454,21 @@ label.checkbox.fallout-maw-ability-change-choice {
   position: relative;
   text-align: center;
   width: 100%;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-quick-disassembly {
+  background: linear-gradient(180deg, #d4d1ba, #a09d88);
+  border: 2px solid #6b6955;
+  box-shadow: inset 1px 1px 0 #eee9cc, inset -2px -2px 0 #4a493a;
+  color: #29271b;
+  font-family: inherit;
+  font-weight: bold;
+  flex: 0 0 auto;
+  width: auto;
+  margin-left: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-actor-title .fallout-maw-title-display > span {

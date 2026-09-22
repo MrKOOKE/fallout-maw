@@ -148,13 +148,15 @@ export async function dropItemDataForActor(actor, itemData, containedItems = [],
   return addDroppedItemToScene(actor, dropped);
 }
 
-export async function commitInventoryWithDroppedItems(actor, mutation, drops = [], { reason = "disassembly" } = {}) {
+export async function commitInventoryWithDroppedItems(actor, mutation, drops = [], { reason = "disassembly", additionalMutations = [] } = {}) {
+  if (additionalMutations.length && !game.user?.isGM) throw new Error("Совместный разбор должен выполнить мастер.");
   const scene = canvas?.scene;
   const token = getActorDropTokenDocument(actor, scene);
   const payload = {
     actorUuid: actor.uuid, sceneId: scene?.id, tokenId: token?.id,
     updates: mutation.updates ?? [], deletes: mutation.deletes ?? [], creates: mutation.creates ?? [],
-    expectedItems: mutation.expectedItems ?? actor.items.contents.map(item => item.toObject()), drops, reason
+    expectedItems: mutation.expectedItems ?? actor.items.contents.map(item => item.toObject()), drops, reason,
+    additionalMutations: additionalMutations.map(plan => ({ actorUuid: plan.actor.uuid, updates: plan.updates ?? [], deletes: plan.deletes ?? [], expectedItems: plan.expectedItems }))
   };
   return game.user?.isGM
     ? performInventoryWithDroppedItems(payload, game.user.id)
@@ -166,6 +168,13 @@ async function performInventoryWithDroppedItems(payload, requesterUserId) {
   const actor = await resolveDroppedActor(String(payload.actorUuid ?? ""));
   if (!requester || !actor || (!requester.isGM && !actor.testUserPermission?.(requester, "OWNER"))) {
     throw new Error("Нет прав на разбор предметов этого актёра.");
+  }
+  const additionalMutations = [];
+  if (payload.additionalMutations?.length && !requester.isGM) throw new Error("Совместный разбор должен выполнить мастер.");
+  for (const plan of payload.additionalMutations ?? []) {
+    const toolActor = await resolveDroppedActor(plan.actorUuid);
+    if (!toolActor) throw new Error("Не найден владелец инструмента.");
+    additionalMutations.push({ actor: toolActor, updates: plan.updates, deletes: plan.deletes, expectedItems: plan.expectedItems });
   }
   const scene = game.scenes?.get(String(payload.sceneId ?? ""));
   const token = scene?.tokens?.get(String(payload.tokenId ?? ""));
@@ -182,8 +191,9 @@ async function performInventoryWithDroppedItems(payload, requesterUserId) {
       const tile = await addDroppedItemsToScene(actor, entries, { scene, position });
       staged.push(...entries.map(entry => ({ tile, entryId: entry.entryId })));
     }
-    await executeInventoryMutation({ actor, updates: payload.updates, deletes: payload.deletes,
-      creates: payload.creates, expectedItems: payload.expectedItems }, { reason: payload.reason });
+    const mutation = { actor, updates: payload.updates, deletes: payload.deletes,
+      creates: payload.creates, expectedItems: payload.expectedItems };
+    await executeInventoryMutation(additionalMutations.length ? [mutation, ...additionalMutations] : mutation, { reason: payload.reason });
     return { dropped: staged.length };
   } catch (error) {
     for (const entry of staged.reverse()) await rollbackDroppedItemEntry(entry.tile, entry.entryId);

@@ -14,6 +14,9 @@
         <span>{{name}}</span>
       {{/if}}
       </div>
+      {{#if (eq side "searched")}}{{#if ../canQuickDisassemble}}
+      <button type="button" class="fallout-maw-search-quick-disassembly" data-search-quick-disassembly><i class="fa-solid fa-screwdriver-wrench"></i> Быстрый разбор</button>
+      {{/if}}{{/if}}
     </section>
     {{/each}}
     {{#unless isTrade}}

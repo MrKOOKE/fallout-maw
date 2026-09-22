@@ -1,4 +1,5 @@
 <div class="fallout-maw-personal-generator-body">
+  <div class="fallout-maw-pg-scroll">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>Персональный генератор</h2>
@@ -170,7 +171,6 @@
         <div class="fallout-maw-pg-dropzone" data-pg-block-drop>
           <div class="fallout-maw-pg-dropzone-header">
             <span>Предметы блока</span>
-            <button type="button" data-action="createItemEntry" title="Добавить строку"><i class="fa-solid fa-plus"></i></button>
           </div>
 
           <div class="fallout-maw-pg-entry-list">
@@ -263,8 +263,9 @@
       {{/each}}
     </div>
 
-    <div class="fallout-maw-pg-add-block-row">
-      <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> Добавить блок</button>
-    </div>
   </section>
+  </div>
+  <footer class="fallout-maw-pg-block-footer">
+    <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> Добавить блок</button>
+  </footer>
 </div>
