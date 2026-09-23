@@ -216,10 +216,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   };
 
   get title() {
-    const sourceName = this.#sourceActor?.name ?? "";
-    const targetName = this.#targetContext?.name ?? "";
-    if (this.#isSelfTreatment()) return `Медицина - ${sourceName} лечит себя`;
-    return `Медицина - ${sourceName} лечит ${targetName}`;
+    return "Медицина";
   }
 
   async _prepareContext(options) {
@@ -282,6 +279,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     return {
       ...context,
       sourceActor: this.#sourceActor,
+      isSelfTreatment: this.#isSelfTreatment(),
       sourceToken: this.#sourceToken,
       targetActor: {
         name: this.#targetContext?.name ?? this.#targetToken?.name ?? ""

@@ -1,12 +1,16 @@
 <div class="fallout-maw-sheet fallout-maw-medicine-body">
   <header class="fallout-maw-dialog-toolbar fallout-maw-medicine-panel-header {{#if tabs.trauma.active}}has-mass-action{{/if}}">
-    <h2>Медицина: {{targetActor.name}}</h2>
+    <div class="fallout-maw-medicine-patient">
+      <h2>{{targetActor.name}}</h2>
+      <p class="fallout-maw-medicine-subtitle">{{#unless isSelfTreatment}}Лечит: {{sourceActor.name}} <span aria-hidden="true">·</span> {{/unless}}{{toolLabel}}</p>
+    </div>
     {{#if tabs.trauma.active}}
+    <div class="fallout-maw-medicine-mass-action">
     <button type="button" class="fallout-maw-dialog-primary-action" data-action="treatAll" {{#unless hasMassTreatments}}disabled{{/unless}}>
       <i class="fa-solid fa-kit-medical"></i> Массовое лечение
     </button>
+    </div>
     {{/if}}
-    <strong>{{toolLabel}}</strong>
   </header>
 
   {{#if medicineCombatStatus}}
@@ -22,11 +26,11 @@
   </div>
   {{/if}}
 
-  <nav class="fallout-maw-medicine-tabs">
-    <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma">Конечности и травмы</button>
-    <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease">Болезни</button>
-    <button type="button" class="{{tabs.implant.cssClass}}" data-action="setMedicineTab" data-medicine-tab="implant">Импланты</button>
-    <button type="button" class="{{tabs.prosthesis.cssClass}}" data-action="setMedicineTab" data-medicine-tab="prosthesis">Протезы</button>
+  <nav class="fallout-maw-medicine-tabs" aria-label="Разделы медицины">
+    <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma" aria-pressed="{{tabs.trauma.active}}"><span aria-hidden="true">01</span> Конечности и травмы</button>
+    <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease" aria-pressed="{{tabs.disease.active}}"><span aria-hidden="true">02</span> Болезни</button>
+    <button type="button" class="{{tabs.implant.cssClass}}" data-action="setMedicineTab" data-medicine-tab="implant" aria-pressed="{{tabs.implant.active}}"><span aria-hidden="true">03</span> Импланты</button>
+    <button type="button" class="{{tabs.prosthesis.cssClass}}" data-action="setMedicineTab" data-medicine-tab="prosthesis" aria-pressed="{{tabs.prosthesis.active}}"><span aria-hidden="true">04</span> Протезы</button>
   </nav>
 
   {{#if tabs.trauma.active}}
@@ -71,7 +75,9 @@
     {{/if}}
 
     {{#unless hasTraumaTreatments}}
-    <p class="fallout-maw-empty-list">У цели нет повреждённых конечностей или травм.</p>
+    <div class="fallout-maw-medicine-empty-state">
+      <strong><span aria-hidden="true">[ OK ]</span> Нет повреждённых конечностей или травм</strong>
+    </div>
     {{/unless}}
   </div>
   {{/if}}
