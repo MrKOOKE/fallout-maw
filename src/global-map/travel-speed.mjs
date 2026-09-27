@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { evaluateFormula, validateFormula } from "../formulas/index.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { buildActorFormulaData } from "../utils/actor-formulas.mjs";
@@ -9,7 +10,7 @@ import {
 } from "./constants.mjs";
 
 export const TRAVEL_SPEED_FORMULA_VARIABLES = Object.freeze([
-  Object.freeze({ key: "movementPoints", abbr: "mov", label: "Максимум очков передвижения" })
+  Object.freeze({ key: "movementPoints", abbr: "mov", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1078", "Максимум очков передвижения"); } })
 ]);
 const TRAVEL_SPEED_FORMULA_ALIASES = Object.freeze(
   TRAVEL_SPEED_FORMULA_VARIABLES.flatMap(variable => [variable.key, variable.abbr].filter(Boolean))

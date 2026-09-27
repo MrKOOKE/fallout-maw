@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevels } from "./creation-levels.mjs";
 import { finalizeActiveItemActionPointCost } from "../utils/action-point-cost-limits.mjs";
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
@@ -198,20 +199,20 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.trap)) return false;
   if (isContainerItem(item)) {
-    ui.notifications.warn(`${item.name}: контейнер нельзя расходовать как ловушку.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0672", { p0: (item.name) }, "{p0}: контейнер нельзя расходовать как ловушку."));
     return false;
   }
   if (isActorUnableToAct(sourceActor)) return false;
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn("Сцена не готова для установки ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0673", "Сцена не готова для установки ловушки."));
     return false;
   }
   if (getItemQuantity(item) <= 0) {
-    ui.notifications.warn(`${item.name}: нет доступной штучности.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0674", { p0: (item.name) }, "{p0}: нет доступной штучности."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn("Нет активного GM для создания ловушки на сцене.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0675", "Нет активного GM для создания ловушки на сцене."));
     return false;
   }
 
@@ -235,11 +236,11 @@ export async function startWorldTrapPlacement({ item = null, factionName = "", a
   });
   if (!game.user?.isGM || !item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.trap, { ignoreBroken: true })) return false;
   if (isContainerItem(item)) {
-    ui.notifications.warn(`${item.name}: контейнер нельзя использовать как шаблон ловушки.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0676", { p0: (item.name) }, "{p0}: контейнер нельзя использовать как шаблон ловушки."));
     return false;
   }
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn("Сцена не готова для установки ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0673", "Сцена не готова для установки ловушки."));
     return false;
   }
   return beginTrapPlacement({
@@ -296,10 +297,10 @@ async function beginTrapPlacement(source = {}) {
 
   bindTrapCanvasInput(placement, onTrapPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
-  const name = placement.itemData?.name ?? "Ловушка";
+  const name = placement.itemData?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка");
   const instruction = placement.mode === "world"
-    ? "размещайте ловушки кликами. Esc или кнопка «Остановить» завершает установку."
-    : "выберите точку установки. Esc/ПКМ завершает.";
+    ? auditLocalize("FALLOUTMAW.AuditRuntime.R0678", "размещайте ловушки кликами. Esc или кнопка «Остановить» завершает установку.")
+    : auditLocalize("FALLOUTMAW.AuditRuntime.R0679", "выберите точку установки. Esc/ПКМ завершает.");
   ui.notifications.info(`${name}: ${instruction}`);
   return true;
 }
@@ -310,11 +311,11 @@ export function startTrapInteractionMode({ actor = null, token = null } = {}) {
   });
   const sourceActor = actor ?? token?.actor ?? token?.document?.actor ?? getTrapViewerActor();
   if (!sourceActor?.isOwner) {
-    ui.notifications.warn("Для работы с ловушками нужен выбранный актёр.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0680", "Для работы с ловушками нужен выбранный актёр."));
     return false;
   }
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn("Сцена не готова для работы с ловушками.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0681", "Сцена не готова для работы с ловушками."));
     return false;
   }
 
@@ -345,7 +346,7 @@ export function startTrapInteractionMode({ actor = null, token = null } = {}) {
   bindTrapCanvasInput(interaction, onTrapInteractionCanvasEvent);
   window.addEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
   refreshTrapInteractionHighlights();
-  ui.notifications.info("Режим ловушек: выберите подсвеченную ловушку. Esc/ПКМ отменяет.");
+  ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0682", "Режим ловушек: выберите подсвеченную ловушку. Esc/ПКМ отменяет."));
   return true;
 }
 
@@ -517,10 +518,10 @@ async function handleTrapDetectionForToken(tile, token) {
   }
 
   await revealTrapToActor(tile, actor, { shareWithFaction: true });
-  ui.notifications.info(`${actor.name}: ловушка обнаружена.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0683", { p0: (actor.name) }, "{p0}: ловушка обнаружена."));
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p><strong>${escapeHTML(actor.name)}</strong> обнаруживает ловушку.</p>`
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0684", { p0: (escapeHTML(actor.name)) }, "<p><strong>{p0}</strong> обнаруживает ловушку.</p>")
   });
   if (shouldPauseAfterTrapDetection(game.combat)) pauseGameForTrap();
   return true;
@@ -588,7 +589,7 @@ async function requestTrapActivation(tile, token, { announce = false } = {}) {
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для срабатывания ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0685", "Нет активного GM для срабатывания ловушки."));
     pendingTrapActivationKeys.delete(key);
     return;
   }
@@ -653,9 +654,9 @@ async function announceTrapTriggerEnterNow({ sceneId = "", tileId = "", tokenId 
   if (!scene || !tile || !actor || !trap || actor.uuid === trap.ownerActorUuid || isActorSafeForTrap(trap, actor)) return;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p><strong>${escapeHTML(actor.name)}</strong> активирует ловушку.</p>`
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0686", { p0: (escapeHTML(actor.name)) }, "<p><strong>{p0}</strong> активирует ловушку.</p>")
   });
-  ui.notifications.warn(`${actor.name}: ловушка активирована.`);
+  ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0687", { p0: (actor.name) }, "{p0}: ловушка активирована."));
   pauseGameForTrap();
 }
 
@@ -683,20 +684,20 @@ async function onTrapPlacementPointerDown(event) {
     return;
   }
   if (getItemQuantity(item) <= 0) {
-    ui.notifications.warn(`${item.name}: нет доступной штучности.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0674", { p0: (item.name) }, "{p0}: нет доступной штучности."));
     cancelActiveTrapPlacement();
     return;
   }
 
   const trapData = normalizeTrapData(getTrapFunction(item));
   const apCost = finalizeActiveItemActionPointCost(trapData.actionPointCost);
-  if (!canSpendCombatActionPoints(actor, apCost, { label: "установки ловушки" })) return;
+  if (!canSpendCombatActionPoints(actor, apCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0688", "установки ловушки") })) return;
 
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
   const rect = getTrapPlacementRectFromPoint(point, trapData, canvas.scene, placement.rotation);
   const clipped = getTrapPlacementClippedArea(rect, canvas.scene);
   if (!clipped.polygons.length) {
-    ui.notifications.warn(`${item.name}: стены полностью отсекают область установки.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0689", { p0: (item.name) }, "{p0}: стены полностью отсекают область установки."));
     return;
   }
   cancelActiveTrapPlacement({
@@ -715,7 +716,7 @@ async function onTrapPlacementPointerDown(event) {
     requester: "trapInstallation"
   });
   if (!isSkillCheckSuccess(outcome)) {
-    ui.notifications.warn(`${item.name}: установка не удалась.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0690", { p0: (item.name) }, "{p0}: установка не удалась."));
     await placement.application?.render?.({ force: true });
     return;
   }
@@ -724,14 +725,14 @@ async function onTrapPlacementPointerDown(event) {
     ? await selectTrapLinkedAction()
     : null;
   if (trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE && !linkedAction) {
-    ui.notifications.info(`${item.name}: установка отменена до выбора связанного действия.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0691", { p0: (item.name) }, "{p0}: установка отменена до выбора связанного действия."));
     await placement.application?.render?.({ force: true });
     return;
   }
 
   const currentItem = actor.items?.get(placement.itemId);
   if (!currentItem || getItemQuantity(currentItem) <= 0) {
-    ui.notifications.warn(`${item.name}: предмет больше недоступен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0692", { p0: (item.name) }, "{p0}: предмет больше недоступен."));
     await placement.application?.render?.({ force: true });
     return;
   }
@@ -747,7 +748,7 @@ async function onTrapPlacementPointerDown(event) {
     linkedAction
   });
   if (!created) {
-    ui.notifications.warn(`${item.name}: ловушка не была создана, предмет не израсходован.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0693", { p0: (item.name) }, "{p0}: ловушка не была создана, предмет не израсходован."));
     return;
   }
   await placement.application?.render?.({ force: true });
@@ -766,7 +767,7 @@ async function placeWorldTrapAtPointer(placement, event) {
   const rect = getTrapPlacementRectFromPoint(point, trapData, canvas.scene, placement.rotation);
   const clipped = getTrapPlacementClippedArea(rect, canvas.scene);
   if (!clipped.polygons.length) {
-    ui.notifications.warn(`${item.name}: стены полностью отсекают область установки.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0689", { p0: (item.name) }, "{p0}: стены полностью отсекают область установки."));
     return;
   }
 
@@ -973,7 +974,7 @@ function cancelActiveTrapPlacement({
   if (refreshApplication && placement.mode === "world" && placement.application?.rendered) {
     void placement.application.render({ force: true });
   }
-  if (notify) ui.notifications.info("Установка ловушки отменена.");
+  if (notify) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0695", "Установка ловушки отменена."));
   return true;
 }
 
@@ -1115,7 +1116,7 @@ function waitForTrapLinkedActorSelection({ parentPlacement = null } = {}) {
 
     const layer = getTrapLinkedActorOverlayLayer();
     if (!layer?.addChild) {
-      ui.notifications.warn("Слой выбора связанного актёра недоступен.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0696", "Слой выбора связанного актёра недоступен."));
       finishTrapLinkedActorSelection(null, {
         selection,
         reason: "overlayUnavailable"
@@ -1135,7 +1136,7 @@ function waitForTrapLinkedActorSelection({ parentPlacement = null } = {}) {
     bindTrapCanvasInput(selection, onTrapLinkedActorCanvasEvent);
     window.addEventListener("keydown", onTrapLinkedActorKeyDown, { capture: true });
     refreshTrapLinkedActorHighlights(selection);
-    ui.notifications.info("Выберите подсвеченного актёра для связи с ловушкой. Esc/ПКМ отменяет.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0697", "Выберите подсвеченного актёра для связи с ловушкой. Esc/ПКМ отменяет."));
   });
 }
 
@@ -1471,7 +1472,7 @@ class TrapLinkedActionDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   get title() {
-    return `Связать ловушку - ${this.#token?.name ?? this.#token?.actor?.name ?? "актёр"}`;
+    return auditFormat("FALLOUTMAW.AuditRuntime.R0698", { p0: (this.#token?.name ?? this.#token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0699", "актёр")) }, "Связать ловушку - {p0}");
   }
 
   async wait() {
@@ -1487,7 +1488,7 @@ class TrapLinkedActionDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     return {
       ...context,
-      actorName: this.#token?.name ?? this.#token?.actor?.name ?? "Актёр",
+      actorName: this.#token?.name ?? this.#token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр"),
       weaponSets,
       hasWeapons: weaponSets.some(set => set.weapons.length > 0),
       canConfirm: Boolean(this.#selectedAction)
@@ -1577,7 +1578,7 @@ function prepareTrapLinkedWeaponSets(actor, { expandedWeaponId = "", selectedAct
           });
         return {
           functionId,
-          label: weaponFunction.isPrimary ? "Основная функция" : (weaponFunction.name || "Дополнительная функция"),
+          label: weaponFunction.isPrimary ? auditLocalize("FALLOUTMAW.AuditRuntime.R0700", "Основная функция") : (weaponFunction.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0701", "Дополнительная функция")),
           actions
         };
       }).filter(entry => entry.actions.length > 0);
@@ -1585,7 +1586,7 @@ function prepareTrapLinkedWeaponSets(actor, { expandedWeaponId = "", selectedAct
       weapons.push({
         itemId,
         name: weapon.name,
-        img: normalizeImagePath(weapon.img, "icons/svg/sword.svg"),
+        img: normalizeImagePath(weapon.img, "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp"),
         expanded: expandedWeaponId === itemId,
         functions
       });
@@ -1743,7 +1744,7 @@ async function onTrapInteractionPointerDown(event) {
     reason: "trapSelected"
   });
   if (!actor?.isOwner) {
-    ui.notifications.warn("Для работы с ловушкой нужен выбранный актёр.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0702", "Для работы с ловушкой нужен выбранный актёр."));
     return;
   }
   await openTrapInteractionDialog(tile, actor);
@@ -1801,7 +1802,7 @@ function cancelTrapInteractionMode({
     activeTrapInteraction = null;
     refreshTrapInteractionHighlights();
   }
-  if (notify) ui.notifications.info("Режим ловушек отменён.");
+  if (notify) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0703", "Режим ловушек отменён."));
   return true;
 }
 
@@ -1816,16 +1817,16 @@ async function openTrapInteractionDialog(tile, actor) {
   if (!trap || !actor) return;
   const canPickup = canActorPickupTrap(trap, actor);
   const action = await DialogV2.wait({
-    window: { title: tile.name || "Ловушка" },
-    content: `<p><strong>${escapeHTML(tile.name || "Ловушка")}</strong></p>`,
+    window: { title: tile.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка") },
+    content: `<p><strong>${escapeHTML(tile.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка"))}</strong></p>`,
     buttons: canPickup
       ? [
-          { action: "pickup", label: "Забрать", icon: "fa-solid fa-hand", default: true },
-          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+          { action: "pickup", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0704", "Забрать"), icon: "fa-solid fa-hand", default: true },
+          { action: "cancel", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"), icon: "fa-solid fa-xmark", type: "button" }
         ]
       : [
-          { action: "disarm", label: "Обезвредить", icon: "fa-solid fa-screwdriver-wrench", default: true },
-          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+          { action: "disarm", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0705", "Обезвредить"), icon: "fa-solid fa-screwdriver-wrench", default: true },
+          { action: "cancel", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"), icon: "fa-solid fa-xmark", type: "button" }
         ],
     rejectClose: false,
     modal: true,
@@ -1879,7 +1880,7 @@ class TrapDisarmDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   get title() {
-    return `Обезвреживание - ${this.#tile?.name || "Ловушка"}`;
+    return auditFormat("FALLOUTMAW.AuditRuntime.R0706", { p0: (this.#tile?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка")) }, "Обезвреживание - {p0}");
   }
 
   async _prepareContext(options) {
@@ -1898,14 +1899,14 @@ class TrapDisarmDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const attemptsFinished = attemptsRemaining <= 0;
     return {
       ...context,
-      title: "ОБЕЗВРЕЖИВАНИЕ",
-      targetName: this.#tile?.name || "Ловушка",
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0707", "ОБЕЗВРЕЖИВАНИЕ"),
+      targetName: this.#tile?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка"),
       toolLabel,
       requiredClass: disarm.toolClass,
       difficulty: disarm.difficulty,
       attemptsRemaining,
       attemptsTotal: disarm.attempts,
-      statusLabel: disarmed ? "Ловушка обезврежена" : (attemptsFinished ? "Попытки исчерпаны" : "Ловушка активна"),
+      statusLabel: disarmed ? auditLocalize("FALLOUTMAW.AuditRuntime.R0708", "Ловушка обезврежена") : (attemptsFinished ? auditLocalize("FALLOUTMAW.AuditRuntime.R0709", "Попытки исчерпаны") : auditLocalize("FALLOUTMAW.AuditRuntime.R0710", "Ловушка активна")),
       statusClass: disarmed ? "status-ok" : (attemptsFinished ? "status-bad" : "status-warn"),
       disarmed,
       tools: tools.map(tool => ({ ...tool, selected: tool.itemId === this.#selectedToolId })),
@@ -1932,13 +1933,13 @@ class TrapDisarmDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const disarm = trapData.disarm;
     const remaining = this.#localAttemptsRemaining ?? getTrapDisarmAttemptsRemaining(trap);
     if (remaining <= 0) {
-      ui.notifications.warn("Попытки обезвреживания закончились.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0711", "Попытки обезвреживания закончились."));
       return this.render({ force: true });
     }
     const tools = getTrapDisarmToolCandidates(this.#actor, disarm);
     const selectedTool = tools.find(tool => tool.itemId === this.#selectedToolId);
     if (!selectedTool) {
-      ui.notifications.warn("Нет подходящего инструмента для обезвреживания.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0712", "Нет подходящего инструмента для обезвреживания."));
       return this.render({ force: true });
     }
 
@@ -2005,7 +2006,7 @@ async function requestPickupTrapDocuments(tile, actor) {
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для забора ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0713", "Нет активного GM для забора ловушки."));
     return false;
   }
   try {
@@ -2018,7 +2019,7 @@ async function requestPickupTrapDocuments(tile, actor) {
     return Boolean(result?.success);
   } catch (error) {
     console.error(`${SYSTEM_ID} | Trap pickup request failed`, error);
-    ui.notifications.warn("GM не подтвердил забор ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0714", "GM не подтвердил забор ловушки."));
     return false;
   }
 }
@@ -2039,7 +2040,7 @@ async function requestDisarmTrapDocuments(tile, actor, { success = false, toolIt
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для обезвреживания ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0715", "Нет активного GM для обезвреживания ловушки."));
     return;
   }
   game.socket.emit(TRAP_SOCKET, {
@@ -2122,9 +2123,9 @@ async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
     if (success) {
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<p><strong>${escapeHTML(actor.name)}</strong> обезвреживает ловушку <strong>${escapeHTML(tile.name)}</strong>.</p>`
+        content: auditFormat("FALLOUTMAW.AuditRuntime.R0716", { p0: (escapeHTML(actor.name)), p1: (escapeHTML(tile.name)) }, "<p><strong>{p0}</strong> обезвреживает ловушку <strong>{p1}</strong>.</p>")
       });
-      ui.notifications.info(`${actor.name}: ловушка обезврежена.`);
+      ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0717", { p0: (actor.name) }, "{p0}: ловушка обезврежена."));
       await markTrapDisarmed(tile, actor, { toolItemId, attemptsRemaining, scope });
     } else {
       await tile.update({
@@ -2133,9 +2134,9 @@ async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
       }, trapDocumentOptions(scope, { render: false }));
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<p><strong>${escapeHTML(actor.name)}</strong> не смог обезвредить ловушку <strong>${escapeHTML(tile.name)}</strong>. Осталось попыток: ${remaining}.</p>`
+        content: auditFormat("FALLOUTMAW.AuditRuntime.R0718", { p0: (escapeHTML(actor.name)), p1: (escapeHTML(tile.name)), p2: (remaining) }, "<p><strong>{p0}</strong> не смог обезвредить ловушку <strong>{p1}</strong>. Осталось попыток: {p2}.</p>")
       });
-      if (remaining <= 0) ui.notifications.warn(`${tile.name}: попытки обезвреживания закончились.`);
+      if (remaining <= 0) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0719", { p0: (tile.name) }, "{p0}: попытки обезвреживания закончились."));
     }
     await scope.emit("fallout-maw.trap.disarm.resolved", {
       data,
@@ -2195,7 +2196,7 @@ async function requestCreateTrapDocuments(request = {}) {
   if (game.user?.isGM) return createTrapDocumentsNow(serialized, game.user.id);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для создания ловушки на сцене.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0675", "Нет активного GM для создания ловушки на сцене."));
     return null;
   }
   try {
@@ -2208,21 +2209,26 @@ async function requestCreateTrapDocuments(request = {}) {
     return result?.success ? result : null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Trap placement request failed`, error);
-    ui.notifications.warn("GM не подтвердил создание ловушки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0720", "GM не подтвердил создание ловушки."));
     return null;
   }
 }
 
-async function handleTrapSocketMessage(payload = {}) {
+async function handleTrapSocketMessage(payload = {}, senderUserId = "") {
   if (!payload || payload.scope !== TRAP_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
   if (payload.type === "response") {
-    if (payload.recipientUserId && payload.recipientUserId !== game.user?.id) return;
+    if (payload.recipientUserId !== game.user?.id) return;
+    const pending = pendingTrapSocketRequests.get(String(payload.requestId ?? ""));
+    if (!pending || !sender.isGM || sender.id !== pending.gmUserId) return;
     settleTrapSocketRequest(payload);
     return;
   }
   if (payload.type === "request") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     const requesterUserId = String(payload.requesterUserId ?? "");
+    if (requesterUserId !== sender.id) return;
     const requestId = String(payload.requestId ?? "");
     if (!requesterUserId || !requestId) return;
     const cacheKey = `${requesterUserId}:${requestId}`;
@@ -2257,8 +2263,15 @@ async function handleTrapSocketMessage(payload = {}) {
 
   // Legacy fire-and-forget actions remain supported for trap activation,
   // detection, pickup and disarm.
-  if (payload.senderUserId === game.user?.id) return;
+  if (String(payload.senderUserId ?? "") !== sender.id || sender.id === game.user?.id) return;
   if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+  if (!sender.isGM && ["disarmTrapDocuments", "activateTrapTile", "resolveTrapDetectionStop", "announceTrapTriggerEnter"].includes(payload.action)) {
+    const request = payload.request ?? {};
+    const actor = request.actorUuid
+      ? await fromUuid(request.actorUuid)
+      : game.scenes?.get(String(request.sceneId ?? ""))?.tokens?.get(String(request.tokenId ?? ""))?.actor;
+    if (!actor?.testUserPermission?.(sender, "OWNER")) return;
+  }
   if (payload.action === "createTrapDocuments") {
     await createTrapDocumentsNow(payload.request ?? {}, payload.senderUserId ?? "");
   }
@@ -2441,7 +2454,7 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
     ?? getTrapPlacementRectFromPoint(point, trapData, scene, rotation);
   const clipped = getTrapPlacementClippedArea(rect, scene);
   if (!clipped.polygons.length) {
-    ui.notifications.warn(`${String(itemData.name ?? "Ловушка")}: стены полностью отсекают область установки.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0689", { p0: (String(itemData.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка"))) }, "{p0}: стены полностью отсекают область установки."));
     return { status: "failed", reason: "blockedPlacement", tile: null };
   }
   const source = trapSourceParticipant({ ownerActor, sourceItemUuid: request.sourceItemUuid });
@@ -2450,7 +2463,7 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
     sceneUuid: String(scene.uuid ?? ""),
     ownerActorUuid: String(ownerActor?.uuid ?? request.ownerActorUuid ?? ""),
     sourceItemUuid: String(request.sourceItemUuid ?? ""),
-    itemName: String(itemData.name ?? "Ловушка")
+    itemName: String(itemData.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка"))
   };
   const itemGate = await scope.emit("fallout-maw.item.use.before", { data: itemUseData }, {
     occurrenceKey: `trap-placement:${scene.id}:${request.sourceItemUuid || itemData.name}:item-use-before`,
@@ -2462,7 +2475,7 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
       sceneUuid: String(scene.uuid ?? ""),
       ownerActorUuid: String(ownerActor?.uuid ?? request.ownerActorUuid ?? ""),
       sourceItemUuid: String(request.sourceItemUuid ?? ""),
-      trapName: String(itemData.name ?? "Ловушка"),
+      trapName: String(itemData.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка")),
       x: Math.round(rect.x),
       y: Math.round(rect.y),
       width: Math.round(rect.width),
@@ -2483,7 +2496,7 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
   const y = Math.round(top + (height / 2));
 
   const createdTiles = await scene.createEmbeddedDocuments("Tile", [{
-    name: String(itemData.name ?? "Ловушка"),
+    name: String(itemData.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка")),
     texture: {
       src: normalizeImagePath(itemData.img, DEFAULT_TRAP_IMAGE),
       anchorX: 0.5,
@@ -2569,7 +2582,7 @@ async function createTrapActivationDocuments(scene, tile, trapData, rect, clippe
   const regionData = [];
   if (detectionRadius > 0) {
     regionData.push({
-      name: `${tile.name}: обнаружение`,
+      name: auditFormat("FALLOUTMAW.AuditRuntime.R0721", { p0: (tile.name) }, "{p0}: обнаружение"),
       color: "#d6c45f",
       shapes: [{
         type: "circle",
@@ -2595,7 +2608,7 @@ async function createTrapActivationDocuments(scene, tile, trapData, rect, clippe
     });
   }
   regionData.push({
-    name: `${tile.name}: активация`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0722", { p0: (tile.name) }, "{p0}: активация"),
     color: "#d85f5f",
     shapes: clippedArea.polygons.map(polygon => ({
       type: "polygon",
@@ -2782,7 +2795,7 @@ async function triggerLinkedTrapAction(tile, triggeringToken, trap) {
     || !attackerToken?.actor
     || attackerToken.actor.uuid !== linkedAction.actorUuid
     || !weapon) {
-    ui.notifications.warn(`${tile?.name ?? "Ловушка"}: связанный актёр или оружие недоступны.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0723", { p0: (tile?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка")) }, "{p0}: связанный актёр или оружие недоступны."));
     return false;
   }
   const executed = await executeWeaponAttackAgainstToken({
@@ -2793,7 +2806,7 @@ async function triggerLinkedTrapAction(tile, triggeringToken, trap) {
     weaponFunctionId: linkedAction.weaponFunctionId
   });
   if (!executed) {
-    ui.notifications.warn(`${attackerToken.name}: действие «${linkedAction.actionName || linkedAction.actionKey}» сейчас невозможно.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0724", { p0: (attackerToken.name), p1: (linkedAction.actionName || linkedAction.actionKey) }, "{p0}: действие «{p1}» сейчас невозможно."));
   }
   return executed;
 }
@@ -2812,7 +2825,7 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
   const levels = getSceneCreationLevels(scene, tile);
   const centerElevation = Number.isFinite(Number(center?.elevation)) ? Number(center.elevation) : 0;
   const created = await scene.createEmbeddedDocuments("Region", [{
-    name: `${tile.name}: область`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0725", { p0: (tile.name) }, "{p0}: область"),
     color: damageEntries.length ? "#dd8431" : "#8a8a8a",
     shapes: [{
       type: "circle",
@@ -3006,18 +3019,18 @@ async function openTrapGmFreeDialog(tile) {
   if (!game.user?.isGM || !trap) return;
   const disarmed = trap.disarmed === true || trap.armed === false;
   const action = await DialogV2.wait({
-    window: { title: tile.name || "Ловушка" },
-    content: `<p><strong>${escapeHTML(tile.name || "Ловушка")}</strong></p>`,
+    window: { title: tile.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка") },
+    content: `<p><strong>${escapeHTML(tile.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка"))}</strong></p>`,
     buttons: disarmed
       ? [
-          { action: "delete", label: "Удалить", icon: "fa-solid fa-trash" },
-          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+          { action: "delete", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0726", "Удалить"), icon: "fa-solid fa-trash" },
+          { action: "cancel", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"), icon: "fa-solid fa-xmark", type: "button" }
         ]
       : [
-          { action: "disarm", label: "Обезвредить", icon: "fa-solid fa-screwdriver-wrench" },
-          { action: "apply", label: "Применить", icon: "fa-solid fa-burst" },
-          { action: "delete", label: "Удалить", icon: "fa-solid fa-trash" },
-          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+          { action: "disarm", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0705", "Обезвредить"), icon: "fa-solid fa-screwdriver-wrench" },
+          { action: "apply", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0284", "Применить"), icon: "fa-solid fa-burst" },
+          { action: "delete", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0726", "Удалить"), icon: "fa-solid fa-trash" },
+          { action: "cancel", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"), icon: "fa-solid fa-xmark", type: "button" }
         ],
     rejectClose: false,
     modal: true,
@@ -4053,7 +4066,7 @@ function requestTrapSocket(action, request, gm, requestId = "") {
       error.code = "socket-timeout";
       reject(error);
     }, TRAP_SOCKET_TIMEOUT_MS);
-    entry = { resolve, reject, timeout, promise: null };
+    entry = { resolve, reject, timeout, promise: null, gmUserId: gm.id };
   });
   entry.promise = promise;
   pendingTrapSocketRequests.set(id, entry);
@@ -4182,7 +4195,7 @@ async function emitTrapItemUseResolved(scope, request, scene, participant, resul
       sceneUuid: String(scene?.uuid ?? ""),
       ownerActorUuid: String(request.ownerActorUuid ?? ""),
       sourceItemUuid: String(request.sourceItemUuid ?? ""),
-      itemName: String(request.itemData?.name ?? "Ловушка"),
+      itemName: String(request.itemData?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0677", "Ловушка")),
       tileUuid: String(result.tile?.uuid ?? "")
     },
     outcome: {

@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
@@ -66,7 +67,7 @@ export async function equipActorItemInEquipmentSlot(actor, item, slotKey = "") {
     allowReplacement: true
   });
   if (!placement) {
-    ui.notifications.warn("Предмет не подходит для этого слота.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1297", "Предмет не подходит для этого слота."));
     return null;
   }
 
@@ -110,7 +111,7 @@ export async function equipActorItemInWeaponSlot(actor, item, weaponSetKey = "",
     weaponSlot: weaponSlotKey
   }, [item.id], { allowReplacement: true });
   if (!placement) {
-    ui.notifications.warn("Предмет не подходит для этого слота оружия.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1298", "Предмет не подходит для этого слота оружия."));
     return null;
   }
 

@@ -1,33 +1,33 @@
 <div class="fallout-maw-global-map-form">
   <div class="form-group">
-    <label>Режим тумана</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textb0203f494d69'}}</label>
     <div class="form-fields">
       <select name="fog.mode">
-        <option value="native" {{#if (eq fog.mode "native")}}selected{{/if}}>Штатное зрение Foundry</option>
-        <option value="cells" {{#if (eq fog.mode "cells")}}selected{{/if}}>Раскрытие по клеткам</option>
+        <option value="native" {{#if (eq fog.mode "native")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text3540fe11cc3a'}}</option>
+        <option value="cells" {{#if (eq fog.mode "cells")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Textcc5d41984736'}}</option>
       </select>
     </div>
   </div>
   <div class="form-group">
-    <label>Радиус раскрытия</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text45e48f805a1c'}}</label>
     <div class="form-fields"><input type="number" name="fog.cellRadius" value="{{fog.cellRadius}}" min="1" max="20" step="1"></div>
   </div>
   <div class="form-group">
-    <label>Скрытые локации в игре</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Texta7985382366f'}}</label>
     <div class="form-fields">
       <input type="checkbox" name="fog.hiddenLocationsInPlay" {{checked hiddenLocationsInPlay}}>
     </div>
-    <p class="hint">GM без выбранного токена видит скрытые локации приглушёнными. Как только он берёт актёра под управление, скрытые локации исчезают. Выключите, чтобы скрытые локации не показывались GM вообще вне режима редактирования.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text805e81b6e57f'}}</p>
   </div>
   {{#if isCellMode}}
   <div class="form-group">
-    <label>Общая разведка</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textf8b9817f560a'}}</label>
     <div class="form-fields">
       <button type="button" data-action="resetCellFog" class="danger">
-        <i class="fa-solid fa-cloud-arrow-down"></i> Сбросить
+        <i class="fa-solid fa-cloud-arrow-down"></i> {{localize 'FALLOUTMAW.Advancement.Reset'}}
       </button>
     </div>
   </div>
   {{/if}}
-  <footer class="form-footer"><button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button></footer>
+  <footer class="form-footer"><button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button></footer>
 </div>

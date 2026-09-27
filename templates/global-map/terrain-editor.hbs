@@ -1,17 +1,17 @@
 <div class="fallout-maw-global-map-form">
-  {{#if levels.length}}<div class="form-group"><label>Уровень</label><div class="form-fields"><select name="terrain.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
-  <div class="form-group"><label>Название</label><div class="form-fields"><input type="text" name="terrain.name" value="{{terrain.name}}" required></div></div>
-  <div class="form-group"><label>Цвет</label><div class="form-fields"><input type="color" name="terrain.color" value="{{terrain.color}}"></div></div>
-  <div class="form-group"><label>Сложность</label><div class="form-fields"><input type="number" name="terrain.difficulty" value="{{terrain.difficulty}}" step="1"></div></div>
-  <div class="form-group"><label>Стоимость выхода из клетки, км</label><div class="form-fields"><input type="number" name="terrain.cellAreaKm" value="{{terrain.cellAreaKm}}" min="0.01" step="0.01"></div></div>
-  <div class="form-group"><label>Радиус кисти</label><div class="form-fields"><input type="number" name="terrain.brushRadius" value="{{terrain.brushRadius}}" min="1" max="12"></div></div>
+  {{#if levels.length}}<div class="form-group"><label>{{localize 'FALLOUTMAW.Actor.Level'}}</label><div class="form-fields"><select name="terrain.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Common.Label'}}</label><div class="form-fields"><input type="text" name="terrain.name" value="{{terrain.name}}" required></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Common.Color'}}</label><div class="form-fields"><input type="color" name="terrain.color" value="{{terrain.color}}"></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Ability.Actions.EventSkillDifficulty'}}</label><div class="form-fields"><input type="number" name="terrain.difficulty" value="{{terrain.difficulty}}" step="1"></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.AuditTemplates.Text7d57b2104ea8'}}</label><div class="form-fields"><input type="number" name="terrain.cellAreaKm" value="{{terrain.cellAreaKm}}" min="0.01" step="0.01"></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.AuditTemplates.Text2f3e5c154a7d'}}</label><div class="form-fields"><input type="number" name="terrain.brushRadius" value="{{terrain.brushRadius}}" min="1" max="12"></div></div>
   <div class="hint">
-    <div>ЛКМ добавляет клетки.</div>
-    <div>Shift+ЛКМ удаляет клетки.</div>
-    <div>Ctrl+ЛКМ перезаписывает клетки других местностей.</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text1e486ceef92f'}}</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text8414e5081205'}}</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text8670b2d00a78'}}</div>
   </div>
   <footer class="form-footer">
-    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
-    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.Common.Delete'}}</button>{{/if}}
   </footer>
 </div>

@@ -12,7 +12,7 @@
       </div>
       <button type="button" class="fallout-maw-combat-settings-migrate" data-action="migratePresetSettings">
         <i class="fa-solid fa-code-compare"></i>
-        <span>Мигрировать из других пресетов</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</span>
       </button>
     </header>
 
@@ -34,7 +34,7 @@
             </select>
           </label>
           <label class="fallout-maw-combat-settings-field">
-            <span>Стоимость вставки оружия в набор, ОД</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text6dec83f8f10f'}}</span>
             <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
           </label>
           <label class="fallout-maw-combat-settings-field">
@@ -156,11 +156,11 @@
         </header>
         <div class="fallout-maw-combat-settings-fields">
           <label class="fallout-maw-combat-settings-field">
-            <span>Порог дополнительной проверки</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text38dd7f545fc4'}}</span>
             <input type="number" name="knockback.repeatDifficultyThreshold" value="{{settings.knockback.repeatDifficultyThreshold}}" min="1" step="1">
           </label>
           <label class="fallout-maw-combat-settings-field">
-            <span>Снижение сложности после каждой проверки</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text1cd5d1f0e0ac'}}</span>
             <input type="number" name="knockback.repeatDifficultyStep" value="{{settings.knockback.repeatDifficultyStep}}" min="1" step="1">
           </label>
         </div>
@@ -193,21 +193,21 @@
           <div class="fallout-maw-settings-table fallout-maw-combat-skill-damage-table">
             <div class="fallout-maw-settings-row fallout-maw-grid-header">
               <span></span>
-              <span>Плоский бонус</span>
-              <span>Процентный бонус</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text0bf26de22a7c'}}</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text8f046be43540'}}</span>
             </div>
             <div class="fallout-maw-settings-row">
-              <span>Ближний бой</span>
+              <span>{{localize 'FALLOUTMAW.AuditSystem.Text100'}}</span>
               <input type="text" name="weaponSkillDamage.meleeCombat.flat" value="{{settings.weaponSkillDamage.meleeCombat.flat}}" data-formula-autocomplete="all">
               <input type="text" name="weaponSkillDamage.meleeCombat.percent" value="{{settings.weaponSkillDamage.meleeCombat.percent}}" data-formula-autocomplete="all">
             </div>
             <div class="fallout-maw-settings-row">
-              <span>Дальний бой</span>
+              <span>{{localize 'FALLOUTMAW.AuditSystem.Text099'}}</span>
               <input type="text" name="weaponSkillDamage.rangedCombat.flat" value="{{settings.weaponSkillDamage.rangedCombat.flat}}" data-formula-autocomplete="all">
               <input type="text" name="weaponSkillDamage.rangedCombat.percent" value="{{settings.weaponSkillDamage.rangedCombat.percent}}" data-formula-autocomplete="all">
             </div>
             <div class="fallout-maw-settings-row">
-              <span>Метание</span>
+              <span>{{localize 'FALLOUTMAW.AuditSystem.Text104'}}</span>
               <input type="text" name="weaponSkillDamage.throwing.flat" value="{{settings.weaponSkillDamage.throwing.flat}}" data-formula-autocomplete="all">
               <input type="text" name="weaponSkillDamage.throwing.percent" value="{{settings.weaponSkillDamage.throwing.percent}}" data-formula-autocomplete="all">
             </div>
@@ -224,24 +224,24 @@
         </header>
         <div class="fallout-maw-combat-settings-fields">
           <label class="fallout-maw-combat-settings-field">
-            <span>Урон по обычной конечности</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text6695f42cfb53'}}</span>
             <input type="text" name="unconsciousness.normalDamageFormula" value="{{settings.unconsciousness.normalDamageFormula}}" data-formula-autocomplete="all">
-            <small>Накопление сложности при состоянии конечности &gt;0.</small>
+            <small>{{localize 'FALLOUTMAW.AuditTemplates.Text83590b2146c4'}}</small>
           </label>
           <label class="fallout-maw-combat-settings-field">
-            <span>Урон по повреждённой конечности</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Textf3bb16f41e31'}}</span>
             <input type="text" name="unconsciousness.negativeDamageFormula" value="{{settings.unconsciousness.negativeDamageFormula}}" data-formula-autocomplete="all">
-            <small>Накопление сложности при состоянии конечности &lt;0.</small>
+            <small>{{localize 'FALLOUTMAW.AuditTemplates.Text066a81b2de32'}}</small>
           </label>
           <label class="fallout-maw-combat-settings-field">
-            <span>Множитель по ключевой конечности</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text413012135911'}}</span>
             <input type="text" name="unconsciousness.criticalDamageFormula" value="{{settings.unconsciousness.criticalDamageFormula}}" data-formula-autocomplete="all">
-            <small>Накопление сложности при повреждении ключевой конечности.</small>
+            <small>{{localize 'FALLOUTMAW.AuditTemplates.Textc8ef7cd81967'}}</small>
           </label>
           <label class="fallout-maw-combat-settings-field">
-            <span>Множитель недостающего состояния</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text312e1fa3a50c'}}</span>
             <input type="text" name="unconsciousness.stateMultiplierFormula" value="{{settings.unconsciousness.stateMultiplierFormula}}" data-formula-autocomplete="all">
-            <small>Чем ниже состояние конечности от максимального, тем больше сложности накапливается от других источников.</small>
+            <small>{{localize 'FALLOUTMAW.AuditTemplates.Text545895fdf829'}}</small>
           </label>
         </div>
       </section>

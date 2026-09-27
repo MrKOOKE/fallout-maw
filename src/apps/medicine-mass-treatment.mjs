@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { normalizeToolSelectionPolicy } from "../utils/tool-selection-policy.mjs";
 
 const DEFAULT_MAX_MASS_TREATMENT_STEPS = 512;
@@ -45,7 +46,7 @@ export async function runSequentialMassTreatment({
 
   const normalized = normalizeMassTreatmentOptions(options);
   if (!normalized.includeTraumas && !normalized.includeLimbHealth) {
-    throw new Error("Выберите хотя бы один вид массового лечения.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneTypeOfBulkTreatment", "Выберите хотя бы один вид массового лечения."));
   }
 
   let targetContext = initialContext;
@@ -75,13 +76,13 @@ export async function runSequentialMassTreatment({
       if (!treatment) return;
       if (treatment.treatable === false) {
         summary.skipped += 1;
-        addSummaryReason(summary, treatment.unavailableReason || `Нельзя лечить: ${treatment.name ?? treatmentId}.`);
+        addSummaryReason(summary, treatment.unavailableReason || auditFormat("FALLOUTMAW.AuditApps.CannotTreat", { v0: (treatment.name ?? treatmentId) }, "Нельзя лечить: {v0}."));
         return;
       }
       if (!isIncompleteTreatment(treatment)) return;
       if (state.steps >= state.maxSteps) {
         summary.stopped = true;
-        addSummaryReason(summary, "Массовое лечение остановлено защитным пределом числа операций.");
+        addSummaryReason(summary, auditLocalize("FALLOUTMAW.AuditApps.BulkTreatmentStoppedAtTheOperationSafetyLimit", "Массовое лечение остановлено защитным пределом числа операций."));
         return;
       }
 
@@ -97,7 +98,7 @@ export async function runSequentialMassTreatment({
         addSummaryReason(
           summary,
           selection?.reason
-            || `Нет подходящего выбранного инструмента: ${treatment.name ?? treatmentId}.`
+            || auditFormat("FALLOUTMAW.AuditApps.NoSuitableSelectedTool", { v0: (treatment.name ?? treatmentId) }, "Нет подходящего выбранного инструмента: {v0}.")
         );
         return;
       }
@@ -131,18 +132,18 @@ export async function runSequentialMassTreatment({
       if (status === "committed" && receipt?.halted) {
         summary.skipped += 1;
         summary.stopped = true;
-        addSummaryReason(summary, receipt?.reason || `Лечение остановлено: ${treatment.name ?? treatmentId}.`);
+        addSummaryReason(summary, receipt?.reason || auditFormat("FALLOUTMAW.AuditApps.TreatmentStopped", { v0: (treatment.name ?? treatmentId) }, "Лечение остановлено: {v0}."));
         return;
       }
       if (status !== "committed") {
         summary.skipped += 1;
         summary.stopped = true;
-        addSummaryReason(summary, receipt?.reason || `Лечение не выполнено: ${treatment.name ?? treatmentId}.`);
+        addSummaryReason(summary, receipt?.reason || auditFormat("FALLOUTMAW.AuditApps.TreatmentFailed_710", { v0: (treatment.name ?? treatmentId) }, "Лечение не выполнено: {v0}."));
         return;
       }
       if (progress <= 0) {
         summary.skipped += 1;
-        addSummaryReason(summary, `Лечение не дало прогресса: ${treatment.name ?? treatmentId}.`);
+        addSummaryReason(summary, auditFormat("FALLOUTMAW.AuditApps.TreatmentMadeNoProgress", { v0: (treatment.name ?? treatmentId) }, "Лечение не дало прогресса: {v0}."));
         return;
       }
     }

@@ -1,10 +1,10 @@
 <div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Блоки имен персонального генератора</h2>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text0fbeb595b282'}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
-        <button type="button" data-action="createBlock"><i class="fa-solid fa-plus"></i> Блок</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
+        <button type="button" data-action="createBlock"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text00eb06d58a99'}}</button>
       </div>
     </header>
 
@@ -17,23 +17,23 @@
             <input type="text" data-field="id" value="{{id}}">
           </label>
           <label>
-            <span>Название</span>
+            <span>{{localize 'FALLOUTMAW.Common.Label'}}</span>
             <input type="text" data-field="name" value="{{name}}">
           </label>
-          <button type="button" data-action="deleteBlock" title="Удалить"><i class="fa-solid fa-trash"></i></button>
+          <button type="button" data-action="deleteBlock" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         </div>
         <label>
-          <span>Имена через запятую, точку с запятой или с новой строки</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text4f2d8384cbb6'}}</span>
           <textarea data-field="namesText" rows="4">{{namesText}}</textarea>
         </label>
       </section>
       {{else}}
-      <p class="fallout-maw-empty-list">Блоки имен не созданы.</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textd9d06f2b7ef0'}}</p>
       {{/each}}
     </div>
   </section>
 
   <footer class="sheet-footer flexrow">
-    <button type="submit"><i class="fa-solid fa-save"></i> Сохранить изменения</button>
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize 'FALLOUTMAW.Common.SaveChanges'}}</button>
   </footer>
 </div>

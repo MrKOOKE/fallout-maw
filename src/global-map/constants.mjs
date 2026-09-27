@@ -1,6 +1,8 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 
 export const GLOBAL_MAP_FLAG = "globalMap";
+export const TRAVEL_MOVEMENT_PLANNING_OPTION = "falloutMawTravelMovementPlanning";
 export const GLOBAL_MAP_VERSION = 3;
 export const GLOBAL_MAP_ROOT_SCENE_SETTING = "globalMapRootSceneId";
 export const GLOBAL_MAP_TRAVEL_IMAGE_SETTING = "globalMapTravelImage";
@@ -13,7 +15,7 @@ export const GLOBAL_MAP_TRANSITIONS_FOLDER_NAME = "\u041f\u0435\u0440\u0435\u044
 export const TRAVEL_GROUP_FLAG = "travelGroup";
 export const TRAVEL_GROUP_FOLDER_FLAG = "travelGroupFolder";
 export const TRAVEL_GROUP_TOKEN_FLAG = "travelGroupToken";
-export const TRAVEL_GROUP_IMAGE_DEFAULT = "icons/svg/group.svg";
+export const TRAVEL_GROUP_IMAGE_DEFAULT = "systems/fallout-maw/assets/System/GlobalMap/global-map-travel-group.webp";
 
 export const GLOBAL_MAP_ROLES = Object.freeze({
   ROOT_FOLDER: "rootFolder",
@@ -58,7 +60,7 @@ export function applyGlobalMapHiddenDisplay(displayable) {
 }
 
 export const DEFAULT_LOCATION = Object.freeze({
-  name: "Новая локация",
+  get name() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0901", "Новая локация"); },
   size: 1,
   strokeColor: "#ffffff",
   strokeWidth: 3,
@@ -74,7 +76,7 @@ export const DEFAULT_LOCATION = Object.freeze({
 });
 
 export const DEFAULT_TERRAIN = Object.freeze({
-  name: "Новая местность",
+  get name() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0902", "Новая местность"); },
   color: "#4a90d9",
   difficulty: 0,
   cellAreaKm: 5,
@@ -82,7 +84,7 @@ export const DEFAULT_TERRAIN = Object.freeze({
 });
 
 export const DEFAULT_TRANSITION = Object.freeze({
-  name: "Новая зона перехода",
+  get name() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0903", "Новая зона перехода"); },
   color: "#7c4dff",
   hidden: false,
   brushRadius: 1,
@@ -94,7 +96,7 @@ export const DEFAULT_TRANSITION = Object.freeze({
 });
 
 export const DEFAULT_LOCATION_EXIT = Object.freeze({
-  name: "Новая зона выхода",
+  get name() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0904", "Новая зона выхода"); },
   color: "#ffb703",
   brushRadius: 1,
   alwaysDiscovered: false,

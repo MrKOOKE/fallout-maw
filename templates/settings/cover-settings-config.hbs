@@ -1,23 +1,23 @@
 <div class="fallout-maw-config-body fallout-maw-cover-settings-config">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Укрытия</h2>
+      <h2>{{localize 'FALLOUTMAW.AuditSystem.Text066'}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
-        <button type="button" data-action="addCoverEntry"><i class="fa-solid fa-plus"></i> Добавить</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
+        <button type="button" data-action="addCoverEntry"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Tile.AddSpecialProperty'}}</button>
       </div>
     </header>
 
     <div class="fallout-maw-settings-table fallout-maw-cover-settings-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span>Ключ</span>
-        <span>Название</span>
-        <span>Иконка</span>
-        <span>Перекрытие</span>
-        <span>Ключ эффекта</span>
-        <span>Тип</span>
-        <span>Значение</span>
-        <span>Приоритет</span>
+        <span>{{localize 'FALLOUTMAW.Common.Key'}}</span>
+        <span>{{localize 'FALLOUTMAW.Common.Label'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text25b8ac0dd866'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text978b53c859f7'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textcdcc2b7219a9'}}</span>
+        <span>{{localize 'FALLOUTMAW.Common.Type'}}</span>
+        <span>{{localize 'FALLOUTMAW.Common.Value'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textb5b6ddbf62af'}}</span>
         <span></span>
       </div>
 
@@ -43,7 +43,7 @@
         <input type="hidden" name="settings.entries.{{index}}.change.phase" value="{{change.phase}}">
       </div>
       {{else}}
-      <p class="fallout-maw-empty-list">Укрытия не заданы.</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textf1110c18a6b1'}}</p>
       {{/each}}
     </div>
   </section>

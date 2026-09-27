@@ -335,7 +335,7 @@ export function registerSettings() {
             config: true,
             type: String,
             filePicker: "image",
-            default: `${SYSTEM_PATH}/assets/mask/mask1.webp`,
+            default: `systems/fallout-maw/assets/System/Quests/quest-mask-mask1.webp`,
         },
         matchJournalPermission: {
             name: `${MODULE_ID}.settings.matchJournalPermission.name`,

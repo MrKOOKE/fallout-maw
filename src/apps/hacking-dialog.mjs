@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getHackingSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
@@ -33,7 +34,7 @@ export async function openHackingSettings(actor) {
   if (!game.user?.isGM || !actor) return undefined;
   const state = normalizeActorHackingState(actor.system?.hacking);
   const result = await DialogV2.input({
-    window: { title: `Настройки взлома — ${actor.name}` },
+    window: { title: auditFormat("FALLOUTMAW.AuditApps.HackingSettings", { v0: (actor.name) }, "Настройки взлома — {v0}") },
     content: buildHackingSettingsContent(state.methods, {
       includeEnabled: true,
       enabled: state.enabled
@@ -42,7 +43,7 @@ export async function openHackingSettings(actor) {
     rejectClose: false,
     render: (_event, dialog) => activateHackingMethodsEditor(dialog.element),
     ok: {
-      label: "Сохранить",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Save", "Сохранить"),
       icon: "fa-solid fa-floppy-disk"
     }
   });
@@ -124,7 +125,7 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   get title() {
-    return this.#isMechanical ? "Взлом // Механика" : "Взлом // Терминал доступа";
+    return this.#isMechanical ? auditLocalize("FALLOUTMAW.AuditApps.HackingMechanical", "Взлом // Механика") : auditLocalize("FALLOUTMAW.AuditApps.HackingAccessTerminal", "Взлом // Терминал доступа");
   }
 
   _configureRenderOptions(options) {
@@ -185,7 +186,7 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       targetName: getHackingTargetName(this.#target),
       choosingMethod: this.#choosingMethod,
       canChooseMethod: methods.length > 1,
-      hackerName: this.#hackerActor?.name ?? "Персонаж",
+      hackerName: this.#hackerActor?.name ?? auditLocalize("FALLOUTMAW.Actor.Character", "Персонаж"),
       skillLabel: getSkillSettings().find(skill => skill.key === skillKey)?.label ?? skillKey,
       feedback: this.#feedback
     };
@@ -322,18 +323,18 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       .find(candidate => candidate.candidateKey === this.#selectedCandidateKey);
     const selectedMethod = methods.find(method => method.id === selectedCandidate?.methodId);
     if (!selectedCandidate || !selectedMethod || selectedMethod.attemptsRemaining <= 0) {
-      ui.notifications.warn("Нет доступного метода и инструмента для взлома.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoAvailableHackingMethodAndTool", "Нет доступного метода и инструмента для взлома."));
       return this.render();
     }
 
     this.#attemptInFlight = true;
     this.#feedback = null;
-    this.#busy = "Проверка…";
+    this.#busy = auditLocalize("FALLOUTMAW.AuditApps.Checking", "Проверка…");
     try {
       await this.render();
       const skillKey = getHackingSettings().skillKey;
       if (!this.#hackerActor?.system?.skills?.[skillKey]) {
-        ui.notifications.warn("У актёра нет выбранного для взлома навыка.");
+        ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheActorDoesNotHaveTheSelectedHacking", "У актёра нет выбранного для взлома навыка."));
         return undefined;
       }
       const outcome = await requestSkillCheck({
@@ -357,11 +358,11 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         requester: "hacking"
       });
       if (!outcome) {
-        this.#feedback = { tone: "neutral", title: "Проверка отменена", text: "Попытка взлома не применена." };
+        this.#feedback = { tone: "neutral", title: auditLocalize("FALLOUTMAW.AuditApps.CheckCanceled", "Проверка отменена"), text: auditLocalize("FALLOUTMAW.AuditApps.TheHackingAttemptWasNotApplied", "Попытка взлома не применена.") };
         return undefined;
       }
 
-      this.#busy = "Применение результата…";
+      this.#busy = auditLocalize("FALLOUTMAW.AuditApps.ApplyingResult", "Применение результата…");
       if (!this.#closed) await this.render();
       const result = await requestApplyHackingResult({
         hackerActor: this.#hackerActor,
@@ -370,7 +371,7 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         toolItemId: selectedCandidate.itemId,
         success: isSkillCheckSuccess(outcome)
       });
-      if (!result) throw new Error("Результат взлома не подтверждён. Проверьте состояние объекта перед следующей попыткой.");
+      if (!result) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheHackingResultWasNotConfirmedCheckThe", "Результат взлома не подтверждён. Проверьте состояние объекта перед следующей попыткой."));
       this.#localMethods = normalizeHackingMethods(result.methods);
       if (result.unlocked) {
         this.#unlocked = true;
@@ -380,13 +381,13 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       const remaining = this.#localMethods.find(method => method.id === selectedMethod.id)?.attemptsRemaining ?? 0;
       this.#feedback = {
         tone: "bad",
-        title: "Замок не поддался",
-        text: `${getToolLabel(selectedMethod.toolKey)}. Израсходовано: ${selectedCandidate.toolCost}. Осталось попыток: ${remaining}.`
+        title: auditLocalize("FALLOUTMAW.AuditApps.TheLockResisted", "Замок не поддался"),
+        text: auditFormat("FALLOUTMAW.AuditApps.ConsumedAttemptsRemaining", { v0: (getToolLabel(selectedMethod.toolKey)), v1: (selectedCandidate.toolCost), v2: (remaining) }, "{v0}. Израсходовано: {v1}. Осталось попыток: {v2}.")
       };
     } catch (error) {
       console.error(`${SYSTEM_ID} | Hacking attempt failed`, error);
       this.#localMethods = null;
-      this.#feedback = { tone: "bad", title: "Не удалось подтвердить результат", text: error.message || "Проверьте состояние объекта перед следующей попыткой." };
+      this.#feedback = { tone: "bad", title: auditLocalize("FALLOUTMAW.AuditApps.FailedToConfirmTheResult", "Не удалось подтвердить результат"), text: error.message || auditLocalize("FALLOUTMAW.AuditApps.CheckTheObjectSStateBeforeTryingAgain", "Проверьте состояние объекта перед следующей попыткой.") };
     } finally {
       this.#attemptInFlight = false;
       this.#busy = "";
@@ -424,39 +425,11 @@ function activateWallHackingConfig(application, element) {
 }
 
 function buildWallHackingFieldset(methods) {
-  return `
-    <fieldset data-hacking-methods-editor data-hacking-field-prefix="${HACKING_FLAG_PATH}.methods">
-      <legend>Методы взлома</legend>
-      <input type="hidden" name="${HACKING_FLAG_PATH}.editorSubmitted" value="true">
-      <p class="hint">Каждый метод использует отдельный тип инструмента и имеет собственные параметры.</p>
-      <div data-hacking-method-list>
-        ${methods.map((method, index) => buildHackingMethodRow(method, index, `${HACKING_FLAG_PATH}.methods`)).join("")}
-      </div>
-      <button type="button" data-action="addHackingMethod">
-        <i class="fa-solid fa-plus"></i> Добавить
-      </button>
-    </fieldset>`;
+  return auditFormat("FALLOUTMAW.AuditApps.HackingMethodsEachMethodUsesASeparateTool", { v0: (HACKING_FLAG_PATH), v1: (HACKING_FLAG_PATH), v2: (methods.map((method, index) => buildHackingMethodRow(method, index, `${HACKING_FLAG_PATH}.methods`)).join("")) }, "\n    <fieldset data-hacking-methods-editor data-hacking-field-prefix=\"{v0}.methods\">\n      <legend>Методы взлома</legend>\n      <input type=\"hidden\" name=\"{v1}.editorSubmitted\" value=\"true\">\n      <p class=\"hint\">Каждый метод использует отдельный тип инструмента и имеет собственные параметры.</p>\n      <div data-hacking-method-list>\n        {v2}\n      </div>\n      <button type=\"button\" data-action=\"addHackingMethod\">\n        <i class=\"fa-solid fa-plus\"></i> Добавить\n      </button>\n    </fieldset>");
 }
 
 function buildHackingSettingsContent(methods, { includeEnabled = false, enabled = false } = {}) {
-  return `
-    <div class="standard-form" data-hacking-methods-editor data-hacking-field-prefix="methods">
-      ${includeEnabled ? `
-        <label class="form-group">
-          <span>Объект заперт</span>
-          <input type="checkbox" name="enabled" ${enabled ? "checked" : ""}>
-        </label>` : ""}
-      <fieldset>
-        <legend>Методы взлома</legend>
-        <p class="hint">Добавьте один или несколько способов вскрытия объекта.</p>
-        <div data-hacking-method-list>
-          ${methods.map((method, index) => buildHackingMethodRow(method, index, "methods")).join("")}
-        </div>
-        <button type="button" data-action="addHackingMethod">
-          <i class="fa-solid fa-plus"></i> Добавить
-        </button>
-      </fieldset>
-    </div>`;
+  return auditFormat("FALLOUTMAW.AuditApps.HackingMethodsAddOneOrMoreMethodsFor", { v0: (includeEnabled ? auditFormat("FALLOUTMAW.AuditApps.ObjectLocked", { v0: (enabled ? "checked" : "") }, "\n        <label class=\"form-group\">\n          <span>Объект заперт</span>\n          <input type=\"checkbox\" name=\"enabled\" {v0}>\n        </label>") : ""), v1: (methods.map((method, index) => buildHackingMethodRow(method, index, "methods")).join("")) }, "\n    <div class=\"standard-form\" data-hacking-methods-editor data-hacking-field-prefix=\"methods\">\n      {v0}\n      <fieldset>\n        <legend>Методы взлома</legend>\n        <p class=\"hint\">Добавьте один или несколько способов вскрытия объекта.</p>\n        <div data-hacking-method-list>\n          {v1}\n        </div>\n        <button type=\"button\" data-action=\"addHackingMethod\">\n          <i class=\"fa-solid fa-plus\"></i> Добавить\n        </button>\n      </fieldset>\n    </div>");
 }
 
 function buildHackingMethodRow(method, index, prefix) {
@@ -467,46 +440,7 @@ function buildHackingMethodRow(method, index, prefix) {
     </option>`).join("");
   const classOptions = Object.keys(TOOL_CLASS_RANKS).map(toolClass => `
     <option value="${toolClass}" ${toolClass === normalized.toolClass ? "selected" : ""}>${toolClass}</option>`).join("");
-  return `
-    <div class="fallout-maw-hacking-method" data-hacking-method-row data-hacking-method-index="${index}">
-      <input type="hidden" name="${prefix}.${index}.id" value="${escapeAttribute(normalized.id)}">
-      <div class="fallout-maw-hacking-method-grid">
-        <label class="fallout-maw-hacking-method-tool">
-          <span>Инструмент</span>
-          <select name="${prefix}.${index}.toolKey">${toolOptions}</select>
-        </label>
-        <label class="fallout-maw-hacking-method-interface">
-          <span>Интерфейс</span>
-          <select name="${prefix}.${index}.interfaceType">
-            <option value="terminal" ${normalized.interfaceType === "terminal" ? "selected" : ""}>Терминал</option>
-            <option value="mechanical" ${normalized.interfaceType === "mechanical" ? "selected" : ""}>Механика</option>
-          </select>
-        </label>
-        <label>
-          <span>Класс</span>
-          <select name="${prefix}.${index}.toolClass">${classOptions}</select>
-        </label>
-        <label>
-          <span>Сложность</span>
-          <input type="number" name="${prefix}.${index}.difficulty" value="${normalized.difficulty}" min="0" step="1">
-        </label>
-        <label>
-          <span>Расход за попытку</span>
-          <input type="number" name="${prefix}.${index}.toolCost" value="${normalized.toolCost}" min="1" step="1">
-        </label>
-        <label>
-          <span>Всего попыток</span>
-          <input type="number" name="${prefix}.${index}.attempts" value="${normalized.attempts}" min="0" step="1">
-        </label>
-        <label>
-          <span>Осталось</span>
-          <input type="number" name="${prefix}.${index}.attemptsRemaining" value="${normalized.attemptsRemaining}" min="0" step="1">
-        </label>
-        <button type="button" class="fallout-maw-hacking-method-delete" data-action="deleteHackingMethod" aria-label="Удалить метод">
-          <i class="fa-solid fa-trash"></i>
-        </button>
-      </div>
-    </div>`;
+  return auditFormat("FALLOUTMAW.AuditApps.ToolInterfaceTerminalMechanicalClassDifficultyCostPer", { v0: (index), v1: (prefix), v2: (index), v3: (escapeAttribute(normalized.id)), v4: (prefix), v5: (index), v6: (toolOptions), v7: (prefix), v8: (index), v9: (normalized.interfaceType === "terminal" ? "selected" : ""), v10: (normalized.interfaceType === "mechanical" ? "selected" : ""), v11: (prefix), v12: (index), v13: (classOptions), v14: (prefix), v15: (index), v16: (normalized.difficulty), v17: (prefix), v18: (index), v19: (normalized.toolCost), v20: (prefix), v21: (index), v22: (normalized.attempts), v23: (prefix), v24: (index), v25: (normalized.attemptsRemaining) }, "\n    <div class=\"fallout-maw-hacking-method\" data-hacking-method-row data-hacking-method-index=\"{v0}\">\n      <input type=\"hidden\" name=\"{v1}.{v2}.id\" value=\"{v3}\">\n      <div class=\"fallout-maw-hacking-method-grid\">\n        <label class=\"fallout-maw-hacking-method-tool\">\n          <span>Инструмент</span>\n          <select name=\"{v4}.{v5}.toolKey\">{v6}</select>\n        </label>\n        <label class=\"fallout-maw-hacking-method-interface\">\n          <span>Интерфейс</span>\n          <select name=\"{v7}.{v8}.interfaceType\">\n            <option value=\"terminal\" {v9}>Терминал</option>\n            <option value=\"mechanical\" {v10}>Механика</option>\n          </select>\n        </label>\n        <label>\n          <span>Класс</span>\n          <select name=\"{v11}.{v12}.toolClass\">{v13}</select>\n        </label>\n        <label>\n          <span>Сложность</span>\n          <input type=\"number\" name=\"{v14}.{v15}.difficulty\" value=\"{v16}\" min=\"0\" step=\"1\">\n        </label>\n        <label>\n          <span>Расход за попытку</span>\n          <input type=\"number\" name=\"{v17}.{v18}.toolCost\" value=\"{v19}\" min=\"1\" step=\"1\">\n        </label>\n        <label>\n          <span>Всего попыток</span>\n          <input type=\"number\" name=\"{v20}.{v21}.attempts\" value=\"{v22}\" min=\"0\" step=\"1\">\n        </label>\n        <label>\n          <span>Осталось</span>\n          <input type=\"number\" name=\"{v23}.{v24}.attemptsRemaining\" value=\"{v25}\" min=\"0\" step=\"1\">\n        </label>\n        <button type=\"button\" class=\"fallout-maw-hacking-method-delete\" data-action=\"deleteHackingMethod\" aria-label=\"Удалить метод\">\n          <i class=\"fa-solid fa-trash\"></i>\n        </button>\n      </div>\n    </div>");
 }
 
 function activateHackingMethodsEditor(root) {
@@ -568,7 +502,7 @@ function patchDoorControl() {
     }
     const hackerActor = getDoorHackerActor();
     if (!hackerActor) {
-      ui.notifications.warn("Для взлома двери нужен выбранный актёр.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.SelectAnActorToHackADoor", "Для взлома двери нужен выбранный актёр."));
       return false;
     }
     void requestWallHacking({ hackerActor, wall });
@@ -590,7 +524,7 @@ async function requestApplyHackingResult({ hackerActor, target, methodId, toolIt
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для взлома.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMForHacking", "Нет активного GM для взлома."));
     return null;
   }
   const requestId = foundry.utils.randomID();
@@ -599,7 +533,7 @@ async function requestApplyHackingResult({ hackerActor, target, methodId, toolIt
       pendingHackingRequests.delete(requestId);
       reject(new Error("GM did not answer hacking request."));
     }, HACKING_SOCKET_TIMEOUT);
-    pendingHackingRequests.set(requestId, { resolve, reject, timeout });
+    pendingHackingRequests.set(requestId, { resolve, reject, timeout, gmUserId: gm.id });
   });
   game.socket.emit(HACKING_SOCKET, {
     scope: HACKING_SOCKET_SCOPE,
@@ -613,17 +547,19 @@ async function requestApplyHackingResult({ hackerActor, target, methodId, toolIt
     return await promise;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Hacking request failed`, error);
-    ui.notifications.warn("GM не ответил на запрос взлома.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheGMDidNotRespondToTheHacking", "GM не ответил на запрос взлома."));
     return null;
   }
 }
 
-async function handleHackingSocketMessage(message = {}) {
+async function handleHackingSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== HACKING_SOCKET_SCOPE) return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
   if (message.type === "response") {
     if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
     const pending = pendingHackingRequests.get(message.requestId);
     if (!pending) return;
+    if (!authenticatedSenderId || authenticatedSenderId !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingHackingRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
@@ -631,7 +567,14 @@ async function handleHackingSocketMessage(message = {}) {
     return;
   }
   if (message.type !== "request" || !game.user?.isGM || message.gmUserId !== game.user.id) return;
+  if (!authenticatedSenderId || authenticatedSenderId !== String(message.requesterUserId ?? "")) return;
   try {
+    const requester = game.users?.get(authenticatedSenderId);
+    const hackerActor = await fromUuid(message.payload?.hackerActorUuid ?? "");
+    if (!requester?.active || !hackerActor || (!requester.isGM
+      && !hackerActor.testUserPermission(requester, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER))) {
+      throw new Error("The requesting user does not own the hacking actor.");
+    }
     const result = await applyHackingResultNow(message.payload);
     game.socket.emit(HACKING_SOCKET, {
       scope: HACKING_SOCKET_SCOPE,
@@ -679,15 +622,15 @@ async function applyHackingResultLocked({
   toolItemId,
   success
 }) {
-  if (!hackerActor || !target || !isHackingTargetLocked(target)) throw new Error("Цель взлома недоступна.");
+  if (!hackerActor || !target || !isHackingTargetLocked(target)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheHackingTargetIsUnavailable", "Цель взлома недоступна."));
 
   const methods = getHackingTargetMethods(target);
   const method = methods.find(entry => entry.id === methodId);
-  if (!method || method.attemptsRemaining <= 0) throw new Error("Попытки этого метода исчерпаны.");
+  if (!method || method.attemptsRemaining <= 0) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NoAttemptsRemainForThisMethod", "Попытки этого метода исчерпаны."));
   const candidate = getHackingToolCandidates(hackerActor, [method], target)
     .find(entry => entry.itemId === toolItemId);
   if (!candidate) {
-    throw new Error("Подходящий инструмент больше недоступен.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheSuitableToolIsNoLongerAvailable", "Подходящий инструмент больше недоступен."));
   }
 
   const toolItem = hackerActor.items?.get(toolItemId);
@@ -697,7 +640,7 @@ async function applyHackingResultLocked({
   const currentSupply = toolResource.available ? toolResource.value : 0;
   const toolCost = candidate.toolCost;
   if (!toolItem || !toolFunction || currentSupply < toolCost) {
-    throw new Error("Запаса инструмента недостаточно для попытки.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheToolDoesNotHaveEnoughSuppliesFor", "Запаса инструмента недостаточно для попытки."));
   }
   const remainingSupply = currentSupply - toolCost;
   const previousMethods = foundry.utils.deepClone(methods);
@@ -756,14 +699,14 @@ async function applyHackingResultLocked({
   }
 
   const resultText = success
-    ? `вскрывает замок на объекте <strong>${escapeHTML(getHackingTargetName(target))}</strong>`
-    : `не смог вскрыть замок на объекте <strong>${escapeHTML(getHackingTargetName(target))}</strong> методом «${escapeHTML(getToolLabel(method.toolKey))}». Осталось попыток: ${method.attemptsRemaining}`;
+    ? auditFormat("FALLOUTMAW.AuditApps.OpensTheLockOn", { v0: (escapeHTML(getHackingTargetName(target))) }, "вскрывает замок на объекте <strong>{v0}</strong>")
+    : auditFormat("FALLOUTMAW.AuditApps.FailedToOpenTheLockOnUsingAttempts", { v0: (escapeHTML(getHackingTargetName(target))), v1: (escapeHTML(getToolLabel(method.toolKey))), v2: (method.attemptsRemaining) }, "не смог вскрыть замок на объекте <strong>{v0}</strong> методом «{v1}». Осталось попыток: {v2}");
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: hackerActor }),
-    content: `<p><strong>${escapeHTML(hackerActor.name)}</strong> ${resultText}. Расход инструмента: ${toolCost}; осталось: ${remainingSupply}.</p>`
+    content: auditFormat("FALLOUTMAW.AuditApps.ToolSuppliesConsumedRemaining", { v0: (escapeHTML(hackerActor.name)), v1: (resultText), v2: (toolCost), v3: (remainingSupply) }, "<p><strong>{v0}</strong> {v1}. Расход инструмента: {v2}; осталось: {v3}.</p>")
   });
-  if (success) ui.notifications.info(`${getHackingTargetName(target)}: замок вскрыт.`);
-  else if (method.attemptsRemaining <= 0) ui.notifications.warn(`${getToolLabel(method.toolKey)}: попытки закончились.`);
+  if (success) ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.LockOpened", { v0: (getHackingTargetName(target)) }, "{v0}: замок вскрыт."));
+  else if (method.attemptsRemaining <= 0) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.NoAttemptsRemain", { v0: (getToolLabel(method.toolKey)) }, "{v0}: попытки закончились."));
   return { unlocked: Boolean(success), methods };
 }
 
@@ -958,8 +901,8 @@ function isWallHackingTarget(target) {
 }
 
 function getHackingTargetName(target) {
-  if (isWallHackingTarget(target)) return target.parent?.name ? `Дверь — ${target.parent.name}` : "Дверь";
-  return String(target?.name ?? "Объект");
+  if (isWallHackingTarget(target)) return target.parent?.name ? auditFormat("FALLOUTMAW.AuditApps.Door", { v0: (target.parent.name) }, "Дверь — {v0}") : auditLocalize("FALLOUTMAW.AuditApps.Door_479", "Дверь");
+  return String(target?.name ?? auditLocalize("FALLOUTMAW.AuditApps.Object", "Объект"));
 }
 
 function getDoorHackerActor() {

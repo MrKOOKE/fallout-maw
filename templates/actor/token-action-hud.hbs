@@ -4,7 +4,7 @@
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
       <div class="fallout-maw-token-hud-block-title fallout-maw-token-hud-limbs-title">
         <details class="fallout-maw-token-hud-limb-layer-menu" data-limb-layer-menu>
-          <summary aria-label="Слой состояния частей тела">
+          <summary aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textbd82abe4bc95'}}">
             <span>{{limbLayer.label}}</span>
             <i class="fa-solid fa-caret-down" inert></i>
           </summary>
@@ -16,10 +16,10 @@
         </details>
         {{#if gmControls}}
         <span class="fallout-maw-token-hud-gm-actions">
-          <button type="button" data-action="gmHealSelected" title="Полностью вылечить выбранных актеров"><i class="fa-solid fa-kit-medical"></i></button>
-          <button type="button" data-action="gmAwardExperience" title="Выдать опыт выбранным актерам"><i class="fa-solid fa-star"></i></button>
-          <button type="button" data-action="gmAwardCurrency" title="Выдать валюту выбранным актерам" aria-label="Выдать валюту выбранным актерам"><i class="fa-solid fa-coins"></i></button>
-          <button type="button" data-action="gmManageRecipeKnowledge" title="Выдать или снять знания рецептов у выбранных актеров"><i class="fa-solid fa-book-medical"></i></button>
+          <button type="button" data-action="gmHealSelected" title="{{localize 'FALLOUTMAW.AuditTemplates.Text5aec36c0198f'}}"><i class="fa-solid fa-kit-medical"></i></button>
+          <button type="button" data-action="gmAwardExperience" title="{{localize 'FALLOUTMAW.AuditTemplates.Textddb057c0d541'}}"><i class="fa-solid fa-star"></i></button>
+          <button type="button" data-action="gmAwardCurrency" title="{{localize 'FALLOUTMAW.AuditTemplates.Text648d4dfa4273'}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text648d4dfa4273'}}"><i class="fa-solid fa-coins"></i></button>
+          <button type="button" data-action="gmManageRecipeKnowledge" title="{{localize 'FALLOUTMAW.AuditTemplates.Textf4b3bfd67087'}}"><i class="fa-solid fa-book-medical"></i></button>
         </span>
         {{/if}}
       </div>
@@ -57,10 +57,10 @@
       <div class="fallout-maw-token-hud-meter-title-row secondary">
         <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle secondary" data-action="toggleMeterSection" data-section="needs" data-token-hud-meter-toggle aria-expanded="{{meterSections.needs.expanded}}">
           <i class="fa-solid fa-caret-down" inert></i>
-          <span>Потребности</span>
+          <span>{{localize 'FALLOUTMAW.Common.Needs'}}</span>
         </button>
         {{#if gmControls}}
-        <button type="button" class="fallout-maw-token-hud-meter-edit-lock {{#if meterSections.needs.editable}}unlocked{{/if}}" data-action="toggleMeterEdit" data-section="needs" title="Редактировать текущие значения потребностей" aria-pressed="{{meterSections.needs.editable}}">
+        <button type="button" class="fallout-maw-token-hud-meter-edit-lock {{#if meterSections.needs.editable}}unlocked{{/if}}" data-action="toggleMeterEdit" data-section="needs" title="{{localize 'FALLOUTMAW.AuditTemplates.Text3943b6a36adb'}}" aria-pressed="{{meterSections.needs.editable}}">
           <i class="fa-solid {{#if meterSections.needs.editable}}fa-lock-open{{else}}fa-lock{{/if}}" inert></i>
         </button>
         {{/if}}
@@ -112,19 +112,19 @@
         {{/if}}
       </button>
       {{else}}
-      <div class="fallout-maw-token-hud-empty">Нет предметов</div>
+      <div class="fallout-maw-token-hud-empty">{{localize 'FALLOUTMAW.AuditTemplates.Text7eafa51836c8'}}</div>
       {{/each}}
       {{/if}}
 
       {{#if (eq activeTray "passengers")}}
       {{#each tray.passengers}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile variable-width" data-action="exitActorContainerPassenger" data-passenger-id="{{id}}" title="Высадить: {{name}}">
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile variable-width" data-action="exitActorContainerPassenger" data-passenger-id="{{id}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9084f31e4a54'}} {{name}}">
         <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{name}}</span>
         <strong>{{sizeLabel}}</strong>
       </button>
       {{else}}
-      <div class="fallout-maw-token-hud-empty">Пассажиров нет</div>
+      <div class="fallout-maw-token-hud-empty">{{localize 'FALLOUTMAW.AuditTemplates.Texte0406529310c'}}</div>
       {{/each}}
       {{/if}}
 
@@ -190,7 +190,7 @@
         </div>
       </div>
       {{else}}
-      <div class="fallout-maw-token-hud-empty">Действий нет</div>
+      <div class="fallout-maw-token-hud-empty">{{localize 'FALLOUTMAW.Settings.HUD.NoActions'}}</div>
       {{/each}}
       {{/if}}
 
@@ -271,7 +271,7 @@
         </div>
       </div>
       {{else}}
-      <div class="fallout-maw-token-hud-empty">Действий нет</div>
+      <div class="fallout-maw-token-hud-empty">{{localize 'FALLOUTMAW.Settings.HUD.NoActions'}}</div>
       {{/each}}
       {{/if}}
 
@@ -306,7 +306,7 @@
         {{#if actionPointCostLabel}}<strong>{{actionPointCostLabel}}</strong>{{/if}}
       </button>
       {{else}}
-      <div class="fallout-maw-token-hud-empty">Нет подходящего оружия</div>
+      <div class="fallout-maw-token-hud-empty">{{localize 'FALLOUTMAW.AuditTemplates.Texta78a7223a419'}}</div>
       {{/each}}
       {{/if}}
     </div>
@@ -315,7 +315,7 @@
     <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
       {{#if weaponSet}}
       <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-set-toggle {{#if weaponSet.active}}selected{{/if}} {{#if (eq activeTray "weaponSets")}}active{{/if}}" data-action="toggleTray" data-tray="weaponSets" title="{{weaponSet.label}}">
-        <span>Наборы</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text9276259877b0'}}</span>
         <i class="fa-solid fa-caret-up" inert></i>
       </button>
       {{#each weaponSet.weapons}}

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -19,12 +20,12 @@ export const ANATOMY_STUDY_BONUS_KEYS = Object.freeze({
 });
 
 const ANATOMY_STUDY_BONUS_DEFINITIONS = Object.freeze([
-  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.damage, label: "Урон", settingKey: "damagePercentBonus", suffix: "%" }),
-  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.accuracy, label: "Точность", settingKey: "accuracyBonus", suffix: "" }),
-  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.criticalChance, label: "Шанс на крит", settingKey: "criticalChanceBonus", suffix: "%" }),
-  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.criticalDamage, label: "Критический урон", settingKey: "criticalDamagePercentBonus", suffix: "%" }),
-  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.drugEffectiveness, label: "Эффективность препаратов", settingKey: "drugEffectivenessPercentBonus", suffix: "%" }),
-  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.treatmentEffectiveness, label: "Лечение здоровья, травм и болезней", settingKey: "treatmentEffectivenessPercentBonus", suffix: "%" })
+  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.damage, get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0030", "Урон"); }, settingKey: "damagePercentBonus", suffix: "%" }),
+  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.accuracy, get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0031", "Точность"); }, settingKey: "accuracyBonus", suffix: "" }),
+  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.criticalChance, get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0032", "Шанс на крит"); }, settingKey: "criticalChanceBonus", suffix: "%" }),
+  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.criticalDamage, get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0033", "Критический урон"); }, settingKey: "criticalDamagePercentBonus", suffix: "%" }),
+  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.drugEffectiveness, get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0034", "Эффективность препаратов"); }, settingKey: "drugEffectivenessPercentBonus", suffix: "%" }),
+  Object.freeze({ key: ANATOMY_STUDY_BONUS_KEYS.treatmentEffectiveness, get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0035", "Лечение здоровья, травм и болезней"); }, settingKey: "treatmentEffectivenessPercentBonus", suffix: "%" })
 ]);
 
 const VALID_ANATOMY_STUDY_BONUS_KEYS = new Set(ANATOMY_STUDY_BONUS_DEFINITIONS.map(entry => entry.key));
@@ -109,7 +110,7 @@ export function buildAnatomyStudyKnowledgeUpdate({
   const normalizedRaceId = String(raceId ?? "").trim();
   const normalizedBonusKey = String(bonusKey ?? "").trim();
   if (!normalizedRaceId || !VALID_ANATOMY_STUDY_BONUS_KEYS.has(normalizedBonusKey)) {
-    return { ok: false, reason: "Некорректное направление исследования.", state: null };
+    return { ok: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0036", "Некорректное направление исследования."), state: null };
   }
 
   const rootState = cloneValue(getFixedAbilityState(abilityItem));
@@ -120,7 +121,7 @@ export function buildAnatomyStudyKnowledgeUpdate({
   const learned = race?.bonuses.includes(normalizedBonusKey) === true;
 
   if (remove) {
-    if (!learned) return { ok: false, reason: "Это знание уже отсутствует.", state: null };
+    if (!learned) return { ok: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0037", "Это знание уже отсутствует."), state: null };
     race.bonuses = race.bonuses.filter(key => key !== normalizedBonusKey);
     const nextRaces = races.filter(entry => entry.bonuses.length);
     rootState[stateKey] = {
@@ -130,10 +131,10 @@ export function buildAnatomyStudyKnowledgeUpdate({
     return { ok: true, state: rootState, knowledge: rootState[stateKey] };
   }
 
-  if (learned) return { ok: false, reason: "Это направление для расы уже изучено.", state: null };
+  if (learned) return { ok: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0038", "Это направление для расы уже изучено."), state: null };
   const capacity = getAnatomyStudyMemoryCapacity(actor, abilityFunction?.fixedSettings);
   if (getAnatomyStudyMemoryUsage(knowledge) >= capacity) {
-    return { ok: false, reason: `Память заполнена (${capacity}/${capacity}).`, state: null };
+    return { ok: false, reason: auditFormat("FALLOUTMAW.AuditRuntime.R0039", { p0: (capacity), p1: (capacity) }, "Память заполнена ({p0}/{p1})."), state: null };
   }
   if (race) race.bonuses.push(normalizedBonusKey);
   else races.push({ raceId: normalizedRaceId, bonuses: [normalizedBonusKey] });

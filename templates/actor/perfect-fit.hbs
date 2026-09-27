@@ -2,15 +2,15 @@
   <header class="fallout-maw-anatomy-study-header fallout-maw-maintained-target-header">
     <button type="button" data-action="select" {{#if selectionDisabled}}disabled{{/if}} title="{{selectionDisabledReason}}">
       <i class="fa-solid fa-crosshairs"></i>
-      Выбрать цель
+      {{localize 'FALLOUTMAW.AuditTemplates.Text588a3e37b4a9'}}
     </button>
   </header>
 
   <section class="fallout-maw-anatomy-costs">
-    <span><i class="fa-solid fa-vest"></i> Требования снаряжения: <strong>{{equipmentRequirementPercent}}%</strong></span>
-    <span><i class="fa-solid fa-gun"></i> Требования оружия: <strong>{{weaponRequirementPercent}}%</strong></span>
-    <span><i class="fa-solid fa-bolt"></i> Удержание одной цели: <strong>{{holdEnergy}} энергии</strong></span>
-    <span><i class="fa-solid fa-battery-three-quarters"></i> Доступно: <strong>{{availableEnergy}} энергии</strong></span>
+    <span><i class="fa-solid fa-vest"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text6a1015bbbdaf'}} <strong>{{equipmentRequirementPercent}}%</strong></span>
+    <span><i class="fa-solid fa-gun"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text6d4430b38fd0'}} <strong>{{weaponRequirementPercent}}%</strong></span>
+    <span><i class="fa-solid fa-bolt"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text0efae31dae04'}} <strong>{{holdEnergy}} {{localize 'FALLOUTMAW.AuditTemplates.Text3c4db44df13d'}}</strong></span>
+    <span><i class="fa-solid fa-battery-three-quarters"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text8acb442f5366'}} <strong>{{availableEnergy}} {{localize 'FALLOUTMAW.AuditTemplates.Text3c4db44df13d'}}</strong></span>
   </section>
 
   {{#if selectionDisabledReason}}
@@ -18,23 +18,23 @@
   {{/if}}
 
   <section class="fallout-maw-anatomy-knowledge">
-    <h2>Удерживаемые цели</h2>
+    <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text20d2a17dc39c'}}</h2>
     {{#if hasHolds}}
       <div class="fallout-maw-maintained-target-list">
       {{#each holds}}
       <div class="fallout-maw-maintained-target-row">
         <img src="{{img}}" alt="{{name}}">
         <strong title="{{name}}">{{name}}</strong>
-        <span class="fallout-maw-maintained-target-summary">снаряжение {{equipmentRequirementPercent}}% · оружие {{weaponRequirementPercent}}%</span>
+        <span class="fallout-maw-maintained-target-summary">{{localize 'FALLOUTMAW.AuditTemplates.Text2c27cc55a5b8'}} {{equipmentRequirementPercent}}{{localize 'FALLOUTMAW.AuditTemplates.Text18a1ecb0d859'}} {{weaponRequirementPercent}}%</span>
         <span class="fallout-maw-maintained-target-energy">{{energy}} <i class="fa-solid fa-bolt"></i></span>
-        <button type="button" data-action="release" data-effect-id="{{effectId}}" title="Отключить удержание">
+        <button type="button" data-action="release" data-effect-id="{{effectId}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Text23442a231caa'}}">
           <i class="fa-solid fa-link-slash"></i>
         </button>
       </div>
       {{/each}}
       </div>
     {{else}}
-      <p class="fallout-maw-anatomy-empty">Удерживаемых целей нет. Нажмите «Выбрать цель», чтобы передать пассивный бонус.</p>
+      <p class="fallout-maw-anatomy-empty">{{localize 'FALLOUTMAW.AuditTemplates.Textbcf4a13c7489'}}</p>
     {{/if}}
   </section>
 </section>

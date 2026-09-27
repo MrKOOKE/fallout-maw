@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCraftItemSourceKeys } from "./craft-item-source.mjs";
 import { resolveWorldItemSync } from "./world-items.mjs";
@@ -55,7 +56,7 @@ export function getCraftEmbeddedItems(item, { resolve = resolveWorldItemSync } =
     sourceUuid = getCraftItemSourceKeys(source).values().next().value || sourceUuid;
     result.push({ kind, path, key: path.join("."), sourceUuid, quantity,
       data: source ? portable(source, sourceUuid) : null,
-      name: source?.name ?? "Предмет не найден", img: source?.img ?? "icons/svg/item-bag.svg" });
+      name: source?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1210", "Предмет не найден"), img: source?.img ?? "icons/svg/item-bag.svg" });
   }
   function visit(value, path) {
     if (!value || typeof value !== "object") return;

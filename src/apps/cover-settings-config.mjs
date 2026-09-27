@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
@@ -50,7 +51,7 @@ export class CoverSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Укрытия";
+    return auditLocalize("FALLOUTMAW.AuditApps.Cover", "Укрытия");
   }
 
   async _prepareContext(options) {
@@ -82,7 +83,7 @@ export class CoverSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData(_event, _form, formData) {
     const data = getExpandedFormData(formData);
     this.settings = await setCoverSettings(data.settings ?? {});
-    ui.notifications.info("Настройки укрытий сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.CoverSettingsSaved", "Настройки укрытий сохранены."));
     return this.forceRender();
   }
 
@@ -133,6 +134,6 @@ export class CoverSettingsConfig extends FalloutMaWFormApplicationV2 {
     const row = input?.closest?.("[data-cover-entry-index]");
     const preview = row?.querySelector?.("[data-cover-img-preview]");
     if (!preview) return;
-    preview.src = input.value?.trim() || "icons/svg/shield.svg";
+    preview.src = input.value?.trim() || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp";
   }
 }

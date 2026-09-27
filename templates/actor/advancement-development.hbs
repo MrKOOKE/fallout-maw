@@ -36,7 +36,7 @@
       <div class="fallout-maw-advancement-hero-side">
         {{#if raceHealthEnabled}}
         <div class="fallout-maw-advancement-side-stat">
-          <span>Здоровье от уровня</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text2cf09ccdb02e'}}</span>
           <strong>{{healthFromLevel}}</strong>
         </div>
         {{/if}}
@@ -68,8 +68,8 @@
     </div>
     <div class="fallout-maw-advancement-characteristics">
       {{#each characteristics}}
-      <div class="fallout-maw-advancement-row">
-        <span class="fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
+      <div class="fallout-maw-advancement-row" {{#if description}}data-system-description="{{description}}"{{/if}}>
+        <span class="fallout-maw-advancement-name" {{#unless description}}title="{{abbr}} / {{key}}"{{/unless}}>{{label}}</span>
         <div class="fallout-maw-advancement-controls">
           <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
           <strong data-advancement-characteristic-value="{{key}}">{{value}}</strong>
@@ -95,7 +95,7 @@
     </div>
     <div class="fallout-maw-advancement-skills">
       {{#each skills}}
-      <div class="fallout-maw-advancement-skill-row">
+      <div class="fallout-maw-advancement-skill-row" {{#if description}}data-system-description="{{description}}"{{/if}}>
         <button
           type="button"
           class="fallout-maw-advancement-signature fallout-maw-advancement-control-button{{#if signature}} active{{/if}}"

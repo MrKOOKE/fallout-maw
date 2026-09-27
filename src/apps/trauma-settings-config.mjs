@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { TEMPLATES } from "../constants.mjs";
@@ -54,7 +55,7 @@ export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройка травм";
+    return auditLocalize("FALLOUTMAW.AuditApps.TraumaSettings", "Настройка травм");
   }
 
   async _prepareContext(options) {
@@ -126,7 +127,7 @@ export class TraumaLimbSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   get title() {
     const limb = this.#getLimb();
-    return limb?.label ? `Настройка травм: ${limb.label}` : "Настройка травм";
+    return limb?.label ? auditFormat("FALLOUTMAW.AuditApps.TraumaSettings_1073", { v0: (limb.label) }, "Настройка травм: {v0}") : auditLocalize("FALLOUTMAW.AuditApps.TraumaSettings", "Настройка травм");
   }
 
   async _prepareContext(options) {
@@ -157,7 +158,7 @@ export class TraumaLimbSettingsConfig extends FalloutMaWFormApplicationV2 {
     const limb = this.#readLimbFromForm();
     if (limb.key) current.limbs[limb.key] = limb.config;
     this.settings = await setTraumaSettings(current, this.creatureOptions, this.damageTypes);
-    ui.notifications.info("Настройка травм сохранена.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.TraumaSettingsSaved", "Настройка травм сохранена."));
     this.onSave?.(this.settings);
     return this.forceRender();
   }
@@ -408,14 +409,14 @@ function buildEffectKeyTokens() {
       key: entry.key,
       label: entry.label,
       path: `system.characteristics.${entry.key}`,
-      group: "Характеристики"
+      group: auditLocalize("FALLOUTMAW.Common.Characteristics", "Характеристики")
     })),
     ...getSkillSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
       label: entry.label,
       path: `system.skills.${entry.key}.bonus`,
-      group: "Навыки"
+      group: auditLocalize("FALLOUTMAW.Common.Skills", "Навыки")
     })),
     ...buildSkillBonusPercentEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
@@ -424,28 +425,28 @@ function buildEffectKeyTokens() {
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
-    ...buildResourceBonusEffectKeyTokens("Ресурсы"),
+    ...buildResourceBonusEffectKeyTokens(auditLocalize("FALLOUTMAW.Common.Resources", "Ресурсы")),
     ...getNeedSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
       label: entry.label,
       path: `system.needs.${entry.key}.bonus`,
-      group: "Потребности"
+      group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности")
     })),
-    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности") }),
     ...getProficiencySettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
       label: entry.label,
       path: `system.proficiencies.${entry.key}.bonus`,
-      group: "Владения"
+      group: auditLocalize("FALLOUTMAW.Common.Proficiencies", "Владения")
     })),
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildDamageBarrierEffectKeyTokens(),
     ...buildLimbMaxBonusEffectKeyTokens(),
-    createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
-    createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
-    createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),
+    createEffectKeyToken({ code: "blind", key: "blind", label: auditLocalize("FALLOUTMAW.AuditApps.Blindness", "Слепота"), path: "status.blind", group: auditLocalize("FALLOUTMAW.AuditApps.Statuses", "Статусы") }),
+    createEffectKeyToken({ code: "moveCost", key: "movement", label: auditLocalize("FALLOUTMAW.AuditApps.MovementCost", "Стоимость перемещения"), path: "system.costs.movement", group: auditLocalize("FALLOUTMAW.Item.Cost", "Стоимость") }),
+    createEffectKeyToken({ code: "actionCost", key: "action", label: auditLocalize("FALLOUTMAW.AuditApps.ActionCost", "Стоимость действий"), path: "system.costs.action", group: auditLocalize("FALLOUTMAW.Item.Cost", "Стоимость") }),
     buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
     ...buildCombatEffectKeyTokens(),

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   DEFAULT_LEVEL_ONE_CHARACTERISTIC_MAXIMUM,
@@ -325,7 +326,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.limbs ??= [];
     race.limbs.push({
       key: id,
-      label: "Новая конечность",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewLimb", "Новая конечность"),
       stateMax: "100 + con * 5",
       damageMultiplier: 1,
       aimedDifficultyPercent: 0,
@@ -378,7 +379,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     const race = this.#activeRace;
     if (!race) return undefined;
     if (!(race.limbs ?? []).length) {
-      ui.notifications.warn("Сначала добавьте хотя бы одну конечность.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AddAtLeastOneLimbFirst", "Сначала добавьте хотя бы одну конечность."));
       return undefined;
     }
 
@@ -560,7 +561,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.needSettings.push({
       key,
       abbr,
-      label: "Новая потребность",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewNeed", "Новая потребность"),
       formula: "0",
       color: "#8f8456",
       settings: { accumulation: { perHour: 10 }, thresholds: [], diseases: [] }
@@ -752,8 +753,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     delete race.naturalWeapons;
     delete race.naturalFeatures;
     race.inventorySize = {
-      columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
-      rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
+      columns: Math.max(0, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
+      rows: Math.max(0, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
     };
     const hasEnergyResource = getResourceSettings().some(resource => resource.key === "power");
     race.regeneration = {
@@ -900,7 +901,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       try {
         validateFormula(race.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA, { allowSkills: true, characteristics, skills });
       } catch (error) {
-        ui.notifications.error(`${race.name || race.id} / Сопротивление кровотечению: ${error.message}`);
+        ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.BleedingResistance", { v0: (race.name || race.id), v1: (error.message) }, "{v0} / Сопротивление кровотечению: {v1}"));
         throw error;
       }
       for (const damageType of damageTypes) {
@@ -917,14 +918,14 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       try {
         validateFormula(race.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
       } catch (error) {
-        ui.notifications.error(`${race.name || race.id} / Регенерация / Здоровье: ${error.message}`);
+        ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.RegenerationHealth", { v0: (race.name || race.id), v1: (error.message) }, "{v0} / Регенерация / Здоровье: {v1}"));
         throw error;
       }
       if (hasEnergyResource) {
         try {
           validateFormula(race.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
         } catch (error) {
-          ui.notifications.error(`${race.name || race.id} / Регенерация / Энергия: ${error.message}`);
+          ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.RegenerationEnergy", { v0: (race.name || race.id), v1: (error.message) }, "{v0} / Регенерация / Энергия: {v1}"));
           throw error;
         }
       }
@@ -933,7 +934,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         try {
           validateFormula(race.baseParameters?.healthFormula ?? DEFAULT_HEALTH_FORMULA, { allowSkills: true, characteristics, skills });
         } catch (error) {
-          ui.notifications.error(`${race.name || race.id} / Здоровье: ${error.message}`);
+          ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.Health", { v0: (race.name || race.id), v1: (error.message) }, "{v0} / Здоровье: {v1}"));
           throw error;
         }
       }
@@ -947,7 +948,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
       for (const [key, label] of [
         ...(raceHealthEnabled
-          ? [["healthPerLevel", "Здоровье за уровень"]]
+          ? [["healthPerLevel", auditLocalize("FALLOUTMAW.AuditApps.HealthPerLevel", "Здоровье за уровень")]]
           : []),
         ["skillPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel")],
         ["researchPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel")],
@@ -978,12 +979,12 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         const key = String(need.key ?? "").trim();
         const abbr = String(need.abbr ?? "").trim();
         if (!IDENTIFIER_PATTERN.test(key) || usedNeedKeys.has(key)) {
-          const message = `${race.name || race.id} / потребность ${index + 1}: ключ некорректный или повторяется`;
+          const message = auditFormat("FALLOUTMAW.AuditApps.NeedInvalidOrDuplicateKey", { v0: (race.name || race.id), v1: (index + 1) }, "{v0} / потребность {v1}: ключ некорректный или повторяется");
           ui.notifications.error(message);
           throw new Error(message);
         }
         if (!IDENTIFIER_PATTERN.test(abbr) || usedNeedAbbrs.has(abbr)) {
-          const message = `${race.name || race.id} / потребность ${index + 1}: код некорректный или повторяется`;
+          const message = auditFormat("FALLOUTMAW.AuditApps.NeedInvalidOrDuplicateCode", { v0: (race.name || race.id), v1: (index + 1) }, "{v0} / потребность {v1}: код некорректный или повторяется");
           ui.notifications.error(message);
           throw new Error(message);
         }
@@ -1072,7 +1073,7 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Доп. настройки конечности: ${this.limb.label || this.limb.key}`;
+    return auditFormat("FALLOUTMAW.AuditApps.AdvancedLimbSettings", { v0: (this.limb.label || this.limb.key) }, "Доп. настройки конечности: {v0}");
   }
 
   async _prepareContext(options) {
@@ -1188,8 +1189,8 @@ function prepareLimbLossEffectRow(effect = {}, index = 0) {
 
 function buildEffectKeyTokens() {
   return [
-    ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: "Характеристики" })),
-    ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: "Навыки" })),
+    ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: auditLocalize("FALLOUTMAW.Common.Characteristics", "Характеристики") })),
+    ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: auditLocalize("FALLOUTMAW.Common.Skills", "Навыки") })),
     ...buildSkillBonusPercentEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsBonusPercentEffectKeyToken(),
@@ -1197,17 +1198,17 @@ function buildEffectKeyTokens() {
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
-    ...buildResourceBonusEffectKeyTokens("Ресурсы"),
-    ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
-    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
-    ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: "Владения" })),
+    ...buildResourceBonusEffectKeyTokens(auditLocalize("FALLOUTMAW.Common.Resources", "Ресурсы")),
+    ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности") })),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности") }),
+    ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: auditLocalize("FALLOUTMAW.Common.Proficiencies", "Владения") })),
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildDamageBarrierEffectKeyTokens(),
     ...buildLimbMaxBonusEffectKeyTokens(),
     ...buildImplantLimitEffectKeyTokens(),
-    createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
-    createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
-    createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),
+    createEffectKeyToken({ code: "blind", key: "blind", label: auditLocalize("FALLOUTMAW.AuditApps.Blindness", "Слепота"), path: "status.blind", group: auditLocalize("FALLOUTMAW.AuditApps.Statuses", "Статусы") }),
+    createEffectKeyToken({ code: "moveCost", key: "movement", label: auditLocalize("FALLOUTMAW.AuditApps.MovementCost", "Стоимость перемещения"), path: "system.costs.movement", group: auditLocalize("FALLOUTMAW.Item.Cost", "Стоимость") }),
+    createEffectKeyToken({ code: "actionCost", key: "action", label: auditLocalize("FALLOUTMAW.AuditApps.ActionCost", "Стоимость действий"), path: "system.costs.action", group: auditLocalize("FALLOUTMAW.Item.Cost", "Стоимость") }),
     buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
     ...buildCombatEffectKeyTokens(),

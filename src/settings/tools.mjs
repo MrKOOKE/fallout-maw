@@ -1,12 +1,13 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 
 export const TOOL_CLASS_CHOICES = Object.freeze(["D", "C", "B", "A", "S"]);
 
 export const DEFAULT_TOOL_SETTINGS = Object.freeze([
-  { key: "medical", label: "Инструменты медицины" },
-  { key: "repair", label: "Инструменты ремонта" },
-  { key: "electronicHacking", label: "Инструменты электронного взлома" },
-  { key: "mechanicalHacking", label: "Инструменты механического взлома" }
+  { key: "medical", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text075", "Инструменты медицины"); } },
+  { key: "repair", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text076", "Инструменты ремонта"); } },
+  { key: "electronicHacking", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text077", "Инструменты электронного взлома"); } },
+  { key: "mechanicalHacking", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text078", "Инструменты механического взлома"); } }
 ]);
 
 export function createDefaultToolSettings() {
@@ -34,43 +35,43 @@ export function normalizeToolSettings(value = []) {
 export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
   {
     key: "medicine",
-    label: "Медицина",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text079", "Медицина"); },
     img: "icons/svg/heal.svg",
     toolKey: "medical"
   },
   {
     key: "repair",
-    label: "Ремонт",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text080", "Ремонт"); },
     img: "icons/tools/smithing/tongs-steel-grey.webp",
     toolKey: "repair"
   },
   {
     key: "search",
-    label: "Обыск",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text081", "Обыск"); },
     img: "icons/svg/eye.svg",
     toolKey: ""
   },
   {
     key: "trade",
-    label: "Торговля",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text082", "Торговля"); },
     img: "icons/svg/coins.svg",
     toolKey: ""
   },
   {
     key: "craft",
-    label: "Крафт",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text083", "Крафт"); },
     img: "icons/tools/smithing/hammer-sledge-steel-grey.webp",
     toolKey: "repair"
   },
   {
     key: "stealth",
-    label: "Скрытность",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text084", "Скрытность"); },
     img: "icons/svg/invisible.svg",
     toolKey: ""
   },
   {
     key: "traps",
-    label: "Ловушки",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text085", "Ловушки"); },
     img: "icons/svg/hazard.svg",
     toolKey: "mechanicalHacking"
   }

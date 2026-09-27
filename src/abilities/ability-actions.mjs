@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { finalizeAttackActionPointCost } from "../utils/action-point-cost-limits.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
@@ -59,9 +60,9 @@ import {
   getActorActiveCombat,
   getStrictActionPointState,
   isActorInActiveCombat,
+  refundStrictActionPointReceipt,
   spendStrictActionPointsWithReceipt
 } from "../combat/reaction-resources.mjs";
-import { applyAttackActionPointMovementLoss } from "../combat/attack-action-point-movement-loss.mjs";
 import { getReactionTimeoutMs, getResponsibleOwner, isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { getWeaponActionBlockState } from "./runtime-state.mjs";
 import {
@@ -77,7 +78,7 @@ import {
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
-import { waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
+import { notifyCombatResourcesSpent, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -506,7 +507,7 @@ async function prepareAbilityFunctionActionsInternal({
       const tokenUuid = String(tokenDocument?.uuid ?? "").trim();
       if (!tokenUuid || routedTokenUuids.has(tokenUuid)) {
         ui?.notifications?.warn?.(
-          `${title || "Способность"}: одному исполнителю нельзя назначить два отдельных нативных маршрута; объедините их в один маршрут.`
+          auditFormat("FALLOUTMAW.AuditRuntime.R0001", { p0: (title || auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) }, "{p0}: одному исполнителю нельзя назначить два отдельных нативных маршрута; объедините их в один маршрут.")
         );
         return { executions: [], cancelled: false, failed: true, reason: "duplicateMovementRouteExecutor" };
       }
@@ -534,11 +535,11 @@ async function prepareAbilityFunctionActionsInternal({
       for (const executor of executorTargets) {
         const executorTokenDocument = executor.token?.document ?? executor.token ?? null;
         if (isActorUnableToAct(executor.actor)) {
-          ui?.notifications?.warn?.(`${buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)}: актёр не может действовать.`);
+          ui?.notifications?.warn?.(auditFormat("FALLOUTMAW.AuditRuntime.R0003", { p0: (buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)) }, "{p0}: актёр не может действовать."));
           return { executions: [], cancelled: false, failed: true, reason: "executorUnableToAct" };
         }
         if (!getMovementRouteAuthority(executor.actor, executorTokenDocument)) {
-          ui?.notifications?.warn?.(`${buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)}: нет владельца или ведущего на сцене для полноценного перемещения.`);
+          ui?.notifications?.warn?.(auditFormat("FALLOUTMAW.AuditRuntime.R0004", { p0: (buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)) }, "{p0}: нет владельца или ведущего на сцене для полноценного перемещения."));
           return { executions: [], cancelled: false, failed: true, reason: "movementAuthorityUnavailable" };
         }
         const formulaActor = action.routeBudgetEvaluation === ABILITY_ACTION_ROUTE_EVALUATION_MODES.source
@@ -546,7 +547,7 @@ async function prepareAbilityFunctionActionsInternal({
           : executor.actor;
         const configuredMaxBudget = evaluateRouteBudget(action, formulaActor);
         if (!(configuredMaxBudget > 0)) {
-          ui?.notifications?.warn?.(`${buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)}: бюджет маршрута должен быть больше нуля.`);
+          ui?.notifications?.warn?.(auditFormat("FALLOUTMAW.AuditRuntime.R0005", { p0: (buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)) }, "{p0}: бюджет маршрута должен быть больше нуля."));
           return { executions: [], cancelled: false, failed: true, reason: "invalidRouteBudget" };
         }
         const actorUuid = String(executor.actor?.uuid ?? "").trim();
@@ -565,7 +566,7 @@ async function prepareAbilityFunctionActionsInternal({
           : Infinity;
         if (resourceState && availableMovementCost <= 0) {
           ui?.notifications?.warn?.(
-            `${executor.actor?.name ?? "Актёр"}: нет доступных ОП/${resourceState.action?.label ?? "ОД"} для маршрута.`
+            auditFormat("FALLOUTMAW.AuditRuntime.R0006", { p0: (executor.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")), p1: (resourceState.action?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД")) }, "{p0}: нет доступных ОП/{p1} для маршрута.")
           );
           return { executions: [], cancelled: false, failed: true, reason: "movementResourcesUnavailable" };
         }
@@ -719,7 +720,7 @@ function preflightPreparedMovementRouteResources(executions = [], resourceReserv
     const available = getMovementRouteResourceAvailability(actor, state, resourceReservations);
     if (!state || amount <= available) continue;
     ui?.notifications?.warn?.(
-      `${actor?.name ?? "Актёр"}: не хватает ОП/${state.action?.label ?? "ОД"} для маршрута (${Math.ceil(amount)} > ${available}).`
+      auditFormat("FALLOUTMAW.AuditRuntime.R0009", { p0: (actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")), p1: (state.action?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД")), p2: (Math.ceil(amount)), p3: (available) }, "{p0}: не хватает ОП/{p1} для маршрута ({p2} > {p3}).")
     );
     return false;
   }
@@ -750,7 +751,7 @@ function preflightSingleMovementRouteResources(
   const available = getMovementRouteResourceAvailability(actor, state, resourceReservations);
   if (totalCost <= available) return true;
   ui?.notifications?.warn?.(
-    `${actor?.name ?? "Актёр"}: не хватает ОП/${state.action?.label ?? "ОД"} для маршрутов (${Math.ceil(totalCost)} > ${available}).`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0010", { p0: (actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")), p1: (state.action?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД")), p2: (Math.ceil(totalCost)), p3: (available) }, "{p0}: не хватает ОП/{p1} для маршрутов ({p2} > {p3}).")
   );
   return false;
 }
@@ -847,8 +848,8 @@ function preflightPreparedActionResources(executions = [], resourceReservations 
     const requiredAction = movementPaidWithAction + action;
     if (requiredAction <= availableAction) continue;
     ui?.notifications?.warn?.(
-      `${actor?.name ?? "Актёр"}: не хватает общего остатка ОП/${state.action?.label ?? "ОД"} `
-      + `для подготовленных действий (${Math.ceil(requiredAction)} > ${availableAction} ${state.action?.label ?? "ОД"}).`
+      auditFormat("FALLOUTMAW.AuditRuntime.R0011", { p0: (actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")), p1: (state.action?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД")) }, "{p0}: не хватает общего остатка ОП/{p1} ")
+      + auditFormat("FALLOUTMAW.AuditRuntime.R0012", { p0: (Math.ceil(requiredAction)), p1: (availableAction), p2: (state.action?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД")) }, "для подготовленных действий ({p0} > {p1} {p2}).")
     );
     return false;
   }
@@ -1042,16 +1043,16 @@ export function getAbilityTargetExecutorAvailability(actor = null, abilityFuncti
     ));
   if (!targetExecutorActions.length) return { available: true, reason: "" };
   if (!actor || !token?.actor || token.actor.uuid !== actor.uuid) {
-    return { available: false, reason: "нет токена исполнителя" };
+    return { available: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0013", "нет токена исполнителя") };
   }
-  if (isActorUnableToAct(actor)) return { available: false, reason: "актёр не может действовать" };
+  if (isActorUnableToAct(actor)) return { available: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0014", "актёр не может действовать") };
   for (const action of targetExecutorActions) {
     if ([
       ABILITY_ACTION_TYPES.movementRoute,
       ABILITY_ACTION_TYPES.eventSkillCheck
     ].includes(action.type)) continue;
     if (!collectAbilityWeaponAttackOptions(actor, action).length) {
-      return { available: false, reason: "нет доступного атакующего действия или ресурсов" };
+      return { available: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0015", "нет доступного атакующего действия или ресурсов") };
     }
   }
   return { available: true, reason: "" };
@@ -1102,7 +1103,7 @@ function preflightCoordinatedActionPointCosts(attacks = []) {
     costsByActor.set(actorUuid, current);
   }
   return Array.from(costsByActor.values())
-    .every(({ actor, amount }) => canSpendStrictActionPoints(actor, amount, { label: "командная атака" }));
+    .every(({ actor, amount }) => canSpendStrictActionPoints(actor, amount, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0016", "командная атака") }));
 }
 
 function buildAbilityActionAuthorityContext({
@@ -2276,20 +2277,20 @@ function createTokenMovementPlanWaiter(tokenDocument, movementId, { timeoutMs = 
 
 function notifyMovementRouteExecutionFailure(actor, reason = "") {
   const messages = {
-    movementPlanningFailed: "Foundry не удалось подготовить нативный план перемещения",
-    routeOriginChanged: "позиция изменилась после подтверждения маршрута",
-    executorUnavailable: "исполнитель больше недоступен",
-    unreachable: "маршрут больше недоступен",
-    pathPlanningFailed: "не удалось заново построить маршрут",
-    measurementFailed: "не удалось заново измерить маршрут",
-    routeInvalidated: "маршрут утратил актуальность",
-    maxDistance: "обновлённый маршрут превышает максимальную дистанцию",
-    maxMovementCost: "обновлённый маршрут превышает бюджет ОП",
-    movementResourcesUnavailable: "после реакций не хватает ОП/ОД для перемещения",
-    executorUnableToAct: "исполнитель больше не может действовать",
-    movementAuthorityUnavailable: "нет владельца или ведущего на нужной сцене и уровне"
+    movementPlanningFailed: auditLocalize("FALLOUTMAW.AuditRuntime.R0017", "Foundry не удалось подготовить нативный план перемещения"),
+    routeOriginChanged: auditLocalize("FALLOUTMAW.AuditRuntime.R0018", "позиция изменилась после подтверждения маршрута"),
+    executorUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0019", "исполнитель больше недоступен"),
+    unreachable: auditLocalize("FALLOUTMAW.AuditRuntime.R0020", "маршрут больше недоступен"),
+    pathPlanningFailed: auditLocalize("FALLOUTMAW.AuditRuntime.R0021", "не удалось заново построить маршрут"),
+    measurementFailed: auditLocalize("FALLOUTMAW.AuditRuntime.R0022", "не удалось заново измерить маршрут"),
+    routeInvalidated: auditLocalize("FALLOUTMAW.AuditRuntime.R0023", "маршрут утратил актуальность"),
+    maxDistance: auditLocalize("FALLOUTMAW.AuditRuntime.R0024", "обновлённый маршрут превышает максимальную дистанцию"),
+    maxMovementCost: auditLocalize("FALLOUTMAW.AuditRuntime.R0025", "обновлённый маршрут превышает бюджет ОП"),
+    movementResourcesUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0026", "после реакций не хватает ОП/ОД для перемещения"),
+    executorUnableToAct: auditLocalize("FALLOUTMAW.AuditRuntime.R0027", "исполнитель больше не может действовать"),
+    movementAuthorityUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0028", "нет владельца или ведущего на нужной сцене и уровне")
   };
-  ui?.notifications?.warn?.(`${actor?.name ?? "Актёр"}: ${messages[reason] ?? "маршрут не выполнен"}.`);
+  ui?.notifications?.warn?.(`${actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")}: ${messages[reason] ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0029", "маршрут не выполнен")}.`);
 }
 
 function preflightOwnedMovementRouteResources(actor, movementCost = 0) {
@@ -2300,7 +2301,7 @@ function preflightOwnedMovementRouteResources(actor, movementCost = 0) {
   const available = Math.max(0, Number(state.total) || 0);
   if (cost <= available) return true;
   ui?.notifications?.warn?.(
-    `${actor?.name ?? "Актёр"}: не хватает ОП/${state.action?.label ?? "ОД"} для маршрута (${Math.ceil(cost)} > ${available}).`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0009", { p0: (actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")), p1: (state.action?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД")), p2: (Math.ceil(cost)), p3: (available) }, "{p0}: не хватает ОП/{p1} для маршрута ({p2} > {p3}).")
   );
   return false;
 }
@@ -2427,31 +2428,29 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null, autho
   const attackModifier = data.preventCancel
     ? createForcedAttackModifier({ label: getWeaponActionLabel(actionKey) })
     : null;
-  const onBeforeExecute = async (execution = {}) => {
-    if (actionPointCost <= 0) return true;
-    if (!canSpendStrictActionPoints(actor, actionPointCost, { label: getWeaponActionLabel(actionKey) })) return false;
-    const transaction = await spendStrictActionPointsWithReceipt(actor, actionPointCost, {
-      source: "abilityAction",
-      actionKey,
-      chainRef
-    });
-    if (transaction.spent !== actionPointCost || !transaction.receipt) return false;
-    await applyAttackActionPointMovementLoss(actor, transaction.receipt.amount, {
-      actorToken: attackerToken,
-      weapon,
-      actionKey,
-      weaponActionKey: actionKey,
-      weaponFunctionId,
-      attackId: execution?.controller?.attackId ?? "",
-      chanceOperationId: execution?.controller?.chanceOperationId
-        ?? execution?.controller?.attackId
-        ?? "",
-      chainRef,
-      requester: "weaponAttack",
-      source: "abilityAction"
-    });
-    return true;
-  };
+  const onBeforeExecute = async () => actionPointCost <= 0
+    || canSpendStrictActionPoints(actor, actionPointCost, { label: getWeaponActionLabel(actionKey) });
+  // Keep the strict ability cost in the same refundable boundary as ammo and
+  // other weapon resources. Selection/preflight must not spend by itself.
+  const costContext = { source: "abilityAction", actionKey, chainRef };
+  const actionPointCostTransaction = actionPointCost > 0 ? {
+    async commit() {
+      if (!(await onBeforeExecute())) return false;
+      const transaction = await spendStrictActionPointsWithReceipt(actor, actionPointCost, {
+        ...costContext,
+        suppressResourceNotification: true
+      });
+      return transaction.spent === actionPointCost && transaction.receipt ? transaction : false;
+    },
+    async rollback(transaction) {
+      const restored = await refundStrictActionPointReceipt(actor, transaction?.receipt, costContext);
+      if (restored !== transaction?.spent) throw new Error("Ability attack action points could not be fully refunded.");
+    },
+    async finalize(transaction) {
+      await notifyCombatResourcesSpent(actor, { actionPoints: transaction.spent }, costContext);
+      return transaction.spent;
+    }
+  } : null;
 
   const suppressGenericEventReactions = Boolean(data.preventCancel || data.autoApply);
   if (action?.targetMode === ABILITY_ACTION_TARGET_MODES.free) {
@@ -2464,6 +2463,7 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null, autho
       chainRef,
       damageHubOperationRef: data.damageHubOperationRef,
       onBeforeExecute,
+      actionPointCostTransaction,
       skipActionPointCost: true,
       ignoreReactionLock: Boolean(data.ignoreReactionLock),
       suspendActiveAttack: true,
@@ -2483,6 +2483,7 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null, autho
       chainRef,
       damageHubOperationRef: data.damageHubOperationRef,
       onBeforeExecute,
+      actionPointCostTransaction,
       timeoutMs: data.timeoutMs,
       suppressGenericEventReactions
     });
@@ -2497,6 +2498,7 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null, autho
     chainRef,
     damageHubOperationRef: data.damageHubOperationRef,
     onBeforeExecute,
+    actionPointCostTransaction,
     skipActionPointCost: true,
     ignoreReactionLock: Boolean(data.ignoreReactionLock),
     suspendActiveAttack: true,
@@ -2552,7 +2554,7 @@ function groupAbilityAttackOptionsByWeapon(options = []) {
     const group = groups.get(weaponUuid) ?? {
       weaponUuid,
       name: String(option?.weaponName ?? option?.weapon?.name ?? weaponUuid),
-      img: String(option?.weaponImg ?? option?.weapon?.img ?? "icons/svg/sword.svg"),
+      img: String(option?.weaponImg ?? option?.weapon?.img ?? "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp"),
       options: []
     };
     group.options.push(option);
@@ -2566,7 +2568,7 @@ function serializeAbilityAttackSelectionOption(option = {}) {
     id: String(option.id ?? ""),
     weaponUuid: String(option.weaponUuid ?? option.weapon?.uuid ?? ""),
     weaponName: String(option.weapon?.name ?? ""),
-    weaponImg: String(option.weapon?.img ?? "icons/svg/sword.svg"),
+    weaponImg: String(option.weapon?.img ?? "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp"),
     weaponFunctionId: String(option.weaponFunctionId ?? ""),
     weaponFunctionName: String(option.weaponFunctionName ?? ""),
     actionKey: String(option.actionKey ?? ""),

@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
@@ -13,6 +14,7 @@ import { FIXED_SIGNATURE_SKILL_MULTIPLIER } from "../advancement/index.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
+import { editSettingsDescription } from "./settings-description-dialog.mjs";
 
 export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -37,6 +39,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createSkill: this.#onCreateSkill,
+      editDescription: editSettingsDescription,
       createSkillCostThreshold: this.#onCreateSkillCostThreshold,
       deleteSkill: this.#onDeleteSkill,
       deleteSkillCostThreshold: this.#onDeleteSkillCostThreshold
@@ -104,7 +107,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     this.skills.push({
       key: this.#getUniqueKey("newSkill"),
       abbr: this.#getUniqueAbbr("new"),
-      label: "Новый навык",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewSkill", "Новый навык"),
       formula: "0"
     });
     return this.forceRender();
@@ -123,6 +126,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
 
   static #onCreateSkillCostThreshold(event) {
     event.preventDefault();
+    this.skills = this.#readSkillsFromForm();
     this.skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
     const thresholds = this.skillDevelopmentCosts.thresholds ?? [];
     const last = thresholds.at(-1) ?? { threshold: 40, cost: 0 };
@@ -142,6 +146,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
 
     this.skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
     this.skillDevelopmentCosts.thresholds.splice(index, 1);
+    this.skills = this.#readSkillsFromForm();
     return this.forceRender();
   }
 
@@ -151,6 +156,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
+      description: row.querySelector("[data-field='description']")?.value?.trim() ?? "",
       formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0"
     }));
   }

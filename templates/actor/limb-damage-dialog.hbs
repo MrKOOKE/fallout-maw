@@ -6,18 +6,18 @@
     </div>
     <div class="fallout-maw-list-grid two-columns">
       <label>
-        <span>Режим</span>
+        <span>{{localize 'FALLOUTMAW.Item.MitigationMode'}}</span>
         <select name="mode">
-          <option value="damage">Урон</option>
-          <option value="healing">Лечение</option>
+          <option value="damage">{{localize 'FALLOUTMAW.REGIONBEHAVIORS.PERIODICDAMAGE.FIELDS.damage.label'}}</option>
+          <option value="healing">{{localize 'FALLOUTMAW.Item.FirstAidHealing'}}</option>
         </select>
       </label>
       <label>
-        <span>Значение</span>
+        <span>{{localize 'FALLOUTMAW.Common.Value'}}</span>
         <input type="number" name="amount" value="{{amount}}" min="0" step="1" autofocus>
       </label>
       <label>
-        <span>Тип урона</span>
+        <span>{{localize 'FALLOUTMAW.Events.Reaction.DepthFilters.damageType.Label'}}</span>
         <select name="damageTypeKey">
           {{#each damageTypes}}
           <option value="{{key}}" {{#if (eq key ../defaultDamageTypeKey)}}selected{{/if}}>{{label}}</option>

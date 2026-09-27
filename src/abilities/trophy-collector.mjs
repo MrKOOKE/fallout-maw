@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
 import { getActorFactionRelation } from "../settings/factions.mjs";
@@ -19,7 +20,7 @@ const STATUS_GAINED_EVENT_KEY = "fallout-maw.actor.status.gained";
 const STATUS_LOST_EVENT_KEY = "fallout-maw.actor.status.lost";
 const DEAD_STATUS_ID = "dead";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
-const DEFAULT_ICON = "icons/svg/target.svg";
+const DEFAULT_ICON = "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp";
 const OCCURRENCE_CACHE_LIMIT = 4096;
 const DAMAGE_PERCENT_EFFECT_KEY = "system.combat.damagePercent";
 const ACCURACY_EFFECT_KEY = "system.combat.accuracy";
@@ -342,7 +343,7 @@ export function buildTrophyCollectorMarkEffectData({
   const abilityName = getAbilityName(abilityItem);
   return {
     type: "base",
-    name: `${abilityName}: Метка ×${count}`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0540", { p0: (abilityName), p1: (count) }, "{p0}: Метка ×{p1}"),
     img: abilityItem?.img || DEFAULT_ICON,
     description: "",
     origin: String(abilityItem?.uuid ?? ""),
@@ -468,7 +469,7 @@ export function getTrophyCollectorLedgerRows(abilityItem = null, abilityFunction
       strength: entry.strength,
       maximumStrength: normalized.maximumStrength
     }))
-    .sort((left, right) => left.raceName.localeCompare(right.raceName, "ru"));
+    .sort((left, right) => left.raceName.localeCompare(right.raceName, globalThis.game?.i18n?.lang || "en"));
 }
 
 /** Activation has no mutation or cost; it opens the permanent ledger for its owner. */
@@ -490,14 +491,14 @@ export async function showTrophyCollectorLedger({
           </div>
         `).join("")}
       </div>`
-    : "<p class=\"hint\">Трофеи ещё не собраны.</p>";
+    : auditLocalize("FALLOUTMAW.AuditRuntime.R0541", "<p class=\"hint\">Трофеи ещё не собраны.</p>");
   await openDialog({
     window: { title: getAbilityName(abilityItem), icon: "fa-solid fa-crosshairs" },
     classes: ["fallout-maw", "fallout-maw-trophy-collector-dialog"],
     content,
     buttons: [{
       action: "close",
-      label: "Закрыть",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0542", "Закрыть"),
       icon: "fa-solid fa-check",
       default: true,
       callback: () => true
@@ -546,7 +547,7 @@ export async function requestTrophyCollectorResilienceCheck({
       abilityItemUuid: String(abilityItem?.uuid ?? ""),
       weaponAttackId: String(attackId ?? "")
     },
-    messageData: { flavor: `${getAbilityName(abilityItem)}: проверка Стойкости` }
+    messageData: { flavor: auditFormat("FALLOUTMAW.AuditRuntime.R0410", { p0: (getAbilityName(abilityItem)) }, "{p0}: проверка Стойкости") }
   });
 }
 
@@ -576,7 +577,7 @@ export async function applyTrophyCollectorStun({
   };
   const data = {
     type: "base",
-    name: `${getAbilityName(abilityItem)}: Оглушение ${normalized.stunPercent}%`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0411", { p0: (getAbilityName(abilityItem)), p1: (normalized.stunPercent) }, "{p0}: Оглушение {p1}%"),
     img: abilityItem?.img || DEFAULT_ICON,
     description: "",
     origin: String(abilityItem?.uuid ?? ""),
@@ -795,7 +796,7 @@ function getConfiguredRaceName(raceId = "") {
 }
 
 function getAbilityName(item = null) {
-  return String(item?.name ?? "").trim() || "Собиратель трофеев";
+  return String(item?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0088", "Собиратель трофеев");
 }
 
 function getAbilitySourceId(item = null) {

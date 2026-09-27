@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN, isFixedResourceKey, validateFormula } from "../formulas/index.mjs";
 import {
@@ -13,8 +14,8 @@ import { activateSettingsReorder } from "./settings-reorder.mjs";
 import { getActiveRulesProfile, isActiveRulesResourceRequired } from "../settings/rules-profiles.mjs";
 
 const RESOURCE_FORMULA_VARIABLES = Object.freeze([
-  Object.freeze({ key: "limbs", abbr: "limbs", label: "Все части тела" }),
-  Object.freeze({ key: "criticalLimbs", abbr: "criticalLimbs", label: "Среднее ключевых частей тела" })
+  Object.freeze({ key: "limbs", abbr: "limbs", get label() { return auditLocalize("FALLOUTMAW.AuditApps.AllBodyParts", "Все части тела"); } }),
+  Object.freeze({ key: "criticalLimbs", abbr: "criticalLimbs", get label() { return auditLocalize("FALLOUTMAW.AuditApps.AverageOfKeyBodyParts", "Среднее ключевых частей тела"); } })
 ]);
 
 export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
@@ -98,7 +99,7 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     this.resources.push({
       key: this.#getUniqueKey("newResource"),
       abbr: this.#getUniqueAbbr("new"),
-      label: "Новый ресурс",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewResource", "Новый ресурс"),
       formula: "0",
       color: "#8f8456"
     });

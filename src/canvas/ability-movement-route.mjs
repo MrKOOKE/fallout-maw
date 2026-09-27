@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { measureTheoreticalMovementPathCost } from "../combat/movement-resources.mjs";
 import {
   ABILITY_ROUTE_PREVIEW_MOVEMENT_OPTION,
@@ -41,7 +42,7 @@ export async function requestAbilityMovementRoute({
   maxBudget = Infinity,
   resourceBudget = Infinity,
   budgetMode = ABILITY_ROUTE_BUDGET_MODES.movementCost,
-  title = "Маршрут перемещения",
+  title = auditLocalize("FALLOUTMAW.AuditRuntime.R0582", "Маршрут перемещения"),
   movementAction = "",
   autoRotate = false,
   showRuler = true,
@@ -57,7 +58,7 @@ export async function requestAbilityMovementRoute({
     return { cancelled: false, failed: true, reason: "movementAuthorityUnavailable" };
   }
   if (isNativeMovementBusy(tokenDocument)) {
-    ui?.notifications?.warn?.(`${title}: у токена уже есть незавершённое перемещение.`);
+    ui?.notifications?.warn?.(auditFormat("FALLOUTMAW.AuditRuntime.R0583", { p0: (title) }, "{p0}: у токена уже есть незавершённое перемещение."));
     return { cancelled: false, failed: true, reason: "movementAlreadyActive" };
   }
 
@@ -232,7 +233,7 @@ export async function requestAbilityMovementRoute({
 
   try {
     ui?.notifications?.info?.(
-      `${title}: маршрут уже привязан к курсору; ЛКМ добавляет точку (на точном максимуме бюджета сразу подтверждает), Enter завершает, ПКМ снимает последнюю точку.`
+      auditFormat("FALLOUTMAW.AuditRuntime.R0584", { p0: (title) }, "{p0}: маршрут уже привязан к курсору; ЛКМ добавляет точку (на точном максимуме бюджета сразу подтверждает), Enter завершает, ПКМ снимает последнюю точку.")
     );
     const planning = tokenObject.planAbilityMovement({
       allowedActions: [action],
@@ -588,7 +589,7 @@ function normalizeMovementAction(value, tokenDocument) {
   const current = String(tokenDocument?.movementAction ?? "walk");
   const action = String(value ?? "").trim() || current;
   if (globalThis.CONFIG?.Token?.movement?.actions && !(action in CONFIG.Token.movement.actions)) {
-    ui?.notifications?.warn?.(`Режим перемещения «${action}» недоступен; используется текущий режим.`);
+    ui?.notifications?.warn?.(auditFormat("FALLOUTMAW.AuditRuntime.R0585", { p0: (action) }, "Режим перемещения «{p0}» недоступен; используется текущий режим."));
     return current;
   }
   return action;
@@ -659,21 +660,21 @@ function finiteOr(value, fallback) {
 function notifyRouteValidationFailure(title, reason, used, maxBudget, budgetMode) {
   if (["maxDistance", "maxMovementCost"].includes(reason)) {
     const unit = budgetMode === ABILITY_ROUTE_BUDGET_MODES.distance
-      ? String(canvas?.grid?.units ?? "ед. сцены")
-      : "ОП";
+      ? String(canvas?.grid?.units ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0586", "ед. сцены"))
+      : auditLocalize("FALLOUTMAW.AuditRuntime.R0587", "ОП");
     ui?.notifications?.warn?.(
-      `${title}: маршрут превышает бюджет (${formatNumber(used)} > ${formatNumber(maxBudget)} ${unit}).`
+      auditFormat("FALLOUTMAW.AuditRuntime.R0588", { p0: (title), p1: (formatNumber(used)), p2: (formatNumber(maxBudget)), p3: (unit) }, "{p0}: маршрут превышает бюджет ({p1} > {p2} {p3}).")
     );
     return;
   }
   const messages = {
-    unreachable: "точка недоступна по правилам перемещения",
-    pathPlanningFailed: "не удалось построить путь",
-    measurementFailed: "не удалось измерить путь",
-    invalidWaypoint: "точки маршрута не прошли проверку Foundry",
-    emptyRoute: "маршрут пуст"
+    unreachable: auditLocalize("FALLOUTMAW.AuditRuntime.R0589", "точка недоступна по правилам перемещения"),
+    pathPlanningFailed: auditLocalize("FALLOUTMAW.AuditRuntime.R0590", "не удалось построить путь"),
+    measurementFailed: auditLocalize("FALLOUTMAW.AuditRuntime.R0591", "не удалось измерить путь"),
+    invalidWaypoint: auditLocalize("FALLOUTMAW.AuditRuntime.R0592", "точки маршрута не прошли проверку Foundry"),
+    emptyRoute: auditLocalize("FALLOUTMAW.AuditRuntime.R0593", "маршрут пуст")
   };
-  ui?.notifications?.warn?.(`${title}: ${messages[reason] ?? "маршрут недействителен"}.`);
+  ui?.notifications?.warn?.(`${title}: ${messages[reason] ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0594", "маршрут недействителен")}.`);
 }
 
 function formatNumber(value) {

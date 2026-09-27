@@ -1,3 +1,4 @@
+import { format as auditFormat } from "../utils/i18n.mjs";
 import {
   BASIC_SIGHT_DETECTION_MODE_ID,
   DETECTION_MODE_RANGE_TOKEN_CHANGE_MARKER,
@@ -6,6 +7,7 @@ import {
 import { SYSTEM_ID } from "../constants.mjs";
 import { unregisterDeletedActiveEffect } from "../effects/registry.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { assertBatchPreflightIds } from "../utils/document-batch-integrity.mjs";
 import {
   EFFECT_EXPIRATION_ACTIONS,
   getEffectExpirationAction,
@@ -19,6 +21,24 @@ const pendingExpirationActions = new Set();
  * System ActiveEffect implementation for narrowly scoped semantic changes.
  */
 export class FalloutMaWActiveEffect extends ActiveEffect {
+  static async createDocuments(data = [], operation = {}) {
+    const documents = await super.createDocuments(data, operation);
+    assertBatchPreflightIds(operation, "create");
+    return documents;
+  }
+
+  static async updateDocuments(updates = [], operation = {}) {
+    const documents = await super.updateDocuments(updates, operation);
+    assertBatchPreflightIds(operation, "update");
+    return documents;
+  }
+
+  static async deleteDocuments(ids = [], operation = {}) {
+    const documents = await super.deleteDocuments(ids, operation);
+    assertBatchPreflightIds(operation, "delete");
+    return documents;
+  }
+
   _onDelete(options, userId) {
     unregisterDeletedActiveEffect(this);
     super._onDelete(options, userId);
@@ -45,11 +65,11 @@ export class FalloutMaWActiveEffect extends ActiveEffect {
         reason: "effect-expiration-action",
         render: true
       });
-      ui.notifications.info(`${item.name}: срок годности истёк.`);
+      ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0859", { p0: (item.name) }, "{p0}: срок годности истёк."));
       return true;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Failed to execute ActiveEffect expiration action`, error);
-      ui.notifications.error(`${item.name}: не удалось выполнить действие истёкшего эффекта.`);
+      ui.notifications.error(auditFormat("FALLOUTMAW.AuditRuntime.R0860", { p0: (item.name) }, "{p0}: не удалось выполнить действие истёкшего эффекта."));
       return false;
     } finally {
       pendingExpirationActions.delete(operationKey);

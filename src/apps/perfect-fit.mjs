@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { getActorAvailableEnergy } from "../combat/energy-resource.mjs";
@@ -54,7 +55,7 @@ class PerfectFitApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   get title() {
-    return String(this.#abilityItem?.name ?? "").trim() || "Идеальная подгонка";
+    return String(this.#abilityItem?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.PerfectFit", "Идеальная подгонка");
   }
 
   matches({ actor = null, abilityItem = null, abilityFunction = null } = {}) {
@@ -90,8 +91,8 @@ class PerfectFitApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const target = globalThis.fromUuidSync?.(String(data.targetActorUuid ?? ""));
       return {
         effectId: String(effect.id ?? ""),
-        name: String(target?.name ?? data.targetActorName ?? "Удалённая цель"),
-        img: String(target?.img ?? data.targetActorImg ?? "icons/svg/mystery-man.svg"),
+        name: String(target?.name ?? data.targetActorName ?? auditLocalize("FALLOUTMAW.AuditApps.RemovedTarget", "Удалённая цель")),
+        img: String(target?.img ?? data.targetActorImg ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
         energy: Math.max(0, Number(data.holdEnergy) || 0),
         equipmentRequirementPercent: Number(data.equipmentRequirementPercent) || 0,
         weaponRequirementPercent: Number(data.weaponRequirementPercent) || 0,
@@ -102,9 +103,9 @@ class PerfectFitApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const availableEnergy = getActorAvailableEnergy(this.#actor);
     const insufficientEnergy = availableEnergy < settings.holdEnergy;
     const selectionDisabledReason = inCombat
-      ? "Новые цели можно выбирать только вне боя. Активные удержания можно отключать."
+      ? auditLocalize("FALLOUTMAW.AuditApps.NewTargetsCanOnlyBeSelectedOutsideCombat", "Новые цели можно выбирать только вне боя. Активные удержания можно отключать.")
       : insufficientEnergy
-        ? `Для новой цели нужно ${settings.holdEnergy} доступной энергии.`
+        ? auditFormat("FALLOUTMAW.AuditApps.ANewTargetRequiresAvailableEnergy", { v0: (settings.holdEnergy) }, "Для новой цели нужно {v0} доступной энергии.")
         : "";
     return {
       ...context,
@@ -128,7 +129,7 @@ class PerfectFitApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#busy || isActorInActiveCombat(this.#actor)) return;
     const settings = normalizePerfectFitSettings(this.#abilityFunction?.fixedSettings);
     if (getActorAvailableEnergy(this.#actor) < settings.holdEnergy) {
-      ui.notifications.warn(`${this.title}: недостаточно доступной энергии.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.NotEnoughAvailableEnergy", { v0: (this.title) }, "{v0}: недостаточно доступной энергии."));
       return;
     }
     const heldActorUuids = new Set(getPerfectFitHolds(this.#actor, {
@@ -143,11 +144,11 @@ class PerfectFitApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         sourceToken: this.#sourceToken,
         includeSelf: false,
         title: this.title,
-        noneWarning: "Нет доступных целей для Идеальной подгонки.",
-        instructions: "Идеальная подгонка: выберите подсвеченную цель. Esc/ПКМ отменяет.",
+        noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoAvailableTargetsForPerfectFit", "Нет доступных целей для Идеальной подгонки."),
+        instructions: auditLocalize("FALLOUTMAW.AuditApps.PerfectFitSelectAHighlightedTargetEscRight", "Идеальная подгонка: выберите подсвеченную цель. Esc/ПКМ отменяет."),
         getReason: ({ actor }) => {
-          if (heldActorUuids.has(String(actor?.uuid ?? ""))) return "Бонус для этой цели уже удерживается.";
-          return findPerfectFitGrant(actor) ? "На цели уже действует Идеальная подгонка." : "";
+          if (heldActorUuids.has(String(actor?.uuid ?? ""))) return auditLocalize("FALLOUTMAW.AuditApps.TheBonusForThisTargetIsAlreadyBeing", "Бонус для этой цели уже удерживается.");
+          return findPerfectFitGrant(actor) ? auditLocalize("FALLOUTMAW.AuditApps.PerfectFitIsAlreadyActiveOnTheTarget", "На цели уже действует Идеальная подгонка.") : "";
         }
       });
       if (selected?.actor) await this.#addHandler?.({ targetActor: selected.actor });
@@ -174,8 +175,8 @@ class PerfectFitApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const data = getPerfectFitHoldData(effect);
     if (!effect || !data) return;
     const confirmed = await DialogV2.confirm({
-      window: { title: "Отключить удержание" },
-      content: `<p>Отключить Идеальную подгонку для «${escapeHtml(data.targetActorName ?? "цель")}»?</p>`,
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.ReleaseHold", "Отключить удержание") },
+      content: auditFormat("FALLOUTMAW.AuditApps.DisablePerfectFitFor", { v0: (escapeHtml(data.targetActorName ?? auditLocalize("FALLOUTMAW.AuditApps.Target", "цель"))) }, "<p>Отключить Идеальную подгонку для «{v0}»?</p>"),
       rejectClose: false,
       modal: true
     });

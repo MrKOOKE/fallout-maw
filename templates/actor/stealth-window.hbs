@@ -3,7 +3,7 @@
     <div>
       <h2>{{actor.name}}</h2>
       <span class="fallout-maw-stealth-status {{#if stealthed}}hidden{{else}}visible{{/if}}">
-        {{#if stealthed}}Скрыт{{else}}Виден{{/if}}
+        {{#if stealthed}}{{localize 'FALLOUTMAW.AuditTemplates.Text8ceffc13e311'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text0935adaecfc7'}}{{/if}}
       </span>
     </div>
     <strong>{{stealthValue}}</strong>
@@ -11,7 +11,7 @@
 
   <section class="fallout-maw-stealth-panel">
     <div class="fallout-maw-stealth-row">
-      <span>Освещение:</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Textb37508aa8bfa'}}</span>
       <strong>{{lighting.levelLabel}}</strong>
     </div>
     <div class="fallout-maw-stealth-light-bar" aria-hidden="true">
@@ -21,7 +21,7 @@
 
   <section class="fallout-maw-stealth-panel">
     <div class="fallout-maw-stealth-row">
-      <span>Бонус СЛ</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text66f2995732e7'}}</span>
       <strong>+{{lighting.modifiers.difficultyBonus}}</strong>
     </div>
   </section>
@@ -29,11 +29,11 @@
   <footer class="fallout-maw-stealth-actions">
     <button type="button" data-action="toggleStealth">
       <i class="fa-solid {{#if stealthed}}fa-eye{{else}}fa-user-ninja{{/if}}"></i>
-      {{#if stealthed}}Раскрыться{{else}}Скрыться{{/if}}
+      {{#if stealthed}}{{localize 'FALLOUTMAW.AuditTemplates.Text3fc71b6723b2'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Textfb8a33702747'}}{{/if}}
     </button>
     <button type="button" data-action="startTargeting" {{#unless stealthed}}disabled{{/unless}}>
       <i class="fa-solid fa-crosshairs"></i>
-      Проверка
+      {{localize 'FALLOUTMAW.CombatCarousel.Check'}}
     </button>
   </footer>
 </div>

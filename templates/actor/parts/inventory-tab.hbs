@@ -1,14 +1,14 @@
 <section class="tab fallout-maw-inventory-tab {{tabs.inventory.cssClass}}" data-group="{{tabs.inventory.group}}" data-tab="{{tabs.inventory.id}}">
   {{#if travelGroup.visible}}
   <section class="fallout-maw-panel fallout-maw-travel-group-sheet">
-    <h2>Состав путешествия</h2>
+    <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text967b777a7674'}}</h2>
     {{#if travelGroup.empty}}
-    <p class="fallout-maw-empty-list">В группе нет участников.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textaa0c6489bcc7'}}</p>
     {{else}}
     <div class="fallout-maw-travel-group-sheet-layout">
       {{#if travelGroup.hasWalkers}}
       <section class="fallout-maw-travel-group-walkers">
-        <h3>Пешие участники</h3>
+        <h3>{{localize 'FALLOUTMAW.AuditTemplates.Text8e5aa48454f6'}}</h3>
         <div class="fallout-maw-travel-group-walker-list">
           {{#each travelGroup.walkers}}
           <article class="fallout-maw-travel-group-walker {{#if missing}}missing{{/if}}" title="{{name}}">
@@ -49,7 +49,7 @@
             </div>
             {{/each}}
             {{else}}
-            <p class="fallout-maw-empty-list">У транспорта нет настроенных мест.</p>
+            <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text4f58a5ce1a75'}}</p>
             {{/if}}
           </div>
         </article>
@@ -104,7 +104,7 @@
                 {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
               </article>
               {{else if phantom}}
-              <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}: перетащите подходящую деталь">
+              <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}{{localize 'FALLOUTMAW.AuditTemplates.Texte9e3c3d99913'}}">
                 <img src="{{phantomImg}}" alt="">
                 <i class="fa-solid fa-plus"></i>
               </div>
@@ -119,7 +119,7 @@
 
       {{#if inventory.prosthesisSlots.length}}
       <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
-        <h2>Протезы</h2>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}</h2>
         <div class="fallout-maw-equipment-slot-list fallout-maw-prosthesis-slot-list">
           {{#each inventory.prosthesisSlots}}
           <div class="fallout-maw-slot-card">
@@ -139,7 +139,7 @@
 
       {{#if inventory.implantSlots.length}}
       <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
-        <h2>Импланты</h2>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text93f75dab61e9'}}</h2>
         <div class="fallout-maw-equipment-slot-list fallout-maw-implant-slot-list">
           {{#each inventory.implantSlots}}
           <div class="fallout-maw-slot-card">
@@ -219,7 +219,7 @@
       </section>
       {{#if inventory.actorContainers.visible}}
       <section class="fallout-maw-panel fallout-maw-actor-container-section">
-        <h2>Пассажирские места</h2>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textd24d43c042ef'}}</h2>
         <div data-inventory-pack>
         {{#each inventory.actorContainers.groups}}
         <div class="fallout-maw-actor-container-group">
@@ -248,7 +248,7 @@
       {{#with inventory.butcheringStorage}}
       {{#if grid.items.length}}
       <section class="fallout-maw-panel fallout-maw-butchering-storage-section">
-        <h2>Разделка</h2>
+        <h2>{{localize 'FALLOUTMAW.Events.Groups.butchering.Label'}}</h2>
         <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
           {{#each grid.zones}}
           <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
@@ -267,8 +267,10 @@
 
     </div>
 
+    {{#if inventory.showInventoryPane}}
     <section class="fallout-maw-panel fallout-maw-inventory-pane">
       <div class="fallout-maw-inventory-blocks" data-inventory-pack>
+        {{#if inventory.showRootInventory}}
         <section class="fallout-maw-root-inventory-block" data-contents-transfer-zone data-inventory-parent-id="">
           <div class="fallout-maw-panel-header fallout-maw-container-header fallout-maw-root-inventory-header" data-inventory-block-header>
             <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
@@ -294,6 +296,7 @@
           </div>
         </section>
 
+        {{/if}}
         {{#each inventory.containers}}
         <section class="fallout-maw-container-section" data-contents-transfer-zone data-container-drop-surface data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
           <div class="fallout-maw-panel-header fallout-maw-container-header" data-inventory-block-header>
@@ -351,6 +354,7 @@
         {{/with}}
       </div>
     </section>
+    {{/if}}
   </div>
   {{/if}}
 </section>

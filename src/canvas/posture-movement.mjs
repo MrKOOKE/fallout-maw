@@ -1,9 +1,9 @@
+import { format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import {
   REACTION_RESOURCE_KEY,
-  getCombatActionPointState,
-  spendCombatActionPoints
+  getCombatActionPointState
 } from "../combat/reaction-resources.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
@@ -13,7 +13,7 @@ import {
   canonicalizeActiveEffectChanges
 } from "../utils/active-effect-source.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "../combat/combat-membership.mjs";
-import { getActorResourceLimitAmount } from "../combat/resource-limits.mjs";
+import { getCombatMovementResourceState, spendMovementThenActionResourcesWithReceipt, refundMovementThenActionResourceReceipt } from "../combat/movement-resources.mjs";
 import {
   getActorPostureAction,
   isPostureEffectApplicableToActor,
@@ -41,7 +41,7 @@ const POSTURE_ACTION_CONFIGS = Object.freeze({
   walk: Object.freeze({
     label: "FALLOUTMAW.Movement.Walk",
     icon: "fa-solid fa-person-walking",
-    img: "icons/svg/walk.svg",
+    img: "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp",
     depthFactor: 1,
     movementCostMultiplier: 1,
     weaponActionPointCostBonus: 0,
@@ -71,7 +71,7 @@ const POSTURE_ACTION_CONFIGS = Object.freeze({
   knocked: Object.freeze({
     label: "FALLOUTMAW.Movement.Knocked",
     icon: "fa-solid fa-person-falling-burst",
-    img: "icons/svg/falling.svg",
+    img: "systems/fallout-maw/assets/System/TokenActionHud/posture-knocked.webp",
     depthFactor: 0.2,
     movementCostMultiplier: 4,
     weaponActionPointCostBonus: 1,
@@ -188,7 +188,7 @@ function onPreUpdateTokenPostureMovement(tokenDocument, changes, options, userId
   const changeCost = getPostureChangeResourceCost(tokenDocument, previousAction, nextAction, options);
   if (changeCost > 0) {
     if (!canSpendPostureChangeResources(tokenDocument?.actor, changeCost)) {
-      ui.notifications.warn(`${tokenDocument?.actor?.name ?? ""}: не хватает ОП/ОД для смены положения (${changeCost}).`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0640", { p0: (tokenDocument?.actor?.name ?? ""), p1: (changeCost) }, "{p0}: не хватает ОП/ОД для смены положения ({p1})."));
       return false;
     }
     foundry.utils.setProperty(changes, `flags.${SYSTEM_ID}.${POSTURE_MOVEMENT_FLAG}.pendingChangeCost`, {
@@ -429,59 +429,33 @@ function canSpendPostureChangeResources(actor, amount) {
 async function spendPostureChangeResources(tokenDocument, amount, pending = {}) {
   const actor = tokenDocument?.actor;
   if (!isActorInActiveCombat(actor)) return;
-  const state = getPostureChangeResourceState(actor);
-  if (!state || !actor?.isOwner) return;
-
-  const cost = Math.max(0, toInteger(amount));
-  const movementSpend = Math.min(cost, state.movement.value);
-  const actionSpend = Math.min(Math.max(0, cost - movementSpend), state.action.value);
-  if (!movementSpend && !actionSpend) return;
-
-  const updates = {};
-  if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-  updates[`flags.${SYSTEM_ID}.${POSTURE_RESOURCE_SPENDING_FLAG}`] = [
-    ...getPostureResourceSpendingStack(actor),
-    createPostureResourceSpendingEntry(tokenDocument, pending, {
-      [MOVEMENT_RESOURCE_KEY]: movementSpend,
-      [state.action.key]: actionSpend
+  if (!actor?.isOwner) return;
+  const receipt = await spendMovementThenActionResourcesWithReceipt(actor, amount, {
+    getUpdates: ({ resources, onceResources }) => ({
+      [`flags.${SYSTEM_ID}.${POSTURE_RESOURCE_SPENDING_FLAG}`]: [
+        ...getPostureResourceSpendingStack(actor),
+        { ...createPostureResourceSpendingEntry(tokenDocument, pending, resources), onceResources }
+      ].slice(-POSTURE_RESOURCE_SPENDING_LIMIT)
     })
-  ].slice(-POSTURE_RESOURCE_SPENDING_LIMIT);
-  await actor.update(updates);
-  if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
-  await notifyCombatResourcesSpent(actor, {
-    [MOVEMENT_RESOURCE_KEY]: movementSpend,
-    [state.action.key]: actionSpend
-  }, { type: "posture", tokenDocument, pending });
+  });
+  if (!receipt) return;
+  await notifyCombatResourcesSpent(actor, receipt.resources, { type: "posture", tokenDocument, pending });
 }
 
 async function restoreLastPostureChangeResources(tokenDocument) {
   const actor = tokenDocument?.actor;
   if (!actor?.isOwner) return;
 
-  const stack = getPostureResourceSpendingStack(actor);
-  const index = findLastPostureResourceSpendingIndex(stack, tokenDocument);
-  if (index < 0) return;
-
-  const entry = stack[index];
-  const nextStack = stack.slice();
-  nextStack.splice(index, 1);
-  const updates = {
-    [`flags.${SYSTEM_ID}.${POSTURE_RESOURCE_SPENDING_FLAG}`]: nextStack
-  };
-
-  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]) {
-    const resource = actor.system?.resources?.[key];
-    if (!resource) continue;
-
-    const current = toInteger(resource.value);
-    const min = Math.max(0, toInteger(resource.min));
-    const max = Math.max(min, toInteger(resource.max));
-    const restored = Math.min(max, Math.max(min, current + Math.max(0, toInteger(entry?.resources?.[key]))));
-    updates[`system.resources.${key}.value`] = restored;
-    updates[`system.resources.${key}.spent`] = Math.max(0, max - restored);
-  }
-
-  await actor.update(updates);
+  await refundMovementThenActionResourceReceipt(actor, () => {
+    const stack = getPostureResourceSpendingStack(actor);
+    const index = findLastPostureResourceSpendingIndex(stack, tokenDocument);
+    return index < 0 ? null : stack[index];
+  }, {
+    updates: entry => ({
+      [`flags.${SYSTEM_ID}.${POSTURE_RESOURCE_SPENDING_FLAG}`]: getPostureResourceSpendingStack(actor)
+        .filter(candidate => candidate !== entry)
+    })
+  });
 }
 
 function createPostureResourceSpendingEntry(tokenDocument, pending = {}, resources = {}) {
@@ -517,28 +491,7 @@ function findLastPostureResourceSpendingIndex(stack, tokenDocument) {
 }
 
 function getPostureChangeResourceState(actor) {
-  const movement = actor?.system?.resources?.[MOVEMENT_RESOURCE_KEY];
-  const action = getCombatActionPointState(actor);
-  if (!movement || !action) return null;
-
-  const movementValue = Math.max(0, toInteger(movement.value));
-  const movementLimited = Math.min(
-    movementValue,
-    getActorResourceLimitAmount(actor, MOVEMENT_RESOURCE_KEY)
-  );
-  const movementAvailable = action.ownTurn ? Math.max(0, movementValue - movementLimited) : 0;
-  return {
-    movement: {
-      current: movementValue,
-      value: movementAvailable
-    },
-    action: {
-      key: action.key,
-      current: action.current,
-      value: action.value
-    },
-    total: movementAvailable + action.value
-  };
+  return getCombatMovementResourceState(actor);
 }
 
 function decorateTokenHudPosturePalette(app, element) {
@@ -688,9 +641,9 @@ function evaluatePostureEffectChangeNumber(actor, value) {
 
 function getConfiguredPostureIcon(action) {
   try {
-    return getTokenActionHudIcons().postures?.[action] || POSTURE_ACTION_CONFIGS[action]?.img || "icons/svg/walk.svg";
+    return getTokenActionHudIcons().postures?.[action] || POSTURE_ACTION_CONFIGS[action]?.img || "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp";
   } catch (_error) {
-    return POSTURE_ACTION_CONFIGS[action]?.img || "icons/svg/walk.svg";
+    return POSTURE_ACTION_CONFIGS[action]?.img || "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp";
   }
 }
 

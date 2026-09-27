@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   createManagedFlag,
@@ -38,13 +39,13 @@ export async function getOrCreateGlobalMap() {
     return rootScene;
   }
   if (!game.user?.isGM) {
-    ui.notifications.warn("Глобальная карта ещё не создана. Это может сделать GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0962", "Глобальная карта ещё не создана. Это может сделать GM."));
     return null;
   }
 
   const mapId = foundry.utils.randomID();
   const rootFolder = await Folder.create({
-    name: "Глобальная карта",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0938", "Глобальная карта"),
     type: "Scene",
     color: "#4a90d9",
     flags: {
@@ -57,7 +58,7 @@ export async function getOrCreateGlobalMap() {
     }
   });
   rootScene = await Scene.create({
-    name: "Глобальная карта",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0938", "Глобальная карта"),
     folder: rootFolder.id,
     width: 4000,
     height: 3000,
@@ -104,7 +105,7 @@ export async function ensureLocationStructure(parentScene, location, {
   let folder = getLocationFolder(location.id);
   if (!folder) {
     folder = await Folder.create({
-      name: location.name || "Локация",
+      name: location.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0905", "Локация"),
       type: "Scene",
       folder: parentFolder.id,
       color: "#6a9ad9",
@@ -147,7 +148,7 @@ export async function ensureLocationStructure(parentScene, location, {
     }, { [GLOBAL_MAP_BYPASS_OPTION]: true });
   } else if (createScene) {
     linkedScene = await Scene.create({
-      name: location.name || "Локация",
+      name: location.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0905", "Локация"),
       folder: folder.id,
       width: 4000,
       height: 3000,
@@ -182,7 +183,7 @@ export async function createZoneScene(parentScene, transition) {
   const folder = await ensureTransitionsFolder(parentScene);
   if (!parentFlag?.mapId || !folder) throw new Error("Global-map parent folder was not found.");
   return Scene.create({
-    name: transition.name || "Зона перехода",
+    name: transition.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0925", "Зона перехода"),
     folder: folder.id,
     width: 4000,
     height: 3000,
@@ -353,10 +354,10 @@ export function validateGlobalMapStructure() {
   const rootScene = getRootScene();
   const rootFlag = getGlobalMapFlag(rootScene);
   const rootFolder = getRootFolder(rootFlag?.mapId);
-  if (!rootScene) issues.push("Не найдена корневая сцена.");
-  if (!rootFolder) issues.push("Не найдена корневая папка.");
+  if (!rootScene) issues.push(auditLocalize("FALLOUTMAW.AuditRuntime.R0963", "Не найдена корневая сцена."));
+  if (!rootFolder) issues.push(auditLocalize("FALLOUTMAW.AuditRuntime.R0964", "Не найдена корневая папка."));
   if (rootScene && rootFolder && documentFolderId(rootScene) !== rootFolder.id) {
-    issues.push("Корневая сцена находится вне корневой папки.");
+    issues.push(auditLocalize("FALLOUTMAW.AuditRuntime.R0965", "Корневая сцена находится вне корневой папки."));
   }
   for (const folder of game.folders ?? []) {
     const flag = getGlobalMapFlag(folder);
@@ -364,14 +365,14 @@ export function validateGlobalMapStructure() {
     const expected = flag.parentNodeId === rootFlag?.nodeId
       ? rootFolder
       : getLocationFolder(flag.parentNodeId);
-    if (!expected || documentFolderId(folder) !== expected.id) issues.push(`Нарушено положение папки ${folder.name}.`);
+    if (!expected || documentFolderId(folder) !== expected.id) issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0966", { p0: (folder.name) }, "Нарушено положение папки {p0}."));
   }
   for (const folder of game.folders ?? []) {
     const flag = getGlobalMapFlag(folder);
     if (flag?.role !== GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER) continue;
     const parentScene = game.scenes?.get(flag.parentSceneId);
     const expected = getGlobalMapParentFolder(parentScene);
-    if (!expected || documentFolderId(folder) !== expected.id) issues.push(`Нарушено положение папки ${folder.name}.`);
+    if (!expected || documentFolderId(folder) !== expected.id) issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0966", { p0: (folder.name) }, "Нарушено положение папки {p0}."));
   }
   for (const scene of game.scenes ?? []) {
     const sceneFlag = getGlobalMapFlag(scene);
@@ -397,15 +398,15 @@ export function canCreateChildLocations(scene) {
 }
 
 function validateLocationLink(parentScene, location, issues) {
-  const locationName = String(location?.name || location?.id || "без названия");
+  const locationName = String(location?.name || location?.id || auditLocalize("FALLOUTMAW.AuditRuntime.R0967", "без названия"));
   const linkedSceneId = String(location?.linkedSceneId ?? "").trim();
   if (!linkedSceneId) {
-    issues.push(`У локации «${locationName}» не указана связанная сцена.`);
+    issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0968", { p0: (locationName) }, "У локации «{p0}» не указана связанная сцена."));
     return;
   }
   const targetScene = game.scenes?.get(linkedSceneId);
   if (!targetScene) {
-    issues.push(`Связанная сцена локации «${locationName}» не найдена.`);
+    issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0969", { p0: (locationName) }, "Связанная сцена локации «{p0}» не найдена."));
     return;
   }
   const parentFlag = getGlobalMapFlag(parentScene);
@@ -414,11 +415,11 @@ function validateLocationLink(parentScene, location, issues) {
     && targetFlag.role === GLOBAL_MAP_ROLES.LOCATION_SCENE
     && targetFlag.nodeId === location.id
     && targetFlag.parentSceneId === parentScene.id;
-  if (!validManagedLink) issues.push(`Связь локации «${locationName}» со сценой ${targetScene.name} повреждена.`);
+  if (!validManagedLink) issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0970", { p0: (locationName), p1: (targetScene.name) }, "Связь локации «{p0}» со сценой {p1} повреждена."));
 
   const targetState = getSceneState(targetScene);
   if (!hasPassableExitZone(targetState)) {
-    issues.push(`На связанной сцене локации «${locationName}» отсутствуют зоны входа и выхода.`);
+    issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0971", { p0: (locationName) }, "На связанной сцене локации «{p0}» отсутствуют зоны входа и выхода."));
   }
   if (location.entryMode !== LOCATION_ENTRY_MODES.DEPLOY) return;
   const passableChildren = targetState.locations.filter(child => {
@@ -427,7 +428,7 @@ function validateLocationLink(parentScene, location, issues) {
   });
   if (!passableChildren.length) return;
   const childNames = passableChildren.map(child => `«${child.name || child.id}»`).join(", ");
-  issues.push(`Конечная локация «${locationName}» содержит проходимые вложенные локации: ${childNames}.`);
+  issues.push(auditFormat("FALLOUTMAW.AuditRuntime.R0972", { p0: (locationName), p1: (childNames) }, "Конечная локация «{p0}» содержит проходимые вложенные локации: {p1}."));
 }
 
 function hasPassableExitZone(state) {
@@ -457,7 +458,7 @@ function preventManagedFolderMove(folder, changes, options) {
   if (options?.[GLOBAL_MAP_BYPASS_OPTION] || changes.folder === undefined) return;
   if (!isManagedGlobalMapDocument(folder)) return;
   if (normalizeFolderId(changes.folder) === documentFolderId(folder)) return;
-  ui.notifications.warn("Эта папка встроена в глобальную карту и не может быть перемещена.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0973", "Эта папка встроена в глобальную карту и не может быть перемещена."));
   return false;
 }
 
@@ -465,7 +466,7 @@ function preventManagedSceneMove(scene, changes, options) {
   if (options?.[GLOBAL_MAP_BYPASS_OPTION] || changes.folder === undefined) return;
   if (!isManagedGlobalMapDocument(scene)) return;
   if (normalizeFolderId(changes.folder) === documentFolderId(scene)) return;
-  ui.notifications.warn("Эта сцена встроена в глобальную карту и не может быть перемещена.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0974", "Эта сцена встроена в глобальную карту и не может быть перемещена."));
   return false;
 }
 
@@ -527,14 +528,11 @@ async function ensureTransitionsFolder(parentScene) {
   let folder = getTransitionFoldersForParent(parentFolder.id)
     .find(candidate => getGlobalMapFlag(candidate)?.parentSceneId === parentScene.id);
   if (folder) {
-    if (folder.name !== GLOBAL_MAP_TRANSITIONS_FOLDER_NAME) {
-      await folder.update({ name: GLOBAL_MAP_TRANSITIONS_FOLDER_NAME }, { [GLOBAL_MAP_BYPASS_OPTION]: true });
-    }
     return folder;
   }
 
   folder = await Folder.create({
-    name: GLOBAL_MAP_TRANSITIONS_FOLDER_NAME,
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0900", GLOBAL_MAP_TRANSITIONS_FOLDER_NAME),
     type: "Scene",
     folder: parentFolder.id,
     color: "#7c4dff",
@@ -603,12 +601,12 @@ function getFolderDepth(folder) {
 
 function confirmManagedDelete(root) {
   return DialogV2.confirm({
-    window: { title: root ? "Удалить глобальную карту?" : "Удалить элемент глобальной карты?" },
+    window: { title: root ? auditLocalize("FALLOUTMAW.AuditRuntime.R0975", "Удалить глобальную карту?") : auditLocalize("FALLOUTMAW.AuditRuntime.R0976", "Удалить элемент глобальной карты?") },
     content: root
-      ? "<p>Будет удалено всё управляемое дерево глобальной карты. Подключённые пользовательские сцены сохранятся.</p>"
-      : "<p>Будут удалены связанные системные документы. Подключённые пользовательские сцены сохранятся.</p>",
-    yes: { label: "Удалить" },
-    no: { label: "Отмена" }
+      ? auditLocalize("FALLOUTMAW.AuditRuntime.R0977", "<p>Будет удалено всё управляемое дерево глобальной карты. Подключённые пользовательские сцены сохранятся.</p>")
+      : auditLocalize("FALLOUTMAW.AuditRuntime.R0978", "<p>Будут удалены связанные системные документы. Подключённые пользовательские сцены сохранятся.</p>"),
+    yes: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0726", "Удалить") },
+    no: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена") }
   });
 }
 

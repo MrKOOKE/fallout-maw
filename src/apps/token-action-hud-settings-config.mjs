@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 ﻿import { TEMPLATES } from "../constants.mjs";
 import { getPostureIconRows } from "../canvas/posture-movement.mjs";
 import {
@@ -10,42 +11,42 @@ import {
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
 const DAMAGE_ICON_ROWS = Object.freeze([
-  { section: "root", key: "damageReductionIcon", label: "Иконка снижения урона" },
-  { section: "root", key: "damageBlockedIcon", label: "Иконка полного блокирования урона" },
-  { section: "root", key: "dodgeConversionIcon", label: "Иконка уклонения от конвертации ОД" },
-  { section: "root", key: "emptyWeaponSlotIcon", label: "Иконка пустого слота оружия" }
+  { section: "root", key: "damageReductionIcon", get label() { return auditLocalize("FALLOUTMAW.Settings.HUD.DamageReductionIcon", "Иконка снижения урона"); } },
+  { section: "root", key: "damageBlockedIcon", get label() { return auditLocalize("FALLOUTMAW.Settings.HUD.DamageBlockedIcon", "Иконка полного блокирования урона"); } },
+  { section: "root", key: "dodgeConversionIcon", get label() { return auditLocalize("FALLOUTMAW.AuditApps.DodgeFromAPConversionIcon", "Иконка уклонения от конвертации ОД"); } },
+  { section: "root", key: "emptyWeaponSlotIcon", get label() { return auditLocalize("FALLOUTMAW.AuditApps.EmptyWeaponSlotIcon", "Иконка пустого слота оружия"); } }
 ]);
 
 const MAIN_ACTION_ICON_ROWS = Object.freeze([
-  { key: "weapon", label: "Оружие" },
-  { key: "items", label: "Предметы" },
-  { key: "abilities", label: "Способности" },
-  { key: "skills", label: "Испытания" },
-  { key: "passengers", label: "Пассажиры" },
-  { key: "actions", label: "Действия" },
-  { key: "settings", label: "Настройки" }
+  { key: "weapon", get label() { return auditLocalize("FALLOUTMAW.Settings.CreatureOptions.WeaponSets", "Оружие"); } },
+  { key: "items", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Items", "Предметы"); } },
+  { key: "abilities", get label() { return auditLocalize("FALLOUTMAW.Events.Groups.ability.Label", "Способности"); } },
+  { key: "skills", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Checks", "Испытания"); } },
+  { key: "passengers", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Passengers", "Пассажиры"); } },
+  { key: "actions", get label() { return auditLocalize("FALLOUTMAW.Settings.Presets.Columns.Actions", "Действия"); } },
+  { key: "settings", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Settings_1017", "Настройки"); } }
 ]);
 
 const ACTIVE_ACTION_ICON_ROWS = Object.freeze([
-  { key: "grapple", label: "Захват" },
-  { key: "dragGrappled", label: "Перетащить" },
-  { key: "push", label: "Толчок" }
+  { key: "grapple", get label() { return auditLocalize("FALLOUTMAW.Settings.HUD.GrappleConsentTitle", "Захват"); } },
+  { key: "dragGrappled", get label() { return auditLocalize("FALLOUTMAW.Settings.HUD.DragGrappled", "Перетащить"); } },
+  { key: "push", get label() { return auditLocalize("FALLOUTMAW.Settings.HUD.Push", "Толчок"); } }
 ]);
 
 const ADVANCEMENT_ACTION_ICON_ROW = Object.freeze({
   section: "root",
   key: "levelUpIcon",
-  label: "Повышение уровня"
+  get label() { return auditLocalize("FALLOUTMAW.Settings.CreatureOptions.Progression", "Повышение уровня"); }
 });
 
 const ACTOR_CONTAINER_ACTION_ICON_ROWS = Object.freeze([
-  { section: "activeActions", key: "boardTransport", label: "Сесть в транспорт" },
-  { section: "activeActions", key: "camp", label: "Лагерь" }
+  { section: "activeActions", key: "boardTransport", get label() { return auditLocalize("FALLOUTMAW.AuditApps.BoardTransport", "Сесть в транспорт"); } },
+  { section: "activeActions", key: "camp", get label() { return auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь"); } }
 ]);
 
 const COMBAT_END_ICON_ROWS = Object.freeze([
-  { key: "search", label: "Обыскать" },
-  { key: "finish", label: "Добить" }
+  { key: "search", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Search_1023", "Обыскать"); } },
+  { key: "finish", get label() { return auditLocalize("FALLOUTMAW.AuditApps.FinishOff", "Добить"); } }
 ]);
 
 const WEAPON_ACTION_ICON_ROWS = Object.freeze([
@@ -57,7 +58,7 @@ const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "aimedMeleeAttack", labelKey: "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack" },
   { key: "push", labelKey: "FALLOUTMAW.Item.WeaponActionPush" },
   { key: "reload", labelKey: "FALLOUTMAW.Item.WeaponActionReload" },
-  { key: "replaceWeapon", label: "Заменить оружие" },
+  { key: "replaceWeapon", get label() { return auditLocalize("FALLOUTMAW.AuditApps.ReplaceWeapon", "Заменить оружие"); } },
   { key: "lightOn", labelKey: "FALLOUTMAW.Item.LightSourceToggleOn" },
   { key: "lightOff", labelKey: "FALLOUTMAW.Item.LightSourceToggleOff" },
   { key: "lightRecharge", labelKey: "FALLOUTMAW.Item.LightSourceRecharge" }

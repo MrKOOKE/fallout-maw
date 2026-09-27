@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import { getCurrencySettings, setCurrencySettings } from "../settings/accessors.mjs";
@@ -71,7 +72,7 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
     this.currencies = this.#readCurrenciesFromForm();
     this.currencies.push({
       key: this.#getUniqueKey("newCurrency"),
-      label: "Новая валюта",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewCurrency", "Новая валюта"),
       img: "",
       value: 1,
       primaryTrade: !this.currencies.length

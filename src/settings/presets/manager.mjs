@@ -1,9 +1,12 @@
 import { FALLOUT_MAW } from "../../config/system-config.mjs";
 import { SYSTEM_ID, SYSTEM_TITLE } from "../../constants.mjs";
 import { SETTINGS_PRESET_STATE_SETTING } from "../constants.mjs";
+import { localize } from "../../utils/i18n.mjs";
 import {
   MAIN_PRESET_ID,
+  ENGLISH_PRESET_ID,
   PRESET_FORMAT,
+  clonePresetFromBase,
   clonePresetFromMain,
   convertLegacyBaseline,
   createPresetDocument,
@@ -16,6 +19,7 @@ const PRESET_QUERY = `${SYSTEM_ID}.settingsPresets`;
 const SOCKET_KIND = "settings-presets";
 const DELETE_PRESET_FILE_ACTION = "deleteFalloutMaWSettingsPreset";
 const SYSTEM_PRESET_DIRECTORY = `systems/${SYSTEM_ID}/storage/settings-presets`;
+const BUNDLED_ENGLISH_PRESET_PATH = `systems/${SYSTEM_ID}/src/settings/presets/defaults/${ENGLISH_PRESET_ID}.json`;
 const APPLY_MARKER = "falloutMaWSettingsPresetApply";
 const APPLY_BATCH_ID = "falloutMaWSettingsPresetBatchId";
 const APPLY_BATCH_SIZE = "falloutMaWSettingsPresetBatchSize";
@@ -25,6 +29,7 @@ const STATE_MARKER = "falloutMaWSettingsPresetState";
 const AUTOSAVE_DELAY = 300;
 const RPC_TIMEOUT = 30_000;
 const CLIENT_LEADER_RETRY_DELAY = 500;
+const PRESET_LANGUAGE_SETTING = "settingsPresetLanguageHistory";
 const CLIENT_INSTANCE_ID = globalThis.crypto?.randomUUID?.()
   ?? `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -56,7 +61,9 @@ const runtime = {
   primaryClientLeader: true,
   primaryClientLockPending: false,
   primaryClientLockRelease: null,
-  primaryClientRetryTimer: null
+  primaryClientRetryTimer: null,
+  initialLanguagePreset: false,
+  languageChangePromise: null
 };
 
 const api = Object.freeze({
@@ -82,6 +89,11 @@ const api = Object.freeze({
 
 /** Register the public API and document listeners during init. */
 export function registerSettingsPresetTools() {
+  if (!game.settings?.settings?.has?.(`${SYSTEM_ID}.${PRESET_LANGUAGE_SETTING}`)) {
+    game.settings.register(SYSTEM_ID, PRESET_LANGUAGE_SETTING, {
+      scope: "client", config: false, type: Object, default: {}
+    });
+  }
   FALLOUT_MAW.settingsPresets = api;
   if (globalThis.CONFIG?.FalloutMaW) CONFIG.FalloutMaW.settingsPresets = api;
   if (globalThis.CONFIG?.queries) CONFIG.queries[PRESET_QUERY] = handlePresetUserQuery;
@@ -133,7 +145,66 @@ export async function finalizeSettingsPresetStartup() {
     runtime.deferredApplyEffects = false;
     await enqueuePresetApplyEffects();
   }
+  try {
+    await checkPresetLanguageChange();
+  } catch (error) {
+    runtime.lastError = errorMessage(error);
+    console.error(`${SYSTEM_TITLE} | Failed to switch the localized settings preset`, error);
+    ui.notifications?.error?.(`${SYSTEM_TITLE}: ${runtime.lastError}`);
+  }
   return null;
+}
+
+function checkPresetLanguageChange() {
+  if (!isPrimaryGM() || !getPresetState().activePresetId) return Promise.resolve();
+  if (!runtime.languageChangePromise) {
+    runtime.languageChangePromise = offerPresetLanguageChange().finally(() => {
+      runtime.languageChangePromise = null;
+    });
+  }
+  return runtime.languageChangePromise;
+}
+
+async function offerPresetLanguageChange() {
+  const baseId = getInitialPresetBaseId();
+  const language = baseId === MAIN_PRESET_ID ? "ru" : "en";
+  // Foundry client settings share localStorage across worlds and users.
+  const historyKey = `${game.world?.id ?? "world"}:${game.user?.id ?? "user"}`;
+  const readHistory = () => {
+    const value = game.settings.get(SYSTEM_ID, PRESET_LANGUAGE_SETTING);
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  };
+  const previous = readHistory()[historyKey];
+  const remember = () => game.settings.set(SYSTEM_ID, PRESET_LANGUAGE_SETTING, {
+    ...readHistory(), [historyKey]: language
+  });
+  if (runtime.initialLanguagePreset || !["ru", "en"].includes(previous) || previous === language) {
+    if (previous !== language) await remember();
+    runtime.initialLanguagePreset = false;
+    return;
+  }
+  const root = "FALLOUTMAW.Settings.Presets.LanguageChange";
+  const confirmed = await foundry.applications.api.DialogV2.confirm({
+    window: { title: localize(`${root}.Title`), icon: "fa-solid fa-language" },
+    content: `<p>${localize(`${root}.${language === "ru" ? "RussianContent" : "EnglishContent"}`)}</p>`,
+    yes: { label: `${root}.Apply` },
+    no: { label: `${root}.Keep`, default: true },
+    rejectClose: false,
+    modal: true
+  });
+  if (confirmed) {
+    await enqueueMutation(async () => {
+      await ensureFullPresetSourcesLoaded();
+      await flushActivePresetLocal();
+      const personal = clonePresetFromBase(requirePreset(baseId), {
+        id: randomPresetId(), name: normalizeName(game.world?.title, game.world?.id || "World")
+      });
+      await savePresetCopies(personal);
+      await activatePresetLocal(personal.id, { skipFlush: true });
+      broadcastPresetChange();
+    });
+  }
+  await remember();
 }
 
 /** Return the main preset value used as a registration-time fallback after ready. */
@@ -298,7 +369,7 @@ export async function removeSettingsPreset(id) {
   const presetId = String(id ?? "");
   if (!runtime.presets.has(presetId)) await ensureFullPresetSourcesLoaded();
   return runMutation("remove", [presetId], async () => {
-    if (presetId === MAIN_PRESET_ID) throw new Error("The Fallout-MaW preset cannot be deleted.");
+    if ([MAIN_PRESET_ID, ENGLISH_PRESET_ID].includes(presetId)) throw new Error("A base Fallout-MaW preset cannot be deleted.");
     await flushActivePresetLocal();
     const current = requirePreset(presetId);
     assertWritablePreset(current);
@@ -521,8 +592,8 @@ async function initializePrimaryGM() {
     }
   }
   if (getPresetState().activePresetId) return;
-  const main = requirePreset(MAIN_PRESET_ID);
-  const personal = clonePresetFromMain(main, {
+  const base = requirePreset(getInitialPresetBaseId());
+  const personal = clonePresetFromBase(base, {
     id: randomPresetId(),
     name: normalizeName(game.world?.title, game.world?.id || "World")
   });
@@ -534,6 +605,7 @@ async function initializePrimaryGM() {
       lastError: ""
     }
   });
+  runtime.initialLanguagePreset = true;
 }
 
 async function loadPresetSources({ bustCache = false, startupOnly = false } = {}) {
@@ -609,14 +681,32 @@ async function loadPresetSources({ bustCache = false, startupOnly = false } = {}
   if (!runtime.presets.has(MAIN_PRESET_ID)) {
     throw new Error(`Required settings preset ${MAIN_PRESET_ID} was not found.`);
   }
+  // The updater preserves storage. New packaged bases must also be available
+  // from managed source files, after stored/module/pending copies take priority.
+  if ((!startupIds || startupIds.has(ENGLISH_PRESET_ID)) && !runtime.presets.has(ENGLISH_PRESET_ID)) {
+    assertNoPresetIdCaseCollision(ENGLISH_PRESET_ID, runtime.presets.keys());
+    const url = bustCache ? `${BUNDLED_ENGLISH_PRESET_PATH}?preset-cache=${Date.now()}` : BUNDLED_ENGLISH_PRESET_PATH;
+    const response = await fetch(url, bustCache ? { cache: "no-store" } : undefined);
+    if (!response.ok) throw new Error(`Cannot load bundled English settings preset: ${response.status} ${response.statusText}`);
+    const bundled = normalizePresetDocument(await response.json());
+    if (bundled.id !== ENGLISH_PRESET_ID) throw new Error(`Bundled English settings preset has unexpected id ${bundled.id}.`);
+    runtime.sourceSystem.set(bundled.id, bundled);
+    setRuntimePreset(bundled, "system");
+  }
   runtime.fullSourcesLoaded = !startupOnly;
 }
 
 function getStartupPresetIds(state = getPresetState()) {
   const ids = new Set([MAIN_PRESET_ID]);
   if (state.activePresetId) ids.add(state.activePresetId);
+  else ids.add(getInitialPresetBaseId());
   if (state.pendingPresetId) ids.add(state.pendingPresetId);
   return ids;
+}
+
+function getInitialPresetBaseId() {
+  const language = String(game.i18n?.lang ?? "").trim().toLowerCase();
+  return language === "ru" || language.startsWith("ru-") ? MAIN_PRESET_ID : ENGLISH_PRESET_ID;
 }
 
 function reconcileLoadedPresetSources(systemPresets, worldPresets, modulePresets = new Map()) {
@@ -1006,6 +1096,15 @@ async function applyPresetAtomically(rawPreset, { statePatch = {}, settingIds = 
     { config: stateConfig, json: JSON.stringify(nextState) }
   ];
   const storage = game.settings.storage.get("world");
+  const snapshots = values.map(({ config, json }) => {
+    const document = storage.getSetting(config.id, null);
+    return {
+      config,
+      id: document?.id ?? document?._id ?? null,
+      json: document ? readStoredSettingJson(document, config) : null,
+      targetJson: json
+    };
+  });
   let batchId = null;
   try {
     const documentIds = await materializeMissingSettingDocuments(values, storage);
@@ -1050,8 +1149,16 @@ async function applyPresetAtomically(rawPreset, { statePatch = {}, settingIds = 
     await confirmPresetApplyBatch(batchId, { force: true });
   } catch (error) {
     if (batchId) discardPresetApplyBatch(batchId);
-    runtime.lastError = errorMessage(error);
-    throw new Error(`Preset ${preset.name} was not applied atomically: ${runtime.lastError}`, { cause: error });
+    let failure = error;
+    try {
+      await restorePresetSettingSnapshots(snapshots, storage);
+    } catch (recoveryError) {
+      failure = new AggregateError([error, recoveryError],
+        "Preset application failed and its previous settings could not be fully restored.");
+      failure.cause = error;
+    }
+    runtime.lastError = errorMessage(failure);
+    throw new Error(`Preset ${preset.name} was not applied atomically: ${runtime.lastError}`, { cause: failure });
   }
 
   if (healedAssignments.length) {
@@ -1070,6 +1177,48 @@ async function applyPresetAtomically(rawPreset, { statePatch = {}, settingIds = 
     }
   }
   return appliedPreset;
+}
+
+function readStoredSettingJson(document, config) {
+  // JSONField stores serialized JSON in _source and exposes its parsed/cast
+  // value on the prepared document. Preserve the exact persisted source.
+  if (typeof document?._source?.value === "string") return document._source.value;
+  const value = document && Object.hasOwn(document, "value")
+    ? document.value
+    : game.settings.get(config.namespace, config.key);
+  return JSON.stringify(serializableValue(value));
+}
+
+async function restorePresetSettingSnapshots(snapshots, storage) {
+  const updates = [];
+  const ids = [];
+  for (const snapshot of snapshots) {
+    const document = storage.getSetting(snapshot.config.id, null);
+    const id = document?.id ?? document?._id ?? null;
+    if (!id) continue;
+    const json = readStoredSettingJson(document, snapshot.config);
+    // A different value or replacement document can belong to another writer.
+    // Leave it intact and let the final verification report incomplete recovery.
+    if (json !== snapshot.targetJson || (snapshot.id && id !== snapshot.id)) continue;
+    if (!snapshot.id) ids.push(id);
+    else if (json !== snapshot.json) updates.push({ _id: id, value: snapshot.json });
+  }
+  const operations = [];
+  const options = { documentName: "Setting", noHook: true, [MATERIALIZE_MARKER]: true };
+  if (updates.length) operations.push({ ...options, action: "update", updates, diff: false });
+  if (ids.length) operations.push({ ...options, action: "delete", ids });
+  let recoveryError;
+  if (operations.length) {
+    try { await foundry.documents.modifyBatch(operations); }
+    catch (error) { recoveryError = error; }
+  }
+  for (const snapshot of snapshots) {
+    const document = storage.getSetting(snapshot.config.id, null);
+    const id = document?.id ?? document?._id ?? null;
+    if (id !== snapshot.id || (id && readStoredSettingJson(document, snapshot.config) !== snapshot.json)) {
+      throw new Error(`Previous Setting ${snapshot.config.id} could not be restored.`, { cause: recoveryError });
+    }
+  }
 }
 
 async function materializeMissingSettingDocuments(values, storage) {
@@ -2193,7 +2342,7 @@ function describePreset(preset) {
     isMain: preset.id === MAIN_PRESET_ID,
     active: state.activePresetId === preset.id,
     canModify: !source.startsWith("module:"),
-    canDelete: preset.id !== MAIN_PRESET_ID && !source.startsWith("module:"),
+    canDelete: ![MAIN_PRESET_ID, ENGLISH_PRESET_ID].includes(preset.id) && !source.startsWith("module:"),
     saveCount: preset.saves?.length ?? 0,
     syncState
   };
@@ -2293,6 +2442,7 @@ function slugifyName(value) {
 
 /** Narrow test seam for the Foundry-facing preset logic. */
 export const SETTINGS_PRESET_TESTING = Object.freeze({
+  checkPresetLanguageChange,
   applyActiveRevisionIfNeeded,
   applyPresetAtomically,
   captureCurrentSettings,
@@ -2345,6 +2495,8 @@ export const SETTINGS_PRESET_TESTING = Object.freeze({
     runtime.ready = false;
     runtime.autosaveEnabled = false;
     runtime.busy = false;
+    runtime.initialLanguagePreset = false;
+    runtime.languageChangePromise = null;
     runtime.mutationQueue = Promise.resolve();
     runtime.wrappedChanges = false;
   }

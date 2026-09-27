@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import {
   MOVEMENT_RULER_COLORS,
   applyCombatMovementCostModifier,
@@ -74,7 +75,7 @@ export class FalloutMaWTokenRuler extends foundry.canvas.placeables.tokens.Token
         total: Number.isFinite(total) ? formatNumber(total) : "∞",
         unit: preview.mode === ABILITY_ROUTE_BUDGET_MODES.distance
           ? String(canvas.grid?.units ?? "")
-          : "ОП",
+          : auditLocalize("FALLOUTMAW.AuditRuntime.R0587", "ОП"),
         over: Boolean(preview.invalid)
           || (Number.isFinite(used) && Number.isFinite(total) && used > total + 1e-6)
       };

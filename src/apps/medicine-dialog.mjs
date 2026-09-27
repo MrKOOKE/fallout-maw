@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import {
@@ -91,7 +92,8 @@ import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
   getActorAvailableEnergy,
-  getActorEnergy
+  prepareActorEnergySpend,
+  runActorEnergyMutation
 } from "../combat/energy-resource.mjs";
 import { analyzeMedicineToolAvailability } from "./medicine-tool-availability.mjs";
 import {
@@ -142,9 +144,9 @@ export async function requestMedicineTarget(sourceToken) {
     sourceActor,
     sourceToken,
     includeSelf: true,
-    title: "Медицина",
-    noneWarning: "Нет подходящих целей для медицины.",
-    instructions: "Медицина: выберите цель. Esc/ПКМ отменяет."
+    title: auditLocalize("FALLOUTMAW.Events.Groups.medicine.Label", "Медицина"),
+    noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoSuitableMedicalTargets", "Нет подходящих целей для медицины."),
+    instructions: auditLocalize("FALLOUTMAW.AuditApps.MedicineSelectATargetEscRightClickCancels", "Медицина: выберите цель. Esc/ПКМ отменяет.")
   });
   const targetToken = selected?.token ?? null;
   if (!selected?.actor || !targetToken) return undefined;
@@ -216,7 +218,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   };
 
   get title() {
-    return "Медицина";
+    return auditLocalize("FALLOUTMAW.Events.Groups.medicine.Label", "Медицина");
   }
 
   async _prepareContext(options) {
@@ -302,7 +304,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       } : null,
       emergencyTreatmentStatus: emergencyTreatment ? {
         bonus: emergencyTreatment.settings.toolEfficiencyPercentBonus,
-        text: `Следующее лечение инструментом: +${formatNumber(emergencyTreatment.settings.toolEfficiencyPercentBonus)}% эффективности`
+        text: auditFormat("FALLOUTMAW.AuditApps.NextTreatmentWithThisToolEffectiveness", { v0: (formatNumber(emergencyTreatment.settings.toolEfficiencyPercentBonus)) }, "Следующее лечение инструментом: +{v0}% эффективности")
       } : null,
       tabs: {
         trauma: {
@@ -420,7 +422,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       return await operation();
     } catch (error) {
       console.error(`${SYSTEM_ID} | Medicine dialog mutation failed`, error);
-      ui.notifications.error(`Медицинская операция не выполнена: ${error.message}`);
+      ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.MedicalOperationFailed", { v0: (error.message) }, "Медицинская операция не выполнена: {v0}"));
       return undefined;
     } finally {
       this.#mutationInFlight = false;
@@ -484,7 +486,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
         };
         this.#pendingMassTreatment = pending;
       } else {
-        ui.notifications.info("Повторное ожидание уже запущенного массового лечения.");
+        ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.WaitingAgainForTheBulkTreatmentAlreadyIn", "Повторное ожидание уже запущенного массового лечения."));
       }
       const result = await performMassTreatment({
         sourceActor: this.#sourceActor,
@@ -609,7 +611,7 @@ async function getMedicineTargetContext(targetToken, sourceActor = null) {
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для доступа к цели медицины.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToAccessThe", "Нет активного GM для доступа к цели медицины."));
     return null;
   }
 
@@ -622,7 +624,7 @@ async function getMedicineTargetContext(targetToken, sourceActor = null) {
     return result?.targetContext ?? null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Medicine target socket failed`, error);
-    ui.notifications.error(`Не удалось получить данные цели медицины: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToRetrieveMedicalTargetData", { v0: (error.message) }, "Не удалось получить данные цели медицины: {v0}"));
     return null;
   }
 }
@@ -648,7 +650,7 @@ function getMedicineCombatOperationAccess(sourceActor) {
       cost: 0,
       entry: null,
       settings: null,
-      message: "Медицинские операции в бою заблокированы."
+      message: auditLocalize("FALLOUTMAW.AuditApps.MedicalOperationsAreBlockedDuringCombat", "Медицинские операции в бою заблокированы.")
     };
   }
   const settings = normalizeEmergencyOperationsSettings(entry.abilityFunction.fixedSettings);
@@ -664,8 +666,8 @@ function getMedicineCombatOperationAccess(sourceActor) {
     settings,
     actionPointState,
     message: usable
-      ? `Экстренные операции: каждая медицинская операция стоит ${cost} ${actionPointState?.label ?? "ОД"}.`
-      : `Недостаточно ${actionPointState?.label ?? "ОД"}: для медицинской операции требуется ${cost}.`
+      ? auditFormat("FALLOUTMAW.AuditApps.EmergencyOperationsEachMedicalOperationCosts", { v0: (cost), v1: (actionPointState?.label ?? auditLocalize("FALLOUTMAW.Common.ActionPointsShort", "ОД")) }, "Экстренные операции: каждая медицинская операция стоит {v0} {v1}.")
+      : auditFormat("FALLOUTMAW.AuditApps.NotEnoughTheMedicalOperationRequires", { v0: (actionPointState?.label ?? auditLocalize("FALLOUTMAW.Common.ActionPointsShort", "ОД")), v1: (cost) }, "Недостаточно {v0}: для медицинской операции требуется {v1}.")
   };
 }
 
@@ -682,7 +684,7 @@ function getPendingEmergencyOperationsTreatment(sourceActor) {
 }
 
 async function executeMedicineCombatOperation(sourceActor, {
-  label = "медицинской операции",
+  label = auditLocalize("FALLOUTMAW.AuditApps.MedicalOperation", "медицинской операции"),
   operation,
   didStart = () => true
 } = {}) {
@@ -697,7 +699,7 @@ async function executeMedicineCombatOperation(sourceActor, {
     label
   });
   if (transaction.spent !== access.cost) {
-    throw new Error(`Не удалось потратить ${access.cost} ОД для ${label}.`);
+    throw new Error(auditFormat("FALLOUTMAW.AuditApps.FailedToSpendAPOn", { v0: (access.cost), v1: (label) }, "Не удалось потратить {v0} ОД для {v1}."));
   }
 
   let result;
@@ -736,9 +738,9 @@ function getGoodEnoughNoToolInstrument(
   const usable = medicineOperationsUsable && skillRequirementMet && (free || energy > 0);
   return {
     id: GOOD_ENOUGH_NO_TOOL_ID,
-    name: "И так сойдет — без инструмента",
-    img: "icons/svg/aura.svg",
-    toolLabel: "И так сойдет",
+    name: auditLocalize("FALLOUTMAW.AuditApps.GoodEnoughWithoutTools", "И так сойдет — без инструмента"),
+    img: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
+    toolLabel: auditLocalize("FALLOUTMAW.AuditApps.GoodEnough", "И так сойдет"),
     toolClass: "D",
     efficiency: 100,
     efficiencyLabel: "100%",
@@ -746,8 +748,8 @@ function getGoodEnoughNoToolInstrument(
     usable,
     requirementMet: true,
     skillRequirement: free
-      ? `Бесплатно: состояние выше ${settings.freeConditionThreshold}%`
-      : `1 энергия = ${settings.healthPerEnergy} здоровья`,
+      ? auditFormat("FALLOUTMAW.AuditApps.FreeConditionAbove", { v0: (settings.freeConditionThreshold) }, "Бесплатно: состояние выше {v0}%")
+      : auditFormat("FALLOUTMAW.AuditApps.1EnergyHealth", { v0: (settings.healthPerEnergy) }, "1 энергия = {v0} здоровья"),
     supplyValue: free ? "∞" : energy,
     supplyMax: free ? "∞" : energyCapacity,
     noTool: true,
@@ -910,9 +912,9 @@ function prepareTargetTreatments(
       treatmentSkillThresholdMet: skillResolution.met,
       usable: instrument.usable && skillResolution.met && hasTreatmentEnergy && medicineOperationsUsable,
       unavailableReason: !medicineOperationsUsable
-        ? "Медицинская операция сейчас недоступна."
+        ? auditLocalize("FALLOUTMAW.AuditApps.TheMedicalOperationIsCurrentlyUnavailable", "Медицинская операция сейчас недоступна.")
         : !hasTreatmentEnergy
-        ? `Нужно ${experimentalSurgery.settings.treatmentEnergyCost} энергии.`
+        ? auditFormat("FALLOUTMAW.AuditApps.RequiresEnergy", { v0: (experimentalSurgery.settings.treatmentEnergyCost) }, "Нужно {v0} энергии.")
         : ""
     }));
     const treatable = treatment.treatable !== false
@@ -969,7 +971,7 @@ function prepareMedicalInstruments(actor, toolKey) {
         skillValue,
         skillLabel,
         actorSkillValue,
-        skillRequirement: skillKey ? `${skillValue} ${skillLabel}` : "Без навыка",
+        skillRequirement: skillKey ? `${skillValue} ${skillLabel}` : auditLocalize("FALLOUTMAW.AuditApps.NoSkill", "Без навыка"),
         hasSkill: Boolean(skillKey),
         requirementMet
       };
@@ -998,7 +1000,7 @@ function hasMassTreatmentTargets(targetContext) {
 async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey = "medical" } = {}) {
   const counts = getMassTreatmentTargetCounts(targetContext);
   if (counts.traumas + counts.limbHealth <= 0) {
-    ui.notifications.warn("Нет травм или повреждённых частей тела для массового лечения.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoTraumasOrDamagedBodyParts", "Нет травм или повреждённых частей тела для массового лечения."));
     return null;
   }
 
@@ -1010,66 +1012,18 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
   const instruments = availability.instruments;
 
   const toolGroups = groupToolSelectionOptions(instruments);
-  const instrumentRows = toolGroups.map(group => `
-    <label class="fallout-maw-mass-operation-instrument">
-      <input type="checkbox" name="toolGroup" value="${escapeAttribute(group.key)}" checked>
-      <span>${escapeHtml(group.toolLabel)}</span>
-      <strong>Класс ${escapeHtml(group.toolClass)}</strong>
-      <em>${group.count} шт., общий запас ${group.supplyValue}/${group.supplyMax}</em>
-    </label>
-  `).join("");
-  const content = `
-    <div class="fallout-maw-mass-operation-dialog fallout-maw-mass-treatment-dialog">
-      <p>Лечение выполняется последовательно: сначала травмы, затем здоровье частей тела.</p>
-      <div class="fallout-maw-mass-operation-categories">
-        <label>
-          <input type="checkbox" name="includeTraumas" ${counts.traumas > 0 ? "checked" : "disabled"}>
-          <span>Лечить травмы</span>
-          <strong>${counts.traumas}</strong>
-        </label>
-        <label>
-          <input type="checkbox" name="includeLimbHealth" ${counts.limbHealth > 0 ? "checked" : "disabled"}>
-          <span>Восстанавливать здоровье частей тела</span>
-          <strong>${counts.limbHealth}</strong>
-        </label>
-      </div>
-      <fieldset class="fallout-maw-mass-operation-modes">
-        <legend>Выбор класса</legend>
-        <label>
-          <input type="radio" name="qualityMode" value="matched" checked>
-          <span>Минимально достаточный класс</span>
-        </label>
-        <label>
-          <input type="radio" name="qualityMode" value="best">
-          <span>Лучший доступный класс</span>
-        </label>
-      </fieldset>
-      <fieldset class="fallout-maw-mass-operation-modes">
-        <legend>Распределение запаса</legend>
-        <label>
-          <input type="radio" name="supplyMode" value="depleted" checked>
-          <span>Сначала наиболее израсходованные наборы</span>
-        </label>
-        <label>
-          <input type="radio" name="supplyMode" value="balanced">
-          <span>Выравнивать остаток между наборами</span>
-        </label>
-      </fieldset>
-      <div class="fallout-maw-mass-operation-instruments">
-        ${instrumentRows}
-      </div>
-    </div>
-  `;
+  const instrumentRows = toolGroups.map(group => auditFormat("FALLOUTMAW.AuditApps.ClassItemsTotalSupplies", { v0: (escapeAttribute(group.key)), v1: (escapeHtml(group.toolLabel)), v2: (escapeHtml(group.toolClass)), v3: (group.count), v4: (group.supplyValue), v5: (group.supplyMax) }, "\n    <label class=\"fallout-maw-mass-operation-instrument\">\n      <input type=\"checkbox\" name=\"toolGroup\" value=\"{v0}\" checked>\n      <span>{v1}</span>\n      <strong>Класс {v2}</strong>\n      <em>{v3} шт., общий запас {v4}/{v5}</em>\n    </label>\n  ")).join("");
+  const content = auditFormat("FALLOUTMAW.AuditApps.TreatmentIsPerformedSequentiallyTraumasFirstThenBody", { v0: (counts.traumas > 0 ? "checked" : "disabled"), v1: (counts.traumas), v2: (counts.limbHealth > 0 ? "checked" : "disabled"), v3: (counts.limbHealth), v4: (instrumentRows) }, "\n    <div class=\"fallout-maw-mass-operation-dialog fallout-maw-mass-treatment-dialog\">\n      <p>Лечение выполняется последовательно: сначала травмы, затем здоровье частей тела.</p>\n      <div class=\"fallout-maw-mass-operation-categories\">\n        <label>\n          <input type=\"checkbox\" name=\"includeTraumas\" {v0}>\n          <span>Лечить травмы</span>\n          <strong>{v1}</strong>\n        </label>\n        <label>\n          <input type=\"checkbox\" name=\"includeLimbHealth\" {v2}>\n          <span>Восстанавливать здоровье частей тела</span>\n          <strong>{v3}</strong>\n        </label>\n      </div>\n      <fieldset class=\"fallout-maw-mass-operation-modes\">\n        <legend>Выбор класса</legend>\n        <label>\n          <input type=\"radio\" name=\"qualityMode\" value=\"matched\" checked>\n          <span>Минимально достаточный класс</span>\n        </label>\n        <label>\n          <input type=\"radio\" name=\"qualityMode\" value=\"best\">\n          <span>Лучший доступный класс</span>\n        </label>\n      </fieldset>\n      <fieldset class=\"fallout-maw-mass-operation-modes\">\n        <legend>Распределение запаса</legend>\n        <label>\n          <input type=\"radio\" name=\"supplyMode\" value=\"depleted\" checked>\n          <span>Сначала наиболее израсходованные наборы</span>\n        </label>\n        <label>\n          <input type=\"radio\" name=\"supplyMode\" value=\"balanced\">\n          <span>Выравнивать остаток между наборами</span>\n        </label>\n      </fieldset>\n      <div class=\"fallout-maw-mass-operation-instruments\">\n        {v4}\n      </div>\n    </div>\n  ");
 
   return DialogV2.input({
     modal: true,
-    window: { title: "Массовое лечение" },
+    window: { title: auditLocalize("FALLOUTMAW.AuditApps.BulkTreatment", "Массовое лечение") },
     content,
     render: (_event, dialog) => bindMassOperationDialogSubmitState(dialog, {
       categoryNames: ["includeTraumas", "includeLimbHealth"]
     }),
     ok: {
-      label: "Начать лечение",
+      label: auditLocalize("FALLOUTMAW.AuditApps.StartTreatment", "Начать лечение"),
       icon: "fa-solid fa-kit-medical",
       callback: (_event, button) => {
         const form = button.form;
@@ -1077,7 +1031,7 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
           categoryNames: ["includeTraumas", "includeLimbHealth"]
         });
         if (!selectionState.hasCategorySelection) {
-          ui.notifications.warn("Выберите травмы, здоровье частей тела или оба варианта.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.SelectTraumasBodyPartHealthOrBoth", "Выберите травмы, здоровье частей тела или оба варианта."));
           return "cancel";
         }
         const includeTraumas = Boolean(form.querySelector("input[name='includeTraumas']")?.checked);
@@ -1086,7 +1040,7 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
           .map(input => String(input.value ?? "").trim())
           .filter(Boolean);
         if (!selectionState.hasToolGroupSelection || !allowedToolGroupKeys.length) {
-          ui.notifications.warn("Выберите хотя бы одну группу медицинских инструментов.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneGroupOfMedicalTools", "Выберите хотя бы одну группу медицинских инструментов."));
           return "cancel";
         }
         const options = normalizeMassTreatmentOptions({
@@ -1109,7 +1063,7 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
         return options;
       }
     },
-    buttons: [{ action: "cancel", label: "Отмена" }],
+    buttons: [{ action: "cancel", label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена") }],
     position: { width: 580 },
     rejectClose: false
   });
@@ -1134,7 +1088,7 @@ function chooseBestTreatmentInstrument(sourceActor, treatment, toolKey, options 
   }, normalizedOptions);
   return selected
     ? { instrumentId: selected.id }
-    : { reason: "Выбранные медицинские инструменты больше не подходят для этой цели." };
+    : { reason: auditLocalize("FALLOUTMAW.AuditApps.TheSelectedMedicalToolsAreNoLongerSuitable", "Выбранные медицинские инструменты больше не подходят для этой цели.") };
 }
 
 function getMassTreatmentAvailability(
@@ -1211,10 +1165,10 @@ function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimb
       candidates,
       hasCandidates: candidates.length > 0,
       statusLabel: limb.prosthesis
-        ? `Протез: ${limb.prosthesis.name}`
-        : "Отсутствует",
+        ? auditFormat("FALLOUTMAW.AuditApps.Prosthesis", { v0: (limb.prosthesis.name) }, "Протез: {v0}")
+        : auditLocalize("FALLOUTMAW.Item.FunctionNone", "Отсутствует"),
       conditionLabel: limb.prosthesis?.conditionLabel ?? "",
-      displayValue: limb.prosthesis ? (limb.prosthesis.hasCondition ? limb.prosthesis.conditionValue : "∞") : "Отсутствует",
+      displayValue: limb.prosthesis ? (limb.prosthesis.hasCondition ? limb.prosthesis.conditionValue : "∞") : auditLocalize("FALLOUTMAW.Item.FunctionNone", "Отсутствует"),
       displayMax: limb.prosthesis?.hasCondition ? limb.prosthesis.conditionMax : "",
       fill: limb.prosthesis ? mixRgb([22, 81, 122], [143, 216, 255], conditionRatio) : "rgba(6, 8, 8, 0.96)"
     };
@@ -1280,7 +1234,7 @@ function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey
       installedCount: installed.length,
       implantLimit,
       slotsAvailable,
-      statusLabel: `Импланты: ${installed.length} / ${implantLimit}`,
+      statusLabel: auditFormat("FALLOUTMAW.AuditApps.Implants", { v0: (installed.length), v1: (implantLimit) }, "Импланты: {v0} / {v1}"),
       displayValue: installed.length,
       displayMax: implantLimit,
       fill: installed.length ? mixRgb([40, 80, 56], [130, 230, 165], fillRatio) : "rgba(6, 8, 8, 0.96)"
@@ -1313,7 +1267,7 @@ function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey
 
 async function performTreatment({ sourceActor, sourceToken = null, targetContext, targetToken = null, treatmentType = "trauma", treatmentId, instrumentId, toolKey }) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
-    ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToUseS", { v0: (sourceActor?.name ?? "") }, "Нет прав на использование инструментов {v0}."));
     return undefined;
   }
   const resolution = await applyTreatmentToTarget(targetContext, {
@@ -1344,17 +1298,17 @@ async function performTreatment({ sourceActor, sourceToken = null, targetContext
   } = resolution;
   if (alreadyHealed) {
     await postMedicineChat(sourceActor, {
-      title: "Медицина",
+      title: auditLocalize("FALLOUTMAW.Events.Groups.medicine.Label", "Медицина"),
       tone: "success",
-      lines: [`"${treatment?.name ?? "Цель лечения"}" уже вылечено.`]
+      lines: [auditFormat("FALLOUTMAW.AuditApps.HasAlreadyBeenTreated", { v0: (treatment?.name ?? auditLocalize("FALLOUTMAW.AuditApps.TreatmentTarget", "Цель лечения")) }, "\"{v0}\" уже вылечено.")]
     });
     return { targetContext: updatedTargetContext ?? targetContext };
   }
   if (!entries.length) {
     await postMedicineChat(sourceActor, {
-      title: `Лечение: ${treatment?.name ?? "цель"}`,
+      title: auditFormat("FALLOUTMAW.AuditApps.Treatment", { v0: (treatment?.name ?? auditLocalize("FALLOUTMAW.AuditApps.Target", "цель")) }, "Лечение: {v0}"),
       tone: "failure",
-      lines: [reason || "Лечение не выполнено."]
+      lines: [reason || auditLocalize("FALLOUTMAW.AuditApps.TreatmentFailed", "Лечение не выполнено.")]
     });
     return undefined;
   }
@@ -1384,7 +1338,7 @@ async function performMassTreatment({
   requestId = ""
 } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
-    ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToUseS", { v0: (sourceActor?.name ?? "") }, "Нет прав на использование инструментов {v0}."));
     return undefined;
   }
   const resolution = await applyMassTreatmentToTarget(targetContext, {
@@ -1412,21 +1366,21 @@ async function applyMassTreatmentToTarget(targetContext, {
   const actorUuid = String(targetContext?.actorUuid ?? "");
   const sourceActorUuid = String(sourceActor?.uuid ?? "");
   if (!actorUuid || !sourceActorUuid) {
-    ui.notifications.warn("Не удалось определить цель массового лечения.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.FailedToIdentifyTheBulkTreatmentTarget", "Не удалось определить цель массового лечения."));
     return null;
   }
   const normalizedOptions = normalizeMassTreatmentOptions(options);
   const stableRequestId = String(requestId ?? "").trim();
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для массового лечения.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMForBulkTreatment", "Нет активного GM для массового лечения."));
     return null;
   }
   if (isCurrentResponsibleGM(gm)) {
     try {
       const actor = targetToken?.actor ?? await fromUuid(actorUuid);
       if (!actor || String(actor.uuid ?? "") !== actorUuid) {
-        throw new Error("цель массового лечения не найдена");
+        throw new Error(auditLocalize("FALLOUTMAW.AuditApps.BulkTreatmentTargetNotFound", "цель массового лечения не найдена"));
       }
       return await resolveMassTreatmentOnAuthority({
         sourceActor,
@@ -1441,7 +1395,7 @@ async function applyMassTreatmentToTarget(targetContext, {
       });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Medicine local mass treatment failed`, error);
-      ui.notifications.error(`Не удалось выполнить массовое лечение: ${error.message}`);
+      ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToPerformBulkTreatment", { v0: (error.message) }, "Не удалось выполнить массовое лечение: {v0}"));
       return null;
     }
   }
@@ -1459,10 +1413,10 @@ async function applyMassTreatmentToTarget(targetContext, {
   } catch (error) {
     console.error(`${SYSTEM_ID} | Medicine mass treatment socket failed`, error);
     if (error?.code === "authority-timeout") {
-      ui.notifications.warn("GM продолжает массовое лечение. Повторное нажатие будет ожидать ту же операцию.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheGMIsContinuingBulkTreatmentClickingAgain", "GM продолжает массовое лечение. Повторное нажатие будет ожидать ту же операцию."));
       return { pending: true, requestId: stableRequestId };
     }
-    ui.notifications.error(`Не удалось выполнить массовое лечение: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToPerformBulkTreatment", { v0: (error.message) }, "Не удалось выполнить массовое лечение: {v0}"));
     return null;
   }
 }
@@ -1491,15 +1445,15 @@ async function resolveMassTreatmentOnAuthorityOperation({
   options = {},
   operationId = `medicine-mass-treatment:${foundry.utils.randomID()}`
 } = {}) {
-  if (!sourceActor || !targetActor) throw new Error("участники массового лечения не найдены");
+  if (!sourceActor || !targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.BulkTreatmentParticipantsNotFound", "участники массового лечения не найдены"));
   const normalizedToolKey = validateConfiguredMedicineToolKey(toolKey);
 
   const normalizedOptions = normalizeMassTreatmentOptions(options);
   if (!normalizedOptions.includeTraumas && !normalizedOptions.includeLimbHealth) {
-    throw new Error("Выберите хотя бы один вид массового лечения.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneTypeOfBulkTreatment", "Выберите хотя бы один вид массового лечения."));
   }
   if (!normalizedOptions.allowedToolGroupKeys.length) {
-    throw new Error("Выберите хотя бы одну группу медицинских инструментов.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneGroupOfMedicalTools", "Выберите хотя бы одну группу медицинских инструментов."));
   }
 
   const initialContext = buildTargetContext(targetActor, targetToken);
@@ -1508,7 +1462,7 @@ async function resolveMassTreatmentOnAuthorityOperation({
       targetContext: initialContext,
       summary: createEmptyMassTreatmentSummary(initialContext, normalizedOptions, {
         stopped: true,
-        reason: "Цель сейчас не может получать лечение."
+        reason: auditLocalize("FALLOUTMAW.AuditApps.TheTargetCannotReceiveTreatmentRightNow", "Цель сейчас не может получать лечение.")
       })
     };
   }
@@ -1586,7 +1540,7 @@ function createFailedMassTreatmentReceipt({
   treatmentType = "trauma",
   treatmentId = "",
   operationId = "",
-  reason = "Лечение не выполнено."
+  reason = auditLocalize("FALLOUTMAW.AuditApps.TreatmentFailed", "Лечение не выполнено.")
 } = {}) {
   const targetContext = buildTargetContext(targetActor, targetToken);
   const treatment = getTargetTreatments(targetContext, treatmentType)
@@ -1605,13 +1559,13 @@ function createFailedMassTreatmentReceipt({
     spentCharges: 0,
     entries: [],
     completed: initialProgress >= maxProgress,
-    reason: String(reason || "Лечение не выполнено.")
+    reason: String(reason || auditLocalize("FALLOUTMAW.AuditApps.TreatmentFailed", "Лечение не выполнено."))
   };
 }
 
 async function performImplantInstallation({ sourceActor, sourceToken = null, targetContext, targetToken = null, limbKey = "", implantSource = "", itemId = "" } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
-    ui.notifications.warn(`Нет прав на использование инвентаря ${sourceActor?.name ?? ""}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToUseS_559", { v0: (sourceActor?.name ?? "") }, "Нет прав на использование инвентаря {v0}."));
     return undefined;
   }
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
@@ -1627,14 +1581,14 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
   });
   if (!resolution || resolution.cancelled) return undefined;
 
-  const title = `Установка импланта: ${resolution.itemName ?? "имплант"}`;
+  const title = auditFormat("FALLOUTMAW.AuditApps.ImplantInstallation", { v0: (resolution.itemName ?? auditLocalize("FALLOUTMAW.AuditApps.Implant", "имплант")) }, "Установка импланта: {v0}");
   if (resolution.resultKey === "criticalFailure") {
     await postMedicineChat(sourceActor, {
       title,
       tone: "failure",
       lines: [resolution.criticalDamage > 0
-        ? `Критический провал. Имплант повреждён на ${resolution.criticalDamage} и не установлен.`
-        : "Критический провал. Имплант не установлен."]
+        ? auditFormat("FALLOUTMAW.AuditApps.CriticalFailureTheImplantTookDamageAndWas", { v0: (resolution.criticalDamage) }, "Критический провал. Имплант повреждён на {v0} и не установлен.")
+        : auditLocalize("FALLOUTMAW.AuditApps.CriticalFailureTheImplantWasNotInstalled", "Критический провал. Имплант не установлен.")]
     });
     return { targetContext: resolution.targetContext ?? targetContext };
   }
@@ -1642,7 +1596,7 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
     await postMedicineChat(sourceActor, {
       title,
       tone: "failure",
-      lines: [resolution.reason || "Проверка провалена. Имплант не установлен."]
+      lines: [resolution.reason || auditLocalize("FALLOUTMAW.AuditApps.CheckFailedTheImplantWasNotInstalled", "Проверка провалена. Имплант не установлен.")]
     });
     return { targetContext: resolution.targetContext ?? targetContext };
   }
@@ -1650,7 +1604,7 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
   await postMedicineChat(sourceActor, {
     title,
     tone: "success",
-    lines: [`${resolution.targetName ?? targetContext?.name ?? "Цель"}: ${resolution.limbLabel ?? getTargetLimbLabel(targetContext, limbKey)} получила имплант.`]
+    lines: [auditFormat("FALLOUTMAW.AuditApps.AnImplantWasInstalledIn", { v0: (resolution.targetName ?? targetContext?.name ?? auditLocalize("FALLOUTMAW.Research.Target", "Цель")), v1: (resolution.limbLabel ?? getTargetLimbLabel(targetContext, limbKey)) }, "{v0}: {v1} получила имплант.")]
   });
   return { targetContext: resolution.targetContext ?? targetContext };
 }
@@ -1683,7 +1637,7 @@ async function requestImplantInstallation({
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для установки импланта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToInstallThe", "Нет активного GM для установки импланта."));
     return null;
   }
   try {
@@ -1699,7 +1653,7 @@ async function requestImplantInstallation({
     return result?.resolution ?? null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Medicine implant socket failed`, error);
-    ui.notifications.error(`Не удалось выполнить установку импланта: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToInstallTheImplant", { v0: (error.message) }, "Не удалось выполнить установку импланта: {v0}"));
     return null;
   }
 }
@@ -1720,29 +1674,29 @@ async function resolveImplantInstallationOnAuthorityLocked({
   implantSource = "",
   itemId = ""
 } = {}) {
-  if (!sourceActor || !targetActor) throw new Error("участники установки импланта не найдены");
-  if (!["source", "target"].includes(implantSource)) throw new Error("некорректный источник импланта");
+  if (!sourceActor || !targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ImplantInstallationParticipantsNotFound", "участники установки импланта не найдены"));
+  if (!["source", "target"].includes(implantSource)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidImplantSource", "некорректный источник импланта"));
 
   const targetContext = buildTargetContext(targetActor, targetToken);
   const targetLimb = targetContext.limbs.find(limb => limb.key === limbKey);
-  if (!targetLimb) throw new Error("часть тела для установки импланта не найдена");
+  if (!targetLimb) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.BodyPartForImplantInstallationNotFound", "часть тела для установки импланта не найдена"));
   const implantLimit = Math.max(0, toInteger(targetLimb.implantLimit));
   if ((targetLimb.implants ?? []).length >= implantLimit) {
-    throw new Error("на выбранной части тела нет свободного места для импланта");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheSelectedBodyPartHasNoFreeImplant", "на выбранной части тела нет свободного места для импланта"));
   }
 
   const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
   const implant = sourceContainer.items?.get(String(itemId ?? ""));
   if (!implant || implant.type !== "gear" || !isImplantForLimb(implant, limbKey)) {
-    throw new Error("имплант не найден или не подходит к выбранной части тела");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ImplantNotFoundOrIncompatibleWithTheSelected", "имплант не найден или не подходит к выбранной части тела"));
   }
-  if (!isImplantItemInstallable(implant)) throw new Error("сломанный имплант нельзя установить");
+  if (!isImplantItemInstallable(implant)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ABrokenImplantCannotBeInstalled", "сломанный имплант нельзя установить"));
 
   const data = getImplantFunction(implant);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
   const skillResolution = await executeMedicineCombatOperation(sourceActor, {
-    label: "установки импланта",
+    label: auditLocalize("FALLOUTMAW.AuditApps.ImplantInstallation_575", "установки импланта"),
     operation: () => resolveMedicineSkillAction(sourceActor, {
       skillKey,
       difficulty,
@@ -1776,7 +1730,7 @@ async function resolveImplantInstallationOnAuthorityLocked({
       criticalDamage: 0,
       reason: getMedicineInstallationSkillThresholdMessage(
         skillResolution,
-        "импланта",
+        auditLocalize("FALLOUTMAW.AuditApps.Implant_576", "импланта"),
         implant.name
       )
     };
@@ -1839,7 +1793,7 @@ async function applyImplantRemoval({ sourceActor, targetContext, targetToken = n
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для снятия импланта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToRemoveThe", "Нет активного GM для снятия импланта."));
     return null;
   }
   const result = await requestMedicineSocket("removeImplant", {
@@ -1856,7 +1810,7 @@ async function resolveImplantRemovalOnAuthority(args = {}) {
   return runWithMedicineAuthorityLocks(
     [args.sourceActor, args.targetActor],
     () => executeMedicineCombatOperation(args.sourceActor, {
-      label: "извлечения импланта",
+      label: auditLocalize("FALLOUTMAW.AuditApps.ImplantRemoval", "извлечения импланта"),
       operation: () => applyImplantRemovalLocally(args)
     })
   );
@@ -1866,16 +1820,16 @@ async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = 
   const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
   if (!item || item.type !== "gear" || !isImplantForLimb(item, limbKey)) {
-    throw createTreatmentStaleError("Имплант изменился или больше не доступен.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheImplantHasChangedOrIsNoLonger", "Имплант изменился или больше не доступен."));
   }
   if (!isImplantItemInstallable(item)) {
-    throw createTreatmentStaleError("Имплант сломан до завершения установки.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheImplantBrokeBeforeInstallationWasCompleted", "Имплант сломан до завершения установки."));
   }
 
   const implantLimit = getActorLimbImplantLimit(targetActor, limbKey);
   const installedBefore = getInstalledTargetImplants(targetActor, limbKey).length;
   if (installedBefore >= implantLimit) {
-    throw createTreatmentStaleError("Свободное место для импланта уже занято.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheFreeImplantSpaceIsAlreadyOccupied", "Свободное место для импланта уже занято."));
   }
   if (sourceContainer?.uuid !== targetActor.uuid && isContainerItem(item)) {
     await transferItemBetweenActors({
@@ -1889,7 +1843,7 @@ async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = 
       spendWeaponSwitchCost: false
     });
     if (getInstalledTargetImplants(targetActor, limbKey).length <= installedBefore) {
-      throw new Error("Foundry не подтвердил установку импланта.");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditApps.FoundryDidNotConfirmImplantInstallation", "Foundry не подтвердил установку импланта."));
     }
     return true;
   }
@@ -1916,7 +1870,7 @@ async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = 
   }
 
   if (getInstalledTargetImplants(targetActor, limbKey).length <= installedBefore) {
-    throw new Error("Foundry не подтвердил установку импланта.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.FoundryDidNotConfirmImplantInstallation", "Foundry не подтвердил установку импланта."));
   }
   return true;
 }
@@ -1928,14 +1882,14 @@ async function applyImplantRemovalLocally({ sourceActor, targetActor, targetToke
     || item.type !== "gear"
     || String(item.system?.placement?.mode ?? "") !== "implant"
     || String(item.system?.placement?.limbKey ?? "") !== limbKey
-  ) throw createTreatmentStaleError("Установленный имплант изменился или уже снят.");
+  ) throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheInstalledImplantHasChangedOrHasAlready", "Установленный имплант изменился или уже снят."));
 
   const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
   const returnPlan = planActorInventoryGrant(receivingActor, createReturnedImplantItemData(item), {
     quantity: 1,
     merge: false
   });
-  if (!returnPlan) throw new Error("В инвентаре получателя нет места для снятого импланта.");
+  if (!returnPlan) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheRecipientSInventoryHasNoSpaceFor", "В инвентаре получателя нет места для снятого импланта."));
   await executeInventoryMutation([
     {
       actor: receivingActor,
@@ -1954,7 +1908,7 @@ async function applyImplantCriticalFailureLocally({ sourceActor, targetActor, li
   const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
   if (!item || item.type !== "gear" || !isImplantForLimb(item, limbKey)) {
-    throw createTreatmentStaleError("Имплант изменился до применения критического провала.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheImplantChangedBeforeTheCriticalFailureWas", "Имплант изменился до применения критического провала."));
   }
 
   const applied = await damageImplantForCriticalFailure(item);
@@ -2092,7 +2046,7 @@ function isImplantSnapshotInstallable(item) {
 
 async function performProsthesisInstallation({ sourceActor, sourceToken = null, targetContext, targetToken = null, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
-    ui.notifications.warn(`Нет прав на использование инвентаря ${sourceActor?.name ?? ""}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToUseS_559", { v0: (sourceActor?.name ?? "") }, "Нет прав на использование инвентаря {v0}."));
     return undefined;
   }
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
@@ -2108,14 +2062,14 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
   });
   if (!resolution || resolution.cancelled) return undefined;
 
-  const title = `Установка протеза: ${resolution.itemName ?? "протез"}`;
+  const title = auditFormat("FALLOUTMAW.AuditApps.ProsthesisInstallation", { v0: (resolution.itemName ?? auditLocalize("FALLOUTMAW.AuditApps.Prosthesis_587", "протез")) }, "Установка протеза: {v0}");
   if (resolution.resultKey === "criticalFailure") {
     await postMedicineChat(sourceActor, {
       title,
       tone: "failure",
       lines: [resolution.criticalDamage > 0
-        ? `Критический провал. Протез повреждён на ${resolution.criticalDamage} и не установлен.`
-        : "Критический провал. Протез не установлен."]
+        ? auditFormat("FALLOUTMAW.AuditApps.CriticalFailureTheProsthesisTookDamageAndWas", { v0: (resolution.criticalDamage) }, "Критический провал. Протез повреждён на {v0} и не установлен.")
+        : auditLocalize("FALLOUTMAW.AuditApps.CriticalFailureTheProsthesisWasNotInstalled", "Критический провал. Протез не установлен.")]
     });
     return { targetContext: resolution.targetContext ?? targetContext };
   }
@@ -2123,7 +2077,7 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
     await postMedicineChat(sourceActor, {
       title,
       tone: "failure",
-      lines: [resolution.reason || "Проверка провалена. Протез не установлен."]
+      lines: [resolution.reason || auditLocalize("FALLOUTMAW.AuditApps.CheckFailedTheProsthesisWasNotInstalled", "Проверка провалена. Протез не установлен.")]
     });
     return { targetContext: resolution.targetContext ?? targetContext };
   }
@@ -2131,7 +2085,7 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
   await postMedicineChat(sourceActor, {
     title,
     tone: "success",
-    lines: [`${resolution.targetName ?? targetContext?.name ?? "Цель"}: ${resolution.limbLabel ?? getTargetLimbLabel(targetContext, limbKey)} заменена протезом.`]
+    lines: [auditFormat("FALLOUTMAW.AuditApps.WasReplacedWithAProsthesis", { v0: (resolution.targetName ?? targetContext?.name ?? auditLocalize("FALLOUTMAW.Research.Target", "Цель")), v1: (resolution.limbLabel ?? getTargetLimbLabel(targetContext, limbKey)) }, "{v0}: {v1} заменена протезом.")]
   });
   return { targetContext: resolution.targetContext ?? targetContext };
 }
@@ -2164,7 +2118,7 @@ async function requestProsthesisInstallation({
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для установки протеза.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToInstallThe_592", "Нет активного GM для установки протеза."));
     return null;
   }
   try {
@@ -2180,7 +2134,7 @@ async function requestProsthesisInstallation({
     return result?.resolution ?? null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Medicine prosthesis socket failed`, error);
-    ui.notifications.error(`Не удалось выполнить установку протеза: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToInstallTheProsthesis", { v0: (error.message) }, "Не удалось выполнить установку протеза: {v0}"));
     return null;
   }
 }
@@ -2201,28 +2155,28 @@ async function resolveProsthesisInstallationOnAuthorityLocked({
   prosthesisSource = "",
   itemId = ""
 } = {}) {
-  if (!sourceActor || !targetActor) throw new Error("участники установки протеза не найдены");
-  if (!["source", "target"].includes(prosthesisSource)) throw new Error("некорректный источник протеза");
+  if (!sourceActor || !targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ProsthesisInstallationParticipantsNotFound", "участники установки протеза не найдены"));
+  if (!["source", "target"].includes(prosthesisSource)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidProsthesisSource", "некорректный источник протеза"));
 
   const targetContext = buildTargetContext(targetActor, targetToken);
   const targetLimb = targetContext.limbs.find(limb => limb.key === limbKey);
-  if (!targetLimb) throw new Error("часть тела для установки протеза не найдена");
+  if (!targetLimb) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.BodyPartForProsthesisInstallationNotFound", "часть тела для установки протеза не найдена"));
   if (!targetLimb.missing || targetLimb.prosthesis) {
-    throw new Error("протез можно установить только на отсутствующую свободную часть тела");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.AProsthesisCanOnlyBeInstalledInAn", "протез можно установить только на отсутствующую свободную часть тела"));
   }
 
   const sourceContainer = prosthesisSource === "source" ? sourceActor : targetActor;
   const prosthesis = sourceContainer.items?.get(String(itemId ?? ""));
   if (!prosthesis || prosthesis.type !== "gear" || !isProsthesisForLimb(prosthesis, limbKey)) {
-    throw new Error("протез не найден или не подходит к выбранной части тела");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ProsthesisNotFoundOrIncompatibleWithTheSelected", "протез не найден или не подходит к выбранной части тела"));
   }
-  if (!isProsthesisItemInstallable(prosthesis)) throw new Error("сломанный протез нельзя установить");
+  if (!isProsthesisItemInstallable(prosthesis)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ABrokenProsthesisCannotBeInstalled", "сломанный протез нельзя установить"));
 
   const data = getProsthesisFunction(prosthesis);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
   const skillResolution = await executeMedicineCombatOperation(sourceActor, {
-    label: "установки протеза",
+    label: auditLocalize("FALLOUTMAW.AuditApps.ProsthesisInstallation_600", "установки протеза"),
     operation: () => resolveMedicineSkillAction(sourceActor, {
       skillKey,
       difficulty,
@@ -2256,7 +2210,7 @@ async function resolveProsthesisInstallationOnAuthorityLocked({
       criticalDamage: 0,
       reason: getMedicineInstallationSkillThresholdMessage(
         skillResolution,
-        "протеза",
+        auditLocalize("FALLOUTMAW.AuditApps.Prosthesis_601", "протеза"),
         prosthesis.name
       )
     };
@@ -2319,7 +2273,7 @@ async function applyProsthesisRemoval({ sourceActor, targetContext, targetToken 
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для снятия протеза.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToRemoveThe_602", "Нет активного GM для снятия протеза."));
     return null;
   }
   const result = await requestMedicineSocket("removeProsthesis", {
@@ -2336,7 +2290,7 @@ async function resolveProsthesisRemovalOnAuthority(args = {}) {
   return runWithMedicineAuthorityLocks(
     [args.sourceActor, args.targetActor],
     () => executeMedicineCombatOperation(args.sourceActor, {
-      label: "снятия протеза",
+      label: auditLocalize("FALLOUTMAW.AuditApps.ProsthesisRemoval", "снятия протеза"),
       operation: () => applyProsthesisRemovalLocally(args)
     })
   );
@@ -2346,17 +2300,17 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
   const sourceContainer = prosthesisSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
   if (!item || item.type !== "gear" || !isProsthesisForLimb(item, limbKey)) {
-    throw createTreatmentStaleError("Протез изменился или больше не доступен.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheProsthesisHasChangedOrIsNoLonger", "Протез изменился или больше не доступен."));
   }
   if (!isProsthesisItemInstallable(item)) {
-    throw createTreatmentStaleError("Протез сломан до завершения установки.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheProsthesisBrokeBeforeInstallationWasCompleted", "Протез сломан до завершения установки."));
   }
 
   if (!targetActor?.system?.limbs?.[limbKey]?.missing) {
-    throw createTreatmentStaleError("Часть тела больше не отсутствует.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheBodyPartIsNoLongerMissing", "Часть тела больше не отсутствует."));
   }
   const existing = getInstalledTargetProsthesis(targetActor, limbKey);
-  if (existing) throw createTreatmentStaleError("На части тела уже установлен протез.");
+  if (existing) throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheBodyPartAlreadyHasAProsthesisInstalled", "На части тела уже установлен протез."));
   if (sourceContainer?.uuid !== targetActor.uuid && isContainerItem(item)) {
     await transferItemBetweenActors({
       sourceActor: sourceContainer,
@@ -2371,7 +2325,7 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
     await clearLimbLossState(targetActor, limbKey);
     await setLimbMissingState(targetActor, limbKey);
     if (!getInstalledTargetProsthesis(targetActor, limbKey)) {
-      throw new Error("Foundry не подтвердил установку протеза.");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditApps.FoundryDidNotConfirmProsthesisInstallation", "Foundry не подтвердил установку протеза."));
     }
     return true;
   }
@@ -2403,7 +2357,7 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
   await clearLimbLossState(targetActor, limbKey);
   await setLimbMissingState(targetActor, limbKey);
   if (!getInstalledTargetProsthesis(targetActor, limbKey)) {
-    throw new Error("Foundry не подтвердил установку протеза.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.FoundryDidNotConfirmProsthesisInstallation", "Foundry не подтвердил установку протеза."));
   }
   return true;
 }
@@ -2415,14 +2369,14 @@ async function applyProsthesisRemovalLocally({ sourceActor, targetActor, targetT
     || item.type !== "gear"
     || String(item.system?.placement?.mode ?? "") !== "prosthesis"
     || String(item.system?.placement?.limbKey ?? "") !== limbKey
-  ) throw createTreatmentStaleError("Установленный протез изменился или уже снят.");
+  ) throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheInstalledProsthesisHasChangedOrHasAlready", "Установленный протез изменился или уже снят."));
 
   const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
   const returnPlan = planActorInventoryGrant(receivingActor, createReturnedProsthesisItemData(item), {
     quantity: 1,
     merge: false
   });
-  if (!returnPlan) throw new Error("В инвентаре получателя нет места для снятого протеза.");
+  if (!returnPlan) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheRecipientSInventoryHasNoSpaceFor_610", "В инвентаре получателя нет места для снятого протеза."));
   await executeInventoryMutation([
     {
       actor: receivingActor,
@@ -2443,7 +2397,7 @@ async function applyProsthesisCriticalFailureLocally({ sourceActor, targetActor,
   const sourceContainer = prosthesisSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
   if (!item || item.type !== "gear" || !isProsthesisForLimb(item, limbKey)) {
-    throw createTreatmentStaleError("Протез изменился до применения критического провала.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheProsthesisChangedBeforeTheCriticalFailureWas", "Протез изменился до применения критического провала."));
   }
 
   const applied = await damageProsthesisForCriticalFailure(item);
@@ -2697,7 +2651,7 @@ async function runTreatmentChecks({
         finalProgress: currentProgress,
         halted: true,
         attemptedChecks,
-        reason: "Проверка навыка лечения не выполнена."
+        reason: auditLocalize("FALLOUTMAW.AuditApps.TreatmentSkillCheckFailed", "Проверка навыка лечения не выполнена.")
       };
     }
     attemptedChecks += 1;
@@ -2779,18 +2733,18 @@ async function runTreatmentChecks({
     attemptedChecks,
     reason: noTool
       ? (!freeEnergy && availableHealing <= 0 && currentProgress < maxProgress
-        ? "Энергии не хватило для полного лечения."
+        ? auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughEnergyToCompleteThe", "Энергии не хватило для полного лечения.")
         : "")
-      : (availableCharges <= 0 ? "Запаса инструмента не хватило для лечения." : "")
+      : (availableCharges <= 0 ? auditLocalize("FALLOUTMAW.AuditApps.TheToolDidNotHaveEnoughSuppliesFor", "Запаса инструмента не хватило для лечения.") : "")
   };
 }
 
 function validateInstrumentForTreatment(actor, treatment, tool, { allowedToolClassDeficit = 0 } = {}) {
   if (treatment?.treatable === false) {
-    return { ok: false, message: treatment.unavailableReason || "Эту цель сейчас нельзя лечить." };
+    return { ok: false, message: treatment.unavailableReason || auditLocalize("FALLOUTMAW.AuditApps.ThisTargetCannotBeTreatedRightNow", "Эту цель сейчас нельзя лечить.") };
   }
-  if (!tool?.enabled) return { ok: false, message: "Инструмент не подходит для лечения." };
-  if (toInteger(tool.resourceValue) <= 0) return { ok: false, message: "Ресурс инструмента исчерпан." };
+  if (!tool?.enabled) return { ok: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheToolIsNotSuitableForTreatment", "Инструмент не подходит для лечения.") };
+  if (toInteger(tool.resourceValue) <= 0) return { ok: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheToolSResourceIsDepleted", "Ресурс инструмента исчерпан.") };
 
   const requiredClass = String(treatment.healingToolClass ?? "D");
   const toolClass = String(tool.toolClass ?? "D");
@@ -2799,8 +2753,8 @@ function validateInstrumentForTreatment(actor, treatment, tool, { allowedToolCla
     return {
       ok: false,
       message: deficit > 0
-        ? `Нужен инструмент не более чем на ${deficit} класс ниже ${requiredClass}.`
-        : `Нужен инструмент класса ${requiredClass} или выше.`
+        ? auditFormat("FALLOUTMAW.AuditApps.RequiresAToolNoMoreThanClassBelow", { v0: (deficit), v1: (requiredClass) }, "Нужен инструмент не более чем на {v0} класс ниже {v1}.")
+        : auditFormat("FALLOUTMAW.AuditApps.RequiresAToolOfClassOrHigher", { v0: (requiredClass) }, "Нужен инструмент класса {v0} или выше.")
     };
   }
 
@@ -2808,7 +2762,7 @@ function validateInstrumentForTreatment(actor, treatment, tool, { allowedToolCla
   const skillValue = toInteger(tool.skillValue);
   if (skillKey && toInteger(actor.system?.skills?.[skillKey]?.value) < skillValue) {
     const label = getSkillSettings().find(skill => skill.key === skillKey)?.label ?? skillKey;
-    return { ok: false, message: `Нужно ${skillValue} ${label}.` };
+    return { ok: false, message: auditFormat("FALLOUTMAW.AuditApps.Requires", { v0: (skillValue), v1: (label) }, "Нужно {v0} {v1}.") };
   }
 
   return { ok: true, message: "" };
@@ -2911,20 +2865,20 @@ async function applyTreatmentToTarget(targetContext, {
   const actorUuid = String(targetContext?.actorUuid ?? "");
   const sourceActorUuid = String(sourceActor?.uuid ?? "");
   if (!actorUuid || !sourceActorUuid) {
-    ui.notifications.warn("Не удалось определить цель лечения.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.FailedToIdentifyTheTreatmentTarget", "Не удалось определить цель лечения."));
     return null;
   }
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для применения лечения.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToApplyTreatment", "Нет активного GM для применения лечения."));
     return null;
   }
   if (isCurrentResponsibleGM(gm)) {
     try {
       const actor = targetToken?.actor ?? await fromUuid(actorUuid);
       if (!actor || String(actor.uuid ?? "") !== actorUuid) {
-        throw new Error("цель лечения не найдена");
+        throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetNotFound", "цель лечения не найдена"));
       }
       return await resolveTreatmentOnAuthority({
         sourceActor,
@@ -2939,7 +2893,7 @@ async function applyTreatmentToTarget(targetContext, {
       });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Medicine local treatment failed`, error);
-      ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
+      ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToApplyTreatment", { v0: (error.message) }, "Не удалось применить лечение: {v0}"));
       return null;
     }
   }
@@ -2958,7 +2912,7 @@ async function applyTreatmentToTarget(targetContext, {
     return result?.resolution ?? null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Medicine treatment socket failed`, error);
-    ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToApplyTreatment", { v0: (error.message) }, "Не удалось применить лечение: {v0}"));
     return null;
   }
 }
@@ -3108,7 +3062,7 @@ function buildMedicineTreatmentStateSnapshot({
 } = {}) {
   const instrument = sourceActor?.items?.get?.(String(instrumentId ?? "")) ?? null;
   const supply = String(instrumentId ?? "") === GOOD_ENOUGH_NO_TOOL_ID
-    ? getActorEnergy(sourceActor)
+    ? getActorAvailableEnergy(sourceActor)
     : getEffectiveMedicineToolFunction(instrument, toolKey)?.resourceValue;
   if (treatmentType === "limb") {
     const limb = targetActor?.system?.limbs?.[String(treatmentId ?? "")];
@@ -3152,14 +3106,14 @@ function createCancelledMedicineTreatmentReceipt(args = {}, reason = "cancelled"
     spentCharges: 0,
     entries: [],
     completed: initialProgress >= maxProgress,
-    reason: String(reason || "Лечение отменено.")
+    reason: String(reason || auditLocalize("FALLOUTMAW.AuditApps.TreatmentCanceled", "Лечение отменено."))
   };
 }
 
 function getExternalMedicineHealingFailureReason(result = {}) {
-  if (result.cancelled) return "Лечение отменено до применения.";
-  if (result.reason === "healing-blocked") return "Цель сейчас не может получать лечение.";
-  return "Лечение не удалось применить.";
+  if (result.cancelled) return auditLocalize("FALLOUTMAW.AuditApps.TreatmentCanceledBeforeApplication", "Лечение отменено до применения.");
+  if (result.reason === "healing-blocked") return auditLocalize("FALLOUTMAW.AuditApps.TheTargetCannotReceiveTreatmentRightNow", "Цель сейчас не может получать лечение.");
+  return auditLocalize("FALLOUTMAW.AuditApps.TreatmentCouldNotBeApplied", "Лечение не удалось применить.");
 }
 
 async function resolveTreatmentOnAuthorityOperation({
@@ -3174,12 +3128,12 @@ async function resolveTreatmentOnAuthorityOperation({
   operationId = `medicine-treatment:${foundry.utils.randomID()}`,
   chainRef = null
 } = {}) {
-  if (!sourceActor || !targetActor) throw new Error("участники лечения не найдены");
+  if (!sourceActor || !targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentParticipantsNotFound", "участники лечения не найдены"));
   if (!["limb", "trauma", "disease"].includes(treatmentType)) {
-    throw new Error("некорректный тип цели лечения");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidTreatmentTargetType", "некорректный тип цели лечения"));
   }
   if (!String(treatmentId ?? "").trim() || !String(instrumentId ?? "").trim()) {
-    throw new Error("цель или инструмент лечения не указаны");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetOrToolNotSpecified", "цель или инструмент лечения не указаны"));
   }
 
   const currentTargetContext = buildTargetContext(targetActor, targetToken);
@@ -3190,17 +3144,17 @@ async function resolveTreatmentOnAuthorityOperation({
   let tool = null;
   let noTool = false;
   if (String(instrumentId ?? "") === GOOD_ENOUGH_NO_TOOL_ID) {
-    if (treatmentType !== "limb") throw new Error("Способность «И так сойдет» применима только к лечению конечностей.");
-    if (!treatment) throw new Error("цель лечения не найдена");
+    if (treatmentType !== "limb") throw new Error(auditLocalize("FALLOUTMAW.AuditApps.GoodEnoughCanOnlyBeUsedToTreat", "Способность «И так сойдет» применима только к лечению конечностей."));
+    if (!treatment) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetNotFound", "цель лечения не найдена"));
     const settings = getActorGoodEnoughSettings(sourceActor);
-    if (!settings) throw new Error("Способность «И так сойдет» недоступна.");
+    if (!settings) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheGoodEnoughAbilityIsUnavailable", "Способность «И так сойдет» недоступна."));
     if (treatment.treatable === false) {
-      throw new Error(treatment.unavailableReason || "Эту цель сейчас нельзя лечить.");
+      throw new Error(treatment.unavailableReason || auditLocalize("FALLOUTMAW.AuditApps.ThisTargetCannotBeTreatedRightNow", "Эту цель сейчас нельзя лечить."));
     }
     noTool = true;
     const freeEnergy = isGoodEnoughHealingFree(treatment, settings);
     const energyAvailable = getActorSpendableEnergy(sourceActor);
-    if (!freeEnergy && energyAvailable <= 0) throw new Error("Недостаточно энергии для лечения.");
+    if (!freeEnergy && energyAvailable <= 0) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughEnergyForTreatment", "Недостаточно энергии для лечения."));
     tool = {
       toolKey: normalizedToolKey,
       toolClass: "D",
@@ -3218,7 +3172,7 @@ async function resolveTreatmentOnAuthorityOperation({
       || instrument.type !== "gear"
       || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
     ) {
-      throw new Error("цель или исправный инструмент лечения не найдены");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetOrFunctioningToolNotFound", "цель или исправный инструмент лечения не найдены"));
     }
     tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
   }
@@ -3228,7 +3182,7 @@ async function resolveTreatmentOnAuthorityOperation({
     experimentalSurgery
     && !canActorSpendEnergy(sourceActor, experimentalSurgery.settings.treatmentEnergyCost)
   ) {
-    throw new Error(`Недостаточно энергии для лечения: нужно ${experimentalSurgery.settings.treatmentEnergyCost}.`);
+    throw new Error(auditFormat("FALLOUTMAW.AuditApps.NotEnoughEnergyForTreatmentRequired", { v0: (experimentalSurgery.settings.treatmentEnergyCost) }, "Недостаточно энергии для лечения: нужно {v0}."));
   }
   const validation = noTool
     ? { ok: true }
@@ -3248,8 +3202,8 @@ async function resolveTreatmentOnAuthorityOperation({
     instrument: noTool
       ? {
         id: GOOD_ENOUGH_NO_TOOL_ID,
-        name: "И так сойдет — без инструмента",
-        img: "icons/svg/aura.svg",
+        name: auditLocalize("FALLOUTMAW.AuditApps.GoodEnoughWithoutTools", "И так сойдет — без инструмента"),
+        img: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
         noTool: true
       }
       : {
@@ -3269,7 +3223,7 @@ async function resolveTreatmentOnAuthorityOperation({
     return {
       ...receiptBase,
       status: "failed",
-      reason: "Цель сейчас не может получать лечение."
+      reason: auditLocalize("FALLOUTMAW.AuditApps.TheTargetCannotReceiveTreatmentRightNow", "Цель сейчас не может получать лечение.")
     };
   }
   if (initialProgress >= maxProgress) {
@@ -3284,7 +3238,7 @@ async function resolveTreatmentOnAuthorityOperation({
     toolEfficiencyPercentBonus: emergencyOperations.settings.toolEfficiencyPercentBonus
   } : null;
   const result = await executeMedicineCombatOperation(sourceActor, {
-    label: "лечения",
+    label: auditLocalize("FALLOUTMAW.Item.TooltipBreakdownHealingUnit", "лечения"),
     operation: () => runTreatmentChecks({
       sourceActor,
       sourceToken,
@@ -3309,7 +3263,7 @@ async function resolveTreatmentOnAuthorityOperation({
     return {
       ...receiptBase,
       status: "failed",
-      reason: result.reason || "Лечение не выполнено."
+      reason: result.reason || auditLocalize("FALLOUTMAW.AuditApps.TreatmentFailed", "Лечение не выполнено.")
     };
   }
 
@@ -3470,16 +3424,16 @@ async function commitTreatmentToActors({
   let goodEnoughSettings = null;
   if (noTool) {
     if (treatmentType !== "limb" || instrumentId !== GOOD_ENOUGH_NO_TOOL_ID) {
-      throw new Error("Некорректный способ лечения без инструмента.");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidTreatmentMethodWithoutTools", "Некорректный способ лечения без инструмента."));
     }
     goodEnoughSettings = getActorGoodEnoughSettings(sourceActor);
-    if (!goodEnoughSettings) throw new Error("Способность «И так сойдет» недоступна.");
+    if (!goodEnoughSettings) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheGoodEnoughAbilityIsUnavailable", "Способность «И так сойдет» недоступна."));
   } else {
     instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
     tool = getEffectiveMedicineToolFunction(instrument, normalizedToolKey);
   }
   if (getMedicineResolutionMode() !== expectedMedicineMode) {
-    throw createTreatmentStaleError("Режим медицины изменился во время лечения.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.MedicineModeChangedDuringTreatment", "Режим медицины изменился во время лечения."));
   }
   let currentExperimentalSurgery = null;
   if (experimentalSurgery) {
@@ -3489,7 +3443,7 @@ async function commitTreatmentToActors({
       || String(currentExperimentalSurgery.abilityItem.id ?? "") !== String(experimentalSurgery.abilityItemId ?? "")
       || String(currentExperimentalSurgery.abilityFunction.id ?? "") !== String(experimentalSurgery.functionId ?? "")
     ) {
-      throw createTreatmentStaleError("Эксперементальная хирургия была выключена во время лечения.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.ExperimentalSurgeryWasDisabledDuringTreatment", "Эксперементальная хирургия была выключена во время лечения."));
     }
     const settings = currentExperimentalSurgery.settings;
     if (
@@ -3497,10 +3451,10 @@ async function commitTreatmentToActors({
       || settings.allowedToolClassDeficit !== Math.max(0, toInteger(experimentalSurgery.allowedToolClassDeficit))
       || settings.supplyCostMultiplier !== Math.max(1, toInteger(experimentalSurgery.supplyCostMultiplier))
     ) {
-      throw createTreatmentStaleError("Настройки эксперементальной хирургии изменились во время лечения.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.ExperimentalSurgerySettingsChangedDuringTreatment", "Настройки эксперементальной хирургии изменились во время лечения."));
     }
     if (!canActorSpendEnergy(sourceActor, settings.treatmentEnergyCost)) {
-      throw createTreatmentStaleError("Недостаточно энергии для лечения.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughEnergyForTreatment", "Недостаточно энергии для лечения."));
     }
     const expectedPatientDamage = experimentalSurgery.patientDamageTriggered
       ? calculateExperimentalSurgeryPatientDamage(
@@ -3509,7 +3463,7 @@ async function commitTreatmentToActors({
         )
       : 0;
     if (expectedPatientDamage !== Math.max(0, toInteger(experimentalSurgery.patientDamage))) {
-      throw createTreatmentStaleError("Максимум здоровья пациента изменился во время лечения.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.ThePatientSMaximumHealthChangedDuringTreatment", "Максимум здоровья пациента изменился во время лечения."));
     }
   }
   const emergencyOperationsConsumption = emergencyOperations
@@ -3526,10 +3480,10 @@ async function commitTreatmentToActors({
       || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
       || !tool?.enabled
     ) {
-      throw new Error("инструмент лечения не найден");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentToolNotFound", "инструмент лечения не найден"));
     }
     if (currentSupply !== expected) {
-      throw createTreatmentStaleError("Запас инструмента изменился.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.ToolSuppliesHaveChanged", "Запас инструмента изменился."));
     }
     if (currentExperimentalSurgery) {
       const expectedSupplyCost = calculateExperimentalSurgerySupplyCost({
@@ -3542,10 +3496,10 @@ async function commitTreatmentToActors({
         remaining !== expectedSupplyCost.remaining
         || Math.max(0, toInteger(experimentalSurgery.extraSupplySpent)) !== expectedSupplyCost.extraSpent
       ) {
-        throw createTreatmentStaleError("Расход инструмента изменился во время лечения.");
+        throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.ToolConsumptionChangedDuringTreatment", "Расход инструмента изменился во время лечения."));
       }
     }
-    if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
+    if (remaining >= currentSupply) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentMustConsumeToolSupplies", "Лечение должно расходовать запас инструмента."));
   }
 
   const treatmentCommit = treatmentType === "limb"
@@ -3593,40 +3547,42 @@ async function commitTreatmentToActors({
       goodEnoughSettings
     );
     if (energyCost !== Math.max(0, toInteger(expectedEnergyCost))) {
-      throw createTreatmentStaleError("Стоимость лечения изменилась.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TreatmentCostHasChanged", "Стоимость лечения изменилась."));
     }
     if (!canActorSpendEnergy(sourceActor, energyCost)) {
-      throw createTreatmentStaleError("Недостаточно энергии для лечения.");
+      throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughEnergyForTreatment", "Недостаточно энергии для лечения."));
     }
-    const targetUpdate = Object.assign({}, ...treatmentCommit.targetPlan.actorUpdates);
-    const targetDocumentOptions = {
-      falloutMawSkipDamageStatusSync: true,
-      falloutMawLimbCapSync: true,
-      falloutMawMedicineNoTool: true
-    };
-    const updateEntries = [];
-    if (energyCost > 0) {
-      const energyResource = sourceActor.system?.resources?.[ENERGY_RESOURCE_KEY];
-      const nextEnergy = Math.max(toInteger(energyResource?.min), getActorEnergy(sourceActor) - energyCost);
-      if (sourceActor === targetActor) targetUpdate[`system.resources.${ENERGY_RESOURCE_KEY}.value`] = nextEnergy;
-      else {
-        updateEntries.push({
-          document: sourceActor,
-          updates: { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextEnergy },
-          documentOptions: { falloutMawMedicineNoTool: true }
+    await runActorEnergyMutation(sourceActor, async () => {
+      const targetUpdate = Object.assign({}, ...treatmentCommit.targetPlan.actorUpdates);
+      const targetDocumentOptions = {
+        falloutMawSkipDamageStatusSync: true,
+        falloutMawLimbCapSync: true,
+        falloutMawMedicineNoTool: true
+      };
+      const updateEntries = [];
+      if (energyCost > 0) {
+        const energyPlan = prepareActorEnergySpend(sourceActor, energyCost);
+        if (!energyPlan) throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughEnergyForTreatment", "Недостаточно энергии для лечения."));
+        if (sourceActor === targetActor) Object.assign(targetUpdate, energyPlan.updates);
+        else {
+          updateEntries.push({
+            document: sourceActor,
+            updates: energyPlan.updates,
+            documentOptions: { falloutMawMedicineNoTool: true }
+          });
+        }
+      }
+      if (Object.keys(targetUpdate).length) {
+        updateEntries.unshift({
+          document: targetActor,
+          updates: targetUpdate,
+          documentOptions: targetDocumentOptions
         });
       }
-    }
-    if (Object.keys(targetUpdate).length) {
-      updateEntries.unshift({
-        document: targetActor,
-        updates: targetUpdate,
-        documentOptions: targetDocumentOptions
+      await executeAtomicActorItemUpdates(updateEntries, {
+        reason: "medicine-limb-treatment-no-tool",
+        chainRef
       });
-    }
-    await executeAtomicActorItemUpdates(updateEntries, {
-      reason: "medicine-limb-treatment-no-tool",
-      chainRef
     });
   } else {
     const instrumentUpdate = createToolResourceValueUpdate(instrument, tool, remaining);
@@ -3650,40 +3606,35 @@ async function commitTreatmentToActors({
         chainRef
       });
     } else {
-      const sourceActorUpdates = [];
-      if (currentExperimentalSurgery?.settings.treatmentEnergyCost > 0) {
-        const energyCost = currentExperimentalSurgery.settings.treatmentEnergyCost;
-        const energyResource = sourceActor.system?.resources?.[ENERGY_RESOURCE_KEY];
-        const nextEnergy = Math.max(toInteger(energyResource?.min), getActorEnergy(sourceActor) - energyCost);
-        const energyUpdate = { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextEnergy };
-        if (energyResource && Object.hasOwn(energyResource, "spent")) {
-          energyUpdate[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(
-            0,
-            toInteger(energyResource.max) - nextEnergy
-          );
+      await runActorEnergyMutation(sourceActor, async () => {
+        const sourceActorUpdates = [];
+        if (currentExperimentalSurgery?.settings.treatmentEnergyCost > 0) {
+          const energyCost = currentExperimentalSurgery.settings.treatmentEnergyCost;
+          const energyPlan = prepareActorEnergySpend(sourceActor, energyCost);
+          if (!energyPlan) throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughEnergyForTreatment", "Недостаточно энергии для лечения."));
+          sourceActorUpdates.push(energyPlan.updates);
         }
-        sourceActorUpdates.push(energyUpdate);
-      }
-      await executeInventoryMutation([
-        treatmentCommit.targetPlan,
-        {
-          actor: sourceActor,
-          updates: [
-            { _id: instrument.id, ...instrumentUpdate },
-            ...(emergencyOperationsConsumption ? [{
-              _id: emergencyOperationsConsumption.abilityItem.id,
-              ...emergencyOperationsConsumption.update
-            }] : [])
-          ],
-          actorUpdates: sourceActorUpdates
-        }
-      ], {
-        reason: "medicine-treatment-with-tool",
-        documentOptions: {
-          falloutMawSkipDamageStatusSync: true,
-          falloutMawLimbCapSync: true,
-          ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
-        }
+        await executeInventoryMutation([
+          treatmentCommit.targetPlan,
+          {
+            actor: sourceActor,
+            updates: [
+              { _id: instrument.id, ...instrumentUpdate },
+              ...(emergencyOperationsConsumption ? [{
+                _id: emergencyOperationsConsumption.abilityItem.id,
+                ...emergencyOperationsConsumption.update
+              }] : [])
+            ],
+            actorUpdates: sourceActorUpdates
+          }
+        ], {
+          reason: "medicine-treatment-with-tool",
+          documentOptions: {
+            falloutMawSkipDamageStatusSync: true,
+            falloutMawLimbCapSync: true,
+            ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
+          }
+        });
       });
     }
   }
@@ -3702,7 +3653,7 @@ async function commitTreatmentToActors({
         : {});
     } catch (error) {
       console.error(`${SYSTEM_ID} | Disease immunity effect creation failed after treatment commit`, error);
-      ui.notifications.warn("Болезнь вылечена, но эффект иммунитета создать не удалось.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheDiseaseWasCuredButTheImmunityEffect", "Болезнь вылечена, но эффект иммунитета создать не удалось."));
     }
   }
   let patientDamageApplied = 0;
@@ -3727,7 +3678,7 @@ async function commitTreatmentToActors({
       } catch (error) {
         patientDamageApplied = 0;
         console.error(`${SYSTEM_ID} | Experimental surgery patient damage failed`, error);
-        ui.notifications.warn("Лечение завершено, но побочный урон эксперементальной хирургии применить не удалось.");
+        ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TreatmentCompletedButTheSideEffectDamageFrom", "Лечение завершено, но побочный урон эксперементальной хирургии применить не удалось."));
       }
     }
   }
@@ -3746,7 +3697,7 @@ function prepareEmergencyOperationsConsumption(sourceActor, expected = {}) {
     || String(current.abilityFunction.id ?? "") !== String(expected.functionId ?? "")
     || current.settings.toolEfficiencyPercentBonus !== Math.max(0, Number(expected.toolEfficiencyPercentBonus) || 0)
   ) {
-    throw createTreatmentStaleError("Подготовка экстренной операции изменилась во время лечения.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.EmergencyOperationPreparationChangedDuringTreatment", "Подготовка экстренной операции изменилась во время лечения."));
   }
   const state = foundry.utils.deepClone(getAbilityFixedFunctionState(current.abilityItem));
   const stateKey = getAbilityFixedFunctionStateKey(current.abilityFunction);
@@ -3771,7 +3722,7 @@ function prepareLimbTreatmentCommit(targetActor, {
 } = {}) {
   const limbKey = String(treatmentId ?? "").trim();
   const limb = targetActor?.system?.limbs?.[limbKey];
-  if (!limb || targetActor?.type === "construct") throw new Error("цель лечения не найдена");
+  if (!limb || targetActor?.type === "construct") throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetNotFound", "цель лечения не найдена"));
 
   const limbHealthContext = buildActorLimbHealthContext(targetActor);
   const min = toInteger(limb.min);
@@ -3785,13 +3736,13 @@ function prepareLimbTreatmentCommit(targetActor, {
     || limbHealthContext.prosthesesByLimb.has(limbKey)
     || currentLimbValue >= healingCap
   ) {
-    throw createTreatmentStaleError("Конечность больше не подлежит лечению.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheLimbCanNoLongerBeTreated", "Конечность больше не подлежит лечению."));
   }
   const maxProgress = Math.max(1, healingCap - min);
   const currentProgress = Math.min(maxProgress, Math.max(0, currentLimbValue - min));
   const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
   assertTreatmentProgressIsCurrent(currentProgress, expectedProgress);
-  if (nextProgress < currentProgress) throw new Error("Лечение не может уменьшать здоровье конечности.");
+  if (nextProgress < currentProgress) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentCannotReduceLimbHealth", "Лечение не может уменьшать здоровье конечности."));
   assertTreatmentCompletionIsCurrent(nextProgress, maxProgress, completed);
 
   const expectedLimbValue = Math.min(healingCap, min + nextProgress);
@@ -3802,7 +3753,7 @@ function prepareLimbTreatmentCommit(targetActor, {
     limbHealthContext
   );
   if (healing.previousValue !== currentLimbValue || healing.finalValue !== expectedLimbValue) {
-    throw createTreatmentStaleError("Состояние конечности изменилось или она больше не подлежит лечению.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheLimbSStateHasChangedOrIt", "Состояние конечности изменилось или она больше не подлежит лечению."));
   }
 
   const targetPlan = createEmptyTreatmentPlan(targetActor);
@@ -3835,14 +3786,14 @@ function prepareItemTreatmentCommit(targetActor, {
 } = {}) {
   const treatment = targetActor?.items?.get(String(treatmentId ?? ""));
   if (!treatment || treatment.type !== treatmentType || !["trauma", "disease"].includes(treatmentType)) {
-    throw new Error("цель лечения не найдена");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetNotFound", "цель лечения не найдена"));
   }
 
   const maxProgress = Math.max(1, toInteger(treatment.system?.healingProgressMax));
   const currentProgress = Math.min(maxProgress, Math.max(0, toInteger(treatment.system?.healingProgress)));
   const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
   assertTreatmentProgressIsCurrent(currentProgress, expectedProgress);
-  if (nextProgress < currentProgress) throw new Error("Лечение не может уменьшать прогресс.");
+  if (nextProgress < currentProgress) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentCannotReduceProgress", "Лечение не может уменьшать прогресс."));
   const treatmentCompleted = assertTreatmentCompletionIsCurrent(nextProgress, maxProgress, completed);
 
   const targetPlan = createEmptyTreatmentPlan(targetActor);
@@ -3885,14 +3836,14 @@ function createEmptyTreatmentPlan(actor) {
 
 function assertTreatmentProgressIsCurrent(currentProgress, expectedProgress) {
   if (currentProgress !== toInteger(expectedProgress)) {
-    throw createTreatmentStaleError("Прогресс лечения изменился.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TreatmentProgressHasChanged", "Прогресс лечения изменился."));
   }
 }
 
 function assertTreatmentCompletionIsCurrent(nextProgress, maxProgress, completed) {
   const treatmentCompleted = nextProgress >= maxProgress;
   if (Boolean(completed) !== treatmentCompleted) {
-    throw createTreatmentStaleError("Результат лечения больше не соответствует состоянию цели.");
+    throw createTreatmentStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheTreatmentResultNoLongerMatchesTheTarget", "Результат лечения больше не соответствует состоянию цели."));
   }
   return treatmentCompleted;
 }
@@ -3967,7 +3918,7 @@ function snapshotActorLimbs(actor, limbHealthContext = buildActorLimbHealthConte
       type: "limb",
       key,
       limbKey: key,
-      name: `Здоровье: ${String(limb?.label ?? key)}`,
+      name: auditFormat("FALLOUTMAW.AuditApps.Health_656", { v0: (String(limb?.label ?? key)) }, "Здоровье: {v0}"),
       label: String(limb?.label ?? key),
       img: "icons/svg/heal.svg",
       value,
@@ -3978,7 +3929,7 @@ function snapshotActorLimbs(actor, limbHealthContext = buildActorLimbHealthConte
       healable,
       treatable: healable,
       unavailableReason,
-      statusLabel: unavailableReason || (healingCap < max ? `Доступный предел: ${healingCap}` : "Можно лечить"),
+      statusLabel: unavailableReason || (healingCap < max ? auditFormat("FALLOUTMAW.AuditApps.AvailableLimit", { v0: (healingCap) }, "Доступный предел: {v0}") : auditLocalize("FALLOUTMAW.AuditApps.CanBeTreated", "Можно лечить")),
       healingDifficulty: LIMB_TREATMENT_DIFFICULTY,
       healingToolClass: LIMB_TREATMENT_TOOL_CLASS,
       healingSkillKey: LIMB_TREATMENT_SKILL_KEY,
@@ -3996,11 +3947,11 @@ function snapshotActorLimbs(actor, limbHealthContext = buildActorLimbHealthConte
 }
 
 function getLimbTreatmentUnavailableReason({ actorType = "", value = 0, max = 0, healingCap = 0, missing = false, prosthesis = null } = {}) {
-  if (actorType === "construct") return "Для механизмов используется ремонт.";
-  if (missing) return "Конечность отсутствует.";
-  if (prosthesis) return "Установленный протез лечению не подлежит.";
-  if (value >= healingCap && healingCap < max) return "Сначала вылечите ограничивающую травму.";
-  if (value >= healingCap) return "Здоровье уже восстановлено до доступного предела.";
+  if (actorType === "construct") return auditLocalize("FALLOUTMAW.AuditApps.MechanicalTargetsRequireRepair", "Для механизмов используется ремонт.");
+  if (missing) return auditLocalize("FALLOUTMAW.AuditApps.TheLimbIsMissing", "Конечность отсутствует.");
+  if (prosthesis) return auditLocalize("FALLOUTMAW.AuditApps.AnInstalledProsthesisCannotBeTreated", "Установленный протез лечению не подлежит.");
+  if (value >= healingCap && healingCap < max) return auditLocalize("FALLOUTMAW.AuditApps.TreatTheLimitingTraumaFirst", "Сначала вылечите ограничивающую травму.");
+  if (value >= healingCap) return auditLocalize("FALLOUTMAW.AuditApps.HealthHasAlreadyBeenRestoredToTheAvailable", "Здоровье уже восстановлено до доступного предела.");
   return "";
 }
 
@@ -4102,7 +4053,7 @@ function snapshotTrauma(item) {
     id: item.id,
     type: "trauma",
     name: item.name,
-    img: normalizeImagePath(item.img, "icons/svg/blood.svg"),
+    img: normalizeImagePath(item.img, "systems/fallout-maw/assets/System/Traumas/trauma-default.webp"),
     limbKey: String(system.limbKey ?? "").trim(),
     limbKeys,
     limbLabel: system.limbLabel ?? "",
@@ -4127,7 +4078,7 @@ function snapshotDisease(item) {
     name: item.name,
     img: normalizeImagePath(item.img, "icons/svg/biohazard.svg"),
     sources: [{
-      summary: `${system.needLabel ?? system.needKey}: ${thresholdPercent}% / уровень ${level}`
+      summary: auditFormat("FALLOUTMAW.AuditApps.Level", { v0: (system.needLabel ?? system.needKey), v1: (thresholdPercent), v2: (level) }, "{v0}: {v1}% / уровень {v2}")
     }],
     healingDifficulty: toInteger(system.healingDifficulty),
     healingToolClass: String(system.healingToolClass ?? "D"),
@@ -4161,14 +4112,14 @@ function prepareTraumaSourceEntries(item) {
 }
 
 async function requestMedicineSocket(action, payload = {}, gm = getResponsibleGM(), { requestId = "" } = {}) {
-  if (!gm) throw new Error("нет активного GM");
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NoActiveGM", "нет активного GM"));
   const resolvedRequestId = String(requestId ?? "").trim() || foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingMedicineSocketRequests.delete(resolvedRequestId);
-      const error = new Error("GM не ответил на запрос медицины");
+      const error = new Error(auditLocalize("FALLOUTMAW.AuditApps.TheGMDidNotRespondToTheMedical", "GM не ответил на запрос медицины"));
       error.code = "authority-timeout";
       reject(error);
     }, MEDICINE_SOCKET_TIMEOUT);
@@ -4204,7 +4155,7 @@ async function handleMedicineSocketMessage(message = {}, senderUserId = "") {
     window.clearTimeout(pending.timeout);
     pendingMedicineSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
-    else pending.reject(new Error(message.error || "ошибка GM-сокета медицины"));
+    else pending.reject(new Error(message.error || auditLocalize("FALLOUTMAW.AuditApps.MedicalGMSocketError", "ошибка GM-сокета медицины")));
     return;
   }
 
@@ -4238,7 +4189,7 @@ async function handleMedicineSocketMessage(message = {}, senderUserId = "") {
 function handleMedicineSocketRequestOnce(message = {}) {
   const requestId = String(message.requestId ?? "").trim();
   const requesterUserId = String(message.requesterUserId ?? "").trim();
-  if (!requestId || !requesterUserId) throw new Error("некорректный запрос медицины");
+  if (!requestId || !requesterUserId) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidMedicalRequest", "некорректный запрос медицины"));
   const key = `${requesterUserId}:${requestId}`;
   const existing = handledMedicineSocketRequests.get(key);
   if (existing) return existing.promise;
@@ -4277,7 +4228,7 @@ function pruneHandledMedicineSocketRequests() {
 
 async function handleMedicineSocketRequest(action, payload = {}, requesterUserId = "", operationId = "") {
   const actor = await fromUuid(String(payload.actorUuid ?? payload.targetActorUuid ?? ""));
-  if (!actor) throw new Error("цель не найдена");
+  if (!actor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TargetNotFound", "цель не найдена"));
 
   if (action === "getTargetContext") {
     const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
@@ -4394,20 +4345,20 @@ async function handleMedicineSocketRequest(action, payload = {}, requesterUserId
     };
   }
 
-  throw new Error(`неизвестное действие медицины: ${action}`);
+  throw new Error(auditFormat("FALLOUTMAW.AuditApps.UnknownMedicalAction", { v0: (action) }, "неизвестное действие медицины: {v0}"));
 }
 
 function assertMedicineSocketActorOwner(actor, requesterUserId) {
   const user = game.users?.get?.(String(requesterUserId ?? ""))
     ?? (game.users?.contents ?? []).find(entry => entry.id === requesterUserId);
   if (!user || (!user.isGM && !actor?.testUserPermission?.(user, "OWNER"))) {
-    throw new Error("нет прав на использование инструмента");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NoPermissionToUseTheTool", "нет прав на использование инструмента"));
   }
 }
 
 async function getMedicineSocketSourceActor(actorUuid = "", requesterUserId = "") {
   const actor = await fromUuid(String(actorUuid ?? "").trim());
-  if (!actor || actor.documentName !== "Actor") throw new Error("источник медицины не найден");
+  if (!actor || actor.documentName !== "Actor") throw new Error(auditLocalize("FALLOUTMAW.AuditApps.MedicalSourceNotFound", "источник медицины не найден"));
   assertMedicineSocketActorOwner(actor, requesterUserId);
   return actor;
 }
@@ -4420,7 +4371,7 @@ function getMedicineTokenUuid(token = null) {
 async function resolveMedicineTokenForActor(tokenUuid = "", actor = null, { required = false } = {}) {
   const uuid = String(tokenUuid ?? "").trim();
   if (!uuid) {
-    if (required) throw new Error("токен участника медицины не найден");
+    if (required) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.MedicalParticipantTokenNotFound", "токен участника медицины не найден"));
     return null;
   }
   const token = await fromUuid(uuid);
@@ -4429,7 +4380,7 @@ async function resolveMedicineTokenForActor(tokenUuid = "", actor = null, { requ
     || !token.actor
     || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
   ) {
-    throw new Error("токен не соответствует участнику медицины");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheMedicalParticipant", "токен не соответствует участнику медицины"));
   }
   return token;
 }
@@ -4447,40 +4398,32 @@ function mixRgb(from, to, ratio) {
 async function postTreatmentResultChat(actor, { treatment, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed, experimentalSurgery = null, emergencyOperations = null }) {
   const progressOffset = treatment.type === "limb" ? toInteger(treatment.min) : 0;
   const displayProgress = value => toInteger(value) + progressOffset;
-  const resourceLabel = instrument?.noTool ? "энергия" : "запас";
-  const spentLabel = instrument?.noTool ? "Потрачено энергии" : "Потрачено запаса";
+  const resourceLabel = instrument?.noTool ? auditLocalize("FALLOUTMAW.AuditApps.Energy", "энергия") : auditLocalize("FALLOUTMAW.AuditApps.Supplies", "запас");
+  const spentLabel = instrument?.noTool ? auditLocalize("FALLOUTMAW.AuditApps.EnergySpent", "Потрачено энергии") : auditLocalize("FALLOUTMAW.AuditApps.SuppliesConsumed", "Потрачено запаса");
   const completionLabel = treatment.type === "disease"
-    ? "Болезнь вылечена."
+    ? auditLocalize("FALLOUTMAW.AuditApps.DiseaseCured", "Болезнь вылечена.")
     : treatment.type === "limb"
-      ? "Конечность восстановлена до доступного предела."
-      : "Травма полностью вылечена.";
-  const rows = entries.map(entry => `
-    <li>
-      Проверка ${entry.index}/${entry.total}: ${entry.resultLabel},
-      +${entry.progress} прогресса,
-      ${resourceLabel} ${entry.charges},
-      эффективность ${formatNumber(entry.efficiency)}%,
-      итог ${displayProgress(entry.currentProgress)}/${displayProgress(maxProgress)}
-    </li>
-  `).join("");
+      ? auditLocalize("FALLOUTMAW.AuditApps.LimbRestoredToTheAvailableLimit", "Конечность восстановлена до доступного предела.")
+      : auditLocalize("FALLOUTMAW.AuditApps.TraumaFullyTreated", "Травма полностью вылечена.");
+  const rows = entries.map(entry => auditFormat("FALLOUTMAW.AuditApps.CheckProgressEffectivenessTotal", { v0: (entry.index), v1: (entry.total), v2: (entry.resultLabel), v3: (entry.progress), v4: (resourceLabel), v5: (entry.charges), v6: (formatNumber(entry.efficiency)), v7: (displayProgress(entry.currentProgress)), v8: (displayProgress(maxProgress)) }, "\n    <li>\n      Проверка {v0}/{v1}: {v2},\n      +{v3} прогресса,\n      {v4} {v5},\n      эффективность {v6}%,\n      итог {v7}/{v8}\n    </li>\n  ")).join("");
   await postMedicineChat(actor, {
-    title: `Лечение: ${treatment.name}`,
+    title: auditFormat("FALLOUTMAW.AuditApps.Treatment", { v0: (treatment.name) }, "Лечение: {v0}"),
     tone: completed ? "success" : "standard",
     lines: [
-      `Инструмент: ${instrument.name}`,
-      `Прогресс: ${displayProgress(initialProgress)}/${displayProgress(maxProgress)} -> ${displayProgress(finalProgress)}/${displayProgress(maxProgress)}`,
+      auditFormat("FALLOUTMAW.AuditApps.Tool", { v0: (instrument.name) }, "Инструмент: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.Progress", { v0: (displayProgress(initialProgress)), v1: (displayProgress(maxProgress)), v2: (displayProgress(finalProgress)), v3: (displayProgress(maxProgress)) }, "Прогресс: {v0}/{v1} -> {v2}/{v3}"),
       `${spentLabel}: ${spentCharges}`,
       experimentalSurgery
-        ? `Эксперементальная хирургия: -${Math.max(0, toInteger(experimentalSurgery.energyCost))} энергии.`
+        ? auditFormat("FALLOUTMAW.AuditApps.ExperimentalSurgeryEnergy", { v0: (Math.max(0, toInteger(experimentalSurgery.energyCost))) }, "Эксперементальная хирургия: -{v0} энергии.")
         : "",
       experimentalSurgery?.extraSupplyTriggered
-        ? `Повышенный расход инструмента: x${Math.max(1, toInteger(experimentalSurgery.supplyCostMultiplier))} (дополнительно ${Math.max(0, toInteger(experimentalSurgery.extraSupplySpent))}).`
+        ? auditFormat("FALLOUTMAW.AuditApps.IncreasedToolConsumptionXAdditional", { v0: (Math.max(1, toInteger(experimentalSurgery.supplyCostMultiplier))), v1: (Math.max(0, toInteger(experimentalSurgery.extraSupplySpent))) }, "Повышенный расход инструмента: x{v0} (дополнительно {v1}).")
         : "",
       experimentalSurgery?.patientDamage > 0
-        ? `Осложнение: пациент потерял ${Math.max(0, toInteger(experimentalSurgery.patientDamage))} здоровья.`
+        ? auditFormat("FALLOUTMAW.AuditApps.ComplicationThePatientLostHealth", { v0: (Math.max(0, toInteger(experimentalSurgery.patientDamage))) }, "Осложнение: пациент потерял {v0} здоровья.")
         : "",
       emergencyOperations
-        ? `Экстренные операции: +${formatNumber(emergencyOperations.toolEfficiencyPercentBonus)}% эффективности инструмента.`
+        ? auditFormat("FALLOUTMAW.AuditApps.EmergencyOperationsToolEffectiveness", { v0: (formatNumber(emergencyOperations.toolEfficiencyPercentBonus)) }, "Экстренные операции: +{v0}% эффективности инструмента.")
         : "",
       `<ul>${rows}</ul>`,
       completed ? completionLabel : ""
@@ -4494,17 +4437,17 @@ async function postMassTreatmentChat(actor, summary = {}) {
     ? `<ul>${reasons.map(reason => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>`
     : "";
   await postMedicineChat(actor, {
-    title: "Массовое лечение",
+    title: auditLocalize("FALLOUTMAW.AuditApps.BulkTreatment", "Массовое лечение"),
     tone: summary.stopped ? "failure" : toInteger(summary.skipped) > 0 ? "standard" : "success",
     lines: [
-      summary.targetName ? `Цель: ${summary.targetName}` : "",
-      `Последовательных операций: ${Math.max(0, toInteger(summary.attempted))}`,
-      `Полностью вылечено травм: ${Math.max(0, toInteger(summary.completedTraumas))}`,
-      `Получено прогресса лечения травм: ${Math.max(0, toInteger(summary.restoredTraumaProgress))}`,
-      `Частей тела восстановлено до доступного предела: ${Math.max(0, toInteger(summary.completedLimbs))}`,
-      `Восстановлено здоровья частей тела: ${Math.max(0, toInteger(summary.restoredLimbHealth))}`,
-      `Потрачено запаса инструментов: ${Math.max(0, toInteger(summary.charges))}`,
-      `Пропущено целей: ${Math.max(0, toInteger(summary.skipped))}`,
+      summary.targetName ? auditFormat("FALLOUTMAW.AuditApps.Target_689", { v0: (summary.targetName) }, "Цель: {v0}") : "",
+      auditFormat("FALLOUTMAW.AuditApps.SequentialOperations", { v0: (Math.max(0, toInteger(summary.attempted))) }, "Последовательных операций: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.TraumasFullyTreated", { v0: (Math.max(0, toInteger(summary.completedTraumas))) }, "Полностью вылечено травм: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.TraumaTreatmentProgressGained", { v0: (Math.max(0, toInteger(summary.restoredTraumaProgress))) }, "Получено прогресса лечения травм: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.BodyPartsRestoredToTheAvailableLimit", { v0: (Math.max(0, toInteger(summary.completedLimbs))) }, "Частей тела восстановлено до доступного предела: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.BodyPartHealthRestored", { v0: (Math.max(0, toInteger(summary.restoredLimbHealth))) }, "Восстановлено здоровья частей тела: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.ToolSuppliesConsumed", { v0: (Math.max(0, toInteger(summary.charges))) }, "Потрачено запаса инструментов: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.TargetsSkipped", { v0: (Math.max(0, toInteger(summary.skipped))) }, "Пропущено целей: {v0}"),
       reasonList
     ].filter(Boolean)
   });
@@ -4537,10 +4480,10 @@ function escapeAttribute(value) {
 }
 
 function getTreatmentResultLabel(resultKey) {
-  if (resultKey === "criticalSuccess") return "критический успех";
-  if (resultKey === "success") return "успех";
-  if (resultKey === "criticalFailure") return "критический провал";
-  return "провал";
+  if (resultKey === "criticalSuccess") return auditLocalize("FALLOUTMAW.AuditApps.CriticalSuccess", "критический успех");
+  if (resultKey === "success") return auditLocalize("FALLOUTMAW.AuditApps.Success", "успех");
+  if (resultKey === "criticalFailure") return auditLocalize("FALLOUTMAW.AuditApps.CriticalFailure", "критический провал");
+  return auditLocalize("FALLOUTMAW.AuditApps.Failure", "провал");
 }
 
 function isSuccessfulSkillResult(resultKey = "") {
@@ -4579,8 +4522,8 @@ function getMedicineSkillResolution(
 
 function getMedicineSkillThresholdMessage(resolution = {}, treatmentName = "") {
   const name = String(treatmentName ?? "").trim();
-  const skillLabel = getHealingSkillLabel(resolution.skillKey) || "требуемого навыка";
-  return `Для лечения${name ? ` «${name}»` : ""} нужно ${toInteger(resolution.difficulty)} ${skillLabel} (сейчас ${toInteger(resolution.skillValue)}).`;
+  const skillLabel = getHealingSkillLabel(resolution.skillKey) || auditLocalize("FALLOUTMAW.AuditApps.RequiredSkill", "требуемого навыка");
+  return auditFormat("FALLOUTMAW.AuditApps.TreatmentRequiresCurrently", { v0: (name ? ` «${name}»` : ""), v1: (toInteger(resolution.difficulty)), v2: (skillLabel), v3: (toInteger(resolution.skillValue)) }, "Для лечения{v0} нужно {v1} {v2} (сейчас {v3}).");
 }
 
 function getMedicineInstallationSkillThresholdMessage(
@@ -4590,8 +4533,8 @@ function getMedicineInstallationSkillThresholdMessage(
 ) {
   const type = String(installationType ?? "").trim();
   const name = String(itemName ?? "").trim();
-  const skillLabel = getHealingSkillLabel(resolution.skillKey) || "требуемого навыка";
-  return `Для установки${type ? ` ${type}` : ""}${name ? ` «${name}»` : ""} нужно ${toInteger(resolution.difficulty)} ${skillLabel} (сейчас ${toInteger(resolution.skillValue)}).`;
+  const skillLabel = getHealingSkillLabel(resolution.skillKey) || auditLocalize("FALLOUTMAW.AuditApps.RequiredSkill", "требуемого навыка");
+  return auditFormat("FALLOUTMAW.AuditApps.InstallationRequiresCurrently", { v0: (type ? ` ${type}` : ""), v1: (name ? ` «${name}»` : ""), v2: (toInteger(resolution.difficulty)), v3: (skillLabel), v4: (toInteger(resolution.skillValue)) }, "Для установки{v0}{v1} нужно {v2} {v3} (сейчас {v4}).");
 }
 
 function getActorItemsByType(actor, type = "") {
@@ -4637,11 +4580,11 @@ function validateConfiguredMedicineToolKey(value = "") {
     configured.includes(".")
     || !getToolSettings().some(entry => entry.key === configured)
   ) {
-    throw new Error("в настройках медицины указан некорректный тип инструмента");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidToolTypeInMedicineSettings", "в настройках медицины указан некорректный тип инструмента"));
   }
   const requested = String(value ?? configured).trim() || configured;
   if (requested !== configured) {
-    throw new Error("тип медицинского инструмента не соответствует настройкам действия");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.MedicalToolTypeDoesNotMatchActionSettings", "тип медицинского инструмента не соответствует настройкам действия"));
   }
   return configured;
 }
@@ -4653,7 +4596,7 @@ function assertMedicineTokenMatchesActor(token = null, actor = null) {
     || !token.actor
     || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
   ) {
-    throw new Error("токен не соответствует участнику медицины");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheMedicalParticipant", "токен не соответствует участнику медицины"));
   }
 }
 

@@ -1,3 +1,4 @@
+import { rerollUnexpectedInitiative } from "../abilities/unexpected-impulse.mjs";
 import {
   TURN_CONVERSION_MODES,
   prepareActorTurnEnd,
@@ -1081,6 +1082,7 @@ export class FalloutMaWCombat extends Combat {
     const updates = [];
     const messages = [];
     const initiativeBatchId = foundry.utils.randomID();
+    const initiativeRolls = new Map();
     for (const [i, id] of ids.entries()) {
       const combatant = this.combatants.get(id);
       if (!combatant?.isOwner) continue;
@@ -1151,14 +1153,16 @@ export class FalloutMaWCombat extends Combat {
         flavor: game.i18n.format("COMBAT.RollsInitiative", { name: foundry.utils.escapeHTML(combatant.name) }),
         flags: { "core.initiativeRoll": true }
       }, messageOptions);
-      const chatData = await roll.toMessage(messageData, {
-        messageMode: messageMode ?? (combatant.hidden ? "gm" : undefined),
-        create: false
-      });
-      if (i > 0) chatData.sound = null;
-      messages.push(chatData);
+      initiativeRolls.set(id, { roll, messageData, messageMode: messageMode ?? (combatant.hidden ? "gm" : undefined), index: i });
     }
     if (!updates.length) return this;
+    await rerollUnexpectedInitiative(this, updates, initiativeRolls);
+    for (const record of initiativeRolls.values()) {
+      if (record.rerolls) record.messageData.flavor += ` (Неожиданный порыв: перебросов ${record.rerolls})`;
+      const chatData = await record.roll.toMessage(record.messageData, { messageMode: record.messageMode, create: false });
+      if (record.index > 0) chatData.sound = null;
+      messages.push(chatData);
+    }
 
     const updateOptions = { turnEvents: false };
     if (!updateTurn) updateOptions.combatTurn = this.turn;

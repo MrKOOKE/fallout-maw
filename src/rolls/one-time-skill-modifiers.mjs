@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
@@ -22,7 +23,7 @@ export function registerOneTimeSkillModifierHooks() {
 
 export function getPendingOneTimeSkillModifierEffects(actor, predicate = null) {
   return Array.from(actor?.effects ?? []).filter(effect => {
-    if (effect?.disabled || effectClaims.has(effect.id)) return false;
+    if (effect?.disabled || effectClaims.has(getEffectClaimKey(actor, effect.id))) return false;
     const data = effect.getFlag?.(SYSTEM_ID, ONE_TIME_SKILL_MODIFIER_FLAG_KEY);
     if (getOneTimeSkillModifierRemainingUses(data) <= 0) return false;
     return typeof predicate !== "function" || predicate(data, effect);
@@ -39,7 +40,7 @@ function applyOneTimeSkillModifiers(check = {}) {
     if (effect?.disabled) return false;
     const data = effect.getFlag?.(SYSTEM_ID, ONE_TIME_SKILL_MODIFIER_FLAG_KEY);
     if (getOneTimeSkillModifierRemainingUses(data) <= 0 || String(data?.skillKey ?? "") !== skillKey) return false;
-    const claim = effectClaims.get(effect.id);
+    const claim = effectClaims.get(getEffectClaimKey(actor, effect.id));
     if (!claim) return true;
     return Boolean(weaponAttackId) && claim.weaponAttackId === weaponAttackId;
   });
@@ -55,9 +56,11 @@ function applyOneTimeSkillModifiers(check = {}) {
       modifier += value;
     }
     effectIds.push(effect.id);
-    if (!effectClaims.has(effect.id)) {
-      effectClaims.set(effect.id, {
+    const claimKey = getEffectClaimKey(actor, effect.id);
+    if (!effectClaims.has(claimKey)) {
+      effectClaims.set(claimKey, {
         actorUuid: String(actor.uuid ?? ""),
+        effectId: effect.id,
         weaponAttackId
       });
     }
@@ -68,7 +71,7 @@ function applyOneTimeSkillModifiers(check = {}) {
   check.oneTimeSkillModifierEffectIds = effectIds;
   if (modifier) check.modifiers?.push?.({
     key: ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
-    label: "Одноразовый модификатор",
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R1176", "Одноразовый модификатор"),
     value: modifier
   });
 }
@@ -86,7 +89,7 @@ async function consumeOneTimeSkillModifiers(outcome = {}) {
   } catch (error) {
     console.error("Fallout MaW | Failed to consume one-time skill modifiers", error);
   } finally {
-    for (const effectId of effectIds) effectClaims.delete(effectId);
+    for (const effectId of effectIds) effectClaims.delete(getEffectClaimKey(actor, effectId));
   }
 }
 
@@ -102,7 +105,7 @@ async function consumeOneTimeSkillModifiersForAttack(context = {}) {
       claim.weaponAttackId === weaponAttackId
       && claim.actorUuid === actorUuid
     ))
-    .map(([effectId]) => effectId);
+    .map(([_claimKey, claim]) => claim.effectId);
   if (!claimedEffectIds.length) return;
   const existingEffectIds = claimedEffectIds.filter(effectId => actor.effects?.get?.(effectId));
 
@@ -111,8 +114,12 @@ async function consumeOneTimeSkillModifiersForAttack(context = {}) {
   } catch (error) {
     console.error("Fallout MaW | Failed to consume attack-scoped skill modifiers", error);
   } finally {
-    for (const effectId of claimedEffectIds) effectClaims.delete(effectId);
+    for (const effectId of claimedEffectIds) effectClaims.delete(getEffectClaimKey(actor, effectId));
   }
+}
+
+function getEffectClaimKey(actor, effectId) {
+  return `${actor?.uuid ?? actor?.id ?? ""}.ActiveEffect.${effectId}`;
 }
 
 async function consumeOneTimeSkillModifierEffectIds(actor, effectIds = []) {

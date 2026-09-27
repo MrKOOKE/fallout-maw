@@ -145,10 +145,10 @@ function registerCombatCarouselSettings() {
   registerSetting("portraitImageBorder", {
     scope: "world",
     type: String,
-    default: getMainPresetDefault("portraitImageBorder", `systems/${MODULE_ID}/assets/combat-carousel/border.png`),
+    default: getMainPresetDefault("portraitImageBorder", `systems/${MODULE_ID}/assets/System/CombatCarousel/carousel-portrait-border.webp`),
     onChange: refreshCombatCarousel
   });
-  registerSetting("portraitImageBackground", { scope: "world", type: String, default: getMainPresetDefault("portraitImageBackground", "ui/denim075.png"), onChange: refreshCombatCarousel });
+  registerSetting("portraitImageBackground", { scope: "world", type: String, default: getMainPresetDefault("portraitImageBackground", "systems/fallout-maw/assets/System/CombatCarousel/carousel-portrait-background.webp"), onChange: refreshCombatCarousel });
   registerSetting("showSystemIcons", {
     scope: "world",
     type: Number,

@@ -1,10 +1,19 @@
+import { localize } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   FACTION_MATRIX_SETTING,
   FACTION_SETTINGS_SETTING
 } from "./constants.mjs";
 
-export const DEFAULT_FACTION_NAME = "\u041d\u0435\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u043e";
+// This legacy sentinel is persisted in actor flags and faction matrix keys.
+// Only its UI label may follow the active language.
+export const DEFAULT_FACTION_NAME = "Неопределено";
+
+export function getFactionDisplayLabel(name) {
+  return name === DEFAULT_FACTION_NAME
+    ? localize("FALLOUTMAW.AuditSystem.Text055", DEFAULT_FACTION_NAME)
+    : String(name ?? "");
+}
 
 const RELATIONS = new Set(["ally", "neutral", "enemy"]);
 
@@ -173,6 +182,7 @@ export function getActorFactionRelation(sourceActor, targetActor) {
 export function registerFactionApi() {
   const api = {
     defaultFactionName: DEFAULT_FACTION_NAME,
+    getFactionDisplayLabel,
     getFactions: getFactionSettings,
     setFactions: setFactionSettings,
     getMatrix: getFactionMatrix,

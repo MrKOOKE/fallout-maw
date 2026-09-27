@@ -22,21 +22,21 @@
   <div class="fallout-maw-action-cell"><strong>{{healingSkillLabel}}</strong></div>
   <div class="fallout-maw-action-cell fallout-maw-action-cell--button">
     <button type="button" data-action="startTreatment" data-treatment-type="{{type}}" data-treatment-id="{{id}}" {{#unless treatable}}disabled{{/unless}}>
-      {{#if active}}Скрыть{{else}}Лечение{{/if}}
+      {{#if active}}{{localize 'FALLOUTMAW.AuditTemplates.Text10729118a0e1'}}{{else}}{{localize 'FALLOUTMAW.Item.FirstAidHealing'}}{{/if}}
     </button>
   </div>
 </div>
 {{#if active}}
 <div class="fallout-maw-action-subtable">
-  <p class="fallout-maw-medicine-instrument-heading"><span aria-hidden="true">↳</span> Выберите инструмент</p>
+  <p class="fallout-maw-medicine-instrument-heading"><span aria-hidden="true">↳</span> {{localize 'FALLOUTMAW.AuditTemplates.Text34ceb935a1ca'}}</p>
   <div class="fallout-maw-action-row fallout-maw-action-row--tool fallout-maw-action-row--head">
-    <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
-    <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Название</div>
-    <div class="fallout-maw-action-cell">КИ</div>
-    <div class="fallout-maw-action-cell">Эффективность</div>
-    <div class="fallout-maw-action-cell">Запас</div>
-    <div class="fallout-maw-action-cell">Навык</div>
-    <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Действие</div>
+    <div class="fallout-maw-action-cell fallout-maw-action-cell--image">{{localize 'FALLOUTMAW.AuditTemplates.Text23d154f2f1d1'}}</div>
+    <div class="fallout-maw-action-cell fallout-maw-action-cell--name">{{localize 'FALLOUTMAW.Common.Label'}}</div>
+    <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.AuditTemplates.Textc6019eacffb5'}}</div>
+    <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.FirstAidChatEffectiveness'}}</div>
+    <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.EnergySourceReserve'}}</div>
+    <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Common.Skill'}}</div>
+    <div class="fallout-maw-action-cell fallout-maw-action-cell--button">{{localize 'FALLOUTMAW.Ability.Actions.Type'}}</div>
   </div>
   {{#each availableInstruments}}
   <div class="fallout-maw-action-row fallout-maw-action-row--tool {{#unless usable}}is-disabled{{/unless}}">
@@ -53,12 +53,12 @@
     <div class="fallout-maw-action-cell"><small>{{skillRequirement}}</small></div>
     <div class="fallout-maw-action-cell fallout-maw-action-cell--button">
       <button type="button" data-action="treatWithInstrument" data-treatment-type="{{../type}}" data-treatment-id="{{../id}}" data-instrument-id="{{id}}" {{#unless usable}}disabled{{/unless}}>
-        Выбрать
+        {{localize 'FALLOUTMAW.AuditTemplates.Textfe4b0c80f09e'}}
       </button>
     </div>
   </div>
   {{else}}
-  <p class="fallout-maw-empty-list">Доступных инструментов нет.</p>
+  <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text83735c828cdd'}}</p>
   {{/each}}
 </div>
 {{/if}}

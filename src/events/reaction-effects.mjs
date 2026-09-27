@@ -332,7 +332,7 @@ export function buildEventReactionEffectData({
   const data = {
     type: "base",
     name: String(sourceItem?.name ?? "Event Reaction"),
-    img: String(sourceItem?.img ?? "icons/svg/aura.svg"),
+    img: String(sourceItem?.img ?? "systems/fallout-maw/assets/System/Abilities/ability-default.webp"),
     origin: effectOriginUuid,
     transfer: false,
     disabled: false,

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import { getToolSettings, setToolSettings } from "../settings/accessors.mjs";
@@ -37,7 +38,7 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройка инструментов";
+    return auditLocalize("FALLOUTMAW.AuditApps.ToolSettings", "Настройка инструментов");
   }
 
   async _prepareContext(options) {
@@ -57,7 +58,7 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
     this.#validateTools(tools);
     await setToolSettings(tools);
     this.tools = getToolSettings();
-    ui.notifications.info("Настройка инструментов сохранена.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ToolSettingsSaved", "Настройка инструментов сохранена."));
     return this.forceRender();
   }
 
@@ -66,7 +67,7 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
     this.tools = this.#readToolsFromForm();
     this.tools.push({
       key: this.#getUniqueKey("newTool"),
-      label: "Новый инструмент"
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewTool", "Новый инструмент")
     });
     return this.forceRender();
   }
@@ -95,8 +96,8 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
     const keys = new Set();
     for (const [index, tool] of tools.entries()) {
       const key = String(tool.key ?? "").trim();
-      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(`Инструмент ${index + 1}: ключ должен быть латинским идентификатором.`);
-      if (keys.has(key)) throwValidationError(`Ключ инструмента "${key}" повторяется.`);
+      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(auditFormat("FALLOUTMAW.AuditApps.ToolTheKeyMustBeALatinIdentifier", { v0: (index + 1) }, "Инструмент {v0}: ключ должен быть латинским идентификатором."));
+      if (keys.has(key)) throwValidationError(auditFormat("FALLOUTMAW.AuditApps.DuplicateToolKey", { v0: (key) }, "Ключ инструмента \"{v0}\" повторяется."));
       keys.add(key);
     }
   }

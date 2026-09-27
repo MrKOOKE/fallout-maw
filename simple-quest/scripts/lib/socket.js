@@ -18,34 +18,40 @@ export class Socket {
 
     static __$reserved = ["__$eventName", "__$response", "__$onMessage", "__$parseUsers", "register", "USERS"];
 
-    static async __$onMessage(data) {
+    static async __$onMessage(data, senderUserId = "") {
         if (data?.scope !== SOCKET_SCOPE || !data.__$socketOptions) return;
+        const sender = game.users.get(String(senderUserId ?? ""));
+        if (!sender) return;
         const options = data.__$socketOptions;
 
         if (options.__$storeName) {
+            if (!Object.hasOwn(this.__$stores, options.__$storeName)) return;
+            const store = this.__$stores[options.__$storeName];
+            if (!store || options.user !== sender.id) return;
             if (options.__$request) {
-                const store = this.__$stores[options.__$storeName];
                 const _isLive = store._isLive;
                 if (!_isLive) return;
                 game.socket.emit(SOCKET_CHANNEL, { scope: SOCKET_SCOPE, __$socketOptions: { __$storeName: options.__$storeName, user: game.user.id }, data: store.getData() });
             } else {
-                this.__$stores[options.__$storeName].synchronize(data.data, game.users.get(options.user));
+                store.synchronize(data.data, sender);
             }
             return;
         }
 
         if (options.__$eventName === "__$response") {
             const key = options.__$responseKey;
-            if (this.__$promises[key]) {
-                this.__$promises[key].resolve({ user: game.users.get(options.__$userId), response: data.result });
+            if (Object.hasOwn(this.__$promises, key) && this.__$promises[key]?.responderUserId === sender.id && options.__$userId === sender.id) {
+                this.__$promises[key].resolve({ user: sender, response: data.result });
                 delete this.__$promises[key];
             }
             return;
         }
-        if (!options.users.includes(game.user.id)) return;
+        if (!Array.isArray(options.users) || !options.users.includes(game.user.id)) return;
+        if (!Object.hasOwn(this.__$callbacks, options.__$eventName)) return;
         const callback = this.__$callbacks[options.__$eventName];
-        delete data.__$socketOptions;
-        const result = await callback(data);
+        if (typeof callback !== "function") return;
+        const { __$socketOptions, ...payload } = data;
+        const result = await callback(payload, sender);
         if (options.response) {
             const key = `${options.__$eventId}.${game.user.id}`;
             const data = { __$socketOptions: { __$eventName: "__$response", __$responseKey: key, __$userId: game.user.id }, result };
@@ -70,7 +76,7 @@ export class Socket {
         } else if (users === this.USERS.OTHERS) {
             options.users = active.filter((u) => u.id !== game.user.id).map((u) => u.id);
         } else if (users === this.USERS.FIRSTGM) {
-            options.users = game.users.activeGM.id;
+            options.users = game.users.activeGM ? [game.users.activeGM.id] : [];
         } else if (users === this.USERS.SELF) {
             options.users = [game.user.id];
         }
@@ -90,12 +96,13 @@ export class Socket {
         this.__$callbacks[eventName] = callback;
 
         const wrappedCallback = async (data, options = {}) => {
-            options = this.__$parseUsers(options);
-            options = { ...defaultOptions, ...options };
+            const supplied = typeof options === "string" || Array.isArray(options) ? { users: options } : options;
+            options = this.__$parseUsers({ ...defaultOptions, ...supplied });
             const eventId = foundry.utils.randomID();
             options.__$eventId = eventId;
             options.__$eventName = eventName;
             const promises = [];
+            let responseTimeout;
             const local = options.users.includes(game.user.id);
             options.users = options.users.filter((u) => u !== game.user.id);
             if (options.response) {
@@ -103,12 +110,12 @@ export class Socket {
                     promises.push(
                         new Promise((resolve, reject) => {
                             const key = `${eventId}.${user}`;
-                            this.__$promises[key] = { resolve, reject };
+                            this.__$promises[key] = { resolve, reject, responderUserId: user };
                         }),
                     );
                 }
 
-                setTimeout(() => {
+                responseTimeout = setTimeout(() => {
                     for (const user of options.users) {
                         const key = `${eventId}.${user}`;
                         if (this.__$promises[key]) {
@@ -119,20 +126,21 @@ export class Socket {
                 }, options.timeout || 30000);
             }
 
-            data.scope = SOCKET_SCOPE;
-            data.__$socketOptions = options;
-            this.__$socket.emit(SOCKET_CHANNEL, data);
+            const payload = { ...data, scope: SOCKET_SCOPE, __$socketOptions: options };
+            this.__$socket.emit(SOCKET_CHANNEL, payload);
 
             const results = [];
 
             if (local) {
                 const localWrapper = async () => {
-                    return { user: game.user, response: await callback(data) };
+                    return { user: game.user, response: await callback(data, game.user) };
                 };
                 promises.push(localWrapper());
             }
 
-            const allPromises = await Promise.all(promises);
+            let allPromises;
+            try { allPromises = await Promise.all(promises); }
+            finally { clearTimeout(responseTimeout); }
             for (const promise of allPromises) {
                 results.push(promise);
             }
@@ -144,6 +152,10 @@ export class Socket {
     }
 
     static registerStore(storeName, initialValue = {}, callback = null) {
+        if (!this.__$socket) {
+            this.__$socket = game.socket;
+            game.socket.on(SOCKET_CHANNEL, this.__$onMessage.bind(this));
+        }
         if (this.__$reserved.includes(storeName)) {
             throw new Error(`Store name ${storeName} is reserved`);
         }
@@ -187,7 +199,7 @@ class SynchronizedStore {
         this._data = data;
         this._timestamp = Date.now();
         this._isLive = true;
-        this._onChange?.(this.data);
+        this._onChange?.(this._data);
     }
 
     getData() {

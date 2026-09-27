@@ -70,12 +70,14 @@ export function requestCombatTurnNavigation(combat, method, {
   return promise;
 }
 
-async function handleCombatTurnNavigationSocketMessage(message = {}) {
+async function handleCombatTurnNavigationSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== COMBAT_TURN_SOCKET_SCOPE) return;
+  if (!senderUserId) return;
   if (message.type === "response") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingRequests.get(message.requestId);
     if (!pending) return;
+    if (senderUserId !== pending.expectedAuthorityUserId) return;
     if (message.authorityUserId !== pending.expectedAuthorityUserId) return;
     if (game.users?.activeGM?.id !== pending.expectedAuthorityUserId) {
       globalThis.clearTimeout(pending.timeout);
@@ -95,6 +97,7 @@ async function handleCombatTurnNavigationSocketMessage(message = {}) {
     || message.targetUserId !== game.user?.id
     || !isCurrentActiveGM()
   ) return;
+  if (message.requesterUserId !== senderUserId) return;
 
   try {
     await performCombatTurnNavigationRequest(message);

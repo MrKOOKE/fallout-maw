@@ -5,22 +5,22 @@
   {{#if abilityEvolutionPanel}}data-ability-family-source-id="{{abilityEvolutionPanel.familySourceId}}"{{/if}}
 >
   {{#if abilityEvolutionPanel}}
-  <aside class="fallout-maw-advancement-evolution-panel" aria-label="Эволюция способности {{abilityEvolutionPanel.rootAbility.name}}">
+  <aside class="fallout-maw-advancement-evolution-panel" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Texta9ed02743cf0'}} {{abilityEvolutionPanel.rootAbility.name}}">
     <header class="fallout-maw-advancement-evolution-header">
       <div>
-        <span>Ветка эволюции</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text5af92fbc09dd'}}</span>
         <strong>{{abilityEvolutionPanel.rootAbility.name}}</strong>
       </div>
-      <button type="button" data-action="closeAbilityEvolution" title="Закрыть ветку" aria-label="Закрыть ветку эволюции">
+      <button type="button" data-action="closeAbilityEvolution" title="{{localize 'FALLOUTMAW.AuditTemplates.Text7c92502adbb2'}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text98cb19a1a332'}}">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </header>
 
     <div class="fallout-maw-advancement-evolution-toolbar">
-      <span>Колесо — масштаб, ПКМ — камера</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text58b928d7e064'}}</span>
       <div>
         <output data-ability-evolution-zoom>90%</output>
-        <button type="button" data-action="resetAbilityEvolutionView" title="Вернуть камеру" aria-label="Вернуть камеру">
+        <button type="button" data-action="resetAbilityEvolutionView" title="{{localize 'FALLOUTMAW.AuditTemplates.Textb305d8f2fab5'}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textb305d8f2fab5'}}">
           <i class="fa-solid fa-crosshairs"></i>
         </button>
       </div>
@@ -58,11 +58,11 @@
           <span>
             <strong>{{ability.name}}</strong>
             <small>
-              {{#if currentOwned}}Текущая версия
-              {{else if researchActive}}Исследуется
-              {{else if completed}}Пройдено
-              {{else if acquisitionAvailable}}Доступно
-              {{else}}Заблокировано{{/if}}
+              {{#if currentOwned}}{{localize 'FALLOUTMAW.AuditTemplates.Text97d0045edf65'}}
+              {{else if researchActive}}{{localize 'FALLOUTMAW.AuditTemplates.Textbed7a9f8fa0f'}}
+              {{else if completed}}{{localize 'FALLOUTMAW.AuditTemplates.Text63525200bde2'}}
+              {{else if acquisitionAvailable}}{{localize 'FALLOUTMAW.AuditTemplates.Textf925cafd86d7'}}
+              {{else}}{{localize 'FALLOUTMAW.Common.Locked'}}{{/if}}
             </small>
           </span>
         </button>

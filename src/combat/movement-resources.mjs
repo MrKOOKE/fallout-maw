@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import {
   COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION,
   GRAPPLE_FOLLOW_MOVEMENT_OPTION
@@ -14,10 +15,9 @@ import {
 import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 import {
   REACTION_RESOURCE_KEY,
-  getCombatActionPointState,
-  prepareDirectCombatActionPointSpend,
-  spendCombatActionPoints
+  getCombatActionPointState
 } from "./reaction-resources.mjs";
+import { getOneTimeResourceValue, prepareActorResourceSpend, runOneTimeResourceMutation } from "./one-time-resources.mjs";
 import { beginCombatResourceSpending, notifyCombatResourcesSpent } from "./resource-spending.mjs";
 import { ACTION_RESOURCE_KEY } from "./strict-action-points.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "./combat-membership.mjs";
@@ -31,8 +31,8 @@ export const ABILITY_FREE_MOVEMENT_OPTION = "falloutMawAbilityFreeMovement";
 const MOVEMENT_RESOURCE_SPENDING_FLAG = "movementResourceSpending";
 const MOVEMENT_RESOURCE_SPENDING_LIMIT = 50;
 const movementResourceSpendingQueues = new Map();
-const MOVEMENT_RESOURCE_LABEL = "ОП";
-const ACTION_RESOURCE_LABEL = "ОД";
+const MOVEMENT_RESOURCE_LABEL = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0587", "ОП");
+const ACTION_RESOURCE_LABEL = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0008", "ОД");
 
 export const MOVEMENT_RULER_COLORS = Object.freeze({
   movement: 0x43c96b,
@@ -53,14 +53,16 @@ export function getCombatMovementResourceState(actor) {
 
   const movementValue = Math.max(0, toInteger(movement.value));
   const limited = getResourceLimitState(actor).resources;
-  const movementAvailable = action.ownTurn ? movementValue : 0;
+  const movementOnce = getOneTimeResourceValue(actor, MOVEMENT_RESOURCE_KEY);
+  const movementAvailable = action.ownTurn ? movementValue + movementOnce : 0;
   const limitedMovement = Math.min(movementAvailable, Math.max(0, toInteger(limited[MOVEMENT_RESOURCE_KEY]?.amount)));
   const limitedAction = action.ownTurn ? Math.max(0, toInteger(action.limited)) : 0;
   return {
     movement: {
       key: MOVEMENT_RESOURCE_KEY,
-      label: MOVEMENT_RESOURCE_LABEL,
+      label: MOVEMENT_RESOURCE_LABEL(),
       current: movementValue,
+      once: movementOnce,
       limited: limitedMovement,
       value: Math.max(0, movementAvailable - limitedMovement),
       max: Math.max(0, toInteger(movement.max))
@@ -69,11 +71,12 @@ export function getCombatMovementResourceState(actor) {
       key: action.key,
       label: action.label,
       current: action.current,
+      once: action.once,
       limited: limitedAction,
       value: action.value,
       max: action.max
     },
-    total: Math.max(0, movementAvailable - limitedMovement) + Math.max(0, action.value - limitedAction)
+    total: Math.max(0, movementAvailable - limitedMovement) + action.value
   };
 }
 
@@ -337,7 +340,7 @@ function preventUnaffordableCombatMovement(tokenDocument, movement, operation) {
   if (cost <= state.total) return true;
 
   ui.notifications.warn(
-    `${tokenDocument.actor.name}: не хватает ${MOVEMENT_RESOURCE_LABEL}/${ACTION_RESOURCE_LABEL} для перемещения (${cost} > ${state.total}).`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0780", { p0: (tokenDocument.actor.name), p1: (MOVEMENT_RESOURCE_LABEL()), p2: (ACTION_RESOURCE_LABEL()), p3: (cost), p4: (state.total) }, "{p0}: не хватает {p1}/{p2} для перемещения ({p3} > {p4}).")
   );
   return false;
 }
@@ -361,6 +364,7 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
     await runMovementResourceSpendingSerially(actor, async () => {
       await waitForMovementAnimation(movement);
       if (!isCombatMovementTracked(tokenDocument)) return;
+      const committed = await runOneTimeResourceMutation(actor, async () => {
       const activeUseOperationId = getCombatMovementActiveUseOperationId(actor, tokenDocument, movement, operation);
       const actorToken = tokenDocument?.object ?? tokenDocument ?? null;
       const chanceContext = { actorToken, chanceOperationId: activeUseOperationId };
@@ -382,29 +386,32 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
         conditionContexts: [chanceContext],
         reverseOnly: false
       });
-      const updates = {};
-      if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-      const directActionSpend = actionSpend
-        ? prepareDirectCombatActionPointSpend(actor, actionSpend)
-        : null;
-      if (directActionSpend) Object.assign(updates, directActionSpend.updates);
-      updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
-        ...getMovementResourceSpendingStack(actor),
-        createMovementResourceSpendingEntry(tokenDocument, movement, {
-          [MOVEMENT_RESOURCE_KEY]: movementSpend,
-          [state.action.key]: actionSpend
-        }, { adjustedCost: cost, costProfileKey: costProfile.key })
-      ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
-      await actor.update(updates, {
-        ...createMovementResourceDocumentOptions(),
-        ...directActionSpend?.documentOptions
+      const plans = [
+        movementSpend ? prepareActorResourceSpend(actor, MOVEMENT_RESOURCE_KEY, movementSpend, { available: state.movement.value }) : null,
+        actionSpend ? prepareActorResourceSpend(actor, state.action.key, actionSpend, { available: state.action.value }) : null
+      ].filter(Boolean);
+      if (plans.reduce((sum, plan) => sum + plan.amount, 0) !== cost) return null;
+      const resources = { [MOVEMENT_RESOURCE_KEY]: movementSpend, [state.action.key]: actionSpend };
+      const onceResources = Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.onceSpent]));
+      const entry = createMovementResourceSpendingEntry(tokenDocument, movement, resources, {
+        adjustedCost: cost, costProfileKey: costProfile.key, onceResources
       });
-      if (actionSpend && !directActionSpend) {
-        await spendCombatActionPoints(actor, actionSpend, {
-          suppressResourceNotification: true,
-          documentOptions: createMovementResourceDocumentOptions()
-        });
+      const updates = Object.assign({}, ...plans.map(plan => plan.updates), {
+        [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: [
+          ...getMovementResourceSpendingStack(actor), entry
+        ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT)
+      });
+      await actor.update(updates, {
+        ...createMovementResourceDocumentOptions(), falloutMawReactionResourceUpdate: true
+      });
+      if (!getMovementResourceSpendingStack(actor).some(candidate => candidate.id === entry.id)
+        || !resourceUpdatesMatch(actor, updates)) {
+        throw new Error("Combat movement resource update was cancelled or altered.");
       }
+      return { resources, activeUsePreparation, activeUseOperationId };
+      });
+      if (!committed) return;
+      const { resources, activeUsePreparation, activeUseOperationId } = committed;
       if (activeUsePreparation) {
         try {
           await commitPreparedActiveUseOperations([activeUsePreparation], {
@@ -414,10 +421,7 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
           console.error(`${FALLOUT_MAW.id} | Movement active-use commit failed`, error);
         }
       }
-      await notifyCombatResourcesSpent(actor, {
-        [MOVEMENT_RESOURCE_KEY]: movementSpend,
-        [state.action.key]: actionSpend
-      }, { type: "movement", tokenDocument, movement, operation });
+      await notifyCombatResourcesSpent(actor, resources, { type: "movement", tokenDocument, movement, operation });
     });
   } finally {
     finishSpending();
@@ -525,6 +529,7 @@ function getCombatMovementActiveUseOperationId(actor, tokenDocument, movement = 
 
 async function restoreLastMovementResourceSpending(tokenDocument) {
   const actor = tokenDocument.actor;
+  return runOneTimeResourceMutation(actor, async () => {
   const stack = getMovementResourceSpendingStack(actor);
   const index = findLastMovementResourceSpendingIndex(stack, tokenDocument);
   if (index < 0) return;
@@ -538,6 +543,12 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
   const restoredResources = restoredEntries.reduce((totals, entry) => {
     for (const [key, value] of Object.entries(entry?.resources ?? {})) {
       totals[key] = (totals[key] ?? 0) + Math.max(0, toInteger(value));
+    }
+    return totals;
+  }, {});
+  const restoredOnce = restoredEntries.reduce((totals, entry) => {
+    for (const [key, value] of Object.entries(entry?.onceResources ?? {})) {
+      totals[key] = (totals[key] ?? 0) + Math.min(Math.max(0, toInteger(value)), Math.max(0, toInteger(entry.resources?.[key])));
     }
     return totals;
   }, {});
@@ -559,12 +570,83 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
     const current = toInteger(resource.value);
     const min = Math.max(0, toInteger(resource.min));
     const max = Math.max(min, toInteger(resource.max));
-    const restored = Math.min(max, Math.max(min, current + Math.max(0, toInteger(restoredResources[key]))));
-    updates[`system.resources.${key}.value`] = restored;
-    updates[`system.resources.${key}.spent`] = Math.max(0, max - restored);
+    const once = Math.max(0, toInteger(restoredOnce[key]));
+    const normal = Math.max(0, toInteger(restoredResources[key]) - once);
+    if (normal > 0) {
+      const restored = Math.min(max, Math.max(min, current + normal));
+      updates[`system.resources.${key}.value`] = restored;
+      updates[`system.resources.${key}.spent`] = Math.max(0, max - restored);
+    }
+    if (once > 0) updates[`system.resources.${key}.once`] = getOneTimeResourceValue(actor, key) + once;
   }
 
-  await actor.update(updates);
+  await actor.update(updates, { ...createMovementResourceDocumentOptions(), falloutMawReactionResourceUpdate: true });
+  if (!resourceUpdatesMatch(actor, updates)
+    || getMovementResourceSpendingStack(actor).some(entry => restoredIds.has(entry.id))) {
+    throw new Error("Movement resource refund was cancelled or altered.");
+  }
+  });
+}
+
+function resourceUpdatesMatch(actor, updates) {
+  return Object.entries(updates).every(([path, value]) => {
+    const match = /^system\.resources\.([^.]+)\.(value|once)$/.exec(path);
+    return !match || Number(actor.system?.resources?.[match[1]]?.[match[2]]) === value;
+  });
+}
+
+/** Spend MP first, then current AP/RP, retaining both normal/once splits. */
+export function spendMovementThenActionResourcesWithReceipt(actor, amount = 0, {
+  documentOptions = {}, getUpdates = null
+} = {}) {
+  return runOneTimeResourceMutation(actor, async () => {
+    const cost = Math.max(0, toInteger(amount));
+    if (!isActorInActiveCombat(actor) || !cost) return { spent: 0, resources: {}, onceResources: {} };
+    const state = getCombatMovementResourceState(actor);
+    if (!actor?.isOwner || !state || cost > state.total) return null;
+    const movementSpent = Math.min(cost, state.movement.value);
+    const actionSpent = cost - movementSpent;
+    const plans = [
+      movementSpent ? prepareActorResourceSpend(actor, MOVEMENT_RESOURCE_KEY, movementSpent, { available: state.movement.value }) : null,
+      actionSpent ? prepareActorResourceSpend(actor, state.action.key, actionSpent, { available: state.action.value }) : null
+    ].filter(Boolean);
+    if (plans.reduce((sum, plan) => sum + plan.amount, 0) !== cost) return null;
+    const receipt = {
+      actorUuid: actor.uuid, spent: cost, movementSpent, actionSpent, actionResourceKey: state.action.key,
+      resources: { [MOVEMENT_RESOURCE_KEY]: movementSpent, [state.action.key]: actionSpent },
+      onceResources: Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.onceSpent]))
+    };
+    const updates = Object.assign({}, getUpdates?.(receipt) ?? {}, ...plans.map(plan => plan.updates));
+    await actor.update(updates, { ...documentOptions, falloutMawReactionResourceUpdate: true });
+    if (!resourceUpdatesMatch(actor, updates)) return null;
+    return receipt;
+  });
+}
+
+export function refundMovementThenActionResourceReceipt(actor, receipt, { updates = {}, documentOptions = {} } = {}) {
+  return runOneTimeResourceMutation(actor, async () => {
+    if (typeof receipt === "function") receipt = receipt();
+    if (!receipt) return 0;
+    if (!actor?.isOwner || (receipt?.actorUuid && receipt.actorUuid !== actor.uuid)) return 0;
+    const changes = { ...(typeof updates === "function" ? updates(receipt) : updates) };
+    let restored = 0;
+    for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]) {
+      const resource = actor.system?.resources?.[key];
+      const amount = Math.max(0, toInteger(receipt?.resources?.[key]));
+      if (!resource || !amount) continue;
+      const once = Math.min(amount, Math.max(0, toInteger(receipt?.onceResources?.[key])));
+      const normal = Math.max(0, Math.min(amount - once, toInteger(resource.max) - toInteger(resource.value)));
+      if (normal) {
+        changes[`system.resources.${key}.value`] = toInteger(resource.value) + normal;
+        changes[`system.resources.${key}.spent`] = Math.max(0, toInteger(resource.max) - toInteger(resource.value) - normal);
+      }
+      if (once) changes[`system.resources.${key}.once`] = getOneTimeResourceValue(actor, key) + once;
+      restored += normal + once;
+    }
+    if (!Object.keys(changes).length) return 0;
+    await actor.update(changes, { ...documentOptions, falloutMawReactionResourceUpdate: true });
+    return resourceUpdatesMatch(actor, changes) ? restored : 0;
+  });
 }
 
 export async function restoreCombatMovementResources(combat, {
@@ -624,12 +706,12 @@ export async function restoreActorMovementResources(actor) {
 export function buildActorMovementResourceRestoreUpdate(actor) {
   const updates = {};
   if (!actor) return updates;
-  const storedSpending = actor.getFlag?.(FALLOUT_MAW.id, MOVEMENT_RESOURCE_SPENDING_FLAG);
-  const hasStoredSpending = Array.isArray(storedSpending)
-    ? storedSpending.length > 0
-    : storedSpending !== null && storedSpending !== undefined;
-  if (hasStoredSpending) {
-    updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [];
+  for (const flag of [MOVEMENT_RESOURCE_SPENDING_FLAG, "postureResourceSpending"]) {
+    const storedSpending = actor.getFlag?.(FALLOUT_MAW.id, flag);
+    const hasStoredSpending = Array.isArray(storedSpending)
+      ? storedSpending.length > 0
+      : storedSpending !== null && storedSpending !== undefined;
+    if (hasStoredSpending) updates[`flags.${FALLOUT_MAW.id}.${flag}`] = [];
   }
   for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY]) {
     const resource = actor.system?.resources?.[key];
@@ -647,7 +729,8 @@ export function buildActorMovementResourceRestoreUpdate(actor) {
 
 function createMovementResourceSpendingEntry(tokenDocument, movement, resources, {
   adjustedCost = null,
-  costProfileKey = ""
+  costProfileKey = "",
+  onceResources = {}
 } = {}) {
   const actor = tokenDocument?.actor;
   const rawCost = Math.max(0, getMovementSectionCost(movement?.passed));
@@ -662,7 +745,8 @@ function createMovementResourceSpendingEntry(tokenDocument, movement, resources,
     sceneId: tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "",
     tokenId: tokenDocument?.id ?? "",
     round: getActorActiveCombat(actor)?.round ?? 0,
-    resources
+    resources,
+    onceResources
   };
 }
 

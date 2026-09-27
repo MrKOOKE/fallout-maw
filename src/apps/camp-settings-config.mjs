@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   getCampSettings,
@@ -44,7 +45,7 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Лагерь";
+    return auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь");
   }
 
   async _prepareContext(options) {
@@ -57,7 +58,7 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData(_event, _form, _formData) {
     this.settings = normalizeCampSettings(this.#readSettingsFromForm());
     await setCampSettings(this.settings);
-    ui.notifications.info("Настройки лагеря сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.CampSettingsSaved", "Настройки лагеря сохранены."));
     return this.forceRender();
   }
 
@@ -67,7 +68,7 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
     const id = getUniqueRestPlaceId(this.settings.restPlaces, "restPlace");
     this.settings.restPlaces.push({
       id,
-      label: "Новое место",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewLocation", "Новое место"),
       effects: []
     });
     return this.forceRender();
@@ -150,7 +151,7 @@ class CampPlaceSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `${this.place?.label || "Место отдыха"}: настройки`;
+    return auditFormat("FALLOUTMAW.AuditApps.Settings", { v0: (this.place?.label || auditLocalize("FALLOUTMAW.AuditApps.RestingPlace", "Место отдыха")) }, "{v0}: настройки");
   }
 
   async _prepareContext(options) {

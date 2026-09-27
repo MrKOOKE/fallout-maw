@@ -15,7 +15,6 @@ import {
 } from "../settings/creature-options.mjs";
 import {
   getActorTimeSegments,
-  isRestModeTime,
   isTimeMechanicsForced
 } from "../time/rest-context.mjs";
 import { registerWorldTimeActorCandidateIndex } from "../time/world-time-actor-index.mjs";
@@ -56,7 +55,7 @@ function countCrossedHourTicks(worldTime, deltaTime) {
 function getActorRegenerationTickCount(actor, worldTime, deltaTime, options, defaultTickCount) {
   const segments = getActorTimeSegments(actor, deltaTime, options);
   if (segments.length === 1 && !segments[0]?.effects?.length) {
-    return Math.max(0, toInteger(defaultTickCount)) * (isRestModeTime(options) ? 2 : 1);
+    return Math.max(0, toInteger(defaultTickCount)) * (segments[0].restMode ? 2 : 1);
   }
   return segments.reduce((total, segment) => {
     const ticks = countWholeHourTicks(segment.seconds);

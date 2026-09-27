@@ -158,11 +158,11 @@ export function buildFirstAidApplicationCardContext({
     },
     source: {
       name: String(sourceActor?.name ?? ""),
-      img: String(sourceActor?.img ?? "icons/svg/mystery-man.svg")
+      img: String(sourceActor?.img ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp")
     },
     target: {
       name: String(targetName || targetActor?.name || ""),
-      img: String(targetActor?.img ?? "icons/svg/mystery-man.svg")
+      img: String(targetActor?.img ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp")
     },
     result: {
       key: String(resultKey ?? ""),

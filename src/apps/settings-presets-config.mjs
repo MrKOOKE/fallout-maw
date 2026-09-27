@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 
@@ -218,9 +219,9 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
     const preset = await this.#getTargetPreset(target);
     if (!preset?.canModify) return undefined;
     const name = await DialogV2.prompt({
-      window: { title: `Сохранить версию «${escapeHTML(preset.name)}»`, icon: "fa-solid fa-camera" },
-      content: `<label class="form-group"><span>Название сохранения</span><input type="text" name="name" placeholder="Дата и время" autocomplete="off"></label>`,
-      ok: { label: "Сохранить", callback: (_event, button) => button.form.elements.name.value },
+      window: { title: auditFormat("FALLOUTMAW.AuditApps.SaveVersionOf", { v0: (escapeHTML(preset.name)) }, "Сохранить версию «{v0}»"), icon: "fa-solid fa-camera" },
+      content: auditLocalize("FALLOUTMAW.AuditApps.SaveName", "<label class=\"form-group\"><span>Название сохранения</span><input type=\"text\" name=\"name\" placeholder=\"Дата и время\" autocomplete=\"off\"></label>"),
+      ok: { label: auditLocalize("FALLOUTMAW.AuditApps.Save", "Сохранить"), callback: (_event, button) => button.form.elements.name.value },
       rejectClose: false,
       modal: true
     });
@@ -242,12 +243,12 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
       }
       const saves = Array.isArray(preset?.saves) ? [...preset.saves].reverse() : [];
       if (!saves.length) {
-        ui.notifications.info("У этого пресета пока нет сохранённых версий.");
+        ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ThisPresetHasNoSavedVersionsYet", "У этого пресета пока нет сохранённых версий."));
         await this.render({ force: true });
         return undefined;
       }
       const rows = saves.map((save, index) => {
-        const date = save.createdAt ? new Date(save.createdAt).toLocaleString() : "";
+        const date = save.createdAt ? new Date(save.createdAt).toLocaleString(globalThis.game?.i18n?.lang) : "";
         return `<label class="fallout-maw-preset-save-row">
           <input type="radio" name="saveId" value="${escapeAttribute(save.id)}"${index === 0 ? " checked" : ""}>
           <span class="fallout-maw-preset-save-name">${escapeHTML(save.name)}</span>
@@ -256,12 +257,12 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
         </label>`;
       }).join("");
       const selection = await DialogV2.wait({
-        window: { title: `Сохранения «${row.name}»`, icon: "fa-solid fa-clock-rotate-left", resizable: true },
-        content: `<div class="fallout-maw-preset-save-browser"><p class="hint">Выберите сохранённую версию. Установка заменит текущие настройки этого пресета и активирует его.</p><div class="fallout-maw-preset-save-list">${rows}</div></div>`,
+        window: { title: auditFormat("FALLOUTMAW.AuditApps.SavedVersionsOf", { v0: (row.name) }, "Сохранения «{v0}»"), icon: "fa-solid fa-clock-rotate-left", resizable: true },
+        content: auditFormat("FALLOUTMAW.AuditApps.SelectASavedVersionInstallingItWillReplace", { v0: (rows) }, "<div class=\"fallout-maw-preset-save-browser\"><p class=\"hint\">Выберите сохранённую версию. Установка заменит текущие настройки этого пресета и активирует его.</p><div class=\"fallout-maw-preset-save-list\">{v0}</div></div>"),
         buttons: [
-          { action: "install", label: "Установить", icon: "fa-solid fa-check", default: true, callback: (_event, button) => ({ action: "install", saveId: button.form.elements.saveId.value }) },
-          { action: "delete", label: "Удалить", icon: "fa-solid fa-trash", class: "danger", callback: (_event, button) => ({ action: "delete", saveId: button.form.elements.saveId.value }) },
-          { action: "cancel", label: "Отмена", callback: () => false }
+          { action: "install", label: auditLocalize("FALLOUTMAW.Item.LightSourceInstall", "Установить"), icon: "fa-solid fa-check", default: true, callback: (_event, button) => ({ action: "install", saveId: button.form.elements.saveId.value }) },
+          { action: "delete", label: auditLocalize("FALLOUTMAW.Settings.Presets.Actions.Delete", "Удалить"), icon: "fa-solid fa-trash", class: "danger", callback: (_event, button) => ({ action: "delete", saveId: button.form.elements.saveId.value }) },
+          { action: "cancel", label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена"), callback: () => false }
         ],
         rejectClose: false,
         modal: true,
@@ -274,10 +275,10 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
       if (selection.action !== "delete") return undefined;
       const save = saves.find(entry => entry.id === selection.saveId);
       const confirmed = await DialogV2.confirm({
-        window: { title: "Удалить сохранение", icon: "fa-solid fa-trash" },
-        content: `<p>Удалить сохранение «${escapeHTML(save?.name ?? selection.saveId)}»? Текущие настройки пресета не изменятся.</p>`,
-        yes: { label: "Удалить" },
-        no: { label: "Отмена" },
+        window: { title: auditLocalize("FALLOUTMAW.AuditApps.DeleteSavedVersion", "Удалить сохранение"), icon: "fa-solid fa-trash" },
+        content: auditFormat("FALLOUTMAW.AuditApps.DeleteTheSavedVersionCurrentPresetSettingsWill", { v0: (escapeHTML(save?.name ?? selection.saveId)) }, "<p>Удалить сохранение «{v0}»? Текущие настройки пресета не изменятся.</p>"),
+        yes: { label: auditLocalize("FALLOUTMAW.Settings.Presets.Actions.Delete", "Удалить") },
+        no: { label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена") },
         rejectClose: false,
         modal: true
       });
@@ -455,7 +456,7 @@ function preparePresetContext(preset, activePresetId) {
     shortRevision: revision ? shorten(revision, 12) : "—",
     source,
     sourceLabel: source.startsWith("module:")
-      ? `Модуль: ${source.slice("module:".length)}`
+      ? auditFormat("FALLOUTMAW.AuditApps.Module", { v0: (source.slice("module:".length)) }, "Модуль: {v0}")
       : localizeEnum(source, SOURCE_KEYS),
     syncState,
     syncLabel: localizeEnum(syncState, SYNC_STATE_KEYS),

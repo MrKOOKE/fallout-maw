@@ -1,8 +1,8 @@
 <section class="fallout-maw-construct-structure-body">
   <section class="fallout-maw-panel fallout-maw-construct-part-list-panel">
     <div class="fallout-maw-panel-header">
-      <h2>Строение конструкта</h2>
-      <button type="submit"><i class="fa-solid fa-check"></i> Сохранить</button>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textdd0944ea61f3'}}</h2>
+      <button type="submit"><i class="fa-solid fa-check"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
     </div>
     <div class="fallout-maw-construct-part-list fallout-maw-construct-drop-zone" data-construct-part-list data-construct-part-drop-zone>
       {{#each entries}}
@@ -25,18 +25,18 @@
           {{#if phantom}}
           <div class="fallout-maw-construct-part-phantom-label">
             <i class="fa-solid fa-terminal" aria-hidden="true"></i>
-            СЛОТ ОЖИДАЕТ: {{partType}}
+            {{localize 'FALLOUTMAW.AuditTemplates.Text6769eeb280f8'}} {{partType}}
           </div>
           {{/if}}
         </div>
-        <button class="fallout-maw-construct-part-remove" type="button" title="Удалить слот" data-construct-part-remove="{{id}}">
+        <button class="fallout-maw-construct-part-remove" type="button" title="{{localize 'FALLOUTMAW.Item.ModuleSlotDelete'}}" data-construct-part-remove="{{id}}">
           <i class="fa-solid fa-trash"></i>
         </button>
       </article>
       {{else}}
       <div class="fallout-maw-construct-drop-placeholder">
         <i class="fa-solid fa-plus"></i>
-        <strong>Перетащите деталь конструкта</strong>
+        <strong>{{localize 'FALLOUTMAW.AuditTemplates.Text6e9fdcab0317'}}</strong>
       </div>
       {{/each}}
     </div>

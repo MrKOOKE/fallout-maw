@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const WEAPON_ATTACK_MODIFIER_KEYS = Object.freeze({
@@ -12,7 +13,7 @@ export const WEAPON_ATTACK_MODIFIER_KEYS = Object.freeze({
 const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
   [WEAPON_ATTACK_MODIFIER_KEYS.whirlwind]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.whirlwind,
-    label: "Способность",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность"); },
     targetedAction: false,
     requiresLimbSelection: false,
     requiresDirectionSelection: false,
@@ -22,12 +23,12 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.lunge]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.lunge,
-    label: "Способность",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность"); },
     finishAfterAttack: true
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.counterSniper]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.counterSniper,
-    label: "Контр-снайпер",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер"); },
     finishAfterAttack: true,
     preventCancel: true,
     suppressCounterSniperReaction: true,
@@ -35,13 +36,13 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.forced]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.forced,
-    label: "Реакция",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0857", "Реакция"); },
     finishAfterAttack: true,
     preventCancel: true
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.attackActionTargeted]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.attackActionTargeted,
-    label: "Атакующее действие",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"); },
     targetedAction: true,
     requiresLimbSelection: false,
     requiresDirectionSelection: false,
@@ -53,7 +54,7 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.attackActionDirection]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.attackActionDirection,
-    label: "Атакующее действие",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"); },
     targetedAction: false,
     requiresLimbSelection: false,
     requiresDirectionSelection: false,
@@ -67,7 +68,7 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
 
 export function createWhirlwindAttackModifier({
   accuracyModifier = 0,
-  label = "Способность",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность"),
   onBeforeAttack = null,
   targetLowestCriticalLimb = false
 } = {}) {
@@ -81,7 +82,7 @@ export function createWhirlwindAttackModifier({
 }
 
 export function createLungeAttackModifier({
-  label = "Способность",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность"),
   onDestroy = null,
   resultPolicy = null,
   suppressGuardianAngelReaction = false
@@ -99,7 +100,7 @@ export function createLungeAttackModifier({
 
 export function createCounterSniperAttackModifier({
   onDestroy = null,
-  label = "Контр-снайпер",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер"),
   resultPolicy = null,
   suppressGuardianAngelReaction = true
 } = {}) {
@@ -112,7 +113,7 @@ export function createCounterSniperAttackModifier({
   });
 }
 
-export function createForcedAttackModifier({ onDestroy = null, label = "Реакция" } = {}) {
+export function createForcedAttackModifier({ onDestroy = null, label = auditLocalize("FALLOUTMAW.AuditRuntime.R0857", "Реакция") } = {}) {
   return normalizeWeaponAttackModifier({
     key: WEAPON_ATTACK_MODIFIER_KEYS.forced,
     label,
@@ -122,7 +123,7 @@ export function createForcedAttackModifier({ onDestroy = null, label = "Реак
 
 export function createAttackActionTargetedModifier({
   aimed = false,
-  label = "Атакующее действие",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"),
   difficultyBonus = 0
 } = {}) {
   return normalizeWeaponAttackModifier({
@@ -136,7 +137,7 @@ export function createAttackActionTargetedModifier({
 }
 
 export function createAttackActionDirectionModifier({
-  label = "Атакующее действие",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"),
   accuracyModifier = 0,
   criticalChanceModifier = 0,
   damagePercentModifier = 0

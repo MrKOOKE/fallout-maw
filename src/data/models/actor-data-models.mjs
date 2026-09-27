@@ -68,6 +68,8 @@ const REACTION_RESOURCE_KEY = "reactionPoints";
 const EMPTY_SKILL_ADVANCEMENT_CHANGES = Object.freeze({});
 import { toInteger } from "../../utils/numbers.mjs";
 import { composePreparedSkillValue } from "../../utils/skill-value.mjs";
+import { seedConstructEffectTargets } from "./construct-effect-targets.mjs";
+import { mergePreparedBonuses } from "./prepared-bonuses.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
@@ -75,7 +77,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
       description: new HTMLField({ required: false, blank: true, initial: "" }),
-      resources: new TypedObjectField(resourceField(), { required: true, initial: {} }),
+      resources: new TypedObjectField(resourceField(0, 0, { oneTime: true }), { required: true, initial: {} }),
       needs: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       load: resourceField(0, 0, { required: true, persisted: false }),
       inventory: inventoryField(),
@@ -228,6 +230,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
   prepareBaseData() {
     this.resources ??= {};
+    if (this.parent?.type === "construct") {
+      const settings = getPreparedRuntimeSettings();
+      seedConstructEffectTargets(this, {
+        ...settings,
+        needSettings: getConstructPartNeedSettings(this.parent?.items),
+        limbSource: getConstructPartLimbData(this.parent).source
+      });
+    }
     ensureReactionResourceBase(this.resources);
     prepareActorOrganismDevelopmentLimitBase(this);
   }
@@ -316,7 +326,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const needSettings = isConstruct
       ? getConstructPartNeedSettings(this.parent?.items)
       : getRaceNeedSettings(race);
-    prepareActorInventorySize(this.inventory, race);
+    prepareActorInventorySize(this.inventory, race, { isConstruct });
     if (race?.progression) {
       this.progression.healthPerLevel = String(race.progression.healthPerLevel ?? DEFAULT_HEALTH_PER_LEVEL_FORMULA);
       this.progression.skillPointsPerLevel = String(race.progression.skillPointsPerLevel ?? DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA);
@@ -609,8 +619,8 @@ function researchField() {
 
 function inventoryField() {
   return new SchemaField({
-    columns: new NumberField({ required: true, integer: true, min: 1, initial: 1, persisted: false }),
-    rows: new NumberField({ required: true, integer: true, min: 1, initial: 1, persisted: false }),
+    columns: new NumberField({ required: true, integer: true, min: 0, initial: 1, persisted: false }),
+    rows: new NumberField({ required: true, integer: true, min: 0, initial: 1, persisted: false }),
     columnsBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     rowsBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
   }, { required: true, persisted: false });
@@ -639,15 +649,15 @@ function limbField() {
   });
 }
 
-function prepareActorInventorySize(inventory = {}, race = null) {
+function prepareActorInventorySize(inventory = {}, race = null, { isConstruct = false } = {}) {
   const fallback = createDefaultInventorySize();
-  const size = race?.inventorySize ?? fallback;
+  const size = isConstruct ? { columns: 0, rows: 0 } : race?.inventorySize ?? fallback;
   const columnsBonus = toInteger(inventory.columnsBonus);
   const rowsBonus = toInteger(inventory.rowsBonus);
   inventory.columnsBonus = columnsBonus;
   inventory.rowsBonus = rowsBonus;
-  inventory.columns = Math.max(1, toInteger(size.columns ?? fallback.columns) + columnsBonus);
-  inventory.rows = Math.max(1, toInteger(size.rows ?? fallback.rows) + rowsBonus);
+  inventory.columns = Math.max(0, toInteger(size.columns ?? fallback.columns) + columnsBonus);
+  inventory.rows = Math.max(0, toInteger(size.rows ?? fallback.rows) + rowsBonus);
 }
 
 function replaceObjectContents(target, source) {
@@ -839,7 +849,9 @@ function normalizeResourceMap(
         }
       }
       const normalizedSpent = trackSpent ? Math.max(0, max - value) : spent;
-      return [setting.key, { min, spent: normalizedSpent, bonus, value, max, recoveryTarget }];
+      const once = Math.max(0, toInteger(sourceResources?.[setting.key]?.once ?? current?.once));
+      return [setting.key, { min, spent: normalizedSpent, bonus, value, max, recoveryTarget,
+        ...(trackSpent ? { once } : {}) }];
     })
   );
 }
@@ -907,29 +919,6 @@ function getEffectChangePriority(change = {}) {
   return toInteger(ActiveEffect?.CHANGE_TYPES?.[change?.type]?.defaultPriority);
 }
 
-function mergePreparedBonuses(source = {}, prepared = {}, { preparedBonusMode = "prepared" } = {}) {
-  const keys = new Set([
-    ...Object.keys(source ?? {}),
-    ...Object.keys(prepared ?? {})
-  ]);
-  return Object.fromEntries(
-    Array.from(keys).map(key => {
-      const value = source?.[key] ?? prepared?.[key] ?? {};
-      const sourceBonus = toInteger(value?.bonus);
-      const preparedBonus = toInteger(prepared?.[key]?.bonus ?? value?.bonus);
-      return [
-        key,
-        {
-          ...value,
-          bonus: preparedBonusMode === "delta"
-            ? preparedBonus - sourceBonus
-            : preparedBonus
-        }
-      ];
-    })
-  );
-}
-
 function buildZeroResourceMaximums(settings = []) {
   return Object.fromEntries((settings ?? []).map(setting => [setting.key, 0]));
 }
@@ -949,6 +938,7 @@ function ensureReactionResourceBase(resources = {}) {
       min: 0,
       spent: Math.max(0, toInteger(current.spent)),
       bonus: toInteger(current.bonus),
+      once: Math.max(0, toInteger(current.once)),
       value: Math.max(0, toInteger(current.value)),
       max: Math.max(0, toInteger(current.max)),
       recoveryTarget: 0
@@ -959,6 +949,7 @@ function ensureReactionResourceBase(resources = {}) {
     min: 0,
     spent: 0,
     bonus: 0,
+    once: 0,
     value: 0,
     max: 0,
     recoveryTarget: 0
@@ -976,6 +967,7 @@ function ensureReactionResource(resources = {}, currentResource = resources[REAC
     min,
     spent,
     bonus,
+    once: Math.max(0, toInteger(current?.once)),
     value,
     max,
     recoveryTarget: 0

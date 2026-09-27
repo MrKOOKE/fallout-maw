@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   getCharacteristicSettings,
@@ -12,13 +13,13 @@ import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const DETECTION_RANGE_FORMULA_VARIABLES = Object.freeze([
-  { key: "skill", abbr: "skill", label: "Навык обнаружения" },
-  { key: "skill", abbr: "навык", label: "Навык обнаружения" }
+  { key: "skill", abbr: "skill", get label() { return auditLocalize("FALLOUTMAW.AuditApps.DetectionSkill", "Навык обнаружения"); } },
+  { key: "skill", abbr: "навык", get label() { return auditLocalize("FALLOUTMAW.AuditApps.DetectionSkill", "Навык обнаружения"); } }
 ]);
 
 const AUTO_DETECTION_FORMULA_VARIABLES = Object.freeze([
-  { key: "actionPointsMax", abbr: "ОД", label: "Максимум ОД" },
-  { key: "movementPointsMax", abbr: "ОП", label: "Максимум ОП" }
+  { key: "actionPointsMax", abbr: "ОД", get label() { return auditLocalize("FALLOUTMAW.AuditApps.MaximumAP", "Максимум ОД"); } },
+  { key: "movementPointsMax", abbr: "ОП", get label() { return auditLocalize("FALLOUTMAW.AuditApps.MaximumMP", "Максимум ОП"); } }
 ]);
 
 export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
@@ -55,7 +56,7 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройка скрытности";
+    return auditLocalize("FALLOUTMAW.AuditApps.StealthSettings", "Настройка скрытности");
   }
 
   async _prepareContext(options) {
@@ -96,7 +97,7 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
     const data = getExpandedFormData(formData);
     await setStealthSettings(data);
     this.settings = getStealthSettings();
-    ui.notifications.info("Настройки скрытности сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.StealthSettingsSaved", "Настройки скрытности сохранены."));
     return this.forceRender();
   }
 
@@ -120,7 +121,7 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
   static async #onAddDifficultyLevel(event) {
     event.preventDefault();
     this.#syncSettingsFromForm();
-    this.settings.difficultyLevels.push({ label: "Новая степень", threshold: 0, difficultyBonus: 0 });
+    this.settings.difficultyLevels.push({ label: auditLocalize("FALLOUTMAW.AuditApps.NewLevel", "Новая степень"), threshold: 0, difficultyBonus: 0 });
     return this.forceRender();
   }
 

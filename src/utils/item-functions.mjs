@@ -1,4 +1,5 @@
 import { resolveWorldItemSync } from "./world-items.mjs";
+import { hasEquipmentLimitProtection } from "../abilities/release-ability-rules.mjs";
 import { NATURAL_RACE_WEAPON_SET_KEY } from "../races/natural-item-identity.mjs";
 
 export const ITEM_FUNCTIONS = {
@@ -80,7 +81,7 @@ export function getItemSystem(itemOrSystem = null) {
 
 export function hasItemFunction(itemOrSystem = null, functionKey = "", { ignoreBroken = false } = {}) {
   const system = getItemSystem(itemOrSystem);
-  if (!ignoreBroken && isItemFunctionSuppressedByBrokenCondition(system, functionKey)) return false;
+  if (!ignoreBroken && isItemFunctionSuppressedByBrokenCondition(itemOrSystem, functionKey)) return false;
   if (functionKey === ITEM_FUNCTIONS.container && String(system.itemFunction ?? "") === ITEM_FUNCTIONS.container) {
     return true;
   }
@@ -94,6 +95,7 @@ export function hasItemFunction(itemOrSystem = null, functionKey = "", { ignoreB
 }
 
 export function isItemBrokenByCondition(itemOrSystem = null) {
+  if (hasEquipmentLimitProtection(itemOrSystem)) return false;
   const system = getItemSystem(itemOrSystem);
   const condition = system.functions?.[ITEM_FUNCTIONS.condition];
   if (!condition?.enabled) return false;
@@ -267,6 +269,10 @@ export function isActiveItem(itemOrSystem = null) {
 }
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {
+  if (hasEquipmentLimitProtection(itemOrSystem)) {
+    const condition = getConditionFunction(itemOrSystem);
+    return { current: Number(condition.value) || 0, max: Number(condition.max) || 0, threshold: 20, steps: 0, ratio: 1, active: true };
+  }
   if (!hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.condition)) {
     return { current: 0, max: 0, threshold: 20, steps: 0, ratio: 1, active: false };
   }

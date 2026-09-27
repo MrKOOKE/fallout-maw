@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   getCharacteristicSettings,
@@ -55,7 +56,7 @@ export class DiseaseSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройка болезней";
+    return auditLocalize("FALLOUTMAW.AuditApps.DiseaseSettings", "Настройка болезней");
   }
 
   async _prepareContext(options) {
@@ -73,7 +74,7 @@ export class DiseaseSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData(_event, _form, formData) {
     const data = getExpandedFormData(formData);
     this.settings = await setDiseaseSettings(normalizeDiseaseSettingsFromForm(data.settings ?? {}));
-    ui.notifications.info("Настройка болезней сохранена.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.DiseaseSettingsSaved", "Настройка болезней сохранена."));
     return this.forceRender();
   }
 
@@ -83,7 +84,7 @@ export class DiseaseSettingsConfig extends FalloutMaWFormApplicationV2 {
     const id = foundry.utils.randomID();
     this.settings.diseases.push({
       id,
-      name: "Новая болезнь",
+      name: auditLocalize("FALLOUTMAW.AuditApps.NewDisease", "Новая болезнь"),
       img: "",
       stages: [createDiseaseStage(1)]
     });
@@ -178,7 +179,7 @@ function normalizeDiseaseSettingsFromForm(settings = {}) {
   return {
     diseases: normalizeIndexedCollection(settings.diseases).map((entry, index) => ({
       id: String(entry?.id ?? `disease-${index + 1}`),
-      name: String(entry?.name ?? "").trim() || `Болезнь ${index + 1}`,
+      name: String(entry?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditApps.Disease", { v0: (index + 1) }, "Болезнь {v0}"),
       img: String(entry?.img ?? "").trim(),
       stages: normalizeIndexedCollection(entry?.stages).map((stage, stageIndex) => ({
         id: String(stage?.id ?? `stage-${stageIndex + 1}`),
@@ -283,8 +284,8 @@ function getScopedRowIndex(scope, target, selector) {
 
 function buildEffectKeyTokens() {
   return [
-    ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: "Характеристики" })),
-    ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: "Навыки" })),
+    ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: auditLocalize("FALLOUTMAW.Common.Characteristics", "Характеристики") })),
+    ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: auditLocalize("FALLOUTMAW.Common.Skills", "Навыки") })),
     ...buildSkillBonusPercentEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsBonusPercentEffectKeyToken(),
@@ -292,10 +293,10 @@ function buildEffectKeyTokens() {
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
-    ...buildResourceBonusEffectKeyTokens("Ресурсы"),
-    ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
-    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
-    ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}`, group: "Владения" })),
+    ...buildResourceBonusEffectKeyTokens(auditLocalize("FALLOUTMAW.Common.Resources", "Ресурсы")),
+    ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности") })),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности") }),
+    ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}`, group: auditLocalize("FALLOUTMAW.Common.Proficiencies", "Владения") })),
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildDamageBarrierEffectKeyTokens(),
     ...buildLimbMaxBonusEffectKeyTokens(),

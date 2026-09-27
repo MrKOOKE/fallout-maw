@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import {
@@ -86,7 +87,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
   static #onCreateDamageType(event) {
     event.preventDefault();
     this.damageTypes = this.#readDamageTypesFromForm();
-    this.damageTypes.push({ key: this.#getUniqueKey("newDamageType"), label: "Новый тип урона", color: "#f0d48a", img: "icons/svg/d20-grey.svg" });
+    this.damageTypes.push({ key: this.#getUniqueKey("newDamageType"), label: auditLocalize("FALLOUTMAW.AuditApps.NewDamageType", "Новый тип урона"), color: "#f0d48a", img: "systems/fallout-maw/assets/System/Skills/skill-default.webp" });
     return this.forceRender();
   }
 
@@ -168,7 +169,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
         key,
         label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
         color: row.querySelector("[data-field='color']")?.value?.trim() ?? "#f0d48a",
-        img: row.querySelector("[data-field='img']")?.value?.trim() ?? "icons/svg/d20-grey.svg",
+        img: row.querySelector("[data-field='img']")?.value?.trim() ?? "systems/fallout-maw/assets/System/Skills/skill-default.webp",
         settings: foundry.utils.deepClone(existing)
       };
     });
@@ -233,7 +234,7 @@ class DamageTypeSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Доп. настройки урона: ${this.damageType.label || this.damageType.key}`;
+    return auditFormat("FALLOUTMAW.AuditApps.AdvancedDamageSettings", { v0: (this.damageType.label || this.damageType.key) }, "Доп. настройки урона: {v0}");
   }
 
   async _prepareContext(options) {
@@ -297,8 +298,8 @@ function normalizeSettingsFromForm(settings = {}) {
     },
     bleeding: {
       enabled: toBoolean(settings.bleeding?.enabled, false),
-      effectName: String(settings.bleeding?.effectName ?? "Кровотечение").trim(),
-      img: String(settings.bleeding?.img ?? "icons/skills/wounds/blood-drip-droplet-red.webp").trim(),
+      effectName: String(settings.bleeding?.effectName ?? auditLocalize("FALLOUTMAW.Item.ProsthesisBleedingEffect", "Кровотечение")).trim(),
+      img: String(settings.bleeding?.img ?? "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp").trim(),
       percent: Math.max(0, Math.min(100, toDecimal(settings.bleeding?.percent, 0))),
       durationSeconds: Math.max(1, toInteger(settings.bleeding?.durationSeconds || 24))
     },

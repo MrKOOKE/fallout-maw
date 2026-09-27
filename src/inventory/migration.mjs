@@ -10,6 +10,7 @@ import {
 } from "./repair-triggers.mjs";
 
 const INVENTORY_REPAIR_REASON = "inventory-repair";
+const AUTOMATIC_REPAIR_MAX_ATTEMPTS = 3;
 let hooksRegistered = false;
 let repairQueueRunning = false;
 const queuedActors = new Map();
@@ -109,27 +110,36 @@ export async function repairActorInventory(actor, {
   if (actor?.documentName !== "Actor") {
     return { actor, changed: false, updates: [], repairs: [] };
   }
-  if (automatic && !isCurrentUserRepairAuthority(actor)) {
-    return { actor, changed: false, updates: [], repairs: [] };
-  }
+  for (let attempt = 0; attempt < (automatic ? AUTOMATIC_REPAIR_MAX_ATTEMPTS : 1); attempt += 1) {
+    if (automatic && !isCurrentUserRepairAuthority(actor)) {
+      return { actor, changed: false, updates: [], repairs: [] };
+    }
 
-  const expectedItems = Array.from(actor.items ?? [], cloneInventoryItemData);
-  const resolvedRace = race ?? getActorRace(actor);
-  const plan = await planActorInventoryRepair(actor, resolvedRace, { items: expectedItems });
-  if (!plan.updates.length) {
-    return { actor, changed: false, ...plan };
-  }
+    const expectedItems = Array.from(actor.items ?? [], cloneInventoryItemData);
+    const resolvedRace = race ?? getActorRace(actor);
+    const plan = await planActorInventoryRepair(actor, resolvedRace, { items: expectedItems });
+    if (!plan.updates.length) {
+      return { actor, changed: false, ...plan };
+    }
 
-  await executeInventoryMutation({
-    actor,
-    updates: plan.updates,
-    expectedItems
-  }, {
-    validateLoad: false,
-    render,
-    reason: INVENTORY_REPAIR_REASON
-  });
-  return { actor, changed: true, ...plan };
+    try {
+      await executeInventoryMutation({
+        actor,
+        updates: plan.updates,
+        expectedItems
+      }, {
+        validateLoad: false,
+        render,
+        reason: INVENTORY_REPAIR_REASON
+      });
+      return { actor, changed: true, ...plan };
+    } catch (error) {
+      // A rename or another non-layout Item edit can invalidate the complete
+      // snapshot without queuing another repair. Replan, never replay the old
+      // updates, and bound retries if inventory keeps changing.
+      if (!automatic || error?.code !== "inventory-stale" || attempt + 1 >= AUTOMATIC_REPAIR_MAX_ATTEMPTS) throw error;
+    }
+  }
 }
 
 export function collectWorldInventoryActors() {

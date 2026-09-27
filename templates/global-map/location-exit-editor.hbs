@@ -1,21 +1,21 @@
 <div class="fallout-maw-global-map-form">
-  {{#if levels.length}}<div class="form-group"><label>Уровень</label><div class="form-fields"><select name="exit.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
-  <div class="form-group"><label>Название</label><div class="form-fields"><input type="text" name="exit.name" value="{{exit.name}}" required></div></div>
-  <div class="form-group"><label>Цвет</label><div class="form-fields"><input type="color" name="exit.color" value="{{exit.color}}"></div></div>
-  <div class="form-group"><label>Радиус кисти</label><div class="form-fields"><input type="number" name="exit.brushRadius" value="{{exit.brushRadius}}" min="1" max="12"></div></div>
+  {{#if levels.length}}<div class="form-group"><label>{{localize 'FALLOUTMAW.Actor.Level'}}</label><div class="form-fields"><select name="exit.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Common.Label'}}</label><div class="form-fields"><input type="text" name="exit.name" value="{{exit.name}}" required></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Common.Color'}}</label><div class="form-fields"><input type="color" name="exit.color" value="{{exit.color}}"></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.AuditTemplates.Text2f3e5c154a7d'}}</label><div class="form-fields"><input type="number" name="exit.brushRadius" value="{{exit.brushRadius}}" min="1" max="12"></div></div>
   <div class="form-group">
     <div class="fallout-maw-global-map-visibility" style="display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 0.75rem; width: 100%;">
-      <label class="checkbox"><span>Раскрыта</span><input type="checkbox" name="exit.alwaysDiscovered" title="Зона выхода видна на карте всегда, даже до обнаружения." {{checked exit.alwaysDiscovered}}></label>
-      <label class="checkbox"><span>Скрыта</span><input type="checkbox" name="exit.hidden" title="Зона выхода не отображается на карте и не срабатывает при входе в её клетки. Взаимоисключающа с «Раскрыта»." {{checked exit.hidden}}></label>
+      <label class="checkbox"><span>{{localize 'FALLOUTMAW.AuditTemplates.Textd1a318ecb8c6'}}</span><input type="checkbox" name="exit.alwaysDiscovered" title="{{localize 'FALLOUTMAW.AuditTemplates.Textb2eaadb207b1'}}" {{checked exit.alwaysDiscovered}}></label>
+      <label class="checkbox"><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb4def752e70f'}}</span><input type="checkbox" name="exit.hidden" title="{{localize 'FALLOUTMAW.AuditTemplates.Text4334334a0887'}}" {{checked exit.hidden}}></label>
     </div>
   </div>
   <div class="form-group stacked">
-    <p class="hint">ЛКМ добавляет клетки.</p>
-    <p class="hint">Shift+ЛКМ удаляет клетки.</p>
-    <p class="hint">Ctrl+ЛКМ перехватывает клетки другой зоны выхода.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text1e486ceef92f'}}</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text8414e5081205'}}</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text67e4776c59a0'}}</p>
   </div>
   <footer class="form-footer">
-    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
-    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.Common.Delete'}}</button>{{/if}}
   </footer>
 </div>

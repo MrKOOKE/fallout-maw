@@ -1,7 +1,8 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getDamageTypeSettings, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
-import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
+import { getFactionDisplayLabel, getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import {
   getIlluminationLevelChoices,
   normalizeIlluminationLevel
@@ -82,6 +83,7 @@ import {
   normalizeWatchOutSettings,
   normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
+  normalizeBloodbathSettings,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
@@ -377,7 +379,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `${this.#isFeature ? "Особенность" : "Способность"}: ${this.ability.name}`;
+    return `${this.#isFeature ? auditLocalize("FALLOUTMAW.AuditApps.Trait", "Особенность") : auditLocalize("TYPES.Item.ability", "Способность")}: ${this.ability.name}`;
   }
 
   getAbility(_categoryId, abilityId) {
@@ -983,7 +985,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     }
     condition.trialBranches ??= [];
     condition.trialBranches.push(createAbilityTrialBranch({
-      name: `Ветка ${condition.trialBranches.length + 1}`,
+      name: auditFormat("FALLOUTMAW.AuditApps.Branch", { v0: (condition.trialBranches.length + 1) }, "Ветка {v0}"),
       resultKeys: []
     }));
     return this.#persist({ render: true, sync: false });
@@ -2134,7 +2136,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const selected = await pickCatalogAbilities({
       selectedIds: requirement.abilityIds ?? [],
       excludeIds: [this.abilityId],
-      title: "Выбор способностей"
+      title: auditLocalize("FALLOUTMAW.AuditApps.SelectAbilities", "Выбор способностей")
     });
     if (!selected) return;
 
@@ -2181,21 +2183,21 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
 
     const sourceId = await resolveDroppedAbilitySourceId(event);
     if (!sourceId) {
-      ui.notifications.warn("Перетащите сюда способность из каталога.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.DragAnAbilityFromTheCatalogHere", "Перетащите сюда способность из каталога."));
       return;
     }
     if (sourceId === this.abilityId) {
-      ui.notifications.warn("Нельзя добавить эту же способность в её собственные условия.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AnAbilityCannotBeAddedToItsOwn", "Нельзя добавить эту же способность в её собственные условия."));
       return;
     }
     if (!findCatalogAbility(sourceId)) {
-      ui.notifications.warn("Способность не найдена в каталоге.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AbilityNotFoundInTheCatalog", "Способность не найдена в каталоге."));
       return;
     }
 
     const abilityIds = [...(requirement.abilityIds ?? [])];
     if (abilityIds.includes(sourceId)) {
-      ui.notifications.warn("Эта способность уже добавлена.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThisAbilityHasAlreadyBeenAdded", "Эта способность уже добавлена."));
       return;
     }
     abilityIds.push(sourceId);
@@ -2268,7 +2270,11 @@ function readAbilityFunctions(root, previousValue = []) {
         : previousFunction?.enabled !== false,
       includeInPureValues: Boolean(row.querySelector("[data-advancement-pure-values-input]")?.checked),
       fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
-      fixedSettings: readFixedFunctionSettings(row),
+      fixedSettings: {
+        ...(previousFunction?.fixedKey === (row.querySelector("[data-field='fixedKey']")?.value ?? "")
+          ? previousFunction?.fixedSettings : {}),
+        ...readFixedFunctionSettings(row)
+      },
       activeSettings: readActiveApplicationSettings(row, previousFunction?.activeSettings),
       attackSettings: readAttackActionSettings(row, previousFunction?.attackSettings, type),
       reactionSettings: { durationSeconds: 0, costs: [] },
@@ -2696,6 +2702,9 @@ function readRangedEvolutionFixedSettings(row, fixedKey) {
 
 function readFixedFunctionSettings(row) {
   const fixedKey = row.querySelector("[data-field='fixedKey']")?.value ?? "";
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.bloodbath) {
+    return { explosionAnimationKey: row.querySelector("[data-field='fixed.bloodbath.explosionAnimationKey']")?.value };
+  }
   const rangedEvolutionSettings = readRangedEvolutionFixedSettings(row, fixedKey);
   if (rangedEvolutionSettings) return rangedEvolutionSettings;
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reactive) {
@@ -3811,7 +3820,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
             : normalized.fixedSettings
         ),
         fixedKey,
-        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper ? "Головорезка" : "Вихрь"
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.headChopper ? auditLocalize("FALLOUTMAW.AuditApps.HeadChopper", "Головорезка") : auditLocalize("FALLOUTMAW.AuditApps.Whirlwind", "Вихрь")
       }
     : null;
   const fixedCrowdCrusherSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher
@@ -3840,7 +3849,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
               : normalized.fixedSettings
         ),
         fixedKey,
-        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge ? "Выпад" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave ? "Рассечение" : "Рассечение II"
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge ? auditLocalize("FALLOUTMAW.AuditApps.Lunge", "Выпад") : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cleave ? auditLocalize("FALLOUTMAW.AuditApps.Cleave", "Рассечение") : auditLocalize("FALLOUTMAW.AuditApps.CleaveII", "Рассечение II")
       }
     : null;
   const fixedDeepPenetrationSettings = [
@@ -3857,7 +3866,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
               : normalized.fixedSettings
         ),
         fixedKey,
-        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetration ? "Глубокое проникновение" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing ? "Глубокое проникновение II" : "До кости"
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetration ? auditLocalize("FALLOUTMAW.AuditApps.DeepPenetration", "Глубокое проникновение") : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing ? auditLocalize("FALLOUTMAW.AuditApps.DeepPenetrationII", "Глубокое проникновение II") : auditLocalize("FALLOUTMAW.AuditApps.ToTheBone", "До кости")
       }
     : null;
   const fixedDoubleAttackSettings = [
@@ -3874,7 +3883,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
               : normalized.fixedSettings
         ),
         fixedKey,
-        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack ? "Двоечка" : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack ? "Страховочка" : "Троечка"
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack ? auditLocalize("FALLOUTMAW.AuditApps.DoubleAttack", "Двоечка") : fixedKey === ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack ? auditLocalize("FALLOUTMAW.AuditApps.InsuranceAttack", "Страховочка") : auditLocalize("FALLOUTMAW.AuditApps.TripleAttack", "Троечка")
       }
     : null;
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
@@ -3909,7 +3918,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
             : normalized.fixedSettings
         ),
         fixedKey,
-        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike ? "Зашибу!" : "Ты куда собрался?"
+        label: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.spinalStrike ? auditLocalize("FALLOUTMAW.AuditApps.SpinalStrike", "Зашибу!") : auditLocalize("FALLOUTMAW.AuditApps.WhereDoYouThinkYouReGoing", "Ты куда собрался?")
       }
     : null;
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
@@ -4038,6 +4047,7 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     attackActionSettings,
     fixedWhereAreYouGoingSettings,
     fixedDeusSettings,
+    fixedBloodbathSettings: fixedKey === ABILITY_FIXED_FUNCTION_KEYS.bloodbath ? normalizeBloodbathSettings(normalized.fixedSettings) : null,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
     fixedReactiveSettings,
@@ -4143,7 +4153,7 @@ function prepareAbilityActionForDisplay(action, index, {
     }] : []),
     ...((allowTreatmentClassShift || isTreatmentClassShift) ? [{
       value: ABILITY_ACTION_TYPES.treatmentClassShift,
-      label: "Разовое изменение класса травм/болезней",
+      label: auditLocalize("FALLOUTMAW.AuditApps.OneTimeTraumaDiseaseClassChange", "Разовое изменение класса травм/болезней"),
       selected: isTreatmentClassShift
     }] : [])
   ];
@@ -4389,8 +4399,8 @@ function prepareDeusExMachinaSettingsForDisplay(settings = {}) {
     insightDurationAmount: duration.amount,
     insightDurationUnitChoices: buildDurationUnitChoices(duration.unit),
     restoreModeChoices: [
-      { value: "all", label: "Все ключевые конечности", selected: normalized.rescue.restoreMode === "all" },
-      { value: "count", label: "Ограниченное число", selected: normalized.rescue.restoreMode !== "all" }
+      { value: "all", label: auditLocalize("FALLOUTMAW.AuditApps.AllKeyLimbs", "Все ключевые конечности"), selected: normalized.rescue.restoreMode === "all" },
+      { value: "count", label: auditLocalize("FALLOUTMAW.AuditApps.LimitedNumber", "Ограниченное число"), selected: normalized.rescue.restoreMode !== "all" }
     ],
     isRestoreCountMode: normalized.rescue.restoreMode !== "all"
   };
@@ -4596,10 +4606,10 @@ function prepareConcussionSettingsForDisplay(settings = {}) {
 
 function getAbilityFunctionTypeLabel(entry, fixedKey = "") {
   if (entry.type === ABILITY_FUNCTION_TYPES.fixed) return getFixedAbilityFunctionLabel(fixedKey);
-  if (entry.type === ABILITY_FUNCTION_TYPES.activeApplication) return "Активное применение";
-  if (entry.type === ABILITY_FUNCTION_TYPES.attackAction) return "Атакующее действие";
-  if (entry.type === ABILITY_FUNCTION_TYPES.acquisitionChanges) return "Разовое изменение при приобретении";
-  return "Свободная настройка";
+  if (entry.type === ABILITY_FUNCTION_TYPES.activeApplication) return auditLocalize("FALLOUTMAW.AuditApps.ActiveUse", "Активное применение");
+  if (entry.type === ABILITY_FUNCTION_TYPES.attackAction) return auditLocalize("FALLOUTMAW.Events.Reaction.DepthFilters.weaponAction.Label", "Атакующее действие");
+  if (entry.type === ABILITY_FUNCTION_TYPES.acquisitionChanges) return auditLocalize("FALLOUTMAW.AuditApps.OneTimeChangeOnAcquisition", "Разовое изменение при приобретении");
+  return auditLocalize("FALLOUTMAW.AuditApps.CustomConfiguration", "Свободная настройка");
 }
 
 function prepareActiveApplicationSettingsForDisplay(settings = {}) {
@@ -4608,16 +4618,16 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
     ...normalized,
     activationCosts: prepareActiveApplicationCostRowsForDisplay(normalized.costs),
     targetModeChoices: [
-      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
-      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
+      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: auditLocalize("FALLOUTMAW.AuditApps.Self", "Себе"), selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
+      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: auditLocalize("FALLOUTMAW.AuditApps.Others", "Другим"), selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
     ],
     targetSelectionModeChoices: [
-      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual, label: "Ручной выбор", selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual },
-      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all, label: "Все подходящие", selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all }
+      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual, label: auditLocalize("FALLOUTMAW.AuditApps.ManualSelection", "Ручной выбор"), selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual },
+      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all, label: auditLocalize("FALLOUTMAW.AuditApps.AllEligible", "Все подходящие"), selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all }
     ],
     changeEvaluationChoices: [
-      { value: "target", label: "От параметров цели", selected: normalized.changeEvaluation === "target" },
-      { value: "source", label: "От параметров активатора (снимок)", selected: normalized.changeEvaluation === "source" }
+      { value: "target", label: auditLocalize("FALLOUTMAW.AuditApps.UseTargetParameters", "От параметров цели"), selected: normalized.changeEvaluation === "target" },
+      { value: "source", label: auditLocalize("FALLOUTMAW.AuditApps.UseActivatorParametersSnapshot", "От параметров активатора (снимок)"), selected: normalized.changeEvaluation === "source" }
     ],
     isTargetOthers: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
     isManualTargetSelection: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual,
@@ -4645,9 +4655,9 @@ function prepareAttackActionSettingsForDisplay(settings = {}, constructs = []) {
     attackSoundVolume: normalizeAttackSoundVolume(normalized.attackSoundVolume),
     attackSoundVolumePercent: formatAttackSoundVolumePercent(normalized.attackSoundVolume),
     targetModeChoices: [
-      { value: "cone", label: "Конус", selected: targetMode === "cone" },
-      { value: "selectedTargets", label: "Выбранные цели", selected: targetMode === "selectedTargets" },
-      { value: "area", label: "Область", selected: targetMode === "area" }
+      { value: "cone", label: auditLocalize("FALLOUTMAW.AuditApps.Cone", "Конус"), selected: targetMode === "cone" },
+      { value: "selectedTargets", label: auditLocalize("FALLOUTMAW.AuditApps.SelectedTargets", "Выбранные цели"), selected: targetMode === "selectedTargets" },
+      { value: "area", label: auditLocalize("FALLOUTMAW.Item.AttackChanceArea", "Область"), selected: targetMode === "area" }
     ],
     isCone: targetMode === "cone",
     isTargets: targetMode === "selectedTargets",
@@ -4717,16 +4727,16 @@ function buildAttackHitTrialRows(value = [], constructs = []) {
       canMoveUp: index > 0,
       canMoveDown: index < trials.length - 1,
       subjectChoices: [
-        { value: "source", label: "Применяющий" },
-        { value: "targets", label: "Цели" }
+        { value: "source", label: auditLocalize("FALLOUTMAW.AuditApps.User", "Применяющий") },
+        { value: "targets", label: auditLocalize("FALLOUTMAW.AuditApps.Targets", "Цели") }
       ].map(choice => ({ ...choice, selected: choice.value === subject })),
       sourceModeChoices: [
-        { value: "once", label: "Один раз за применение" },
-        { value: "perTarget", label: "Отдельно для каждой цели" }
+        { value: "once", label: auditLocalize("FALLOUTMAW.AuditApps.OncePerUse", "Один раз за применение") },
+        { value: "perTarget", label: auditLocalize("FALLOUTMAW.AuditApps.SeparatelyForEachTarget", "Отдельно для каждой цели") }
       ].map(choice => ({ ...choice, selected: choice.value === trial?.sourceMode })),
       selectionModeChoices: [
-        { value: "best", label: "Лучшее текущее значение" },
-        { value: "worst", label: "Худшее текущее значение" }
+        { value: "best", label: auditLocalize("FALLOUTMAW.AuditApps.HighestCurrentValue", "Лучшее текущее значение") },
+        { value: "worst", label: auditLocalize("FALLOUTMAW.AuditApps.LowestCurrentValue", "Худшее текущее значение") }
       ].map(choice => ({ ...choice, selected: choice.value === trial?.selectionMode })),
       entries: (trial?.entries ?? []).map((entry, entryIndex) => ({
         ...entry,
@@ -4742,10 +4752,10 @@ function buildAttackHitTrialRows(value = [], constructs = []) {
 
 function buildAttackHitOutcomeRow(outcome = {}, resultKey = "failure", constructs = []) {
   const labels = {
-    criticalFailure: "Критический провал",
-    failure: "Провал",
-    success: "Успех",
-    criticalSuccess: "Критический успех"
+    criticalFailure: auditLocalize("FALLOUTMAW.SkillCheck.CriticalFailure", "Критический провал"),
+    failure: auditLocalize("FALLOUTMAW.SkillCheck.Failure", "Провал"),
+    success: auditLocalize("FALLOUTMAW.SkillCheck.Success", "Успех"),
+    criticalSuccess: auditLocalize("FALLOUTMAW.SkillCheck.CriticalSuccess", "Критический успех")
   };
   return {
     ...outcome,
@@ -4753,9 +4763,9 @@ function buildAttackHitOutcomeRow(outcome = {}, resultKey = "failure", construct
     label: labels[resultKey] ?? resultKey,
     consequenceCount: outcome?.links?.length ?? 0,
     flowChoices: [
-      { value: "continue", label: "Продолжить цепочку" },
-      { value: "stopSubject", label: "Остановить для этого участника" },
-      { value: "stopAll", label: "Остановить всю атаку" }
+      { value: "continue", label: auditLocalize("FALLOUTMAW.AuditApps.ContinueChain", "Продолжить цепочку") },
+      { value: "stopSubject", label: auditLocalize("FALLOUTMAW.AuditApps.StopForThisParticipant", "Остановить для этого участника") },
+      { value: "stopAll", label: auditLocalize("FALLOUTMAW.AuditApps.StopTheEntireAttack", "Остановить всю атаку") }
     ].map(choice => ({ ...choice, selected: choice.value === outcome?.flow })),
     links: buildAttackHitOutcomeLinkRows(outcome?.links, constructs)
   };
@@ -4775,13 +4785,13 @@ function buildAttackHitOutcomeLinkRows(value = [], constructs = []) {
       construct,
       hasConstruct: Boolean(construct),
       recipientChoices: [
-        { value: "subjects", label: "Проходившие это испытание" },
-        { value: "source", label: "Применяющий" },
-        { value: "targets", label: "Все цели атаки" }
+        { value: "subjects", label: auditLocalize("FALLOUTMAW.AuditApps.ParticipantsInThisCheck", "Проходившие это испытание") },
+        { value: "source", label: auditLocalize("FALLOUTMAW.AuditApps.User", "Применяющий") },
+        { value: "targets", label: auditLocalize("FALLOUTMAW.AuditApps.AllAttackTargets", "Все цели атаки") }
       ].map(choice => ({ ...choice, selected: choice.value === link?.recipient })),
       modeChoices: [
-        { value: "perSubject", label: "Отдельно каждому участнику" },
-        { value: "once", label: "Один раз" }
+        { value: "perSubject", label: auditLocalize("FALLOUTMAW.AuditApps.SeparatelyForEachParticipant", "Отдельно каждому участнику") },
+        { value: "once", label: auditLocalize("FALLOUTMAW.AuditApps.Once", "Один раз") }
       ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
     };
   });
@@ -4789,18 +4799,18 @@ function buildAttackHitOutcomeLinkRows(value = [], constructs = []) {
 
 function buildAttackDamageAmountModeChoices(selected = "base") {
   return [
-    { value: "base", label: "Базовый урон оружия" },
-    { value: "formula", label: "Своя формула урона" },
-    { value: "percent", label: "Процент базового урона" }
+    { value: "base", label: auditLocalize("FALLOUTMAW.AuditApps.BaseWeaponDamage", "Базовый урон оружия") },
+    { value: "formula", label: auditLocalize("FALLOUTMAW.AuditApps.CustomDamageFormula", "Своя формула урона") },
+    { value: "percent", label: auditLocalize("FALLOUTMAW.AuditApps.PercentageOfBaseDamage", "Процент базового урона") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
 function buildAttackDamageLimbModeChoices(selected = "random") {
   return [
-    { value: "random", label: "Случайная часть тела" },
-    { value: "randomCritical", label: "Случайная ключевая конечность" },
-    { value: "selected", label: "Выбранная часть тела" },
-    { value: "healthOnly", label: "Только общее здоровье" }
+    { value: "random", label: auditLocalize("FALLOUTMAW.AuditApps.RandomBodyPart", "Случайная часть тела") },
+    { value: "randomCritical", label: auditLocalize("FALLOUTMAW.AuditApps.RandomKeyLimb", "Случайная ключевая конечность") },
+    { value: "selected", label: auditLocalize("FALLOUTMAW.AuditApps.SelectedBodyPart", "Выбранная часть тела") },
+    { value: "healthOnly", label: auditLocalize("FALLOUTMAW.AuditApps.GeneralHealthOnly", "Только общее здоровье") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
@@ -4821,7 +4831,7 @@ function buildAttackProficiencyChoices(selected = "") {
   const key = String(selected ?? "").trim();
   const entries = [...getProficiencySettings()];
   if (key && !entries.some(entry => entry.key === key)) entries.push({ key, label: key });
-  if (!entries.length) return [{ value: "", label: "Владения не настроены", selected: true }];
+  if (!entries.length) return [{ value: "", label: auditLocalize("FALLOUTMAW.AuditApps.ProficienciesAreNotConfigured", "Владения не настроены"), selected: true }];
   return entries.map(entry => ({
     value: entry.key,
     label: entry.label || entry.key,
@@ -4888,7 +4898,7 @@ function buildAttackSpecialPropertyChoices(selected = "", properties = []) {
   const used = new Set(properties.map(property => getWeaponSpecialPropertyType(property)));
   const weaponProficienciesEnabled = getActiveRulesProfile().weaponProficienciesEnabled !== false;
   return [
-    { value: WEAPON_SPECIAL_PROPERTIES.pending, label: "Выберите свойство" },
+    { value: WEAPON_SPECIAL_PROPERTIES.pending, label: auditLocalize("FALLOUTMAW.Item.WeaponSpecialPropertyChoose", "Выберите свойство") },
     {
       value: WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets,
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
@@ -4899,7 +4909,7 @@ function buildAttackSpecialPropertyChoices(selected = "", properties = []) {
     },
     {
       value: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
-      label: "Критический урон по исходу"
+      label: auditLocalize("FALLOUTMAW.AuditApps.CriticalDamageByOutcome", "Критический урон по исходу")
     },
     {
       value: WEAPON_SPECIAL_PROPERTIES.additionalProficiencies,
@@ -4942,10 +4952,10 @@ function buildAttackCriticalDamageOutcomeChoices(
 ) {
   const selectedId = String(selected ?? "").trim();
   const labels = {
-    criticalFailure: "Критический провал",
-    failure: "Провал",
-    success: "Успех",
-    criticalSuccess: "Критический успех"
+    criticalFailure: auditLocalize("FALLOUTMAW.SkillCheck.CriticalFailure", "Критический провал"),
+    failure: auditLocalize("FALLOUTMAW.SkillCheck.Failure", "Провал"),
+    success: auditLocalize("FALLOUTMAW.SkillCheck.Success", "Успех"),
+    criticalSuccess: auditLocalize("FALLOUTMAW.SkillCheck.CriticalSuccess", "Критический успех")
   };
   const trials = Array.isArray(hitResolution?.trials)
     ? hitResolution.trials
@@ -4955,7 +4965,7 @@ function buildAttackCriticalDamageOutcomeChoices(
       const value = String(trial?.outcomes?.[resultKey]?.id ?? "").trim();
       return {
         value,
-        label: `Испытание ${trialIndex + 1} — ${labels[resultKey] ?? resultKey}`,
+        label: auditFormat("FALLOUTMAW.AuditApps.Check", { v0: (trialIndex + 1), v1: (labels[resultKey] ?? resultKey) }, "Испытание {v0} — {v1}"),
         selected: value === selectedId,
         disabled: !value || (unavailableIds.has(value) && value !== selectedId)
       };
@@ -4964,21 +4974,21 @@ function buildAttackCriticalDamageOutcomeChoices(
   if (selectedId && !choices.some(choice => choice.value === selectedId)) {
     choices.push({
       value: selectedId,
-      label: `${selectedId} — ветка не найдена`,
+      label: auditFormat("FALLOUTMAW.AuditApps.BranchNotFound", { v0: (selectedId) }, "{v0} — ветка не найдена"),
       selected: true
     });
   }
   if (choices.length) {
     return [{
       value: "",
-      label: "Выберите исход испытания",
+      label: auditLocalize("FALLOUTMAW.AuditApps.SelectACheckOutcome", "Выберите исход испытания"),
       selected: !selectedId,
       disabled: true
     }, ...choices];
   }
   return [{
     value: "",
-    label: "Сначала добавьте испытание",
+    label: auditLocalize("FALLOUTMAW.AuditApps.AddACheckFirst", "Сначала добавьте испытание"),
     selected: true,
     disabled: true
   }];
@@ -5018,8 +5028,8 @@ function prepareAttackRequirementsForDisplay(requirements = []) {
       index,
       type,
       typeChoices: [
-        { value: "characteristic", label: "Характеристика" },
-        { value: "skill", label: "Навык" }
+        { value: "characteristic", label: auditLocalize("FALLOUTMAW.Settings.CreatureOptions.Characteristic", "Характеристика") },
+        { value: "skill", label: auditLocalize("FALLOUTMAW.Item.WeaponRequirementSkill", "Навык") }
       ].map(choice => ({ ...choice, selected: choice.value === type })),
       keyChoices: buildAttackRequirementKeyChoices(type, requirement?.key, characteristics, skills)
     };
@@ -5084,9 +5094,9 @@ async function browseAttackAudioPath(target, selector) {
 function buildTargetGroupChoices(value = []) {
   const selected = normalizeConditionValues(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
   const labels = {
-    ally: "Союзник",
-    enemy: "Враг",
-    neutral: "Нейтрал"
+    ally: auditLocalize("FALLOUTMAW.Factions.Ally", "Союзник"),
+    enemy: auditLocalize("FALLOUTMAW.Factions.Enemy", "Враг"),
+    neutral: auditLocalize("FALLOUTMAW.Factions.Neutral", "Нейтрал")
   };
   return ABILITY_AURA_TARGET_GROUPS.map(group => ({
     value: group,
@@ -5426,7 +5436,7 @@ function prepareConditionForDisplay(condition, {
     isWeaponSkill,
     isEngagedSkill,
     isSkillCondition,
-    skillConditionLabel: isEngagedSkill ? "Задействованные навыки" : "Задействованные оружием навыки",
+    skillConditionLabel: isEngagedSkill ? auditLocalize("FALLOUTMAW.AuditApps.SkillsUsed", "Задействованные навыки") : auditLocalize("FALLOUTMAW.AuditApps.SkillsUsedByTheWeapon", "Задействованные оружием навыки"),
     isWeaponProficiency,
     isTrial,
     trialSubjectChoices: buildTrialSubjectChoices(condition?.trialSubject),
@@ -5459,12 +5469,12 @@ function prepareConditionForDisplay(condition, {
     changeSelectionModeChoices: [
       {
         value: ABILITY_CHANGE_SELECTION_MODES.exact,
-        label: "Ровно указанное число",
+        label: auditLocalize("FALLOUTMAW.AuditApps.ExactlyTheSpecifiedNumber", "Ровно указанное число"),
         selected: condition?.selectionMode !== ABILITY_CHANGE_SELECTION_MODES.upTo
       },
       {
         value: ABILITY_CHANGE_SELECTION_MODES.upTo,
-        label: "До указанного числа",
+        label: auditLocalize("FALLOUTMAW.AuditApps.UpToTheSpecifiedNumber", "До указанного числа"),
         selected: condition?.selectionMode === ABILITY_CHANGE_SELECTION_MODES.upTo
       }
     ],
@@ -5480,7 +5490,6 @@ function prepareConditionForDisplay(condition, {
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
     typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowAccumulation, allowToggleable, allowTriggerCost, eventReactionMode }),
-    eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
     eventSubjectChoices: buildEventSubjectChoices(condition?.eventSubject),
@@ -5499,8 +5508,8 @@ function prepareConditionForDisplay(condition, {
       { value: "gte", label: ">=", selected: String(condition?.operator ?? "lte") === "gte" }
     ],
     equipmentOperatorChoices: [
-      { value: ABILITY_EQUIPMENT_OPERATORS.occupied, label: "Занят", selected: condition?.operator !== ABILITY_EQUIPMENT_OPERATORS.empty },
-      { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
+      { value: ABILITY_EQUIPMENT_OPERATORS.occupied, label: auditLocalize("FALLOUTMAW.AuditApps.Occupied", "Занят"), selected: condition?.operator !== ABILITY_EQUIPMENT_OPERATORS.empty },
+      { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: auditLocalize("FALLOUTMAW.AuditApps.Unoccupied", "Не занят"), selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
     ],
     equipmentSlotChoices: buildEquipmentSlotChoices(condition?.equipmentSlotKey),
     targetFactionRows: buildTargetFactionRows(condition?.targetFactionNames),
@@ -5613,12 +5622,12 @@ function getAcquisitionRequirementTypeLabel(type) {
 
 function buildFunctionChoices(includeFixed = true) {
   return [
-    { value: "", label: "Выберите функцию", disabled: true, selected: true },
-    { value: ABILITY_FUNCTION_TYPES.fixed, label: "Фиксированные функции" },
-    { value: ABILITY_FUNCTION_TYPES.activeApplication, label: "Активное применение" },
-    { value: ABILITY_FUNCTION_TYPES.attackAction, label: "Атакующее действие" },
-    { value: ABILITY_FUNCTION_TYPES.effectChanges, label: "Свободная настройка" },
-    { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: "Разовое изменение при приобретении" }
+    { value: "", label: auditLocalize("FALLOUTMAW.Item.FunctionChoose", "Выберите функцию"), disabled: true, selected: true },
+    { value: ABILITY_FUNCTION_TYPES.fixed, label: auditLocalize("FALLOUTMAW.AuditApps.FixedFunctions", "Фиксированные функции") },
+    { value: ABILITY_FUNCTION_TYPES.activeApplication, label: auditLocalize("FALLOUTMAW.AuditApps.ActiveUse", "Активное применение") },
+    { value: ABILITY_FUNCTION_TYPES.attackAction, label: auditLocalize("FALLOUTMAW.Events.Reaction.DepthFilters.weaponAction.Label", "Атакующее действие") },
+    { value: ABILITY_FUNCTION_TYPES.effectChanges, label: auditLocalize("FALLOUTMAW.AuditApps.CustomConfiguration", "Свободная настройка") },
+    { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: auditLocalize("FALLOUTMAW.AuditApps.OneTimeChangeOnAcquisition", "Разовое изменение при приобретении") }
   ].filter(choice => includeFixed || choice.value !== ABILITY_FUNCTION_TYPES.fixed);
 }
 
@@ -5634,11 +5643,11 @@ function activateAbilityFunctionKeyAutocomplete(root) {
 
 function buildChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
   const labels = {
-    [ABILITY_CHANGE_TYPES.add]: "Добавить",
-    [ABILITY_CHANGE_TYPES.multiply]: "Умножить",
-    [ABILITY_CHANGE_TYPES.override]: "Заменить",
-    [ABILITY_CHANGE_TYPES.upgrade]: "Повысить до",
-    [ABILITY_CHANGE_TYPES.downgrade]: "Понизить до"
+    [ABILITY_CHANGE_TYPES.add]: auditLocalize("FALLOUTMAW.Item.ConditionAddRecoveryMethod", "Добавить"),
+    [ABILITY_CHANGE_TYPES.multiply]: auditLocalize("FALLOUTMAW.AuditApps.Multiply", "Умножить"),
+    [ABILITY_CHANGE_TYPES.override]: auditLocalize("FALLOUTMAW.Settings.Presets.Import.Replace", "Заменить"),
+    [ABILITY_CHANGE_TYPES.upgrade]: auditLocalize("FALLOUTMAW.AuditApps.IncreaseTo", "Повысить до"),
+    [ABILITY_CHANGE_TYPES.downgrade]: auditLocalize("FALLOUTMAW.AuditApps.DecreaseTo", "Понизить до")
   };
   return Object.values(ABILITY_CHANGE_TYPES).map(value => ({
     value,
@@ -5649,9 +5658,9 @@ function buildChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
 
 function buildAttackDistanceModeChoices(selected = ABILITY_ATTACK_DISTANCE_MODES.effective) {
   return [
-    { value: ABILITY_ATTACK_DISTANCE_MODES.effective, label: "Эффективная дистанция" },
-    { value: ABILITY_ATTACK_DISTANCE_MODES.outsideEffective, label: "Вне эффективной дистанции" },
-    { value: ABILITY_ATTACK_DISTANCE_MODES.free, label: "Свободный" }
+    { value: ABILITY_ATTACK_DISTANCE_MODES.effective, label: auditLocalize("FALLOUTMAW.Item.WeaponEffectiveRange", "Эффективная дистанция") },
+    { value: ABILITY_ATTACK_DISTANCE_MODES.outsideEffective, label: auditLocalize("FALLOUTMAW.AuditApps.OutsideEffectiveRange", "Вне эффективной дистанции") },
+    { value: ABILITY_ATTACK_DISTANCE_MODES.free, label: auditLocalize("FALLOUTMAW.AuditApps.Unrestricted", "Свободный") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
@@ -5660,9 +5669,9 @@ function buildAttackDistanceSideChoices(selected = ABILITY_ATTACK_DISTANCE_SIDES
     ? selected
     : ABILITY_ATTACK_DISTANCE_SIDES.both;
   return [
-    { value: ABILITY_ATTACK_DISTANCE_SIDES.near, label: "Ближняя" },
-    { value: ABILITY_ATTACK_DISTANCE_SIDES.far, label: "Дальняя" },
-    { value: ABILITY_ATTACK_DISTANCE_SIDES.both, label: "Обе" }
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.near, label: auditLocalize("FALLOUTMAW.AuditApps.Near", "Ближняя") },
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.far, label: auditLocalize("FALLOUTMAW.AuditApps.Far", "Дальняя") },
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.both, label: auditLocalize("FALLOUTMAW.AuditApps.Both", "Обе") }
   ].map(choice => ({ ...choice, selected: choice.value === normalized }));
 }
 
@@ -5676,24 +5685,24 @@ function buildConditionTypeChoices(selected = "", {
 } = {}) {
   const choices = [
     { value: "", label: "", selected: !selected },
-    { value: ABILITY_CONDITION_TYPES.triggerChance, label: "Вероятность срабатывания", selected: selected === ABILITY_CONDITION_TYPES.triggerChance },
-    { value: ABILITY_CONDITION_TYPES.timeOfDay, label: "Время суток", selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
-    { value: ABILITY_CONDITION_TYPES.illumination, label: "Степень освещения", selected: selected === ABILITY_CONDITION_TYPES.illumination },
-    { value: ABILITY_CONDITION_TYPES.regionPresence, label: "Нахождение в области", selected: selected === ABILITY_CONDITION_TYPES.regionPresence },
-    { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
-    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
-    { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
-    { value: ABILITY_CONDITION_TYPES.targetRace, label: "Раса цели", selected: selected === ABILITY_CONDITION_TYPES.targetRace },
-    { value: ABILITY_CONDITION_TYPES.targetType, label: "Тип цели", selected: selected === ABILITY_CONDITION_TYPES.targetType },
-    { value: ABILITY_CONDITION_TYPES.posture, label: "Положение", selected: selected === ABILITY_CONDITION_TYPES.posture },
-    { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
-    { value: ABILITY_CONDITION_TYPES.attackDistance, label: "Дистанция атаки", selected: selected === ABILITY_CONDITION_TYPES.attackDistance },
-    { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
-    { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
-    { value: ABILITY_CONDITION_TYPES.engagedSkill, label: "Задействованный навык", selected: selected === ABILITY_CONDITION_TYPES.engagedSkill },
-    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
-    { value: ABILITY_CONDITION_TYPES.trial, label: "Испытание", selected: selected === ABILITY_CONDITION_TYPES.trial },
-    { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
+    { value: ABILITY_CONDITION_TYPES.triggerChance, label: auditLocalize("FALLOUTMAW.AuditApps.TriggerChance", "Вероятность срабатывания"), selected: selected === ABILITY_CONDITION_TYPES.triggerChance },
+    { value: ABILITY_CONDITION_TYPES.timeOfDay, label: auditLocalize("FALLOUTMAW.AuditApps.TimeOfDay", "Время суток"), selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
+    { value: ABILITY_CONDITION_TYPES.illumination, label: auditLocalize("FALLOUTMAW.AuditApps.LightLevel", "Степень освещения"), selected: selected === ABILITY_CONDITION_TYPES.illumination },
+    { value: ABILITY_CONDITION_TYPES.regionPresence, label: auditLocalize("FALLOUTMAW.AuditApps.PresenceInARegion", "Нахождение в области"), selected: selected === ABILITY_CONDITION_TYPES.regionPresence },
+    { value: ABILITY_CONDITION_TYPES.healthPercent, label: auditLocalize("FALLOUTMAW.AuditApps.HPState", "Состояние ОЗ"), selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
+    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: auditLocalize("FALLOUTMAW.AuditApps.EquipmentSlotOccupancy", "Занятость слотов экипировки"), selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
+    { value: ABILITY_CONDITION_TYPES.targetFaction, label: auditLocalize("FALLOUTMAW.AuditApps.TargetFaction", "Фракция цели"), selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
+    { value: ABILITY_CONDITION_TYPES.targetRace, label: auditLocalize("FALLOUTMAW.AuditApps.TargetRace", "Раса цели"), selected: selected === ABILITY_CONDITION_TYPES.targetRace },
+    { value: ABILITY_CONDITION_TYPES.targetType, label: auditLocalize("FALLOUTMAW.AuditApps.TargetType", "Тип цели"), selected: selected === ABILITY_CONDITION_TYPES.targetType },
+    { value: ABILITY_CONDITION_TYPES.posture, label: auditLocalize("FALLOUTMAW.AuditApps.Posture", "Положение"), selected: selected === ABILITY_CONDITION_TYPES.posture },
+    { value: ABILITY_CONDITION_TYPES.occupiedCover, label: auditLocalize("FALLOUTMAW.AuditApps.OccupiedCover", "Занимаемое укрытие"), selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
+    { value: ABILITY_CONDITION_TYPES.attackDistance, label: auditLocalize("FALLOUTMAW.AuditApps.AttackDistance", "Дистанция атаки"), selected: selected === ABILITY_CONDITION_TYPES.attackDistance },
+    { value: ABILITY_CONDITION_TYPES.weaponAction, label: auditLocalize("FALLOUTMAW.AuditApps.AttackType", "Тип атаки"), selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
+    { value: ABILITY_CONDITION_TYPES.weaponSkill, label: auditLocalize("FALLOUTMAW.AuditApps.SkillUsedByTheWeapon", "Задействованный оружием навык"), selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
+    { value: ABILITY_CONDITION_TYPES.engagedSkill, label: auditLocalize("FALLOUTMAW.Item.WeaponSkill", "Задействованный навык"), selected: selected === ABILITY_CONDITION_TYPES.engagedSkill },
+    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: auditLocalize("FALLOUTMAW.AuditApps.WeaponProficiencyUsed", "Задействованное оружейное владение"), selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
+    { value: ABILITY_CONDITION_TYPES.trial, label: auditLocalize("FALLOUTMAW.AuditApps.Check_124", "Испытание"), selected: selected === ABILITY_CONDITION_TYPES.trial },
+    { value: ABILITY_CONDITION_TYPES.aura, label: auditLocalize("FALLOUTMAW.AuditApps.Aura", "Аура"), selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
   if (allowToggleable || selected === ABILITY_CONDITION_TYPES.toggleable) {
     choices.splice(1, 0, {
@@ -5712,7 +5721,7 @@ function buildConditionTypeChoices(selected = "", {
   if (allowAccumulation || selected === ABILITY_CONDITION_TYPES.accumulation) {
     choices.splice(1, 0, {
       value: ABILITY_CONDITION_TYPES.accumulation,
-      label: "Накопление",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Accumulation_126", "Накопление"),
       selected: selected === ABILITY_CONDITION_TYPES.accumulation
     });
   }
@@ -5726,49 +5735,49 @@ function buildConditionTypeChoices(selected = "", {
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
     choices.push({
       value: ABILITY_CONDITION_TYPES.limitedChanges,
-      label: "Ограниченное количество изменений",
+      label: auditLocalize("FALLOUTMAW.AuditApps.LimitedNumberOfChanges", "Ограниченное количество изменений"),
       selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
     });
   }
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.selectedChanges) {
     choices.push({
       value: ABILITY_CONDITION_TYPES.selectedChanges,
-      label: "Выбор изменений (постоянный)",
+      label: auditLocalize("FALLOUTMAW.AuditApps.ChangeSelectionPermanent", "Выбор изменений (постоянный)"),
       selected: selected === ABILITY_CONDITION_TYPES.selectedChanges
     });
   }
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedEffectCopies) {
     choices.push({
       value: ABILITY_CONDITION_TYPES.limitedEffectCopies,
-      label: "Ограниченное количество копий эффекта",
+      label: auditLocalize("FALLOUTMAW.AuditApps.LimitedNumberOfEffectCopies", "Ограниченное количество копий эффекта"),
       selected: selected === ABILITY_CONDITION_TYPES.limitedEffectCopies
     });
   }
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedUses) {
     choices.push({
       value: ABILITY_CONDITION_TYPES.limitedUses,
-      label: "Ограниченное количество применений",
+      label: auditLocalize("FALLOUTMAW.AuditApps.LimitedNumberOfUses", "Ограниченное количество применений"),
       selected: selected === ABILITY_CONDITION_TYPES.limitedUses
     });
   }
   choices.push({
     value: ABILITY_CONDITION_TYPES.cooldown,
-    label: "Перезарядка",
+    label: auditLocalize("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка"),
     selected: selected === ABILITY_CONDITION_TYPES.cooldown
   });
   choices.push({
     value: ABILITY_CONDITION_TYPES.duration,
-    label: "Длительность",
+    label: auditLocalize("FALLOUTMAW.Item.FirstAidChatDuration", "Длительность"),
     selected: selected === ABILITY_CONDITION_TYPES.duration
   });
   choices.push({
     value: ABILITY_CONDITION_TYPES.energyConsumption,
-    label: "Потребление энергии",
+    label: auditLocalize("FALLOUTMAW.Item.WeaponCostEnergy", "Потребление энергии"),
     selected: selected === ABILITY_CONDITION_TYPES.energyConsumption
   });
   choices.push({
     value: ABILITY_CONDITION_TYPES.itemUse,
-    label: "Применение предмета",
+    label: auditLocalize("FALLOUTMAW.AuditApps.UseAnItem", "Применение предмета"),
     selected: selected === ABILITY_CONDITION_TYPES.itemUse
   });
   const activeChoices = getActiveRulesProfile().weaponProficienciesEnabled !== false
@@ -6043,8 +6052,8 @@ function prepareAbilityConstructForDisplay(construct, index) {
     durationAmount: duration.amount,
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: isTemporaryEffect
-      ? "Временный эффект"
-      : (isResourceChange ? "Изменение ресурса" : "Урон"),
+      ? auditLocalize("FALLOUTMAW.AuditApps.TemporaryEffect", "Временный эффект")
+      : (isResourceChange ? auditLocalize("FALLOUTMAW.AuditApps.ResourceChange", "Изменение ресурса") : auditLocalize("FALLOUTMAW.Settings.Proficiencies.InfluenceDamage", "Урон")),
     changes: normalized.changes.map((change, changeIndex) => (
       prepareChangeForDisplay(change, changeIndex, [])
     )),
@@ -6072,8 +6081,8 @@ function prepareAbilityConstructForDisplay(construct, index) {
 
 function buildTrialSubjectChoices(selected = ABILITY_TRIAL_SUBJECTS.targets) {
   return [
-    { value: ABILITY_TRIAL_SUBJECTS.targets, label: "Цели функции" },
-    { value: ABILITY_TRIAL_SUBJECTS.source, label: "Владелец способности" }
+    { value: ABILITY_TRIAL_SUBJECTS.targets, label: auditLocalize("FALLOUTMAW.AuditApps.FunctionTargets", "Цели функции") },
+    { value: ABILITY_TRIAL_SUBJECTS.source, label: auditLocalize("FALLOUTMAW.AuditApps.AbilityOwner", "Владелец способности") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
@@ -6087,8 +6096,8 @@ function buildTrialEntryRows(value = []) {
 
 function buildTrialSelectionModeChoices(selected = ABILITY_TRIAL_SELECTION_MODES.best) {
   return [
-    { value: ABILITY_TRIAL_SELECTION_MODES.best, label: "Лучшее текущее значение" },
-    { value: ABILITY_TRIAL_SELECTION_MODES.worst, label: "Худшее текущее значение" }
+    { value: ABILITY_TRIAL_SELECTION_MODES.best, label: auditLocalize("FALLOUTMAW.AuditApps.HighestCurrentValue", "Лучшее текущее значение") },
+    { value: ABILITY_TRIAL_SELECTION_MODES.worst, label: auditLocalize("FALLOUTMAW.AuditApps.LowestCurrentValue", "Худшее текущее значение") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
@@ -6104,10 +6113,10 @@ function buildTrialBranchRows(value = [], constructs = [], { abilityFunction = n
     ))
   ));
   const labels = {
-    criticalFailure: "Критический провал",
-    failure: "Провал",
-    success: "Успех",
-    criticalSuccess: "Критический успех"
+    criticalFailure: auditLocalize("FALLOUTMAW.SkillCheck.CriticalFailure", "Критический провал"),
+    failure: auditLocalize("FALLOUTMAW.SkillCheck.Failure", "Провал"),
+    success: auditLocalize("FALLOUTMAW.SkillCheck.Success", "Успех"),
+    criticalSuccess: auditLocalize("FALLOUTMAW.SkillCheck.CriticalSuccess", "Критический успех")
   };
   return branches.map((branch, index) => {
     const selected = new Set(normalizeConditionValues(branch?.resultKeys));
@@ -6129,9 +6138,9 @@ function buildTrialBranchRows(value = [], constructs = [], { abilityFunction = n
 
 function buildTrialBranchFlowChoices(selected = ABILITY_TRIAL_BRANCH_FLOWS.continue) {
   return [
-    { value: ABILITY_TRIAL_BRANCH_FLOWS.continue, label: "Продолжить цепочку" },
-    { value: ABILITY_TRIAL_BRANCH_FLOWS.stopSubject, label: "Остановить для участников ветки" },
-    { value: ABILITY_TRIAL_BRANCH_FLOWS.stopAll, label: "Остановить всю цепочку" }
+    { value: ABILITY_TRIAL_BRANCH_FLOWS.continue, label: auditLocalize("FALLOUTMAW.AuditApps.ContinueChain", "Продолжить цепочку") },
+    { value: ABILITY_TRIAL_BRANCH_FLOWS.stopSubject, label: auditLocalize("FALLOUTMAW.AuditApps.StopForBranchParticipants", "Остановить для участников ветки") },
+    { value: ABILITY_TRIAL_BRANCH_FLOWS.stopAll, label: auditLocalize("FALLOUTMAW.AuditApps.StopTheEntireChain", "Остановить всю цепочку") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
@@ -6174,26 +6183,26 @@ function buildTrialLinkRows(value = [], constructs = [], {
       ? kind
       : (construct?.type ?? "");
     const typeChoices = [
-      { value: "", label: "Выберите последствие" },
-      { value: ABILITY_TRIAL_LINK_KINDS.primaryChanges, label: "Основные изменения" },
-      { value: ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent, label: "Процент от основных изменений" },
-      { value: ABILITY_CONSTRUCT_TYPES.damage, label: "Самостоятельное: урон" },
-      { value: ABILITY_CONSTRUCT_TYPES.temporaryEffect, label: "Самостоятельное: временный эффект" },
-      { value: ABILITY_CONSTRUCT_TYPES.resourceChange, label: "Самостоятельное: изменение ресурса" }
+      { value: "", label: auditLocalize("FALLOUTMAW.AuditApps.SelectAConsequence", "Выберите последствие") },
+      { value: ABILITY_TRIAL_LINK_KINDS.primaryChanges, label: auditLocalize("FALLOUTMAW.AuditApps.PrimaryChanges", "Основные изменения") },
+      { value: ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent, label: auditLocalize("FALLOUTMAW.AuditApps.PercentageOfPrimaryChanges", "Процент от основных изменений") },
+      { value: ABILITY_CONSTRUCT_TYPES.damage, label: auditLocalize("FALLOUTMAW.AuditApps.StandaloneDamage", "Самостоятельное: урон") },
+      { value: ABILITY_CONSTRUCT_TYPES.temporaryEffect, label: auditLocalize("FALLOUTMAW.AuditApps.StandaloneTemporaryEffect", "Самостоятельное: временный эффект") },
+      { value: ABILITY_CONSTRUCT_TYPES.resourceChange, label: auditLocalize("FALLOUTMAW.AuditApps.StandaloneResourceChange", "Самостоятельное: изменение ресурса") }
     ].map(choice => ({ ...choice, selected: choice.value === typeKey }));
     const constructChoices = normalizedConstructs.map(construct => ({
       value: construct.id,
       label: construct.name || (
         construct.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect
-          ? "Безымянный временный эффект"
-          : "Безымянное изменение ресурса"
+          ? auditLocalize("FALLOUTMAW.AuditApps.UnnamedTemporaryEffect", "Безымянный временный эффект")
+          : auditLocalize("FALLOUTMAW.AuditApps.UnnamedResourceChange", "Безымянное изменение ресурса")
       ),
       selected: construct.id === constructId
     }));
     if (constructId && !constructChoices.some(choice => choice.value === constructId)) {
       constructChoices.push({
         value: constructId,
-        label: `${constructId} — конструкт не найден`,
+        label: auditFormat("FALLOUTMAW.AuditApps.ConstructNotFound", { v0: (constructId) }, "{v0} — конструкт не найден"),
         selected: true
       });
     }
@@ -6218,21 +6227,21 @@ function buildTrialLinkRows(value = [], constructs = [], {
       hasConstruct: Boolean(construct),
       constructChoices,
       recipientChoices: [
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: "Участники этой ветки" },
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: "Владелец способности" },
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.targets, label: "Все цели функции" }
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: auditLocalize("FALLOUTMAW.AuditApps.ParticipantsInThisBranch", "Участники этой ветки") },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: auditLocalize("FALLOUTMAW.AuditApps.AbilityOwner", "Владелец способности") },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.targets, label: auditLocalize("FALLOUTMAW.AuditApps.AllFunctionTargets", "Все цели функции") }
       ].map(choice => ({ ...choice, selected: choice.value === recipient })),
       modeChoices: recipient !== ABILITY_TRIAL_LINK_RECIPIENTS.source
         ? [{
             value: ABILITY_TRIAL_LINK_MODES.perSubject,
             label: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.targets
-              ? "Каждой цели функции"
-              : "Каждому участнику ветки",
+              ? auditLocalize("FALLOUTMAW.AuditApps.EachFunctionTarget", "Каждой цели функции")
+              : auditLocalize("FALLOUTMAW.AuditApps.EachBranchParticipant", "Каждому участнику ветки"),
             selected: true
           }]
         : [
-            { value: ABILITY_TRIAL_LINK_MODES.once, label: "Один раз за ветку" },
-            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "За каждого участника ветки" }
+            { value: ABILITY_TRIAL_LINK_MODES.once, label: auditLocalize("FALLOUTMAW.AuditApps.OncePerBranch", "Один раз за ветку") },
+            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: auditLocalize("FALLOUTMAW.AuditApps.ForEachBranchParticipant", "За каждого участника ветки") }
           ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
     };
   });
@@ -6297,7 +6306,7 @@ function getEventReactionResourceDefinitions() {
   if (!resources.some(resource => resource.key === ACTION_OR_REACTION_POINTS_RESOURCE_KEY)) {
     resources.unshift({
       key: ACTION_OR_REACTION_POINTS_RESOURCE_KEY,
-      label: "ОД/ОР",
+      label: auditLocalize("FALLOUTMAW.AuditApps.APRP", "ОД/ОР"),
       supported: true
     });
   }
@@ -6359,9 +6368,9 @@ function isRuntimeCondition(type = "") {
 
 function buildAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
   return [
-    { value: ABILITY_AURA_MODES.triggerConditions, label: "Запускать условия по целям" },
-    { value: ABILITY_AURA_MODES.applyToTargets, label: "Накладывать изменения на цели" },
-    { value: ABILITY_AURA_MODES.selfWhenPresent, label: "Сбор внешних условий для наложения на себя" }
+    { value: ABILITY_AURA_MODES.triggerConditions, label: auditLocalize("FALLOUTMAW.AuditApps.RunConditionsOnTargets", "Запускать условия по целям") },
+    { value: ABILITY_AURA_MODES.applyToTargets, label: auditLocalize("FALLOUTMAW.AuditApps.ApplyChangesToTargets", "Накладывать изменения на цели") },
+    { value: ABILITY_AURA_MODES.selfWhenPresent, label: auditLocalize("FALLOUTMAW.AuditApps.CollectExternalConditionsToApplyToSelf", "Сбор внешних условий для наложения на себя") }
   ].map(choice => ({
     ...choice,
     selected: choice.value === selected
@@ -6369,10 +6378,10 @@ function buildAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
 }
 
 function getAuraTargetGroupsLabel(mode = "") {
-  if (mode === ABILITY_AURA_MODES.triggerConditions) return "Цели условий ауры";
+  if (mode === ABILITY_AURA_MODES.triggerConditions) return auditLocalize("FALLOUTMAW.AuditApps.AuraConditionTargets", "Цели условий ауры");
   return mode === ABILITY_AURA_MODES.selfWhenPresent
-    ? "Цели для сбора условий"
-    : "Цели воздействия";
+    ? auditLocalize("FALLOUTMAW.AuditApps.TargetsForCollectingConditions", "Цели для сбора условий")
+    : auditLocalize("FALLOUTMAW.AuditApps.EffectTargets", "Цели воздействия");
 }
 
 function normalizeFormulaText(value = "", fallback = "0") {
@@ -6394,24 +6403,24 @@ function buildAuraTargetGroupRows(value = []) {
 
 function getAuraTargetGroupLabel(group = "") {
   return {
-    ally: "Союзники",
-    enemy: "Враги",
-    neutral: "Нейтралы"
+    ally: auditLocalize("FALLOUTMAW.AuditApps.Allies", "Союзники"),
+    enemy: auditLocalize("FALLOUTMAW.AuditApps.Enemies", "Враги"),
+    neutral: auditLocalize("FALLOUTMAW.AuditApps.Neutrals", "Нейтралы")
   }[group] ?? group;
 }
 
 function buildBooleanChoices(selected = false) {
   return [
-    { value: "true", label: "Да", selected: Boolean(selected) },
-    { value: "false", label: "Нет", selected: !selected }
+    { value: "true", label: auditLocalize("FALLOUTMAW.Common.Yes", "Да"), selected: Boolean(selected) },
+    { value: "false", label: auditLocalize("FALLOUTMAW.SkillCheck.None", "Нет"), selected: !selected }
   ];
 }
 
 function buildHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {
   return [
-    { value: ABILITY_HEALTH_TARGETS.general, label: "Общее" },
-    { value: ABILITY_HEALTH_TARGETS.limb, label: "Конечности" },
-    { value: ABILITY_HEALTH_TARGETS.criticalLimb, label: "Критические конечности" }
+    { value: ABILITY_HEALTH_TARGETS.general, label: auditLocalize("FALLOUTMAW.AuditApps.General", "Общее") },
+    { value: ABILITY_HEALTH_TARGETS.limb, label: auditLocalize("FALLOUTMAW.Settings.CreatureOptions.Limbs", "Конечности") },
+    { value: ABILITY_HEALTH_TARGETS.criticalLimb, label: auditLocalize("FALLOUTMAW.AuditApps.CriticalLimbs", "Критические конечности") }
   ].map(choice => ({
     ...choice,
     selected: choice.value === selected
@@ -6420,7 +6429,7 @@ function buildHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {
 
 function buildLimbChoices(selected = ABILITY_HEALTH_LIMB_ALL, { criticalOnly = false } = {}) {
   const selectedKey = String(selected ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL;
-  const limbs = new Map([[ABILITY_HEALTH_LIMB_ALL, "Все"]]);
+  const limbs = new Map([[ABILITY_HEALTH_LIMB_ALL, auditLocalize("FALLOUTMAW.Craft.Knowledge", "Все")]]);
   for (const race of getCreatureOptions().races ?? []) {
     for (const limb of race.limbs ?? []) {
       if (criticalOnly && !limb?.critical) continue;
@@ -6439,10 +6448,10 @@ function buildLimbChoices(selected = ABILITY_HEALTH_LIMB_ALL, { criticalOnly = f
 
 function buildAcquisitionRequirementTypeChoices(selected = "") {
   const labels = {
-    [ABILITY_ACQUISITION_CONDITION_TYPES.race]: "Раса",
-    [ABILITY_ACQUISITION_CONDITION_TYPES.characteristic]: "Характеристика",
-    [ABILITY_ACQUISITION_CONDITION_TYPES.skill]: "Навык",
-    [ABILITY_ACQUISITION_CONDITION_TYPES.ability]: "Другая способность"
+    [ABILITY_ACQUISITION_CONDITION_TYPES.race]: auditLocalize("FALLOUTMAW.Settings.CreatureOptions.RaceSection", "Раса"),
+    [ABILITY_ACQUISITION_CONDITION_TYPES.characteristic]: auditLocalize("FALLOUTMAW.Settings.CreatureOptions.Characteristic", "Характеристика"),
+    [ABILITY_ACQUISITION_CONDITION_TYPES.skill]: auditLocalize("FALLOUTMAW.Item.WeaponRequirementSkill", "Навык"),
+    [ABILITY_ACQUISITION_CONDITION_TYPES.ability]: auditLocalize("FALLOUTMAW.AuditApps.AnotherAbility", "Другая способность")
   };
   return [
     { value: "", label: "", selected: !selected },
@@ -6459,8 +6468,8 @@ function buildAcquisitionAbilityModeChoices(selected = ABILITY_ACQUISITION_ABILI
     ? selected
     : ABILITY_ACQUISITION_ABILITY_MODES.present;
   const labels = {
-    [ABILITY_ACQUISITION_ABILITY_MODES.present]: "Наличие способности",
-    [ABILITY_ACQUISITION_ABILITY_MODES.absent]: "Отсутствие способности"
+    [ABILITY_ACQUISITION_ABILITY_MODES.present]: auditLocalize("FALLOUTMAW.AuditApps.AbilityPresent", "Наличие способности"),
+    [ABILITY_ACQUISITION_ABILITY_MODES.absent]: auditLocalize("FALLOUTMAW.AuditApps.AbilityAbsent", "Отсутствие способности")
   };
   return Object.values(ABILITY_ACQUISITION_ABILITY_MODES).map(value => ({
     value,
@@ -6612,7 +6621,7 @@ function buildTargetFactionRows(value = []) {
     index,
     choices: getFactionNamesWithDefault(getFactionSettings()).map(name => ({
       value: name,
-      label: name,
+      label: getFactionDisplayLabel(name),
       selected: name === faction
     }))
   }));
@@ -6638,17 +6647,17 @@ function buildTargetTypeChoices(selected = "") {
 
 function buildPostureSubjectChoices(selected = ABILITY_POSTURE_SUBJECTS.self) {
   return [
-    { value: ABILITY_POSTURE_SUBJECTS.self, label: "Свое положение" },
-    { value: ABILITY_POSTURE_SUBJECTS.target, label: "Положение цели" }
+    { value: ABILITY_POSTURE_SUBJECTS.self, label: auditLocalize("FALLOUTMAW.AuditApps.OwnPosture", "Свое положение") },
+    { value: ABILITY_POSTURE_SUBJECTS.target, label: auditLocalize("FALLOUTMAW.AuditApps.TargetPosture", "Положение цели") }
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
 function buildPostureRows(value = []) {
   const labels = {
-    walk: "Стоя",
-    crawl: "В приседе",
-    burrow: "Лежа",
-    knocked: "Опрокинут"
+    walk: auditLocalize("FALLOUTMAW.AuditApps.Standing", "Стоя"),
+    crawl: auditLocalize("FALLOUTMAW.AuditApps.Crouching", "В приседе"),
+    burrow: auditLocalize("FALLOUTMAW.Movement.Prone", "Лежа"),
+    knocked: auditLocalize("FALLOUTMAW.AuditApps.KnockedDown", "Опрокинут")
   };
   return normalizeConditionValues(value).map((posture, index) => ({
     index,
@@ -6710,7 +6719,7 @@ function buildRegionSpecialPropertyRows(value = []) {
   const selected = normalizeConditionValues(value);
   return selected.map((type, index) => ({
     index,
-    choices: [{ value: REGION_SPECIAL_PROPERTY_SMOKE, label: "Задымление" }].map(choice => ({
+    choices: [{ value: REGION_SPECIAL_PROPERTY_SMOKE, label: auditLocalize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke", "Задымление") }].map(choice => ({
       ...choice,
       selected: choice.value === type,
       disabled: choice.value !== type && selected.includes(choice.value)
@@ -6809,9 +6818,9 @@ function splitDurationSeconds(value) {
 
 function buildDurationUnitChoices(selected = "seconds") {
   return [
-    { value: "seconds", label: "секунды" },
-    { value: "minutes", label: "минуты" },
-    { value: "hours", label: "часы" }
+    { value: "seconds", label: auditLocalize("FALLOUTMAW.AuditApps.Seconds", "секунды") },
+    { value: "minutes", label: auditLocalize("FALLOUTMAW.AuditApps.Minutes", "минуты") },
+    { value: "hours", label: auditLocalize("FALLOUTMAW.AuditApps.Hours", "часы") }
   ].map(choice => ({
     ...choice,
     selected: choice.value === selected

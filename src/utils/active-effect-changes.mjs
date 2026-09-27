@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { isMigratedOneTimeResourceChange } from "../migrations/one-time-resources.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { isDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
@@ -186,6 +187,9 @@ export function expandActorEffectChangeKeys(actor, change = {}) {
 }
 
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
+  // One-time points are persisted, consumable Actor balances, never modifiers.
+  if (/^system\.resources\.[^.]+\.once$/.test(String(change?.key ?? ""))) return null;
+  if (isMigratedOneTimeResourceChange(actor, change?.effect, change)) return null;
   if (isDamageBarrierEffectKey(change?.key)) return null;
   if (isPeriodicHealingEffectKey(change?.key)) return null;
   if (isToolSupplyCostEffectKey(change?.key)) return null;
@@ -568,7 +572,15 @@ export function getActorCombatAttackEdgeCount(actor, weaponActionKey = "", kind 
 }
 
 function isAllOrNothingSmartFudgeApplicable(data = {}, check = null, effect = null) {
+  if (data.result === "normal") return false;
   const mode = String(check?.allOrNothingAttackMode ?? "").trim();
+  if (data.burstFirstOnly && (mode === "burst" || check?.weaponActionKey === "burst")) {
+    const count = Math.max(1, toInteger(check?.allOrNothingProjectilesPerAttack ?? 1));
+    const index = toInteger(check?.allOrNothingAttackIndex);
+    if (index >= count) return false;
+    return isIndexedSmartFudgeCheckIncluded({ percent: count > 1 ? data.pelletCoveragePercent : 100,
+      index, count, seed: `${effect?.id}:${check?.weaponAttackId}:first-burst-shot` });
+  }
   if (mode !== "pellet" && mode !== "burst") return true;
   const percent = mode === "burst"
     ? Math.max(0, Math.min(100, toInteger(data.burstCoveragePercent ?? 50)))

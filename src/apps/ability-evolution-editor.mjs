@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   ABILITY_EVOLUTION_ZOOM_MAX,
@@ -64,7 +65,7 @@ export class AbilityEvolutionEditor extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Эволюция: ${this.rootAbility.name}`;
+    return auditFormat("FALLOUTMAW.AuditApps.Evolution", { v0: (this.rootAbility.name) }, "Эволюция: {v0}");
   }
 
   get evolution() {
@@ -274,10 +275,10 @@ export class AbilityEvolutionEditor extends FalloutMaWFormApplicationV2 {
     const selected = this.evolution.nodes.find(node => node.id === selectedId);
     if (!selected) return undefined;
     const confirmed = await DialogV2.confirm({
-      window: { title: "Удалить эволюцию" },
-      content: `<p>Удалить «${foundry.utils.escapeHTML(selected.ability.name)}» и все следующие узлы этой ветки?</p>`,
-      yes: { label: "Удалить" },
-      no: { label: "Отмена" }
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.DeleteEvolution", "Удалить эволюцию") },
+      content: auditFormat("FALLOUTMAW.AuditApps.DeleteAndAllSubsequentNodesInThisBranch", { v0: (foundry.utils.escapeHTML(selected.ability.name)) }, "<p>Удалить «{v0}» и все следующие узлы этой ветки?</p>"),
+      yes: { label: auditLocalize("FALLOUTMAW.Settings.Presets.Actions.Delete", "Удалить") },
+      no: { label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена") }
     });
     if (!confirmed) return undefined;
     const removedIds = collectDescendantIds(this.evolution, selectedId);

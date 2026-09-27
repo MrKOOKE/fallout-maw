@@ -338,8 +338,8 @@ function normalizeWeaponSlots(slots, limbKeys, fallbackLimbKey) {
 function normalizeInventorySize(size = {}) {
   const defaults = createDefaultInventorySize();
   return {
-    columns: Math.max(1, toInteger(size?.columns ?? defaults.columns)),
-    rows: Math.max(1, toInteger(size?.rows ?? defaults.rows))
+    columns: Math.max(0, toInteger(size?.columns ?? defaults.columns)),
+    rows: Math.max(0, toInteger(size?.rows ?? defaults.rows))
   };
 }
 

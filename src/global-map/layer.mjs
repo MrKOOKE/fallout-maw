@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   DEFAULT_LOCATION,
@@ -76,7 +77,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     return {
       name: "falloutMaWGlobalMap",
       order: 9,
-      title: "Глобальная карта",
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0938", "Глобальная карта"),
       layer: GLOBAL_MAP_LAYER,
       icon: "fa-solid fa-map-location-dot",
       visible: true,
@@ -87,23 +88,23 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
         if (active && !tool.button && !tool.toggle) canvas[GLOBAL_MAP_LAYER]?.setMode(tool.name);
       },
       tools: {
-        select: tool("select", 1, "Просмотр", "fa-solid fa-arrow-pointer"),
+        select: tool("select", 1, auditLocalize("FALLOUTMAW.AuditRuntime.R0952", "Просмотр"), "fa-solid fa-arrow-pointer"),
         ...(canManageLocations ? {
-          locationPlace: tool("locationPlace", 2, "Создать локацию", "fa-solid fa-location-dot")
+          locationPlace: tool("locationPlace", 2, auditLocalize("FALLOUTMAW.AuditRuntime.R0953", "Создать локацию"), "fa-solid fa-location-dot")
         } : {}),
-        locationEdit: tool("locationEdit", 3, "Редактировать локацию", "fa-solid fa-pen-to-square"),
-        terrainDraw: tool("terrainDraw", 4, "Новая местность", "fa-solid fa-mountain"),
-        terrainEdit: tool("terrainEdit", 5, "Редактировать местность", "fa-solid fa-paintbrush"),
-        transitionDraw: tool("transitionDraw", 6, "Новая зона перехода", "fa-solid fa-route"),
-        transitionEdit: tool("transitionEdit", 7, "Редактировать переход", "fa-solid fa-signs-post"),
+        locationEdit: tool("locationEdit", 3, auditLocalize("FALLOUTMAW.AuditRuntime.R0954", "Редактировать локацию"), "fa-solid fa-pen-to-square"),
+        terrainDraw: tool("terrainDraw", 4, auditLocalize("FALLOUTMAW.AuditRuntime.R0902", "Новая местность"), "fa-solid fa-mountain"),
+        terrainEdit: tool("terrainEdit", 5, auditLocalize("FALLOUTMAW.AuditRuntime.R0955", "Редактировать местность"), "fa-solid fa-paintbrush"),
+        transitionDraw: tool("transitionDraw", 6, auditLocalize("FALLOUTMAW.AuditRuntime.R0903", "Новая зона перехода"), "fa-solid fa-route"),
+        transitionEdit: tool("transitionEdit", 7, auditLocalize("FALLOUTMAW.AuditRuntime.R0956", "Редактировать переход"), "fa-solid fa-signs-post"),
         ...(isLocationScene ? {
-          locationExitDraw: tool("locationExitDraw", 9, "Новая зона выхода", "fa-solid fa-person-walking-arrow-right"),
-          locationExitEdit: tool("locationExitEdit", 10, "Редактировать зону выхода", "fa-solid fa-pen-ruler")
+          locationExitDraw: tool("locationExitDraw", 9, auditLocalize("FALLOUTMAW.AuditRuntime.R0904", "Новая зона выхода"), "fa-solid fa-person-walking-arrow-right"),
+          locationExitEdit: tool("locationExitEdit", 10, auditLocalize("FALLOUTMAW.AuditRuntime.R0957", "Редактировать зону выхода"), "fa-solid fa-pen-ruler")
         } : {}),
         settings: {
           name: "settings",
           order: 11,
-          title: "Настройки карты",
+          title: auditLocalize("FALLOUTMAW.AuditRuntime.R0958", "Настройки карты"),
           icon: "fa-solid fa-gear",
           button: true,
           onChange: () => new GlobalMapSceneSettings(canvas.scene).render(true)
@@ -178,7 +179,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     } else if (this.mode === "locationExitDraw") {
       if (!assertSupportedGrid()) return this.setMode("select");
       if (getGlobalMapFlag(canvas.scene)?.role !== GLOBAL_MAP_ROLES.LOCATION_SCENE) {
-        ui.notifications.warn("Зоны выхода создаются только на сцене локации.");
+        ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0959", "Зоны выхода создаются только на сцене локации."));
         return this.setMode("select");
       }
       this.editor = new LocationExitEditor(canvas.scene, {
@@ -195,7 +196,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   async startLocationExitEditing() {
     if (!assertSupportedGrid()) return false;
     if (getGlobalMapFlag(canvas.scene)?.role !== GLOBAL_MAP_ROLES.LOCATION_SCENE) {
-      ui.notifications.warn("Зоны выхода редактируются только на сцене локации.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0960", "Зоны выхода редактируются только на сцене локации."));
       return false;
     }
     const exits = getSceneState(canvas.scene).locationExitZones.filter(entry => entry.cells?.length && isMapAreaOnLevel(canvas.scene, entry));
@@ -274,7 +275,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       ? getSceneState(sourceScene).transitions.find(entry => entry.id === transitionId)
       : null;
     if (!sourceScene || !transition || transition.targetSceneId !== canvas.scene?.id) {
-      ui.notifications.warn("Переход для этой сцены не найден.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0961", "Переход для этой сцены не найден."));
       return;
     }
     await this.editor?.close?.();

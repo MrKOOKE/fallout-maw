@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -28,7 +29,7 @@ export function getWeaponSwitchActionPointCost(actor, context = {}) {
 export function canSpendWeaponSwitchActionPoints(actor) {
   const cost = getWeaponSwitchActionPointCost(actor);
   if (cost <= 0) return true;
-  return canSpendCombatActionPoints(actor, cost, { label: "смены оружия" });
+  return canSpendCombatActionPoints(actor, cost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0858", "смены оружия") });
 }
 
 export async function spendWeaponSwitchActionPoints(actor) {

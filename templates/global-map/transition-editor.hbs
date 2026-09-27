@@ -1,44 +1,44 @@
 <div class="fallout-maw-global-map-form">
-  {{#if levels.length}}<div class="form-group"><label>Уровень</label><div class="form-fields"><select name="transition.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
-  <div class="form-group"><label>Название</label><div class="form-fields"><input type="text" name="transition.name" value="{{transition.name}}" required></div></div>
-  <div class="form-group"><label>Цвет</label><div class="form-fields"><input type="color" name="transition.color" value="{{transition.color}}"></div></div>
-  <div class="form-group"><label>Радиус кисти</label><div class="form-fields"><input type="number" name="transition.brushRadius" value="{{transition.brushRadius}}" min="1" max="12"></div></div>
+  {{#if levels.length}}<div class="form-group"><label>{{localize 'FALLOUTMAW.Actor.Level'}}</label><div class="form-fields"><select name="transition.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Common.Label'}}</label><div class="form-fields"><input type="text" name="transition.name" value="{{transition.name}}" required></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.Common.Color'}}</label><div class="form-fields"><input type="color" name="transition.color" value="{{transition.color}}"></div></div>
+  <div class="form-group"><label>{{localize 'FALLOUTMAW.AuditTemplates.Text2f3e5c154a7d'}}</label><div class="form-fields"><input type="number" name="transition.brushRadius" value="{{transition.brushRadius}}" min="1" max="12"></div></div>
   <div class="form-group">
-    <label>Скрыть от игроков</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text7cbf96d8a2a9'}}</label>
     <div class="form-fields">
       <input type="checkbox" name="transition.hidden" {{checked transition.hidden}}>
     </div>
-    <p class="hint">Скрытый переход не отображается игрокам и не срабатывает.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Texte0c94ad59ee4'}}</p>
   </div>
   <div class="form-group">
-    <label>Целевая сцена</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text76f1f62bf4e4'}}</label>
     <div class="form-fields">
       <input type="hidden" name="transition.targetSceneId" value="{{transition.targetSceneId}}">
       <div class="fallout-maw-global-map-dropzone {{#if targetSceneName}}has-scene{{/if}}" data-global-map-transition-scene-drop>
         <i class="fa-solid fa-arrow-down-to-bracket"></i>
         <span data-global-map-transition-scene-name>
-          {{#if targetSceneName}}{{targetSceneName}}{{else}}Перетащите сюда сцену из правой панели{{/if}}
+          {{#if targetSceneName}}{{targetSceneName}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Texte09aceae3b62'}}{{/if}}
         </span>
       </div>
     </div>
-    <p class="hint">Перетащите сцену из списка сцен, чтобы назначить её целью перехода.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textb03419924cb9'}}</p>
   </div>
   {{#if canConfigureEntry}}
   <div class="form-group">
     <button type="button" data-action="configureEntryZone">
-      <i class="fa-solid fa-person-walking-arrow-right"></i> Нарисовать связанную зону
+      <i class="fa-solid fa-person-walking-arrow-right"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textf50cdc4b2ad5'}}
     </button>
-    <p class="hint">Откроет целевую сцену и отдельный редактор связанной зоны этого перехода.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text4a942c42be07'}}</p>
   </div>
   {{/if}}
   <div class="hint">
-    <div>ЛКМ добавляет клетки.</div>
-    <div>Shift+ЛКМ удаляет клетки.</div>
-    <div>Ctrl+ЛКМ перезаписывает клетки других переходов.</div>
-    <div>Связанная зона на целевой сцене настраивается кнопкой выше.</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text1e486ceef92f'}}</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text8414e5081205'}}</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text6d091054951d'}}</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text653e59289929'}}</div>
   </div>
   <footer class="form-footer">
-    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
-    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.Common.Delete'}}</button>{{/if}}
   </footer>
 </div>

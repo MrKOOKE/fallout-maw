@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
 import {
   getNeedGrowthResistanceEffectKey,
@@ -5,7 +6,7 @@ import {
 } from "./need-change-effect-keys.mjs";
 
 export function buildNeedChangeModifierEffectKeyTokens(needs = [], { group = "" } = {}) {
-  const resolvedGroup = String(group || localize("FALLOUTMAW.Common.Needs", "Потребности"));
+  const resolvedGroup = String(group || localize("FALLOUTMAW.Common.Needs", auditLocalize("FALLOUTMAW.AuditRuntime.R1170", "Потребности")));
   return (Array.isArray(needs) ? needs : [])
     .flatMap(need => {
       const needKey = String(need?.key ?? "").trim();
@@ -19,7 +20,7 @@ export function buildNeedChangeModifierEffectKeyTokens(needs = [], { group = "" 
           label: format(
             "FALLOUTMAW.Effects.NeedGrowthResistance",
             { need: needLabel },
-            `Сопротивление росту (${needLabel})`
+            auditFormat("FALLOUTMAW.AuditRuntime.R1171", { p0: (needLabel) }, "Сопротивление росту ({p0})")
           ),
           path: getNeedGrowthResistanceEffectKey(needKey),
           group: resolvedGroup
@@ -30,7 +31,7 @@ export function buildNeedChangeModifierEffectKeyTokens(needs = [], { group = "" 
           label: format(
             "FALLOUTMAW.Effects.NeedSatisfactionEffectiveness",
             { need: needLabel },
-            `Эффективность утоления (${needLabel})`
+            auditFormat("FALLOUTMAW.AuditRuntime.R1172", { p0: (needLabel) }, "Эффективность утоления ({p0})")
           ),
           path: getNeedSatisfactionEffectivenessEffectKey(needKey),
           group: resolvedGroup

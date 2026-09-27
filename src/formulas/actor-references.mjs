@@ -1,50 +1,51 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { getIndicatorValueState } from "../utils/indicator-values.mjs";
 
 const IDENTIFIER_PATTERN = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 const REACTION_RESOURCE = Object.freeze({
   key: "reactionPoints",
   abbr: "rea",
-  label: "Очки реакции"
+  get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0781", "Очки реакции"); }
 });
 const LOAD_INDICATOR = Object.freeze({
   key: "load",
   abbr: "load",
-  label: "Нагрузка"
+  get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0866", "Нагрузка"); }
 });
 export const ACTOR_LEVEL_FORMULA_VARIABLE = Object.freeze({
   key: "level",
   abbr: "уровень",
   aliases: [],
-  label: "Уровень актёра"
+  get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0868", "Уровень актёра"); }
 });
 
 const COMMON_FIELDS = Object.freeze([
-  Object.freeze({ field: "value", suffix: "Value", label: "текущее значение" }),
-  Object.freeze({ field: "max", suffix: "Max", label: "максимум" }),
-  Object.freeze({ field: "min", suffix: "Min", label: "минимум" }),
-  Object.freeze({ field: "bonus", suffix: "Bonus", label: "бонус" }),
-  Object.freeze({ field: "spent", suffix: "Spent", label: "потрачено" })
+  Object.freeze({ field: "value", suffix: "Value", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0869", "текущее значение"); } }),
+  Object.freeze({ field: "max", suffix: "Max", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0870", "максимум"); } }),
+  Object.freeze({ field: "min", suffix: "Min", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0871", "минимум"); } }),
+  Object.freeze({ field: "bonus", suffix: "Bonus", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0872", "бонус"); } }),
+  Object.freeze({ field: "spent", suffix: "Spent", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0873", "потрачено"); } })
 ]);
 const SKILL_FIELDS = Object.freeze([
-  Object.freeze({ field: "base", suffix: "Base", label: "база" }),
-  Object.freeze({ field: "bonusPercent", suffix: "BonusPercent", label: "процентное изменение" }),
-  Object.freeze({ field: "advantage", suffix: "Advantage", label: "преимущество" }),
-  Object.freeze({ field: "disadvantage", suffix: "Disadvantage", label: "помеха" }),
-  Object.freeze({ field: "developmentBonus", suffix: "DevelopmentBonus", label: "бонус развития" }),
-  Object.freeze({ field: "abilityBonus", suffix: "AbilityBonus", label: "бонус способностей" })
+  Object.freeze({ field: "base", suffix: "Base", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0874", "база"); } }),
+  Object.freeze({ field: "bonusPercent", suffix: "BonusPercent", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0875", "процентное изменение"); } }),
+  Object.freeze({ field: "advantage", suffix: "Advantage", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0876", "преимущество"); } }),
+  Object.freeze({ field: "disadvantage", suffix: "Disadvantage", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0877", "помеха"); } }),
+  Object.freeze({ field: "developmentBonus", suffix: "DevelopmentBonus", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0878", "бонус развития"); } }),
+  Object.freeze({ field: "abilityBonus", suffix: "AbilityBonus", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0879", "бонус способностей"); } })
 ]);
 const LIMB_FIELDS = Object.freeze([
-  Object.freeze({ field: "maxBonus", suffix: "MaxBonus", label: "бонус максимума" }),
-  Object.freeze({ field: "aimedDifficultyPercent", suffix: "AimedDifficultyPercent", label: "сложность прицеливания, %" }),
-  Object.freeze({ field: "aimedDifficultyBonus", suffix: "AimedDifficultyBonus", label: "бонус сложности прицеливания" }),
-  Object.freeze({ field: "implantLimit", suffix: "ImplantLimit", label: "лимит имплантов" }),
-  Object.freeze({ field: "implantLimitBase", suffix: "ImplantLimitBase", label: "базовый лимит имплантов" }),
-  Object.freeze({ field: "implantLimitBonus", suffix: "ImplantLimitBonus", label: "бонус лимита имплантов" }),
-  Object.freeze({ field: "damageMultiplier", suffix: "DamageMultiplier", label: "множитель урона" })
+  Object.freeze({ field: "maxBonus", suffix: "MaxBonus", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0880", "бонус максимума"); } }),
+  Object.freeze({ field: "aimedDifficultyPercent", suffix: "AimedDifficultyPercent", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0881", "сложность прицеливания, %"); } }),
+  Object.freeze({ field: "aimedDifficultyBonus", suffix: "AimedDifficultyBonus", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0882", "бонус сложности прицеливания"); } }),
+  Object.freeze({ field: "implantLimit", suffix: "ImplantLimit", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0883", "лимит имплантов"); } }),
+  Object.freeze({ field: "implantLimitBase", suffix: "ImplantLimitBase", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0884", "базовый лимит имплантов"); } }),
+  Object.freeze({ field: "implantLimitBonus", suffix: "ImplantLimitBonus", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0885", "бонус лимита имплантов"); } }),
+  Object.freeze({ field: "damageMultiplier", suffix: "DamageMultiplier", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0886", "множитель урона"); } })
 ]);
 const LOAD_FIELDS = Object.freeze([
-  Object.freeze({ field: "limit", suffix: "Limit", label: "предел перегруза" }),
-  Object.freeze({ field: "limitPercent", suffix: "LimitPercent", label: "предел перегруза, %" })
+  Object.freeze({ field: "limit", suffix: "Limit", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0887", "предел перегруза"); } }),
+  Object.freeze({ field: "limitPercent", suffix: "LimitPercent", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0888", "предел перегруза, %"); } })
 ]);
 
 /**
@@ -215,13 +216,13 @@ function addIndicatorReferenceGroup(state, {
       addIndicatorReference(state, root, definition, descriptor.field, value, descriptor.label, { rootIsEntry });
     }
 
-    addIndicatorVariable(state, definition, "Percent", indicator.percent, "текущий процент");
-    addIndicatorReference(state, root, definition, "percent", indicator.percent, "текущий процент", { rootIsEntry });
+    addIndicatorVariable(state, definition, "Percent", indicator.percent, auditLocalize("FALLOUTMAW.AuditRuntime.R0889", "текущий процент"));
+    addIndicatorReference(state, root, definition, "percent", indicator.percent, auditLocalize("FALLOUTMAW.AuditRuntime.R0889", "текущий процент"), { rootIsEntry });
 
     if (includeMissingPercent) {
       const missingPercent = Math.max(0, Math.min(100, 100 - indicator.percent));
-      addIndicatorVariable(state, definition, "MissingPercent", missingPercent, "недостающий процент");
-      addIndicatorReference(state, root, definition, "missingPercent", missingPercent, "недостающий процент", { rootIsEntry });
+      addIndicatorVariable(state, definition, "MissingPercent", missingPercent, auditLocalize("FALLOUTMAW.AuditRuntime.R0890", "недостающий процент"));
+      addIndicatorReference(state, root, definition, "missingPercent", missingPercent, auditLocalize("FALLOUTMAW.AuditRuntime.R0890", "недостающий процент"), { rootIsEntry });
     }
   }
 }
@@ -265,11 +266,11 @@ function addExplicitReference(state, path, value, label) {
 
 function addIndicatorAutocompleteEntries(target, definitions, type, { includeMissingPercent = false } = {}) {
   for (const definition of collectDefinitions(definitions)) {
-    target.push(createAutocompleteEntry(definition, "Value", "текущее значение", type));
-    target.push(createAutocompleteEntry(definition, "Max", "максимум", type));
-    target.push(createAutocompleteEntry(definition, "Percent", "текущий процент", type));
+    target.push(createAutocompleteEntry(definition, "Value", auditLocalize("FALLOUTMAW.AuditRuntime.R0869", "текущее значение"), type));
+    target.push(createAutocompleteEntry(definition, "Max", auditLocalize("FALLOUTMAW.AuditRuntime.R0870", "максимум"), type));
+    target.push(createAutocompleteEntry(definition, "Percent", auditLocalize("FALLOUTMAW.AuditRuntime.R0889", "текущий процент"), type));
     if (includeMissingPercent) {
-      target.push(createAutocompleteEntry(definition, "MissingPercent", "недостающий процент", type));
+      target.push(createAutocompleteEntry(definition, "MissingPercent", auditLocalize("FALLOUTMAW.AuditRuntime.R0890", "недостающий процент"), type));
     }
   }
 }

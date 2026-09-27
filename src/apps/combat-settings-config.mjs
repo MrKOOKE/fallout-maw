@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   getCombatSettings,
@@ -12,22 +13,22 @@ import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-ap
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
 const UNCONSCIOUSNESS_FORMULA_VARIABLES = Object.freeze([
-  { key: "damage", abbr: "damage", label: "Урон" },
-  { key: "normalDamage", abbr: "normalDamage", label: "Урон в обычной зоне" },
-  { key: "negativeDamage", abbr: "negativeDamage", label: "Урон в минусовой зоне" },
-  { key: "previous", abbr: "previous", label: "Значение до урона" },
-  { key: "next", abbr: "next", label: "Значение после урона" },
-  { key: "min", abbr: "min", label: "Минимум конечности" },
-  { key: "max", abbr: "max", label: "Максимум конечности" },
-  { key: "missingStateRatio", abbr: "missingStateRatio", label: "Доля недостающего состояния" },
-  { key: "negativeDepthRatio", abbr: "negativeDepthRatio", label: "Доля глубины минуса" },
-  { key: "critical", abbr: "critical", label: "Критическая часть: 1 или 0" },
-  { key: "resistance", abbr: "resistance", label: "Сопротивление потере сознания" }
+  { key: "damage", abbr: "damage", get label() { return auditLocalize("FALLOUTMAW.Settings.Proficiencies.InfluenceDamage", "Урон"); } },
+  { key: "normalDamage", abbr: "normalDamage", get label() { return auditLocalize("FALLOUTMAW.AuditApps.DamageInTheNormalRange", "Урон в обычной зоне"); } },
+  { key: "negativeDamage", abbr: "negativeDamage", get label() { return auditLocalize("FALLOUTMAW.AuditApps.DamageInTheNegativeRange", "Урон в минусовой зоне"); } },
+  { key: "previous", abbr: "previous", get label() { return auditLocalize("FALLOUTMAW.AuditApps.ValueBeforeDamage", "Значение до урона"); } },
+  { key: "next", abbr: "next", get label() { return auditLocalize("FALLOUTMAW.AuditApps.ValueAfterDamage", "Значение после урона"); } },
+  { key: "min", abbr: "min", get label() { return auditLocalize("FALLOUTMAW.AuditApps.LimbMinimum", "Минимум конечности"); } },
+  { key: "max", abbr: "max", get label() { return auditLocalize("FALLOUTMAW.AuditApps.LimbMaximum", "Максимум конечности"); } },
+  { key: "missingStateRatio", abbr: "missingStateRatio", get label() { return auditLocalize("FALLOUTMAW.AuditApps.MissingConditionFraction", "Доля недостающего состояния"); } },
+  { key: "negativeDepthRatio", abbr: "negativeDepthRatio", get label() { return auditLocalize("FALLOUTMAW.AuditApps.NegativeDepthFraction", "Доля глубины минуса"); } },
+  { key: "critical", abbr: "critical", get label() { return auditLocalize("FALLOUTMAW.AuditApps.CriticalPart1Or0", "Критическая часть: 1 или 0"); } },
+  { key: "resistance", abbr: "resistance", get label() { return auditLocalize("FALLOUTMAW.AuditApps.ResistanceToLossOfConsciousness", "Сопротивление потере сознания"); } }
 ]);
 
 const AREA_MOVEMENT_FORMULA_VARIABLES = Object.freeze([
-  { key: "actionPointsMax", abbr: "ОД", label: "Максимум ОД" },
-  { key: "movementPointsMax", abbr: "ОП", label: "Максимум ОП" }
+  { key: "actionPointsMax", abbr: "ОД", get label() { return auditLocalize("FALLOUTMAW.AuditApps.MaximumAP", "Максимум ОД"); } },
+  { key: "movementPointsMax", abbr: "ОП", get label() { return auditLocalize("FALLOUTMAW.AuditApps.MaximumMP", "Максимум ОП"); } }
 ]);
 
 export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {

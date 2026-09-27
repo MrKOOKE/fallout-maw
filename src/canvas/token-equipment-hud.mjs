@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING } from "../settings/constants.mjs";
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "../apps/search-inventory.mjs";
@@ -15,8 +16,8 @@ import {
 import { getConditionFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
-const SEARCH_ICON = `systems/${FALLOUT_MAW.id}/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp`;
-const TRADE_ICON = `systems/${FALLOUT_MAW.id}/assets/Komandy%20dlya%20upravleniya%20tokenom/torgovlya.webp`;
+const SEARCH_ICON = `systems/${FALLOUT_MAW.id}/assets/System/SystemActions/action-search.webp`;
+const TRADE_ICON = `systems/${FALLOUT_MAW.id}/assets/System/SystemActions/action-trade.webp`;
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const HUD_BLOCK_CLASS = "fallout-maw-token-equipment-hud";
 const HUD_ACTIONS_CLASS = "fallout-maw-token-equipment-hud-actions";
@@ -179,7 +180,7 @@ async function onOwnerSlotClick(actor, token, row) {
     ? getWeaponSlotCandidateItems(actor, row.weaponSetKey, row.key)
     : getEquipmentSlotCandidateItems(actor, row);
   if (!items.length) {
-    ui.notifications.info(`Нет подходящих предметов для слота "${row.label}".`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0653", { p0: (row.label) }, "Нет подходящих предметов для слота \"{p0}\"."));
     return;
   }
   const itemId = await chooseHudSlotItem(actor, row, items);
@@ -205,21 +206,7 @@ async function chooseHudSlotItem(actor, row, items) {
 
   const overlay = document.createElement("div");
   overlay.className = `${SLOT_PICKER_CLASS}-overlay`;
-  overlay.innerHTML = `
-    <section class="${SLOT_PICKER_CLASS}" role="dialog" aria-modal="true" aria-label="${escapeAttribute(row.label)}">
-      <header class="${SLOT_PICKER_CLASS}-header">
-        <div>
-          <span class="${SLOT_PICKER_CLASS}-eyebrow">Слот: ${escapeHTML(row.label)}</span>
-        </div>
-        <button type="button" class="${SLOT_PICKER_CLASS}-close" aria-label="Закрыть">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </header>
-      <div class="${SLOT_PICKER_CLASS}-body">
-        <div class="${SLOT_PICKER_CLASS}-grid"></div>
-      </div>
-    </section>
-  `;
+  overlay.innerHTML = auditFormat("FALLOUTMAW.AuditRuntime.R0654", { p0: (SLOT_PICKER_CLASS), p1: (escapeAttribute(row.label)), p2: (SLOT_PICKER_CLASS), p3: (SLOT_PICKER_CLASS), p4: (escapeHTML(row.label)), p5: (SLOT_PICKER_CLASS), p6: (SLOT_PICKER_CLASS), p7: (SLOT_PICKER_CLASS) }, "\n    <section class=\"{p0}\" role=\"dialog\" aria-modal=\"true\" aria-label=\"{p1}\">\n      <header class=\"{p2}-header\">\n        <div>\n          <span class=\"{p3}-eyebrow\">Слот: {p4}</span>\n        </div>\n        <button type=\"button\" class=\"{p5}-close\" aria-label=\"Закрыть\">\n          <i class=\"fa-solid fa-xmark\"></i>\n        </button>\n      </header>\n      <div class=\"{p6}-body\">\n        <div class=\"{p7}-grid\"></div>\n      </div>\n    </section>\n  ");
 
   document.body.append(overlay);
   const dialog = overlay.querySelector(`.${SLOT_PICKER_CLASS}`);
@@ -557,17 +544,17 @@ async function renderSlotPickerTooltipHTML(item, actor) {
 
 function getSlotPickerCondition(item) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.condition, { ignoreBroken: true })) {
-    return { label: "Состояние не задано", percent: null, tone: "neutral" };
+    return { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0655", "Состояние не задано"), percent: null, tone: "neutral" };
   }
 
   const condition = getConditionFunction(item);
   const max = Math.max(0, toInteger(condition.max));
   const value = Math.min(Math.max(0, toInteger(condition.value)), max);
-  if (max <= 0) return { label: "Состояние не задано", percent: null, tone: "neutral" };
+  if (max <= 0) return { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0655", "Состояние не задано"), percent: null, tone: "neutral" };
 
   const percent = Math.round((value / max) * 100);
   const tone = percent <= 25 ? "low" : percent <= 60 ? "medium" : "high";
-  return { label: `Состояние ${value}/${max}`, percent, tone };
+  return { label: auditFormat("FALLOUTMAW.AuditRuntime.R0656", { p0: (value), p1: (max) }, "Состояние {p0}/{p1}"), percent, tone };
 }
 
 function closeActiveSlotPicker() {
@@ -592,8 +579,8 @@ function escapeAttribute(value) {
 function buildInteractionActions(token) {
   const wrapper = document.createElement("div");
   wrapper.className = HUD_ACTIONS_CLASS;
-  wrapper.append(buildActionButton("search", "Обыск", SEARCH_ICON, () => openSearchForHudTarget(token)));
-  wrapper.append(buildActionButton("trade", "Торговля", TRADE_ICON, () => requestTradeForHudTarget(token)));
+  wrapper.append(buildActionButton("search", auditLocalize("FALLOUTMAW.AuditRuntime.R0657", "Обыск"), SEARCH_ICON, () => openSearchForHudTarget(token)));
+  wrapper.append(buildActionButton("trade", auditLocalize("FALLOUTMAW.AuditRuntime.R0658", "Торговля"), TRADE_ICON, () => requestTradeForHudTarget(token)));
   return wrapper;
 }
 
@@ -634,7 +621,7 @@ function getControlledOwnerActor() {
   const token = canvas?.tokens?.controlled?.find(entry => entry?.actor?.isOwner) ?? null;
   const actor = token?.actor ?? null;
   if (!actor) {
-    ui.notifications.warn("Выберите свой токен, который будет взаимодействовать с целью.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0659", "Выберите свой токен, который будет взаимодействовать с целью."));
     return null;
   }
   return actor;

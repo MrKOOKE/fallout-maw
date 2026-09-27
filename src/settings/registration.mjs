@@ -1,4 +1,7 @@
+// Foundry registers settings before i18n initialization. Keep metadata as keys
+// so Foundry resolves labels in the active language when rendering the menus.
 import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { registerCompletedTradeSessionStorage } from "../inventory/trade-session-storage.mjs";
 import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
@@ -9,7 +12,6 @@ import {
   createDefaultSkillSettings
 } from "../formulas/index.mjs";
 import { createDefaultCurrencySettings } from "./currency-settings.mjs";
-import { localize } from "../utils/i18n.mjs";
 import { AbilitySettingsConfig } from "../apps/ability-settings-config.mjs";
 import { CampSettingsConfig } from "../apps/camp-settings-config.mjs";
 import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
@@ -122,6 +124,7 @@ import {
 import { syncLoadedActorNaturalRaceItems } from "../races/natural-items.mjs";
 
 export function registerSystemSettings() {
+  registerCompletedTradeSessionStorage();
   registerRulesProfileTools();
   registerPersonalGeneratorSettings();
 
@@ -154,7 +157,7 @@ export function registerSystemSettings() {
   syncActiveRulesProfile(game.settings.get(FALLOUT_MAW.id, SETTINGS_PRESET_STATE_SETTING));
 
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
+    name: "FALLOUTMAW.Settings.CreatureOptions.Title",
     scope: "world",
     preset: true,
     config: false,
@@ -165,7 +168,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, CHARACTERISTICS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Characteristics.Title"),
+    name: "FALLOUTMAW.Settings.Characteristics.Title",
     scope: "world",
     preset: true,
     config: false,
@@ -176,7 +179,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Skills.Title"),
+    name: "FALLOUTMAW.Settings.Skills.Title",
     scope: "world",
     preset: true,
     config: false,
@@ -190,7 +193,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING, {
-    name: "Стоимость развития навыков",
+    name: "FALLOUTMAW.AuditSystem.Text056",
     scope: "world",
     config: false,
     type: Object,
@@ -199,7 +202,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, LEVELS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Levels.Title"),
+    name: "FALLOUTMAW.Settings.Levels.Title",
     scope: "world",
     config: false,
     type: Object,
@@ -210,7 +213,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING, {
-    name: localize("FALLOUTMAW.Settings.DamageTypes.Title"),
+    name: "FALLOUTMAW.Settings.DamageTypes.Title",
     scope: "world",
     config: false,
     type: Object,
@@ -221,7 +224,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, CURRENCY_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Currencies.Title"),
+    name: "FALLOUTMAW.Settings.Currencies.Title",
     scope: "world",
     config: false,
     type: Object,
@@ -232,7 +235,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, ITEM_CATEGORIES_SETTING, {
-    name: "Категории предметов",
+    name: "FALLOUTMAW.AuditSystem.Text057",
     scope: "world",
     config: false,
     type: Object,
@@ -243,7 +246,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Resources.Title"),
+    name: "FALLOUTMAW.Settings.Resources.Title",
     scope: "world",
     config: false,
     type: Object,
@@ -254,7 +257,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
+    name: "FALLOUTMAW.Settings.Proficiencies.Title",
     scope: "world",
     preset: true,
     config: false,
@@ -268,7 +271,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
-    name: "Способности/Особенности",
+    name: "FALLOUTMAW.AuditSystem.Text058",
     scope: "world",
     config: false,
     type: Object,
@@ -281,7 +284,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING, {
-    name: localize("FALLOUTMAW.SkillCheckControl.Title"),
+    name: "FALLOUTMAW.SkillCheckControl.Title",
     scope: "world",
     config: false,
     type: Object,
@@ -290,7 +293,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, DISEASE_SETTINGS_SETTING, {
-    name: "Настройка болезней",
+    name: "FALLOUTMAW.AuditSystem.Text059",
     scope: "world",
     config: false,
     type: Object,
@@ -301,7 +304,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, TRAUMA_SETTINGS_SETTING, {
-    name: "Настройка травм",
+    name: "FALLOUTMAW.AuditSystem.Text060",
     scope: "world",
     config: false,
     type: Object,
@@ -312,7 +315,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, TOOL_SETTINGS_SETTING, {
-    name: "Настройка инструментов",
+    name: "FALLOUTMAW.AuditSystem.Text061",
     scope: "world",
     config: false,
     type: Object,
@@ -323,7 +326,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, SYSTEM_ACTION_SETTINGS_SETTING, {
-    name: "Настройка действий",
+    name: "FALLOUTMAW.AuditSystem.Text062",
     scope: "world",
     config: false,
     type: Object,
@@ -334,7 +337,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, CRAFTING_SETTINGS_SETTING, {
-    name: "Ремесло",
+    name: "FALLOUTMAW.AuditSystem.Text063",
     scope: "world",
     config: false,
     type: Object,
@@ -344,7 +347,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, HACKING_SETTINGS_SETTING, {
-    name: "Настройка взлома",
+    name: "FALLOUTMAW.AuditSystem.Text064",
     scope: "world",
     config: false,
     type: Object,
@@ -353,7 +356,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING, {
-    name: "Настройка скрытности",
+    name: "FALLOUTMAW.AuditSystem.Text065",
     scope: "world",
     config: false,
     type: Object,
@@ -363,7 +366,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Combat.Title"),
+    name: "FALLOUTMAW.Settings.Combat.Title",
     scope: "world",
     config: false,
     type: Object,
@@ -373,7 +376,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, COVER_SETTINGS_SETTING, {
-    name: "Укрытия",
+    name: "FALLOUTMAW.AuditSystem.Text066",
     scope: "world",
     config: false,
     type: Object,
@@ -382,7 +385,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, CAMP_SETTINGS_SETTING, {
-    name: "Лагерь",
+    name: "FALLOUTMAW.AuditSystem.Text067",
     scope: "world",
     config: false,
     type: Object,
@@ -399,7 +402,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, FACTION_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Factions.SettingsTitle"),
+    name: "FALLOUTMAW.Factions.SettingsTitle",
     scope: "world",
     config: false,
     type: Object,
@@ -409,7 +412,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, FACTION_MATRIX_SETTING, {
-    name: localize("FALLOUTMAW.Factions.MatrixTitle"),
+    name: "FALLOUTMAW.Factions.MatrixTitle",
     scope: "world",
     config: false,
     type: Object,
@@ -419,7 +422,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
-    name: "Игнорировать механики времени",
+    name: "FALLOUTMAW.AuditSystem.Text068",
     scope: "world",
     config: false,
     type: Boolean,
@@ -428,7 +431,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_NEEDS_PLAYERS_ONLY_SETTING, {
-    name: "Рост потребностей только у игроков",
+    name: "FALLOUTMAW.AuditSystem.Text069",
     scope: "world",
     config: false,
     type: Boolean,
@@ -437,7 +440,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_REST_MODE_SETTING, {
-    name: "Отдых",
+    name: "FALLOUTMAW.AuditSystem.Text070",
     scope: "world",
     config: false,
     type: Boolean,
@@ -514,32 +517,32 @@ export function registerSystemSettings() {
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
-    name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.CreatureOptions.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-users-gear",
     type: CreatureOptionsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "characteristicsMenu", {
-    name: localize("FALLOUTMAW.Settings.Characteristics.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Characteristics.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-list-check",
     type: CharacteristicsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "skillSettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Skills.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Skills.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-square-root-variable",
     type: SkillFormulasConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "levelSettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Levels.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Levels.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-arrow-trend-up",
     type: LevelSettingsConfig,
     restricted: true
@@ -548,176 +551,176 @@ export function registerSystemSettings() {
   syncProficiencySettingsMenu();
 
   game.settings.registerMenu(FALLOUT_MAW.id, "damageTypesMenu", {
-    name: localize("FALLOUTMAW.Settings.DamageTypes.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.DamageTypes.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-shield-halved",
     type: DamageTypesConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "abilitySettingsMenu", {
-    name: "Способности/Особенности",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text058",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-wand-sparkles",
     type: AbilitySettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "traumaSettingsMenu", {
-    name: "Настройка травм",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text060",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-bone",
     type: TraumaSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "diseaseSettingsMenu", {
-    name: "Настройка болезней",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text059",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-virus",
     type: DiseaseSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "toolSettingsMenu", {
-    name: "Настройка инструментов",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text061",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-screwdriver-wrench",
     type: ToolSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "systemActionSettingsMenu", {
-    name: "Настройка действий",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text062",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-hand-sparkles",
     type: SystemActionSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "craftingSettingsMenu", {
-    name: "Ремесло",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text063",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-hammer",
     type: CraftingSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "hackingSettingsMenu", {
-    name: "Настройка взлома",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text064",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-lock-open",
     type: HackingSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "stealthSettingsMenu", {
-    name: "Настройка скрытности",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text065",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-user-ninja",
     type: StealthSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "combatSettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Combat.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Combat.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-hand-fist",
     type: CombatSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "coverSettingsMenu", {
-    name: "Укрытия",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text066",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-shield-halved",
     type: CoverSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "campSettingsMenu", {
-    name: "Лагерь",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text067",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-campground",
     type: CampSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "factionSettingsMenu", {
-    name: localize("FALLOUTMAW.Factions.SettingsTitle"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Factions.SettingsTitle",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-flag",
     type: FactionSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "personalNameRandomizerMenu", {
-    name: "Настройки персонального генератора",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text071",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-user-gear",
     type: PersonalNameRandomizerConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "currencySettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Currencies.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Currencies.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-coins",
     type: CurrencySettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "itemCategorySettingsMenu", {
-    name: "Категории предметов",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text057",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-tags",
     type: ItemCategorySettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "resourceSettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Resources.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Resources.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-heart-pulse",
     type: ResourceSettingsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "tokenActionHudSettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.HUD.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.HUD.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-table-cells-large",
     type: TokenActionHudSettings,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "characterTokenPrototypeDefaultsMenu", {
-    name: "Базовый прототип токена: Персонаж",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text072",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-circle-user",
     type: CharacterTokenPrototypeDefaultsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "constructTokenPrototypeDefaultsMenu", {
-    name: "Базовый прототип токена: Конструкт",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text073",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-robot",
     type: ConstructTokenPrototypeDefaultsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "groupTokenPrototypeDefaultsMenu", {
-    name: "Базовый прототип токена: Группа",
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.AuditSystem.Text074",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-people-group",
     type: GroupTokenPrototypeDefaultsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "settingsPresetsMenu", {
-    name: localize("FALLOUTMAW.Settings.Presets.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
+    name: "FALLOUTMAW.Settings.Presets.Title",
+    label: "FALLOUTMAW.Settings.Open",
     icon: "fa-solid fa-sliders",
     type: SettingsPresetsConfig,
     restricted: true
@@ -755,8 +758,8 @@ function syncProficiencySettingsMenu() {
 
   if (enabled) {
     game.settings.registerMenu(FALLOUT_MAW.id, "proficiencySettingsMenu", {
-      name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
-      label: localize("FALLOUTMAW.Settings.Open"),
+      name: "FALLOUTMAW.Settings.Proficiencies.Title",
+      label: "FALLOUTMAW.Settings.Open",
       icon: "fa-solid fa-crosshairs",
       type: ProficiencySettingsConfig,
       restricted: true

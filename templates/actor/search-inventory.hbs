@@ -15,20 +15,20 @@
       {{/if}}
       </div>
       {{#if (eq side "searched")}}{{#if ../canQuickDisassemble}}
-      <button type="button" class="fallout-maw-search-quick-disassembly" data-search-quick-disassembly><i class="fa-solid fa-screwdriver-wrench"></i> Быстрый разбор</button>
+      <button type="button" class="fallout-maw-search-quick-disassembly" data-search-quick-disassembly><i class="fa-solid fa-screwdriver-wrench"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text790239529f57'}}</button>
       {{/if}}{{/if}}
     </section>
     {{/each}}
     {{#unless isTrade}}
     <div class="fallout-maw-search-bulk-controls">
-      <button type="button" data-search-bulk-transfer="put" title="Положить все" {{#unless canInteract}}disabled{{/unless}}>
-        <img src="icons/svg/chest.svg" alt="Положить все">
+      <button type="button" data-search-bulk-transfer="put" title="{{localize 'FALLOUTMAW.AuditTemplates.Textd481fb30a7d6'}}" {{#unless canInteract}}disabled{{/unless}}>
+        <img src="icons/svg/chest.svg" alt="{{localize 'FALLOUTMAW.AuditTemplates.Textd481fb30a7d6'}}">
       </button>
-      <button type="button" data-search-bulk-transfer="take" title="Забрать все" {{#unless canInteract}}disabled{{/unless}}>
-        <img src="icons/svg/item-bag.svg" alt="Забрать все">
+      <button type="button" data-search-bulk-transfer="take" title="{{localize 'FALLOUTMAW.AuditTemplates.Textddb8e5152102'}}" {{#unless canInteract}}disabled{{/unless}}>
+        <img src="icons/svg/item-bag.svg" alt="{{localize 'FALLOUTMAW.AuditTemplates.Textddb8e5152102'}}">
       </button>
       {{#if canButcher}}
-      <button type="button" data-search-butchering title="Разделка">
+      <button type="button" data-search-butchering title="{{localize 'FALLOUTMAW.Events.Groups.butchering.Label'}}">
         <i class="fa-solid fa-drumstick-bite" aria-hidden="true"></i>
       </button>
       {{/if}}
@@ -38,7 +38,7 @@
 
   <div class="fallout-maw-sheet-body fallout-maw-search-sheet-body">
     {{#unless canInteract}}
-    <p class="fallout-maw-empty-list fallout-maw-search-notice">Нет прав на обыскивающего актера.</p>
+    <p class="fallout-maw-empty-list fallout-maw-search-notice">{{localize 'FALLOUTMAW.AuditTemplates.Text3dea27623c6e'}}</p>
     {{/unless}}
 
     <section class="tab active fallout-maw-search-tab" data-tab="inventory">
@@ -80,26 +80,26 @@
           <section class="fallout-maw-panel fallout-maw-trade-offer" data-contents-transfer-zone="offer" data-search-actor-uuid="{{uuid}}">
             <header class="fallout-maw-trade-offer-header">
               <h2 data-contents-transfer-title>
-                <span>{{#if tradeOffer.completed}}Купленное{{else}}Предложение{{/if}}</span>
+                <span>{{#if tradeOffer.completed}}{{localize 'FALLOUTMAW.AuditTemplates.Text7fe62ae7f7c5'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text5e31ce88e561'}}{{/if}}</span>
                 {{#unless tradeOffer.completed}}
                 <strong>{{tradeOffer.total}}</strong>
                 <em class="fallout-maw-trade-offer-difference fallout-maw-trade-offer-difference--{{tradeOffer.differenceClass}}">({{tradeOffer.differenceLabel}})</em>
                 {{/unless}}
               </h2>
               <div class="fallout-maw-trade-offer-actions">
-                <button type="button" class="fallout-maw-trade-offer-clear" data-trade-offer-remove="all" data-trade-side="{{tradeOffer.side}}" title="Забрать все" {{#unless tradeOffer.canControl}}disabled{{/unless}}>
+                <button type="button" class="fallout-maw-trade-offer-clear" data-trade-offer-remove="all" data-trade-side="{{tradeOffer.side}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Textddb8e5152102'}}" {{#unless tradeOffer.canControl}}disabled{{/unless}}>
                   <i class="fa-solid fa-box-open"></i>
                 </button>
                 {{#if tradeOffer.completed}}
                 <button type="button" class="fallout-maw-trade-ready-button" data-trade-restart {{#unless tradeOffer.canControl}}disabled{{/unless}}>
                   <i class="fa-solid fa-rotate-right"></i>
-                  <span>Возобновить торговлю</span>
+                  <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7155171abb98'}}</span>
                 </button>
                 {{else}}
                 {{#if tradeOffer.showConfirm}}
                 <button type="button" class="fallout-maw-trade-ready-button {{#if tradeOffer.ready}}ready{{/if}}" data-trade-ready="{{tradeOffer.side}}" {{#unless tradeOffer.canConfirm}}disabled{{/unless}}>
                   <i class="fa-solid fa-check"></i>
-                  <span>Подтвердить</span>
+                  <span>{{localize 'FALLOUTMAW.AuditTemplates.Text0467ae4bb88b'}}</span>
                 </button>
                 {{/if}}
                 {{/if}}
@@ -113,7 +113,7 @@
                   {{#if price}}<span class="fallout-maw-trade-price">{{price}}</span>{{/if}}
                   {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
                   {{#unless completed}}
-                  <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="item" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать" {{#unless ../tradeOffer.canControl}}disabled{{/unless}}>
+                  <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="item" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9c7449bfd16b'}}" {{#unless ../tradeOffer.canControl}}disabled{{/unless}}>
                     <i class="fa-solid fa-xmark"></i>
                   </button>
                   {{/unless}}
@@ -130,7 +130,7 @@
                   </span>
                   <strong>{{amount}}</strong>
                   {{#unless completed}}
-                  <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="currency" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать" {{#unless ../tradeOffer.canControl}}disabled{{/unless}}>
+                  <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="currency" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9c7449bfd16b'}}" {{#unless ../tradeOffer.canControl}}disabled{{/unless}}>
                     <i class="fa-solid fa-xmark"></i>
                   </button>
                   {{/unless}}
@@ -151,7 +151,7 @@
                   <strong>{{count}}</strong>
                 </button>
                 {{else}}
-                <p class="fallout-maw-empty-list">Нет предметов для торговли.</p>
+                <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textf3a1ba503c82'}}</p>
                 {{/each}}
               </div>
               {{#if subcategories}}
@@ -209,7 +209,7 @@
                         {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
                       </article>
                       {{else if phantom}}
-                      <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}: перетащите подходящую деталь">
+                      <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}{{localize 'FALLOUTMAW.AuditTemplates.Texte9e3c3d99913'}}">
                         <img src="{{phantomImg}}" alt="">
                         <i class="fa-solid fa-plus"></i>
                       </div>
@@ -222,7 +222,7 @@
                 </div>
 
                 {{#if inventory.prosthesisSlots.length}}
-                <h2>Протезы</h2>
+                <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}</h2>
                 <div class="fallout-maw-equipment-slot-list fallout-maw-prosthesis-slot-list">
                   {{#each inventory.prosthesisSlots}}
                   <div class="fallout-maw-slot-card">
@@ -280,7 +280,7 @@
             {{#with inventory.butcheringStorage}}
             {{#if grid.items.length}}
             <section class="fallout-maw-panel fallout-maw-butchering-storage-section">
-              <h2>Разделка</h2>
+              <h2>{{localize 'FALLOUTMAW.Events.Groups.butchering.Label'}}</h2>
               <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
                 {{#each grid.zones}}
                 <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
@@ -296,8 +296,10 @@
             {{/if}}
             {{/with}}
 
+            {{#if inventory.showInventoryPane}}
             <section class="fallout-maw-panel fallout-maw-inventory-pane">
               <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll">
+                {{#if inventory.showRootInventory}}
                 <section data-contents-transfer-zone data-search-actor-uuid="{{uuid}}" data-inventory-parent-id="">
                   <h2 data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
                   <div class="fallout-maw-contents-transfer-grid-scroll" data-search-scroll-key="{{side}}:inventory-grid">
@@ -316,6 +318,7 @@
                   </div>
 
                 </section>
+                {{/if}}
                 {{#each inventory.containers}}
                 <section class="fallout-maw-container-section" data-contents-transfer-zone data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
                   <div class="fallout-maw-panel-header fallout-maw-container-header">
@@ -347,6 +350,7 @@
                 {{/each}}
               </div>
             </section>
+            {{/if}}
             {{/unless}}
           </div>
         </section>

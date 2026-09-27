@@ -1,5 +1,7 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
-import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
+import { planInventoryItemConsumption } from "../inventory/consume.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
   getCharacteristicSettings,
   getDamageTypeSettings,
@@ -11,12 +13,14 @@ import {
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { isSkillBonusPercentEffectKey } from "../utils/active-effect-keys.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
+import { toInteger } from "../utils/numbers.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { getOneTimeUseFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import {
   actorKnowsCraftItem,
   getCraftKnowledgeItemUuid,
-  grantCraftItemKnowledge,
+  getKnownCraftItemUuids,
+  KNOWN_CRAFT_ITEMS_FLAG,
   hasCraftKnowledgeData,
   resolveCraftKnowledgeItem
 } from "./recipe-knowledge.mjs";
@@ -30,6 +34,7 @@ const LEGACY_SKILL_KEY_REMAPS = Object.freeze({
 });
 
 export async function useOneTimeUseItem({ actor = null, item = null, source = {}, chainRef = null, options = {} } = {}) {
+  item = actor?.items?.get?.(String(item?.id ?? item?._id ?? "")) ?? null;
   if (!actor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.oneTimeUse)) return false;
   const inheritedChainRef = chainRef
     ?? options?.falloutMawSystemEventChainRef
@@ -42,35 +47,48 @@ export async function useOneTimeUseItem({ actor = null, item = null, source = {}
   const changes = normalizeOneTimeUseChanges(oneTimeUse.changes);
   const recipeItemUuids = normalizeOneTimeUseRecipeItemUuids(oneTimeUse.recipeItemUuids);
   if (!changes.length && !recipeItemUuids.length) {
-    ui.notifications.warn(`${item.name}: изменения и знания рецептов не настроены.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1162", { p0: (item.name) }, "{p0}: изменения и знания рецептов не настроены."));
     return false;
   }
   if (getItemQuantity(item) <= 0) {
-    ui.notifications.warn(`${item.name}: предмет израсходован.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1163", { p0: (item.name) }, "{p0}: предмет израсходован."));
     return false;
   }
 
   const studiedEffect = findOneTimeUseStudiedEffect(actor);
   if (isOneTimeUseRepeatBlocked(oneTimeUse, studiedEffect, item.name)) {
-    ui.notifications.warn(`${item.name}: уже изучено, повторное применение недоступно.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1164", { p0: (item.name) }, "{p0}: уже изучено, повторное применение недоступно."));
     return false;
   }
   const unknownRecipeItemUuids = recipeItemUuids.filter(uuid => !actorKnowsCraftItem(actor, uuid));
   if (!changes.length && recipeItemUuids.length && !unknownRecipeItemUuids.length) {
-    ui.notifications.warn(`${item.name}: все содержащиеся рецепты уже изучены.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1165", { p0: (item.name) }, "{p0}: все содержащиеся рецепты уже изучены."));
     return false;
   }
 
-  if (changes.length || Boolean(oneTimeUse.repeatApplicationBlocked)) {
-    await applyOneTimeUseChanges(actor, item, changes, studiedEffect, documentOptions);
-  }
-  const grantedRecipeItemUuids = await grantCraftItemKnowledge(actor, unknownRecipeItemUuids);
-  await spendOneTimeUseItem(item, documentOptions);
+  const consumption = planInventoryItemConsumption({ item });
+  if (!consumption.changed) return false;
+  const effectPlan = changes.length || Boolean(oneTimeUse.repeatApplicationBlocked)
+    ? planOneTimeUseChanges(actor, item, changes, studiedEffect)
+    : {};
+  const actorUpdates = unknownRecipeItemUuids.length ? {
+    [`flags.${SYSTEM_ID}.${KNOWN_CRAFT_ITEMS_FLAG}`]: Array.from(new Set([
+      ...getKnownCraftItemUuids(actor), ...unknownRecipeItemUuids
+    ])).sort((left, right) => left.localeCompare(right))
+  } : {};
+  await executeInventoryMutation({
+    actor,
+    updates: consumption.updates,
+    deletes: consumption.deletes,
+    actorUpdates,
+    ...effectPlan
+  }, { reason: "one-time-use", documentOptions });
+  const grantedRecipeItemUuids = unknownRecipeItemUuids;
   if (grantedRecipeItemUuids.length) {
     const names = grantedRecipeItemUuids
       .map(uuid => resolveCraftKnowledgeItem(uuid)?.name ?? uuid)
       .join(", ");
-    ui.notifications.info(`${actor.name}: изучены рецепты — ${names}.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R1166", { p0: (actor.name), p1: (names) }, "{p0}: изучены рецепты — {p1}."));
   }
   return true;
 }
@@ -115,8 +133,11 @@ export function remapOneTimeUseChangeKey(key = "") {
   return normalized;
 }
 
-async function applyOneTimeUseChanges(actor, item, changes = [], studiedEffect = null, documentOptions = {}) {
+function planOneTimeUseChanges(actor, item, changes = [], studiedEffect = null) {
   const effect = studiedEffect ?? findOneTimeUseStudiedEffect(actor);
+  // Prepared effect rows contain runtime priority defaults and a back-reference
+  // to the Effect document. Only source rows belong in persistent study data.
+  const effectSource = effect?._source ?? effect?.toObject?.() ?? effect;
   const appliedItems = upsertStudiedAppliedItem(
     normalizeStudiedAppliedItems(getOneTimeUseStudiedAppliedItems(effect)),
     item,
@@ -124,7 +145,7 @@ async function applyOneTimeUseChanges(actor, item, changes = [], studiedEffect =
   );
 
   const mergedChanges = mergeOneTimeUseEffectChanges(
-    effect?.system?.changes ?? effect?.changes ?? [],
+    effectSource?.system?.changes ?? effectSource?.changes ?? [],
     changes
   );
   const description = buildOneTimeUseStudiedDescription(appliedItems);
@@ -135,20 +156,20 @@ async function applyOneTimeUseChanges(actor, item, changes = [], studiedEffect =
   });
 
   if (effect) {
-    await effect.update({
+    return { effectUpdates: [{
+      _id: effect.id,
       name: effectData.name,
       img: effectData.img,
       description: effectData.description,
       "system.changes": effectData.system.changes,
-      [`flags.${SYSTEM_ID}.-${LEGACY_ONE_TIME_USE_STUDIED_FLAG}`]: null,
+      [`flags.${SYSTEM_ID}.-=${LEGACY_ONE_TIME_USE_STUDIED_FLAG}`]: null,
       [`flags.${SYSTEM_ID}.${ONE_TIME_USE_STUDIED_FLAG}`]: { appliedItems },
       [`flags.${SYSTEM_ID}.kind`]: "passive",
       disabled: false
-    }, { animate: false, ...documentOptions });
-    return;
+    }] };
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false, ...documentOptions });
+  return { effectCreates: [effectData] };
 }
 
 export function findOneTimeUseStudiedEffect(actor) {
@@ -173,22 +194,27 @@ function getOneTimeUseStudiedAppliedItems(effect) {
 
 function getOneTimeUseStudiedEffectName() {
   const localized = game.i18n.localize("FALLOUTMAW.Effects.Studied");
-  return localized === "FALLOUTMAW.Effects.Studied" ? "Изученное" : localized;
+  return localized === "FALLOUTMAW.Effects.Studied" ? auditLocalize("FALLOUTMAW.AuditRuntime.R1167", "Изученное") : localized;
 }
 
-function mergeOneTimeUseEffectChanges(existing = [], incoming = []) {
+export function mergeOneTimeUseEffectChanges(existing = [], incoming = []) {
   const merged = (Array.isArray(existing) ? existing : []).map(change => foundry.utils.deepClone(change));
   for (const change of incoming) {
     const match = merged.find(entry =>
       entry.key === change.key
       && entry.type === change.type
       && String(entry.phase ?? "initial") === String(change.phase ?? "initial")
+      && toInteger(entry.priority) === toInteger(change.priority)
     );
     if (match && change.type === "add") {
-      const current = Number(match.value) || 0;
-      const next = Number(change.value) || 0;
-      match.value = String(current + next);
-      continue;
+      const current = Number(match.value);
+      const next = Number(change.value);
+      // Formula-valued changes must be evaluated by the normal effect pipeline.
+      // Coercing them to a number here would permanently replace them with zero.
+      if (Number.isFinite(current) && Number.isFinite(next)) {
+        match.value = String(current + next);
+        continue;
+      }
     }
     merged.push(foundry.utils.deepClone(change));
   }
@@ -219,11 +245,11 @@ function buildOneTimeUseStudiedEffectData({ changes = [], description = "", appl
 }
 
 function upsertStudiedAppliedItem(appliedItems = [], item = null, changes = []) {
-  const itemName = String(item?.name ?? "Предмет").trim() || "Предмет";
+  const itemName = String(item?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет")).trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет");
   const itemId = String(item?.id ?? "");
   const nextItems = appliedItems.map(entry => ({
     itemId: String(entry?.itemId ?? ""),
-    itemName: String(entry?.itemName ?? "Предмет").trim() || "Предмет",
+    itemName: String(entry?.itemName ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет")).trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет"),
     changes: (entry?.changes ?? []).map(change => foundry.utils.deepClone(change))
   }));
   const existing = nextItems.find(entry => entry.itemName === itemName);
@@ -243,7 +269,7 @@ function upsertStudiedAppliedItem(appliedItems = [], item = null, changes = []) 
 function normalizeStudiedAppliedItems(appliedItems = []) {
   const normalized = [];
   for (const entry of appliedItems ?? []) {
-    const itemName = String(entry?.itemName ?? "Предмет").trim() || "Предмет";
+    const itemName = String(entry?.itemName ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет")).trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет");
     const existing = normalized.find(item => item.itemName === itemName);
     if (existing) {
       existing.itemId = String(entry?.itemId ?? existing.itemId ?? "");
@@ -262,7 +288,7 @@ function normalizeStudiedAppliedItems(appliedItems = []) {
 function buildOneTimeUseStudiedDescription(appliedItems = []) {
   const pathLabels = buildOneTimeUsePathLabelMap();
   return normalizeStudiedAppliedItems(appliedItems).map(entry => {
-    const itemName = escapeHtml(String(entry?.itemName ?? "Предмет"));
+    const itemName = escapeHtml(String(entry?.itemName ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1168", "Предмет")));
     const changeSummaries = (entry?.changes ?? [])
       .map(change => escapeHtml(formatOneTimeUseChangeSummary(change, pathLabels)))
       .filter(Boolean)
@@ -330,14 +356,6 @@ function formatOneTimeUseChangeValue(type = "add", value = "", key = "") {
   if (normalizedType === "upgrade") return `≥ ${normalizedValue}${suffix}`;
   if (normalizedType === "downgrade") return `≤ ${normalizedValue}${suffix}`;
   return `${normalizedValue}${suffix}`;
-}
-
-async function spendOneTimeUseItem(item, documentOptions = {}) {
-  return commitInventoryItemConsumption({
-    item,
-    documentOptions,
-    reason: "one-time-use-consume"
-  });
 }
 
 function createOneTimeUseDocumentOptions(chainRef = null) {

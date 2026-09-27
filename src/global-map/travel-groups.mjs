@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { getMapTokenLevelId, isMapAreaOnLevel, getMapAreaLevelId, getMapAreaTokenPlacement } from "./levels.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
@@ -144,24 +145,24 @@ export async function promptLocationExit({ sceneId, exitZoneId, tokenId, userId 
   const preservesCarrier = isTravelGroupCarrierActor(token.actor);
   const parentScene = game.scenes?.get(getGlobalMapFlag(scene)?.parentSceneId);
   const parentSceneName = String(parentScene?.name ?? "").trim();
-  const returnDestination = parentSceneName ? `на «${parentSceneName}»` : "назад";
+  const returnDestination = parentSceneName ? auditFormat("FALLOUTMAW.AuditRuntime.R0979", { p0: (parentSceneName) }, "на «{p0}»") : auditLocalize("FALLOUTMAW.AuditRuntime.R0980", "назад");
   const returnDestinationHtml = parentSceneName
-    ? `на «${foundry.utils.escapeHTML(parentSceneName)}»`
-    : "назад";
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0979", { p0: (foundry.utils.escapeHTML(parentSceneName)) }, "на «{p0}»")
+    : auditLocalize("FALLOUTMAW.AuditRuntime.R0980", "назад");
   const result = await DialogV2.wait({
-    window: { title: preservesCarrier ? `Вернуться ${returnDestination}?` : (zone.name || "Покинуть локацию?") },
+    window: { title: preservesCarrier ? auditFormat("FALLOUTMAW.AuditRuntime.R0981", { p0: (returnDestination) }, "Вернуться {p0}?") : (zone.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0982", "Покинуть локацию?")) },
     content: preservesCarrier
-      ? `<p>Вернуться ${returnDestinationHtml} всей путешествующей группой?</p>`
-      : `<p>Покинуть локацию через <strong>${foundry.utils.escapeHTML(zone.name || "зону выхода")}</strong>?</p>`,
+      ? auditFormat("FALLOUTMAW.AuditRuntime.R0983", { p0: (returnDestinationHtml) }, "<p>Вернуться {p0} всей путешествующей группой?</p>")
+      : auditFormat("FALLOUTMAW.AuditRuntime.R0984", { p0: (foundry.utils.escapeHTML(zone.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0985", "зону выхода"))) }, "<p>Покинуть локацию через <strong>{p0}</strong>?</p>"),
     buttons: preservesCarrier
       ? [
-        { action: "carrier", label: `Вернуться ${returnDestination}`, icon: "fa-solid fa-arrow-left", default: true },
-        { action: "stay", label: "Остаться", icon: "fa-solid fa-xmark" }
+        { action: "carrier", label: auditFormat("FALLOUTMAW.AuditRuntime.R0986", { p0: (returnDestination) }, "Вернуться {p0}"), icon: "fa-solid fa-arrow-left", default: true },
+        { action: "stay", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0987", "Остаться"), icon: "fa-solid fa-xmark" }
       ]
       : [
-        { action: "solo", label: "Покинуть самому", icon: "fa-solid fa-person-walking-arrow-right" },
-        { action: "group", label: "В составе группы", icon: "fa-solid fa-people-group", default: true },
-        { action: "stay", label: "Остаться", icon: "fa-solid fa-xmark" }
+        { action: "solo", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0988", "Покинуть самому"), icon: "fa-solid fa-person-walking-arrow-right" },
+        { action: "group", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0989", "В составе группы"), icon: "fa-solid fa-people-group", default: true },
+        { action: "stay", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0987", "Остаться"), icon: "fa-solid fa-xmark" }
       ],
     rejectClose: false,
     render: (_event, dialog) => {
@@ -182,14 +183,14 @@ export async function promptLocationEntry({ sceneId, locationId, tokenId, userId
   const token = game.scenes?.get(sceneId)?.tokens?.get(tokenId);
   if (!found?.location?.linkedSceneId || !token) return false;
   if (!token.actor?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId) {
-    ui.notifications.warn("На глобальной карте в локацию входит только носитель путешествующей группы.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0990", "На глобальной карте в локацию входит только носитель путешествующей группы."));
     return false;
   }
   const confirmed = await DialogV2.confirm({
-    window: { title: "Войти в локацию?" },
-    content: `<p>Переместиться в <strong>${foundry.utils.escapeHTML(found.location.name)}</strong>?</p>`,
-    yes: { label: "Переместиться" },
-    no: { label: "Остаться" }
+    window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0991", "Войти в локацию?") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0992", { p0: (foundry.utils.escapeHTML(found.location.name)) }, "<p>Переместиться в <strong>{p0}</strong>?</p>"),
+    yes: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0993", "Переместиться") },
+    no: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0987", "Остаться") }
   });
   if (!confirmed) return false;
   return requestLocationEntry({ sceneId, locationId, tokenId, requestingUserId: userId });
@@ -229,7 +230,7 @@ export function openTravelAssembly(assemblyId, sceneId = canvas.scene?.id) {
 export async function travelToLocation(locationId, { tokenIds = null } = {}) {
   const tokenId = tokenIds?.[0] ?? canvas.tokens?.controlled?.[0]?.id;
   if (!canvas.scene?.id || !tokenId) {
-    ui.notifications.warn("Выберите токен путешествующей группы.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0994", "Выберите токен путешествующей группы."));
     return false;
   }
   return promptLocationEntry({ sceneId: canvas.scene.id, locationId, tokenId });
@@ -250,7 +251,7 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-travel-assembly",
     classes: [...super.DEFAULT_OPTIONS.classes, "standard-form", "fallout-maw-global-map-editor", "fallout-maw-travel-assembly"],
     position: { width: "auto", height: "auto" },
-    window: { title: "Сбор группы", resizable: true },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0995", "Сбор группы"); }, resizable: true },
     actions: {
       toggleReady: TravelAssemblyApplication.#toggleReady,
       removeMember: TravelAssemblyApplication.#removeMember,
@@ -436,13 +437,13 @@ async function submitTravelGroupRequest(action, payload = {}) {
   if (game.user?.isGM && isResponsibleGM()) return queueResponsibleGMRequest(request);
   const responsibleGM = getResponsibleGM();
   if (!responsibleGM) {
-    ui.notifications.warn("Путешествие недоступно: нет активного GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0996", "Путешествие недоступно: нет активного GM."));
     return false;
   }
   return new Promise(resolve => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(request.requestId);
-      ui.notifications.error("GM не подтвердил запрос перехода. Обновите клиент GM и повторите попытку.");
+      ui.notifications.error(auditLocalize("FALLOUTMAW.AuditRuntime.R0997", "GM не подтвердил запрос перехода. Обновите клиент GM и повторите попытку."));
       resolve(false);
     }, REQUEST_TIMEOUT_MS);
     pendingRequests.set(request.requestId, { resolve, timeout });
@@ -452,14 +453,17 @@ async function submitTravelGroupRequest(action, payload = {}) {
 
 async function handleTravelGroupSocket(payload, senderUserId = null) {
   if (!payload || typeof payload !== "object" || !String(payload.action ?? "").startsWith("travelGroup.")) return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
+  if (!authenticatedSenderId) return;
   if (isTravelGroupRequestAction(payload.action)) {
-    if (senderUserId && payload.requestingUserId !== senderUserId) return;
+    if (payload.requestingUserId !== authenticatedSenderId) return;
     if (game.user?.isGM && isResponsibleGM()) {
       const result = await queueResponsibleGMRequest(payload);
       emitGroupRequestComplete(payload, result !== false);
     }
     return;
   }
+  if (authenticatedSenderId !== getResponsibleGM()?.id) return;
   if (payload.action === "travelGroup.request.complete" && payload.requestingUserId === game.user?.id) {
     resolvePendingRequest(payload.requestId, payload.success !== false);
   } else if (payload.action === "travelGroup.assembly.changed") {
@@ -474,7 +478,7 @@ async function handleTravelGroupSocket(payload, senderUserId = null) {
     await restoreTokenControlsAfterArrival(payload);
   } else if (payload.action === "travelGroup.error" && payload.requestingUserId === game.user?.id) {
     resolvePendingRequest(payload.requestId, false);
-    ui.notifications.error(payload.message || "Не удалось выполнить путешествие.");
+    ui.notifications.error(payload.message || auditLocalize("FALLOUTMAW.AuditRuntime.R0998", "Не удалось выполнить путешествие."));
   }
 }
 
@@ -527,7 +531,7 @@ async function handleResponsibleGMRequest(payload) {
     }
   } catch (error) {
     console.error(`${FALLOUT_MAW.id} | Travel-group request failed`, error);
-    return emitGroupError(payload, error.message || "Не удалось выполнить путешествие.");
+    return emitGroupError(payload, error.message || auditLocalize("FALLOUTMAW.AuditRuntime.R0998", "Не удалось выполнить путешествие."));
   }
 }
 
@@ -536,15 +540,15 @@ async function handleExitRequest(payload) {
   const token = scene?.tokens?.get(payload.tokenId);
   const zone = getSceneState(scene).locationExitZones.find(entry => entry.id === payload.exitZoneId);
   const user = game.users?.get(payload.requestingUserId);
-  if (zone?.hidden) throw new Error("Эта зона выхода скрыта и недоступна.");
+  if (zone?.hidden) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0999", "Эта зона выхода скрыта и недоступна."));
   validateExitParticipant(scene, zone, token, user);
   if (isTravelGroupCarrierActor(token.actor)) {
     if (token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival) {
-      throw new Error("Сначала завершите уже начатый переход группы.");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1000", "Сначала завершите уже начатый переход группы."));
     }
     return performCarrierDeparture({ scene, zone, carrierToken: token, requestingUserId: user.id });
   }
-  if (!["solo", "group"].includes(payload.mode)) throw new Error("Не выбран режим выхода.");
+  if (!["solo", "group"].includes(payload.mode)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1001", "Не выбран режим выхода."));
   if (payload.mode === "solo") {
     const result = await performDeparture({ scene, zone, tokenDocuments: [token], requestingUserId: user.id });
     if (result) await removeTokenFromAssemblies(scene, token.id);
@@ -577,10 +581,10 @@ async function handleReadyRequest(payload) {
   const { scene, assembly, user } = getAssemblyRequestContext(payload);
   const model = await buildAssemblyModel(scene, assembly);
   const member = model.membersById.get(payload.memberId);
-  if (!member?.actor) throw new Error("Участник не найден.");
-  if (!memberRequiresReady(member)) throw new Error("Этот участник не требует подтверждения готовности.");
+  if (!member?.actor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1002", "Участник не найден."));
+  if (!memberRequiresReady(member)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1003", "Этот участник не требует подтверждения готовности."));
   if (!user.isGM && !member.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
-    throw new Error("Нет прав на подтверждение этого участника.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1004", "Нет прав на подтверждение этого участника."));
   }
   const ready = new Set(model.readyMemberIds);
   if (ready.has(member.id)) ready.delete(member.id);
@@ -597,9 +601,9 @@ async function handlePlaceRequest(payload) {
   const { scene, assembly, user } = getAssemblyRequestContext(payload);
   const model = await buildAssemblyModel(scene, assembly);
   const member = model.membersById.get(payload.memberId);
-  if (!member?.actor || member.vehicle) throw new Error("Актёр недоступен для рассадки.");
+  if (!member?.actor || member.vehicle) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1005", "Актёр недоступен для рассадки."));
   if (!user.isGM && !member.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
-    throw new Error("Перемещать можно только принадлежащего вам актёра.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1006", "Перемещать можно только принадлежащего вам актёра."));
   }
   const placement = normalizeAssemblyPlacement(payload.placement);
   if (placement) validateAssemblyPlacement(model, member, placement);
@@ -624,9 +628,9 @@ async function handleRemoveRequest(payload) {
   const model = await buildAssemblyModel(scene, assembly);
   requireAssemblyManager(scene, assembly, user, model);
   const member = model.membersById.get(payload.memberId);
-  if (!member) throw new Error("Участник не найден.");
+  if (!member) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1002", "Участник не найден."));
   if (!member.topLevel) return removePassengerFromAssembly(scene, assembly, model, member);
-  if (!member.tokenId) throw new Error("Участник не найден.");
+  if (!member.tokenId) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1002", "Участник не найден."));
   const affectedIds = new Set(model.members
     .filter(entry =>
       entry.id === member.id
@@ -662,7 +666,7 @@ async function removePassengerFromAssembly(scene, assembly, model, member) {
   const vehicleActor = vehicleToken?.actor;
   const sourcePassenger = member.sourcePassenger;
   if (!vehicleToken || !vehicleActor || !sourcePassenger?.tokenData) {
-    throw new Error("Исходный транспорт пассажира недоступен.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1007", "Исходный транспорт пассажира недоступен."));
   }
   const tokenData = foundry.utils.deepClone(sourcePassenger.tokenData);
   delete tokenData._id;
@@ -681,7 +685,7 @@ async function removePassengerFromAssembly(scene, assembly, model, member) {
   const ownership = getPassengerRemovalOwnership(vehicleActor, sourcePassenger, remaining);
   try {
     [createdToken] = await scene.createEmbeddedDocuments("Token", [tokenData], { [TRAVEL_BYPASS_OPTION]: true });
-    if (!createdToken) throw new Error("Не удалось разместить исключённого пассажира.");
+    if (!createdToken) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1008", "Не удалось разместить исключённого пассажира."));
     await vehicleActor.update({
       ownership,
       [`flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`]: remaining
@@ -732,13 +736,13 @@ async function handleDepartRequest(payload) {
 
 async function performAssemblyDeparture(scene, assembly, model, requestingUserId) {
   const tokenDocuments = assembly.memberTokenIds.map(id => scene.tokens?.get(id)).filter(Boolean);
-  if (tokenDocuments.length !== assembly.memberTokenIds.length) throw new Error("Один из участников больше недоступен.");
+  if (tokenDocuments.length !== assembly.memberTokenIds.length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1009", "Один из участников больше недоступен."));
   if (model.members.some(member => member.missing)
     || model.members.filter(memberRequiresReady).some(member => !model.readyMemberIds.has(member.id))) {
-    throw new Error("Не все участники подтвердили готовность.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1010", "Не все участники подтвердили готовность."));
   }
   const zone = getSceneState(scene).locationExitZones.find(entry => entry.id === assembly.exitZoneId);
-  if (!zone) throw new Error("Зона выхода не найдена.");
+  if (!zone) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1011", "Зона выхода не найдена."));
   const result = await performDeparture({
     scene,
     zone,
@@ -763,18 +767,18 @@ async function handleArrivalRequest(payload) {
   const token = originScene?.tokens?.get(payload.tokenId);
   const user = game.users?.get(payload.requestingUserId);
   const found = findLocation(payload.locationId);
-  if (!originScene || !token?.actor || !user || !found || found.scene.id !== originScene.id) throw new Error("Локация или группа не найдена.");
-  if (found.location.hidden) throw new Error("Эта локация скрыта и недоступна для входа.");
-  if (!token.actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId) throw new Error("На глобальную карту может входить только носитель группы.");
-  if (!getTravelCarrierUnits(token.actor).length) throw new Error("В группе нет участников для переноса.");
-  if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на группу.");
+  if (!originScene || !token?.actor || !user || !found || found.scene.id !== originScene.id) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1012", "Локация или группа не найдена."));
+  if (found.location.hidden) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1013", "Эта локация скрыта и недоступна для входа."));
+  if (!token.actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1014", "На глобальную карту может входить только носитель группы."));
+  if (!getTravelCarrierUnits(token.actor).length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1015", "В группе нет участников для переноса."));
+  if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1016", "Нет прав на группу."));
   const currentKey = cellKey(pointToCell(originScene, tokenCenter(token, originScene)));
-  if (!getLocationCells(originScene, found.location).some(cell => cellKey(cell) === currentKey)) throw new Error("Группа больше не находится на локации.");
+  if (!getLocationCells(originScene, found.location).some(cell => cellKey(cell) === currentKey)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1017", "Группа больше не находится на локации."));
   if (token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival) {
-    throw new Error("Для группы уже выполняется переход.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1018", "Для группы уже выполняется переход."));
   }
   const targetScene = found.location.linkedSceneId ? game.scenes?.get(found.location.linkedSceneId) : null;
-  if (!targetScene) throw new Error("Сцена локации не найдена.");
+  if (!targetScene) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1019", "Сцена локации не найдена."));
   const group = token.actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
   const entryMode = normalizeLocationEntryMode(found.location.entryMode);
   const transferId = foundry.utils.randomID();
@@ -791,7 +795,7 @@ async function handleArrivalRequest(payload) {
     originCellKeys
   });
   const zones = getValidArrivalZones(targetScene, token, pending);
-  if (!zones.length) throw new Error("На сцене локации нет допустимой зоны входа и выхода.");
+  if (!zones.length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1020", "На сцене локации нет допустимой зоны входа и выхода."));
   pending.validExitZoneIds = zones.map(zone => zone.id);
   const eventParticipants = await collectTravelGroupEventParticipants(token.actor);
   await withSystemEventRoot({
@@ -845,15 +849,15 @@ async function handleArrivalSelectRequest(payload) {
   const token = originScene?.tokens?.get(payload.tokenId);
   const pending = token?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
   const user = game.users?.get(payload.requestingUserId);
-  if (!originScene || !token?.actor || !pending || !user) throw new Error("Ожидающий вход не найден.");
-  if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на выбор зоны.");
-  if (!payload.transferId || payload.transferId !== pending.transferId) throw new Error("Этот выбор зоны уже устарел.");
+  if (!originScene || !token?.actor || !pending || !user) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1021", "Ожидающий вход не найден."));
+  if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1022", "Нет прав на выбор зоны."));
+  if (!payload.transferId || payload.transferId !== pending.transferId) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1023", "Этот выбор зоны уже устарел."));
   validatePendingCarrierPosition(originScene, token, pending);
   const targetScene = game.scenes?.get(pending.targetSceneId);
   const zone = getSceneState(targetScene).locationExitZones.find(entry => entry.id === payload.exitZoneId && !entry.hidden && entry.cells?.length);
-  if (!targetScene || !zone) throw new Error("Зона прибытия не найдена.");
+  if (!targetScene || !zone) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1024", "Зона прибытия не найдена."));
   if (!getValidArrivalZones(targetScene, token, pending).some(entry => entry.id === zone.id)) {
-    throw new Error("В выбранной зоне недостаточно свободного места.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1025", "В выбранной зоне недостаточно свободного места."));
   }
   return performArrival(originScene, token, targetScene, zone, pending);
 }
@@ -888,9 +892,9 @@ async function performCarrierDepartureInRoot({
     : null;
   const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
   const group = getTravelGroupData(carrierActor);
-  if (!parentScene || !location) throw new Error("Родительская карта локации не найдена.");
-  if (!group?.groupId) throw new Error("Носитель путешествующей группы не найден.");
-  if (!getTravelCarrierUnits(carrierActor).length) throw new Error("В группе нет участников для переноса.");
+  if (!parentScene || !location) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1026", "Родительская карта локации не найдена."));
+  if (!group?.groupId) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1027", "Носитель путешествующей группы не найден."));
+  if (!getTravelCarrierUnits(carrierActor).length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1015", "В группе нет участников для переноса."));
 
   const eventParticipants = await collectTravelGroupEventParticipants(carrierActor);
   const commonData = {
@@ -941,7 +945,7 @@ async function performCarrierDepartureInRoot({
     operationOptions: travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
   });
   const destinationToken = transfer.tokenMap.get(carrierToken) ?? transfer.transfers[0]?.destinationToken;
-  if (!destinationToken) throw new Error("Носитель группы не был создан на родительской карте.");
+  if (!destinationToken) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1028", "Носитель группы не был создан на родительской карте."));
 
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor, { requestingUserId });
   if (!parentScene.active) await parentScene.activate().catch(error => {
@@ -998,7 +1002,7 @@ async function performDepartureInRoot({
   const sceneFlag = getGlobalMapFlag(scene);
   const parentScene = sceneFlag?.parentSceneId ? game.scenes?.get(sceneFlag.parentSceneId) : null;
   const location = parentScene ? getSceneState(parentScene).locations.find(entry => entry.id === sceneFlag.nodeId) : null;
-  if (!parentScene || !location) throw new Error("Родительская карта локации не найдена.");
+  if (!parentScene || !location) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1026", "Родительская карта локации не найдена."));
   const activeModel = model ?? await buildSoloAssemblyModel(scene, tokenDocuments[0]);
   const directParticipants = new Map(activeModel.members.map(member => [
     member.actorUuid,
@@ -1035,11 +1039,11 @@ async function performDepartureInRoot({
   }
   const vehicleActorUuids = activeModel.vehicles.map(vehicle => vehicle.actor?.uuid).filter(Boolean);
   if (new Set(vehicleActorUuids).size !== vehicleActorUuids.length) {
-    throw new Error("Каждый транспорт каравана должен использовать отдельного актёра.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1029", "Каждый транспорт каравана должен использовать отдельного актёра."));
   }
   const vehiclePlans = await buildVehiclePlans(activeModel, scene);
   let topUnits = buildTopTravelUnits(activeModel);
-  if (!topUnits.length) throw new Error("В группе нет участников.");
+  if (!topUnits.length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1030", "В группе нет участников."));
   const originalTokenData = new Map(tokenDocuments.map(token => [token.id, token.toObject()]));
   let carrierActor = null;
   let carrierToken = null;
@@ -1083,7 +1087,7 @@ async function performDepartureInRoot({
       pendingArrival: null
     });
     [carrierToken] = await parentScene.createEmbeddedDocuments("Token", [carrierData], travelDocumentOptions(scope));
-    if (!carrierToken) throw new Error("Не удалось создать токен группы.");
+    if (!carrierToken) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1031", "Не удалось создать токен группы."));
     await scene.deleteEmbeddedDocuments(
       "Token",
       tokenDocuments.map(token => token.id),
@@ -1172,14 +1176,14 @@ async function createTravelCarrier({
   const configuredPrototype = foundry.utils.deepClone(getTravelGroupPrototypeToken());
   const image = getTravelGroupImage();
   const prototypeToken = foundry.utils.mergeObject({
-    name: "Путешествие",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0947", "Путешествие"),
     actorLink: true,
     texture: { src: image },
     width: 1,
     height: 1
   }, configuredPrototype, { inplace: false });
   prototypeToken.actorLink = true;
-  prototypeToken.name = "Путешествие";
+  prototypeToken.name = auditLocalize("FALLOUTMAW.AuditRuntime.R0947", "Путешествие");
   const memberActors = await collectTravelActors(allActors);
   const ownerUserIds = collectOwnerUserIds(memberActors);
   const ownership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE };
@@ -1188,7 +1192,7 @@ async function createTravelCarrier({
   const storedUnits = topUnits.map(prepareTravelGroupUnitForStorage);
   const speedKmh = Math.min(...storedUnits.map(unit => unit.speedKmh));
   const actor = await Actor.create({
-    name: "Путешествие",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0947", "Путешествие"),
     type: "character",
     img: image,
     folder: folder.id,
@@ -1220,7 +1224,7 @@ async function createTravelCarrier({
     falloutMawSystemEventChainRef: chainRef,
     chainRef
   });
-  if (!actor) throw new Error("Не удалось создать временного актёра группы.");
+  if (!actor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1032", "Не удалось создать временного актёра группы."));
   return actor;
 }
 
@@ -1228,26 +1232,26 @@ async function handleCarrierMovePassengerRequest(payload) {
   const carrierActor = game.actors?.get(payload.carrierActorId);
   const user = game.users?.get(payload.requestingUserId);
   const group = foundry.utils.deepClone(carrierActor?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG) ?? null);
-  if (!carrierActor || !group?.groupId || !user) throw new Error("Группа путешествия не найдена.");
+  if (!carrierActor || !group?.groupId || !user) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1033", "Группа путешествия не найдена."));
   if (!user.isGM && !carrierActor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
-    throw new Error("Нет прав на изменение состава путешествия.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1034", "Нет прав на изменение состава путешествия."));
   }
   const units = Array.isArray(group.units) ? group.units : [];
   const unit = units.find(entry => String(entry?.id ?? "") === String(payload.unitId ?? ""));
   const snapshot = normalizeTravelGroupActorContainerSnapshot(unit?.actorContainer);
-  if (!unit || !snapshot) throw new Error("Транспорт путешествия не найден.");
+  if (!unit || !snapshot) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1035", "Транспорт путешествия не найден."));
   const passengers = moveActorContainerPassengerData(
     snapshot.seats,
     snapshot.passengers,
     String(payload.passengerId ?? ""),
     payload.target ?? {}
   );
-  if (!passengers) throw new Error("Пассажир не помещается в выбранную область.");
+  if (!passengers) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1036", "Пассажир не помещается в выбранную область."));
 
   unit.actorContainer = { seats: snapshot.seats, passengers };
   if (unit.tokenData?.actorLink) {
     const vehicleActor = game.actors?.get(unit.tokenData.actorId);
-    if (!vehicleActor) throw new Error("Связанный транспорт не найден.");
+    if (!vehicleActor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1037", "Связанный транспорт не найден."));
     await vehicleActor.update({
       [`flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
     }, { [TRAVEL_BYPASS_OPTION]: true });
@@ -1289,7 +1293,7 @@ async function performDeployArrivalInRoot(originScene, carrierToken, targetScene
   const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor, { requestingUserId: pending?.requestedByUserId });
   const units = getTravelCarrierUnits(carrierActor);
-  if (!units.length) throw new Error("В группе нет участников для размещения.");
+  if (!units.length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1038", "В группе нет участников для размещения."));
   const eventParticipants = await collectTravelGroupEventParticipants(carrierActor);
   for (const [index, target] of eventParticipants.entries()) {
     const gate = await scope.emit("fallout-maw.travel.arrival.before", {
@@ -1329,7 +1333,7 @@ async function performDeployArrivalInRoot(originScene, carrierToken, targetScene
   let created = [];
   try {
     created = await targetScene.createEmbeddedDocuments("Token", createData, travelDocumentOptions(scope));
-    if (created.length !== createData.length) throw new Error("Не все участники были размещены.");
+    if (created.length !== createData.length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1039", "Не все участники были размещены."));
     await originScene.deleteEmbeddedDocuments(
       "Token",
       [carrierToken.id],
@@ -1430,8 +1434,8 @@ async function performDeployArrivalInRoot(originScene, carrierToken, targetScene
 async function performCarrierArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope) {
   const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
   const group = getTravelGroupData(carrierActor);
-  if (!group?.groupId) throw new Error("Носитель путешествующей группы не найден.");
-  if (!getTravelCarrierUnits(carrierActor).length) throw new Error("В группе нет участников для переноса.");
+  if (!group?.groupId) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1027", "Носитель путешествующей группы не найден."));
+  if (!getTravelCarrierUnits(carrierActor).length) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1015", "В группе нет участников для переноса."));
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor, {
     requestingUserId: pending?.requestedByUserId
   });
@@ -1484,7 +1488,7 @@ async function performCarrierArrivalInRoot(originScene, carrierToken, targetScen
     operationOptions: travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
   });
   const destinationToken = transfer.tokenMap.get(carrierToken) ?? transfer.transfers[0]?.destinationToken;
-  if (!destinationToken) throw new Error("Носитель группы не был создан на подкарте.");
+  if (!destinationToken) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1040", "Носитель группы не был создан на подкарте."));
 
   const exitWasDiscovered = getSceneState(targetScene).discoveredExitZoneIds.includes(zone.id);
   clearArrivalTimer(originScene.id, carrierToken.id);
@@ -1657,7 +1661,7 @@ async function buildVehiclePlans(model, scene) {
   }]));
   for (const member of model.members.filter(entry => !entry.vehicle && entry.placement)) {
     const plan = plans.get(member.placement.vehicleTokenId);
-    if (!plan) throw new Error(`${member.name}: выбранный транспорт недоступен.`);
+    if (!plan) throw new Error(auditFormat("FALLOUTMAW.AuditRuntime.R1041", { p0: (member.name) }, "{p0}: выбранный транспорт недоступен."));
     const staysInSource = member.sourceVehicleTokenId === plan.vehicle.tokenId && member.sourcePassenger;
     if (staysInSource) {
       plan.nextPassengers.push({
@@ -1756,7 +1760,7 @@ function buildTopTravelUnits(model) {
       const tokenData = member.tokenId
         ? model.scene?.tokens?.get(member.tokenId)?.toObject?.() ?? member.tokenData
         : member.tokenData;
-      if (!member.actor || !member.tokenData) throw new Error(`${member.name}: отсутствуют данные для путешествия.`);
+      if (!member.actor || !member.tokenData) throw new Error(auditFormat("FALLOUTMAW.AuditRuntime.R1042", { p0: (member.name) }, "{p0}: отсутствуют данные для путешествия."));
       units.push({
         actor: member.actor,
         actorUuid: member.actorUuid,
@@ -1777,7 +1781,7 @@ function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [],
     .map(cell => typeof cell === "string" ? parseCellKey(cell) : cell)
     .filter(cell => Number.isFinite(cell?.i) && Number.isFinite(cell?.j));
   if (!source.length) {
-    if (strictPreferredCells) throw new Error("В выбранной области нет клеток для размещения группы.");
+    if (strictPreferredCells) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1043", "В выбранной области нет клеток для размещения группы."));
     source.push(scene.grid.getOffset({
       x: Number(scene.width) / 2,
       y: Number(scene.height) / 2
@@ -1842,7 +1846,7 @@ function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [],
       for (const adjacent of scene.grid.getAdjacentOffsets(cell)) enqueue(adjacent);
     }
   }
-  throw new Error("На сцене нет свободного места для размещения группы.");
+  throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1044", "На сцене нет свободного места для размещения группы."));
 }
 
 function getPlacementBounds(scene) {
@@ -1885,25 +1889,25 @@ async function ensureTravelGroupFolder() {
   const existing = game.folders?.find(folder => folder.type === "Actor" && folder.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FOLDER_FLAG)?.role === "travelGroups");
   if (existing) return existing;
   return Folder.create({
-    name: "Путешествие",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0947", "Путешествие"),
     type: "Actor",
     flags: { [FALLOUT_MAW.id]: { [TRAVEL_GROUP_FOLDER_FLAG]: { version: GLOBAL_MAP_VERSION, role: "travelGroups" } } }
   });
 }
 
 function validateExitParticipant(scene, zone, token, user) {
-  if (!scene || !zone || !token?.actor || !user) throw new Error("Участник или зона выхода не найдена.");
-  if (!isMapAreaOnLevel(scene, zone, getMapTokenLevelId(scene, token))) throw new Error("Зона выхода находится на другом уровне.");
-  if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на участника.");
+  if (!scene || !zone || !token?.actor || !user) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1045", "Участник или зона выхода не найдена."));
+  if (!isMapAreaOnLevel(scene, zone, getMapTokenLevelId(scene, token))) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1046", "Зона выхода находится на другом уровне."));
+  if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1047", "Нет прав на участника."));
   const key = cellKey(pointToCell(scene, tokenCenter(token, scene)));
-  if (!zone.cells.includes(key)) throw new Error("Участник больше не находится в зоне выхода.");
+  if (!zone.cells.includes(key)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1048", "Участник больше не находится в зоне выхода."));
 }
 
 function getAssemblyRequestContext(payload) {
   const scene = game.scenes?.get(payload.sceneId);
   const assembly = getAssembly(scene, payload.assemblyId);
   const user = game.users?.get(payload.requestingUserId);
-  if (!scene || !assembly || !user) throw new Error("Сбор группы не найден.");
+  if (!scene || !assembly || !user) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1049", "Сбор группы не найден."));
   return { scene, assembly, user };
 }
 
@@ -1921,8 +1925,8 @@ async function buildAssemblyModel(scene, assembly) {
       tokenId,
       actor,
       actorUuid: actor?.uuid ?? "",
-      name: actor?.name || token?.name || "Недоступный участник",
-      img: token?.texture?.src || actor?.img || "icons/svg/mystery-man.svg",
+      name: actor?.name || token?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R1050", "Недоступный участник"),
+      img: token?.texture?.src || actor?.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
       missing: !token || !actor,
       vehicle,
       topLevel: true,
@@ -1965,7 +1969,7 @@ async function buildAssemblyModel(scene, assembly) {
         actor: passengerActor,
         actorUuid: passenger.actorUuid,
         name: passenger.actorName || passengerActor?.name || passenger.actorUuid,
-        img: passenger.actorImg || passengerActor?.img || "icons/svg/mystery-man.svg",
+        img: passenger.actorImg || passengerActor?.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
         missing: !passengerActor || !passenger.tokenData,
         vehicle: false,
         topLevel: false,
@@ -2052,11 +2056,11 @@ function normalizeAssemblyPlacement(value) {
 
 function validateAssemblyPlacement(model, member, placement) {
   const vehicle = model.vehicles.find(entry => entry.tokenId === placement.vehicleTokenId);
-  if (!vehicle) throw new Error("Транспорт не входит в этот сбор.");
+  if (!vehicle) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1051", "Транспорт не входит в этот сбор."));
   const seat = vehicle.seats.find(entry => entry.slotId === placement.slotId);
-  if (!seat || placement.slotIndex >= seat.quantity) throw new Error("Выбранное место транспорта не найдено.");
+  if (!seat || placement.slotIndex >= seat.quantity) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1052", "Выбранное место транспорта не найдено."));
   if (placement.x + member.width - 1 > seat.width || placement.y + member.height - 1 > seat.height) {
-    throw new Error("Актёр не помещается в выбранные клетки.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1053", "Актёр не помещается в выбранные клетки."));
   }
   const candidate = {
     x: placement.x,
@@ -2076,7 +2080,7 @@ function validateAssemblyPlacement(model, member, placement) {
       height: other.height
     })
   );
-  if (collision) throw new Error("Выбранные клетки уже заняты.");
+  if (collision) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1054", "Выбранные клетки уже заняты."));
 }
 
 function canUserManageAssembly(scene, assembly, user, model) {
@@ -2087,7 +2091,7 @@ function canUserManageAssembly(scene, assembly, user, model) {
 
 function requireAssemblyManager(scene, assembly, user, model) {
   if (!canUserManageAssembly(scene, assembly, user, model)) {
-    throw new Error("Управлять сбором может только владелец актёра-лидера или GM.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1055", "Управлять сбором может только владелец актёра-лидера или GM."));
   }
 }
 
@@ -2651,28 +2655,28 @@ async function restoreArrivalSelectionForCurrentUser() {
 function protectTravelActorUpdate(actor, _changes, options, userId) {
   if (!actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
   if (game.users?.get(userId)?.isGM) return;
-  ui.notifications.warn("Системный актёр путешествия нельзя изменять вручную.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1056", "Системный актёр путешествия нельзя изменять вручную."));
   return false;
 }
 
 function protectTravelActorDelete(actor, options, userId) {
   if (!actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
   if (game.users?.get(userId)?.isGM) return;
-  ui.notifications.warn("Системный актёр путешествия нельзя удалять вручную.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1057", "Системный актёр путешествия нельзя удалять вручную."));
   return false;
 }
 
 function protectTravelTokenDelete(token, options, userId) {
   if (!token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
   if (game.users?.get(userId)?.isGM) return;
-  ui.notifications.warn("Токен путешествующей группы удаляется только при завершении путешествия.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1058", "Токен путешествующей группы удаляется только при завершении путешествия."));
   return false;
 }
 
 function protectTravelEmbeddedItem(item, options, userId) {
   if (!item.parent?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
   if (game.users?.get(userId)?.isGM) return;
-  ui.notifications.warn("Контейнер путешествующей группы нельзя изменять вручную.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1059", "Контейнер путешествующей группы нельзя изменять вручную."));
   return false;
 }
 
@@ -2680,13 +2684,13 @@ function validatePendingCarrierPosition(originScene, token, pending) {
   const key = cellKey(pointToCell(originScene, tokenCenter(token, originScene)));
   const snapshotCellKeys = Array.isArray(pending.originCellKeys) ? pending.originCellKeys.map(String) : [];
   if (snapshotCellKeys.length && !snapshotCellKeys.includes(key)) {
-    throw new Error("Группа покинула область локации.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1060", "Группа покинула область локации."));
   }
   if (snapshotCellKeys.length) return true;
   const found = findLocation(pending.locationId);
-  if (!found || found.scene.id !== originScene.id) throw new Error("Локация ожидающего входа не найдена.");
+  if (!found || found.scene.id !== originScene.id) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1061", "Локация ожидающего входа не найдена."));
   if (!getLocationCells(originScene, found.location).some(cell => cellKey(cell) === key)) {
-    throw new Error("Группа покинула область локации.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1060", "Группа покинула область локации."));
   }
   return true;
 }

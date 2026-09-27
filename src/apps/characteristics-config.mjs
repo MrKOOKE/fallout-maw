@@ -1,9 +1,11 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import { getCharacteristicSettings, setCharacteristicSettings } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
+import { editSettingsDescription } from "./settings-description-dialog.mjs";
 
 export class CharacteristicsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -26,6 +28,7 @@ export class CharacteristicsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createCharacteristic: this.#onCreateCharacteristic,
+      editDescription: editSettingsDescription,
       deleteCharacteristic: this.#onDeleteCharacteristic
     }
   };
@@ -67,7 +70,7 @@ export class CharacteristicsConfig extends FalloutMaWFormApplicationV2 {
     this.characteristics.push({
       key: this.#getUniqueKey("newCharacteristic"),
       abbr: this.#getUniqueAbbr("new"),
-      label: "Новая характеристика"
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewCharacteristic", "Новая характеристика")
     });
     return this.forceRender();
   }
@@ -89,7 +92,8 @@ export class CharacteristicsConfig extends FalloutMaWFormApplicationV2 {
     return rows.map(row => ({
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
-      label: row.querySelector("[data-field='label']")?.value?.trim() ?? ""
+      label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
+      description: row.querySelector("[data-field='description']")?.value?.trim() ?? ""
     }));
   }
 

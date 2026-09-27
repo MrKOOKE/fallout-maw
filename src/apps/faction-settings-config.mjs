@@ -4,6 +4,7 @@ import {
   getActorFactionBelongs,
   getActorPrimaryFaction,
   getFactionMatrix,
+  getFactionDisplayLabel,
   getFactionNamesWithDefault,
   getFactionScore,
   getFactionSettings,
@@ -154,11 +155,13 @@ export class ActorFactionConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       actor: this.actor,
       primary,
+      primaryLabel: getFactionDisplayLabel(primary),
       rows: factions.map(name => {
         const score = name === primary ? 0 : getFactionScore(primary, name);
         const relation = name === primary ? "ally" : getRelationFromScore(score);
         return {
           name,
+          label: getFactionDisplayLabel(name),
           belongs: belongs.has(name),
           isPrimary: name === primary,
           score,
@@ -218,7 +221,7 @@ export class ActorFactionConfig extends FalloutMaWFormApplicationV2 {
   #filterRows(query) {
     const normalized = String(query ?? "").trim().toLocaleLowerCase();
     for (const row of this.form?.querySelectorAll("[data-faction-relation-row]") ?? []) {
-      const name = String(row.dataset.factionName ?? "").toLocaleLowerCase();
+      const name = getFactionDisplayLabel(row.dataset.factionName).toLocaleLowerCase();
       row.hidden = Boolean(normalized) && !name.includes(normalized);
     }
     return undefined;

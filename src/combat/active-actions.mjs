@@ -2,7 +2,7 @@ import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION, SY
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCombatSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { createDodgeAttackExposureTracker } from "./dodge-resource.mjs";
-import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
+import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState, spendMovementThenActionResourcesWithReceipt } from "./movement-resources.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture as setActorTokensPostureDirect } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -40,7 +40,7 @@ const GRAPPLE_DRAG_PREVIEW_NAME = "fallout-maw-grapple-drag-preview";
 const GRAPPLE_TARGET_PREVIEW_NAME = "fallout-maw-grapple-target-preview";
 const PUSH_TARGET_PREVIEW_NAME = "fallout-maw-push-target-preview";
 const GRAPPLE_EFFECT_FLAG = "grappleEffect";
-const GRAPPLE_EFFECT_ICON = "systems/fallout-maw/icons/statuses/grappled.svg";
+const GRAPPLE_EFFECT_ICON = "systems/fallout-maw/assets/System/Combat/status-grappled.webp";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const SKILL_ALIASES = Object.freeze({
   ath: "athletics",
@@ -540,7 +540,7 @@ async function requestActiveActionGMOperation(action, payload = {}) {
       ui.notifications.warn(localizeHud("GMNoResponseActiveAction"));
       resolve(false);
     }, ACTIVE_ACTION_SOCKET_TIMEOUT);
-    pendingActiveActionSocketRequests.set(requestId, { resolve, timeout });
+    pendingActiveActionSocketRequests.set(requestId, { resolve, timeout, responderUserId: gm.id });
     game.socket.emit(ACTIVE_ACTION_SOCKET, {
       scope: ACTIVE_ACTION_SOCKET_SCOPE,
       action,
@@ -552,13 +552,17 @@ async function requestActiveActionGMOperation(action, payload = {}) {
   });
 }
 
-async function handleActiveActionSocketMessage(message = {}) {
+async function handleActiveActionSocketMessage(message = {}, senderUserId = "") {
   if (message.scope !== ACTIVE_ACTION_SOCKET_SCOPE) return;
-  if (message.senderUserId && message.senderUserId === game.user?.id) return;
+  if (!senderUserId || message.senderUserId !== senderUserId || senderUserId === game.user?.id) return;
+  if (message.targetUserId && message.targetUserId !== game.user?.id) return;
+  const sender = game.users?.get?.(senderUserId);
+  if (!sender?.active) return;
 
   if (message.action === "response") {
     const pending = pendingActiveActionSocketRequests.get(message.requestId);
     if (!pending) return;
+    if (senderUserId !== pending.responderUserId) return;
     window.clearTimeout(pending.timeout);
     pendingActiveActionSocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.ok));
@@ -566,6 +570,7 @@ async function handleActiveActionSocketMessage(message = {}) {
   }
 
   if (message.action === "confirmGrappleConsent") {
+    if (!sender.isGM) return;
     if (message.targetUserId && message.targetUserId !== game.user?.id) return;
     const ok = await DialogV2.confirm({
       window: { title: localizeHud("GrappleConsentTitle") },
@@ -591,7 +596,9 @@ async function handleActiveActionSocketMessage(message = {}) {
   if (message.targetUserId && message.targetUserId !== game.user.id) return;
   let ok = false;
   try {
-    ok = await executeActiveActionGMOperation(message.action, message.payload ?? {});
+    if (await isActiveActionSocketOperationAuthorized(message.action, message.payload ?? {}, sender)) {
+      ok = await executeActiveActionGMOperation(message.action, message.payload ?? {});
+    }
   } catch (error) {
     console.error(`${SYSTEM_ID} | Active action socket operation failed`, error);
   }
@@ -605,6 +612,26 @@ async function handleActiveActionSocketMessage(message = {}) {
       targetUserId: message.senderUserId ?? ""
     });
   }
+}
+
+async function isActiveActionSocketOperationAuthorized(action, payload, sender) {
+  if (sender?.isGM) return true;
+  const owns = actor => actor?.testUserPermission?.(sender, "OWNER") === true;
+  if (action === "setActorTokensPosture") return owns(await fromUuid(String(payload.actorUuid ?? "")));
+  const scene = getScene(payload.sceneId);
+  const target = scene?.tokens?.get(payload.targetTokenId);
+  if (action === "attemptPush" || action === "pushKnockback" || action === "knockback") {
+    return owns(scene?.tokens?.get(payload.attackerTokenId)?.actor);
+  }
+  const grappler = scene?.tokens?.get(payload.grapplerTokenId || getGrapplerId(target));
+  if (action === "attemptGrapple") return owns(grappler?.actor);
+  if (action === "unlinkGrapple") return owns(grappler?.actor) || owns(target?.actor);
+  if (action === "grappleFollowMove" || action === "moveGrappledTarget") {
+    return owns(grappler?.actor) && Boolean(target && grappler
+      && getGrapplerId(target) === grappler.id && getGrappleTargetId(grappler) === target.id);
+  }
+  // New links are committed by the GM's validated attemptGrapple workflow.
+  return false;
 }
 
 async function executeActiveActionGMOperation(action, payload = {}) {
@@ -842,7 +869,7 @@ async function requestOwnerGrappleConsent(grapplerDocument, targetDocument, { al
       pendingActiveActionSocketRequests.delete(requestId);
       resolve(false);
     }, ACTIVE_ACTION_SOCKET_TIMEOUT);
-    pendingActiveActionSocketRequests.set(requestId, { resolve, timeout });
+    pendingActiveActionSocketRequests.set(requestId, { resolve, timeout, responderUserId: owner.id });
     game.socket.emit(ACTIVE_ACTION_SOCKET, {
       scope: ACTIVE_ACTION_SOCKET_SCOPE,
       action: "confirmGrappleConsent",
@@ -934,19 +961,9 @@ function canSpendMovementThenAction(actor, amount = 0) {
 
 async function spendMovementThenAction(actor, amount = 0) {
   if (!isActorInActiveCombat(actor)) return;
-  const cost = Math.max(0, toInteger(amount));
-  const state = getCombatMovementResourceState(actor);
-  if (!state || cost <= 0) return;
-  const movementSpend = Math.min(cost, state.movement.value);
-  const actionSpend = Math.min(cost - movementSpend, state.action.value);
-  const update = {};
-  if (movementSpend) update[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-  if (Object.keys(update).length) await actor.update(update);
-  if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
-  await notifyCombatResourcesSpent(actor, {
-    [MOVEMENT_RESOURCE_KEY]: movementSpend,
-    [state.action.key]: actionSpend
-  }, { type: "activeAction" });
+  const receipt = await spendMovementThenActionResourcesWithReceipt(actor, amount);
+  if (!receipt) return;
+  await notifyCombatResourcesSpent(actor, receipt.resources, { type: "activeAction" });
 }
 
 function getGrappleDragCost(grapplerDocument, targetDocument, destination) {
@@ -990,7 +1007,8 @@ function getPushDifficulty(attackerDocument) {
 }
 
 function getDodgeDifficulty(actor) {
-  return Math.max(0, toInteger(actor?.system?.resources?.dodge?.value));
+  return Math.max(0, toInteger(actor?.system?.resources?.dodge?.value))
+    + Math.max(0, toInteger(actor?.system?.resources?.dodge?.once));
 }
 
 function resolveSkillKey(actor, skillKey = "") {

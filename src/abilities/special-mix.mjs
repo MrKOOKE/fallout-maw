@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { buildBearerExpirationEffectData } from "../effects/expiration-actions.mjs";
 
@@ -105,8 +106,8 @@ export function buildSpecialMixItemData({
     secondItem.system.functions.firstAid,
     settings
   );
-  const name = `Особый намес: ${String(firstItem.name)} + ${String(secondItem.name)}`;
-  const img = String(abilityItem?.img || firstItem.img || secondItem.img || "icons/svg/mystery-man.svg");
+  const name = auditFormat("FALLOUTMAW.AuditRuntime.R0521", { p0: (String(firstItem.name)), p1: (String(secondItem.name)) }, "Особый намес: {p0} + {p1}");
+  const img = String(abilityItem?.img || firstItem.img || secondItem.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp");
   const spoilDurationSeconds = Math.max(1, toInteger(settings.spoilDurationSeconds ?? 1800));
   const data = clone(firstData);
   delete data._id;
@@ -118,7 +119,7 @@ export function buildSpecialMixItemData({
   data.type = "gear";
   data.img = img;
   data.effects = [buildBearerExpirationEffectData({
-    name: "Препарат испортится",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R0522", "Препарат испортится"),
     img,
     durationSeconds: spoilDurationSeconds,
     startTime,
@@ -140,7 +141,7 @@ export function buildSpecialMixItemData({
     quantity: 1,
     maxStack: 1,
     stackParts: [],
-    itemCategory: "Первая помощь",
+    itemCategory: auditLocalize("FALLOUTMAW.AuditRuntime.R0523", "Первая помощь"),
     weight: Math.max(0, Number(firstData.system?.weight) || 0) + Math.max(0, Number(secondData.system?.weight) || 0),
     price: Math.max(0, Number(firstData.system?.price) || 0) + Math.max(0, Number(secondData.system?.price) || 0),
     equipped: false,
@@ -174,13 +175,13 @@ export function getSpecialMixFirstAidDetails(firstAid = {}, {
 } = {}) {
   const rows = [];
   const healing = Math.max(0, toInteger(firstAid.healing));
-  if (healing > 0) rows.push({ label: "Здоровье", value: formatSigned(healing) });
+  if (healing > 0) rows.push({ label: auditLocalize("FALLOUTMAW.AuditRuntime.R0524", "Здоровье"), value: formatSigned(healing) });
 
   const limbCount = Math.max(0, toInteger(firstAid.limbSelection?.count));
   const limbValue = toInteger(firstAid.limbSelection?.value);
   if (limbCount > 0) {
     rows.push({
-      label: `Состояние частей тела (до ${limbCount})`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R0525", { p0: (limbCount) }, "Состояние частей тела (до {p0})"),
       value: formatSigned(limbValue)
     });
   }
@@ -189,7 +190,7 @@ export function getSpecialMixFirstAidDetails(firstAid = {}, {
     const key = String(entry?.needKey ?? "").trim();
     if (!key) continue;
     rows.push({
-      label: `Потребность: ${getLabel(needLabels, key)}`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R0526", { p0: (getLabel(needLabels, key)) }, "Потребность: {p0}"),
       value: formatSigned(toInteger(entry.value))
     });
   }
@@ -199,15 +200,15 @@ export function getSpecialMixFirstAidDetails(firstAid = {}, {
   for (const entry of firstAid.removeEffects ?? []) {
     const key = String(entry?.damageTypeKey ?? "").trim();
     if (!key) continue;
-    rows.push({ label: "Снимает эффект", value: getLabel(damageTypeLabels, key) });
+    rows.push({ label: auditLocalize("FALLOUTMAW.AuditRuntime.R0527", "Снимает эффект"), value: getLabel(damageTypeLabels, key) });
   }
 
   const withdrawalDurationSeconds = Math.max(0, toInteger(firstAid.withdrawalDurationSeconds));
   const withdrawal = getValidChanges(firstAid.withdrawal);
   if (withdrawalDurationSeconds > 0 || withdrawal.length > 0) {
-    rows.push({ kind: "section", label: "Отдача:" });
+    rows.push({ kind: "section", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0528", "Отдача:") });
     if (withdrawalDurationSeconds > 0) {
-      rows.push({ label: "Длительность", value: formatShortDuration(withdrawalDurationSeconds) });
+      rows.push({ label: auditLocalize("FALLOUTMAW.AuditRuntime.R0529", "Длительность"), value: formatShortDuration(withdrawalDurationSeconds) });
     }
     appendChangeDetails(rows, withdrawal, { pathLabels });
   }
@@ -218,8 +219,8 @@ export function getSpecialMixFirstAidDetails(firstAid = {}, {
   return {
     rows,
     durationSeconds,
-    durationLabel: durationSeconds > 0 ? `эффект ${formatShortDuration(durationSeconds)}` : "мгновенно",
-    chargesLabel: `заряды ${chargesValue}/${chargesMax}`
+    durationLabel: durationSeconds > 0 ? auditFormat("FALLOUTMAW.AuditRuntime.R0530", { p0: (formatShortDuration(durationSeconds)) }, "эффект {p0}") : auditLocalize("FALLOUTMAW.AuditRuntime.R0531", "мгновенно"),
+    chargesLabel: auditFormat("FALLOUTMAW.AuditRuntime.R0532", { p0: (chargesValue), p1: (chargesMax) }, "заряды {p0}/{p1}")
   };
 }
 
@@ -227,17 +228,17 @@ function buildSpecialMixDescription(firstItem, secondItem, settings, spoilDurati
   const effectiveness = Math.max(0, toInteger(settings.effectivenessPercentBonus ?? 100));
   const duration = Math.max(0, toInteger(settings.durationPercentBonus ?? 50));
   return [
-    `<p><strong>Смешано:</strong> ${escapeHtml(firstItem.name)} + ${escapeHtml(secondItem.name)}.</p>`,
-    `<p><strong>Эффективность:</strong> +${effectiveness}%<br><strong>Длительность:</strong> +${duration}%</p>`,
-    `<p><strong>Препарат испортится через ${formatShortDuration(spoilDurationSeconds)}.</strong></p>`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0533", { p0: (escapeHtml(firstItem.name)), p1: (escapeHtml(secondItem.name)) }, "<p><strong>Смешано:</strong> {p0} + {p1}.</p>"),
+    auditFormat("FALLOUTMAW.AuditRuntime.R0534", { p0: (effectiveness), p1: (duration) }, "<p><strong>Эффективность:</strong> +{p0}%<br><strong>Длительность:</strong> +{p1}%</p>"),
+    auditFormat("FALLOUTMAW.AuditRuntime.R0535", { p0: (formatShortDuration(spoilDurationSeconds)) }, "<p><strong>Препарат испортится через {p0}.</strong></p>")
   ].join("");
 }
 
 function formatShortDuration(value) {
   const seconds = Math.max(0, toInteger(value));
-  if (seconds % 3600 === 0 && seconds >= 3600) return `${seconds / 3600} ч`;
-  if (seconds % 60 === 0 && seconds >= 60) return `${seconds / 60} мин`;
-  return `${seconds} с`;
+  if (seconds % 3600 === 0 && seconds >= 3600) return auditFormat("FALLOUTMAW.AuditRuntime.R0536", { p0: (seconds / 3600) }, "{p0} ч");
+  if (seconds % 60 === 0 && seconds >= 60) return auditFormat("FALLOUTMAW.AuditRuntime.R0537", { p0: (seconds / 60) }, "{p0} мин");
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0538", { p0: (seconds) }, "{p0} с");
 }
 
 function mergeAndScaleChanges(changeLists, multiplier) {

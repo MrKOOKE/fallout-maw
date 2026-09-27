@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction } from "../utils/function-module-tooltip.mjs";
 ﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
@@ -24,6 +25,8 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { fullyRestoreActorDamageState, getDestroyedLimbStateLabel, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
+import { setOneTimeResourceValue } from "../combat/one-time-resources.mjs";
+import { decorateOneTimeResourceDisplay, supportsOneTimeResourceDisplay } from "../utils/one-time-resource-display.mjs";
 import {
   REACTION_RESOURCE_KEY,
   TURN_CONVERSION_MODES,
@@ -62,7 +65,7 @@ import {
   cancelWeaponAttack,
   getDelayedVolleyWeaponState,
   hasRequiredWeaponReloadActionPoints,
-  spendWeaponReloadActionPoints,
+  runWeaponReloadTransaction,
   startDualWeaponAttack,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
@@ -201,7 +204,7 @@ const TOKEN_ACTION_HUD_SOCKET_SCOPE = "fallout-maw.tokenActionHud";
 const TOKEN_ACTION_HUD_SOCKET_TIMEOUT = 10000;
 const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ACTION_POINT_COST_TOOLTIP_DELAY_MS = 200;
-const HUD_WEAPON_DISABLED_NOTIFICATION = "Поврежденные конечности не позволяют использовать данное оружие.";
+const HUD_WEAPON_DISABLED_NOTIFICATION = () => auditLocalize("FALLOUTMAW.AuditApps.DamagedLimbsPreventTheUseOfThisWeapon", "Поврежденные конечности не позволяют использовать данное оружие.");
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const DUAL_WEAPON_ACTION_KEYS = new Set(["aimedShot", "snapshot", "burst", "volley", "meleeAttack", "aimedMeleeAttack"]);
@@ -212,12 +215,12 @@ const TOKEN_ACTION_HUD_OPEN_CLASS = "fallout-maw-token-action-hud-open";
 const HUD_METER_SECTION_KEYS = Object.freeze(["resources", "needs"]);
 const HUD_LIMB_LAYER_KEYS = Object.freeze(["state", "defense", "resistance"]);
 const HUD_LIMB_LAYERS = Object.freeze([
-  { key: "state", label: "Состояние" },
-  { key: "defense", label: "Защита" }
+  { key: "state", get label() { return auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"); } },
+  { key: "defense", get label() { return auditLocalize("FALLOUTMAW.Item.MitigationModeDefense", "Защита"); } }
 ]);
 const HUD_LIMB_LAYER_CHOICES = Object.freeze([
   ...HUD_LIMB_LAYERS,
-  { key: "resistance", label: "Сопротивление" }
+  { key: "resistance", get label() { return auditLocalize("FALLOUTMAW.Item.MitigationModeResistance", "Сопротивление"); } }
 ]);
 const openReloadDialogs = new Map();
 const HUD_SILENT_ITEM_UPDATE_PATHS = new Set([
@@ -225,13 +228,13 @@ const HUD_SILENT_ITEM_UPDATE_PATHS = new Set([
   "system.functions.condition.value"
 ]);
 const HUD_ACTIONS = Object.freeze([
-  { key: "weapon", label: "Оружие", icon: "icons/svg/combat.svg" },
-  { key: "items", label: "Предметы", icon: "icons/svg/item-bag.svg" },
-  { key: "abilities", label: "Способности", icon: "icons/svg/aura.svg" },
-  { key: "skills", label: "Испытания", icon: "icons/svg/dice-target.svg" },
-  { key: "passengers", label: "Пассажиры", icon: "icons/svg/group.svg" },
-  { key: "actions", label: "Действия", icon: "icons/svg/aura.svg" },
-  { key: "settings", label: "Настройки", icon: "icons/svg/lever.svg" }
+  { key: "weapon", get label() { return auditLocalize("FALLOUTMAW.Settings.CreatureOptions.WeaponSets", "Оружие"); }, icon: "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp" },
+  { key: "items", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Items", "Предметы"); }, icon: "icons/svg/item-bag.svg" },
+  { key: "abilities", get label() { return auditLocalize("FALLOUTMAW.Events.Groups.ability.Label", "Способности"); }, icon: "systems/fallout-maw/assets/System/Abilities/ability-default.webp" },
+  { key: "skills", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Checks", "Испытания"); }, icon: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-burst.webp" },
+  { key: "passengers", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Passengers", "Пассажиры"); }, icon: "systems/fallout-maw/assets/System/GlobalMap/global-map-travel-group.webp" },
+  { key: "actions", get label() { return auditLocalize("FALLOUTMAW.Settings.Presets.Columns.Actions", "Действия"); }, icon: "systems/fallout-maw/assets/System/Abilities/ability-default.webp" },
+  { key: "settings", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Settings_1017", "Настройки"); }, icon: "icons/svg/lever.svg" }
 ]);
 
 let tokenActionHud = null;
@@ -247,7 +250,7 @@ const hudImageAspectCache = new Map();
 
 function isHudActionBlockedByReactionLock() {
   if (!isReactionSystemLocked()) return false;
-  ui.notifications.warn("Ожидание реакций: действие временно заблокировано.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.WaitingForReactionsActionTemporarilyBlocked", "Ожидание реакций: действие временно заблокировано."));
   return true;
 }
 
@@ -484,8 +487,8 @@ function getSelectedHudActors() {
 function prepareEndTurnAction(token) {
   if (!isTokenCombatTurn(token, game.combat) || !canUserAdvanceCombatTurn(game.combat)) return null;
   return {
-    label: "Конец хода",
-    title: "Завершить ход",
+    label: auditLocalize("FALLOUTMAW.Effects.ExpiryEvents.TurnEnd", "Конец хода"),
+    title: auditLocalize("FALLOUTMAW.AuditApps.EndTurn", "Завершить ход"),
     icon: "fa-solid fa-forward-step"
   };
 }
@@ -772,7 +775,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       token: this.token,
       requestIndex
     });
-    const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg", requestIndex);
+    const abilities = prepareOwnedAbilityButtons(actor, "systems/fallout-maw/assets/System/Abilities/ability-default.webp", requestIndex);
     const passengers = prepareHudActorContainerPassengers(actor);
     const systemActions = prepareSystemActionButtons(hudIcons);
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
@@ -952,19 +955,20 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const combat = game.combat;
+    const actor = this.actor;
     if (!isTokenCombatTurn(this.token, combat) || !canUserAdvanceCombatTurn(combat)) return undefined;
     this.#activeTray = "";
-    const conversionMode = await promptEndTurnConversion(this.actor);
+    const conversionMode = await promptEndTurnConversion(actor);
     if (!conversionMode) return this.render({ force: true });
     try {
       await requestEndCombatTurnOperation({
         combat,
-        actor: this.actor,
+        actor,
         conversionMode
       });
     } catch (error) {
       console.error(`${SYSTEM_ID} | End combat turn request failed`, error);
-      ui.notifications.error(error.message || "Не удалось завершить ход.");
+      ui.notifications.error(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToEndTheTurn", "Не удалось завершить ход."));
     }
     return this.render({ force: true });
   }
@@ -977,23 +981,17 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!actors.length) return undefined;
     const formData = await DialogV2.input({
       window: {
-        title: "Полное восстановление"
+        title: auditLocalize("FALLOUTMAW.AuditApps.FullRecovery", "Полное восстановление")
       },
-      content: `
-        <p>Полностью вылечить выбранных актеров: ${actors.length}?</p>
-        <label class="fallout-maw-gm-heal-repair-option">
-          <input type="checkbox" name="repairItems" value="true">
-          <span>Починить предметы, заполнить магазины и зарядить источники энергии</span>
-        </label>
-      `,
+      content: auditFormat("FALLOUTMAW.AuditApps.FullyHealTheSelectedActorsRepairItemsFill", { v0: (actors.length) }, "\n        <p>Полностью вылечить выбранных актеров: {v0}?</p>\n        <label class=\"fallout-maw-gm-heal-repair-option\">\n          <input type=\"checkbox\" name=\"repairItems\" value=\"true\">\n          <span>Починить предметы, заполнить магазины и зарядить источники энергии</span>\n        </label>\n      "),
       ok: {
-        label: "Вылечить",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Heal", "Вылечить"),
         icon: "fa-solid fa-kit-medical",
         callback: (_event, button) => new FormDataExtended(button.form).object
       },
       buttons: [{
         action: "cancel",
-        label: "Отмена"
+        label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена")
       }],
       rejectClose: false
     });
@@ -1012,17 +1010,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!actors.length) return undefined;
     const formData = await DialogV2.input({
       window: {
-        title: "Выдать опыт"
+        title: auditLocalize("FALLOUTMAW.AuditApps.AwardExperience", "Выдать опыт")
       },
-      content: `
-        <p>Выдать опыт выбранным актерам: ${actors.length}.</p>
-        <label class="fallout-maw-stacked-field">
-          <span>Опыт</span>
-          <input type="number" name="experience" value="0" min="0" step="1" autofocus>
-        </label>
-      `,
+      content: auditFormat("FALLOUTMAW.AuditApps.AwardExperienceToTheSelectedActorsExperience", { v0: (actors.length) }, "\n        <p>Выдать опыт выбранным актерам: {v0}.</p>\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Опыт</span>\n          <input type=\"number\" name=\"experience\" value=\"0\" min=\"0\" step=\"1\" autofocus>\n        </label>\n      "),
       ok: {
-        label: "Выдать",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Award", "Выдать"),
         icon: "fa-solid fa-star",
         callback: (_event, button) => new FormDataExtended(button.form).object
       },
@@ -1059,18 +1051,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const currencies = getCurrencySettings();
     if (!actors.length || !currencies.length) return;
     const formData = await DialogV2.input({
-      window: { title: "Выдать валюту" },
-      content: `
-        <label class="fallout-maw-stacked-field">
-          <span>Валюта</span>
-          <select name="currency">${currencies.map(currency => `<option value="${escapeAttribute(currency.key)}">${escapeHTML(currency.label)}</option>`).join("")}</select>
-        </label>
-        <label class="fallout-maw-stacked-field">
-          <span>Сумма каждому</span>
-          <input type="number" name="amount" value="0" min="0" step="1" autofocus>
-        </label>
-      `,
-      ok: { label: "Выдать", icon: "fa-solid fa-coins", callback: (_event, button) => new FormDataExtended(button.form).object },
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.AwardCurrency", "Выдать валюту") },
+      content: auditFormat("FALLOUTMAW.AuditApps.CurrencyAmountForEach", { v0: (currencies.map(currency => `<option value="${escapeAttribute(currency.key)}">${escapeHTML(currency.label)}</option>`).join("")) }, "\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Валюта</span>\n          <select name=\"currency\">{v0}</select>\n        </label>\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Сумма каждому</span>\n          <input type=\"number\" name=\"amount\" value=\"0\" min=\"0\" step=\"1\" autofocus>\n        </label>\n      "),
+      ok: { label: auditLocalize("FALLOUTMAW.AuditApps.Award", "Выдать"), icon: "fa-solid fa-coins", callback: (_event, button) => new FormDataExtended(button.form).object },
       position: { width: 360 },
       rejectClose: false
     });
@@ -1079,7 +1062,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const amount = Number(formData.amount);
     if (!currency || !Number.isSafeInteger(amount) || amount <= 0) return;
     const updates = actors.map(actor => ({ actor, amount: calculateCurrencyAmount(`+${amount}`, actor.system?.currencies?.[currency.key]) }));
-    if (updates.some(update => update.amount === null)) return ui.notifications.warn("Слишком большая сумма валюты.");
+    if (updates.some(update => update.amount === null)) return ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.CurrencyAmountIsTooLarge", "Слишком большая сумма валюты."));
     for (const update of updates) await update.actor.update({ [`system.currencies.${currency.key}`]: update.amount });
     return this.render({ force: true });
   }
@@ -1202,7 +1185,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (isActorUnableToAct(this.actor)) {
-      ui.notifications.warn(`${this.actor?.name ?? ""}: невозможно совершать боевые действия без сознания или после смерти.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.CombatActionsAreUnavailableWhileUnconsciousOrDead", { v0: (this.actor?.name ?? "") }, "{v0}: невозможно совершать боевые действия без сознания или после смерти."));
       return undefined;
     }
     if (isHudWeaponDisabled(this.actor, item)) {
@@ -1210,7 +1193,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return undefined;
     }
     if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
-      ui.notifications.warn("Предмет сломан.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheItemIsBroken", "Предмет сломан."));
       return undefined;
     }
     if (actionKey === "armDelayedExplosion") {
@@ -1243,7 +1226,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     const blockState = getWeaponActionBlockState(this.actor, actionKey);
     if (blockState.blocked) {
-      ui.notifications.warn(`${this.actor?.name ?? ""}: действие заблокировано (${blockState.effect?.name ?? actionKey}).`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.ActionBlocked", { v0: (this.actor?.name ?? ""), v1: (blockState.effect?.name ?? actionKey) }, "{v0}: действие заблокировано ({v1})."));
       return undefined;
     }
     if (actionKey === "reload") {
@@ -1279,7 +1262,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const pending = this.#dualWeaponActionSelection;
     if (!pending || pending.itemId === item.id) {
       this.#dualWeaponActionSelection = selection;
-      ui.notifications.info(`С двух рук: выберите действие второго оружия.`);
+      ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.DualWieldingSelectAnActionForTheSecond", "С двух рук: выберите действие второго оружия."));
       return this.render({ force: true });
     }
 
@@ -1294,7 +1277,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#dualWeaponActionSelection = null;
     const controller = startDualWeaponAttack({
       token: this.token,
-      label: twoHandsEntry?.label ?? "С двух рук",
+      label: twoHandsEntry?.label ?? auditLocalize("FALLOUTMAW.AuditApps.DualWielding", "С двух рук"),
       attacks: [
         { weapon: firstWeapon, actionKey: pending.actionKey, weaponFunctionId: pending.weaponFunctionId },
         { weapon: secondWeapon, actionKey: selection.actionKey, weaponFunctionId: selection.weaponFunctionId }
@@ -1304,7 +1287,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     if (!controller) {
       this.#dualWeaponActionSelection = pending;
-      ui.notifications.warn("С двух рук: невозможно начать парный залп.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.DualWieldingCannotStartAPairedVolley", "С двух рук: невозможно начать парную атаку."));
     }
     return this.render({ force: true });
   }
@@ -1393,7 +1376,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return undefined;
     }
     if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
-      ui.notifications.warn("Предмет сломан.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheItemIsBroken", "Предмет сломан."));
       return undefined;
     }
     const changed = await openWeaponAttackPowerDialog({
@@ -1463,7 +1446,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!hasActiveAbilityFunction(item)) return undefined;
     const interaction = this.#beginAbilityTargetInteraction();
     if (!interaction) {
-      ui.notifications.warn("Сначала завершите или отмените текущее применение способности.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.FinishOrCancelTheCurrentAbilityUseFirst", "Сначала завершите или отмените текущее применение способности."));
       return false;
     }
     try {
@@ -1550,9 +1533,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       sourceActor: this.actor,
       sourceToken: this.token,
       includeSelf: false,
-      title: "Обыск",
-      noneWarning: "Нет подходящих целей для обыска.",
-      instructions: "Обыск: выберите цель. Esc/ПКМ отменяет."
+      title: auditLocalize("FALLOUTMAW.AuditApps.Search_841", "Обыск"),
+      noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoSuitableSearchTargets", "Нет подходящих целей для обыска."),
+      instructions: auditLocalize("FALLOUTMAW.AuditApps.SearchSelectATargetEscRightClickCancels", "Обыск: выберите цель. Esc/ПКМ отменяет.")
     });
     if (!target?.actor) {
       return undefined;
@@ -1570,9 +1553,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       sourceActor: this.actor,
       sourceToken: this.token,
       includeSelf: false,
-      title: "Торговля",
-      noneWarning: "Нет подходящих целей для торговли.",
-      instructions: "Торговля: выберите цель. Esc/ПКМ отменяет."
+      title: auditLocalize("FALLOUTMAW.AuditApps.Trade_836", "Торговля"),
+      noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoSuitableTradeTargets", "Нет подходящих целей для торговли."),
+      instructions: auditLocalize("FALLOUTMAW.AuditApps.TradeSelectATargetEscRightClickCancels", "Торговля: выберите цель. Esc/ПКМ отменяет.")
     });
     if (!target?.actor) {
       return undefined;
@@ -1824,7 +1807,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const data = actor?.system?.[section]?.[key];
     if (!actor || !data) return;
 
-    const min = Math.max(0, toInteger(data.min));
+    if (input.dataset.field === "once") {
+      if (section !== "resources" || !supportsOneTimeResourceDisplay(key)) return;
+      const persisted = await setOneTimeResourceValue(actor, key, input.value);
+      input.value = String(persisted);
+      input.dataset.originalValue = String(persisted);
+      return;
+    }
+
+    const min = toInteger(data.min);
     const max = Math.max(min, toInteger(data.max));
     const value = Math.min(max, Math.max(min, toInteger(input.value)));
     input.value = String(value);
@@ -2561,7 +2552,7 @@ function prepareLimbLayerContext(activeLayer = "state") {
   const active = HUD_LIMB_LAYER_KEYS.includes(activeLayer) ? activeLayer : "state";
   return {
     key: active,
-    label: HUD_LIMB_LAYER_CHOICES.find(layer => layer.key === active)?.label ?? "Состояние",
+    label: HUD_LIMB_LAYER_CHOICES.find(layer => layer.key === active)?.label ?? auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"),
     choices: HUD_LIMB_LAYER_CHOICES.filter(layer => HUD_LIMB_LAYER_KEYS.includes(layer.key)).map(layer => ({
       ...layer,
       selected: layer.key === active
@@ -2647,9 +2638,9 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
       stateLabel: prosthesis.name,
       fill: mixColor([22, 81, 122], [143, 216, 255], ratio),
       popoverRows: [
-        { label: "Протез", value: prosthesis.name },
-        { label: "Состояние", value: hasCondition ? `${conditionValue} / ${conditionMax}` : "∞" },
-        { label: "Интеграция", value: `${Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)))}%` }
+        { label: auditLocalize("FALLOUTMAW.Item.FunctionProsthesis", "Протез"), value: prosthesis.name },
+        { label: auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"), value: hasCondition ? `${conditionValue} / ${conditionMax}` : "∞" },
+        { label: auditLocalize("FALLOUTMAW.Item.ProsthesisIntegration", "Интеграция"), value: `${Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)))}%` }
       ]
     };
   }
@@ -2709,6 +2700,7 @@ function prepareResourceEntries(actor) {
       data: actor.system.resources?.[resource.key]
     }))
     .map(entry => decorateActionPointHudEntry(actor, entry))
+    .map(entry => decorateOneTimeResourceDisplay(actor, entry))
     .map(entry => addLimitedResourceDisplay(entry, limited[entry.key]));
 }
 
@@ -2921,24 +2913,24 @@ function isActiveAbility(item) {
 function prepareSystemActionButtons(hudIcons = {}) {
   const advancementAction = {
     key: "advancement",
-    label: "Повышение уровня",
-    img: normalizeImagePath(hudIcons.levelUpIcon, "icons/svg/upgrade.svg")
+    label: auditLocalize("FALLOUTMAW.Settings.CreatureOptions.Progression", "Повышение уровня"),
+    img: normalizeImagePath(hudIcons.levelUpIcon, "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp")
   };
   const boardTransportAction = {
     key: "boardTransport",
-    label: "Сесть в транспорт",
-    img: normalizeImagePath(hudIcons.activeActions?.boardTransport, "icons/svg/mystery-man.svg")
+    label: auditLocalize("FALLOUTMAW.AuditApps.BoardTransport", "Сесть в транспорт"),
+    img: normalizeImagePath(hudIcons.activeActions?.boardTransport, "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp")
   };
   const campAction = {
     key: "camp",
-    label: "Лагерь",
+    label: auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь"),
     img: normalizeImagePath(hudIcons.activeActions?.camp, "icons/environment/settlement/tent.webp")
   };
   const configuredActions = getSystemActionSettings()
     .filter(action => action.key !== "stealth")
     .map(action => ({
       ...action,
-      img: normalizeImagePath(action.img, "icons/svg/aura.svg")
+      img: normalizeImagePath(action.img, "systems/fallout-maw/assets/System/Abilities/ability-default.webp")
     }));
   return [advancementAction, boardTransportAction, campAction, ...configuredActions];
 }
@@ -2961,7 +2953,7 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
     {
       key: "dragGrappled",
       label: game.i18n.localize("FALLOUTMAW.Settings.HUD.DragGrappled"),
-      img: normalizeImagePath(hudIcons.activeActions?.dragGrappled, "icons/svg/wingfoot.svg"),
+      img: normalizeImagePath(hudIcons.activeActions?.dragGrappled, "systems/fallout-maw/assets/System/TokenActionHud/action-drag-grappled.webp"),
       action: "dragGrappledTarget",
       disabled: !grappleTargetId || !actor?.isOwner
     },
@@ -2975,7 +2967,7 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
     },
     {
       key: "stealth",
-      label: getSystemActionSettings().find(action => action.key === "stealth")?.label ?? "Скрытность",
+      label: getSystemActionSettings().find(action => action.key === "stealth")?.label ?? auditLocalize("FALLOUTMAW.Effects.StealthGroup", "Скрытность"),
       img: normalizeImagePath(hudIcons.activeActions?.stealth, normalizeImagePath(getSystemActionSettings().find(action => action.key === "stealth")?.img, "icons/svg/invisible.svg")),
       action: "useSystemAction",
       datasetKey: "systemActionKey",
@@ -3103,7 +3095,7 @@ function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selecte
       ...slot,
       hudAspectStyle: getHudItemAspectStyle(slot.item),
       weaponSetKey: set.key,
-      emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg"),
+      emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp"),
       selected: Boolean(slot.item?.id && !slot.phantom && slot.item.id === selectedWeaponId)
     })),
     weapons: getUniqueHudWeaponSlots(set.slots ?? []).map(slot => ({
@@ -3121,7 +3113,7 @@ function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selecte
       .map(slot => ({
         ...slot,
         weaponSetKey: set.key,
-        emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg")
+        emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp")
       }))
   }));
 }
@@ -3265,11 +3257,11 @@ function prepareHudWeaponEquipChoices(actor, target = null, hudIcons = {}, reque
     .map(item => ({
       id: item.id,
       name: item.name,
-      img: normalizeImagePath(item.img, normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg")),
+      img: normalizeImagePath(item.img, normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp")),
       weaponSetKey: target.weaponSetKey,
       weaponSlotKey: target.weaponSlotKey,
       hudAspectStyle: getHudItemAspectStyle(item),
-      actionPointCostLabel: cost > 0 ? `${cost} ОД` : "",
+      actionPointCostLabel: cost > 0 ? auditFormat("FALLOUTMAW.AuditApps.AP", { v0: (cost) }, "{v0} ОД") : "",
       disabled: false
     }));
 }
@@ -3287,7 +3279,7 @@ function isHudWeaponEquipCandidate(item) {
 async function equipHudWeaponInSlot(actor, item, weaponSetKey = "", weaponSlotKey = "", { replaceItemId = "" } = {}) {
   if (!actor?.isOwner || !item) return null;
   if (!canFitHudWeaponInTarget(actor, item, weaponSetKey, weaponSlotKey, { replaceItemId })) {
-    ui.notifications.warn("Оружие не помещается в выбранные слоты.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheWeaponDoesNotFitInTheSelected", "Оружие не помещается в выбранные слоты."));
     return null;
   }
 
@@ -3506,7 +3498,7 @@ function isHudWeaponDisabled(actor, weapon, weaponSets = null) {
 }
 
 function notifyHudWeaponDisabled() {
-  ui.notifications.warn(HUD_WEAPON_DISABLED_NOTIFICATION);
+  ui.notifications.warn(HUD_WEAPON_DISABLED_NOTIFICATION());
 }
 
 function getActiveHudWeaponSetKey(actor, weaponSets = []) {
@@ -3621,13 +3613,13 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
   ) {
     rows.at(-1).actions.push({
       key: "replaceWeapon",
-      label: "Заменить",
+      label: auditLocalize("FALLOUTMAW.Settings.Presets.Import.Replace", "Заменить"),
       isWeaponReplaceControl: true,
       disabled: forceDisabled,
       itemId: selectedWeapon.id,
       weaponSetKey: selectedWeaponSlot.weaponSetKey,
       weaponSlotKey: selectedWeaponSlot.key,
-      img: normalizeImagePath(hudIcons.weaponActions?.replaceWeapon, "icons/svg/direction.svg")
+      img: normalizeImagePath(hudIcons.weaponActions?.replaceWeapon, "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-replace-weapon.webp")
     });
   }
   const attachedActionRows = getWeaponAttachedActionRows(actor, selectedWeapon, token, forceDisabled, hudIcons, requestIndex);
@@ -3693,7 +3685,7 @@ function prepareLightSourceActionRow(item = null, token = null, forceDisabled = 
       itemId: item.id,
       isLightRechargeControl: true,
       disabled: forceDisabled,
-      img: normalizeImagePath(hudIcons.weaponActions?.lightRecharge, "icons/svg/upgrade.svg")
+      img: normalizeImagePath(hudIcons.weaponActions?.lightRecharge, "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp")
     });
   }
   return {
@@ -3765,7 +3757,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
         disabled: forceDisabled,
         itemId: selectedWeapon.id,
         weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
-        img: normalizeImagePath(hudIcons.weaponActions?.lightRecharge, "icons/svg/upgrade.svg")
+        img: normalizeImagePath(hudIcons.weaponActions?.lightRecharge, "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp")
       };
     }
     const blockState = getWeaponActionBlockState(actor, action.key);
@@ -3775,7 +3767,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
         disabled: forceDisabled || action.disabled,
         itemId: selectedWeapon.id,
         weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
-        img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "icons/svg/explosion.svg")
+        img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-volley.webp")
       };
     }
     const actionPointCostState = getWeaponActionPointCostAttribution(
@@ -3792,14 +3784,14 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
       disabled: forceDisabled || blockState.blocked,
       itemId: selectedWeapon.id,
       weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
-      img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "icons/svg/combat.svg"),
+      img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp"),
       actionPointCost,
       actionPointCostClass: actionPointCostState.tone ? `cost-${actionPointCostState.tone}` : "",
-      actionPointCostLabel: `${actionPointCost} ОД`,
+      actionPointCostLabel: auditFormat("FALLOUTMAW.AuditApps.AP", { v0: (actionPointCost) }, "{v0} ОД"),
       actionPointCostTooltipHtml: buildActionPointCostTooltipHTML({
         sources: actionPointCostState.sources
       }),
-      actionPointCostTooltipLabel: `${actionPointCost} ОД`
+      actionPointCostTooltipLabel: auditFormat("FALLOUTMAW.AuditApps.AP", { v0: (actionPointCost) }, "{v0} ОД")
     };
   });
 }
@@ -3823,7 +3815,7 @@ function renderActionPointCostTooltipSource(source = {}) {
       <img src="${escapeAttribute(source.img)}" alt="">
       <div>
         <strong>${escapeHTML(source.name)}</strong>
-        <span>${escapeHTML("Изменения")}: <b class="${deltaClass}">${escapeHTML(formatActionPointCostDelta(delta))}</b></span>
+        <span>${escapeHTML(auditLocalize("FALLOUTMAW.Effects.Changes", "Изменения"))}: <b class="${deltaClass}">${escapeHTML(formatActionPointCostDelta(delta))}</b></span>
       </div>
     </section>
   `;
@@ -3834,7 +3826,7 @@ function formatActionPointCostDelta(value) {
   const formatted = Number.isInteger(number)
     ? String(number)
     : number.toFixed(2).replace(/\.?0+$/, "");
-  return `${number > 0 ? "+" : ""}${formatted} ОД`;
+  return auditFormat("FALLOUTMAW.AuditApps.AP_1060", { v0: (number > 0 ? "+" : ""), v1: (formatted) }, "{v0}{v1} ОД");
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {
@@ -3967,9 +3959,9 @@ function buildWeaponAttackPowerPreviewRows(context = {}, nextLevel = 1) {
   push("criticalChanceModifier", game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), current.criticalChanceModifier, next.criticalChanceModifier, { formatter: value => `${formatAttackPowerPreviewSignedNumber(value)}%` });
   push("criticalDamagePercent", game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), current.criticalDamagePercent, next.criticalDamagePercent, { formatter: value => `${formatAttackPowerPreviewNumber(value)}%` });
   push("attackConeDegrees", game.i18n.localize("FALLOUTMAW.Item.WeaponAttackCone"), current.attackConeDegrees, next.attackConeDegrees, { formatter: value => `${formatAttackPowerPreviewNumber(value)}°` });
-  push("maxRangeMeters", game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), current.maxRangeMeters, next.maxRangeMeters, { formatter: value => `${formatAttackPowerPreviewNumber(value)} м` });
-  push("effectiveRange.value", game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), current.effectiveRangeValue, next.effectiveRangeValue, { formatter: value => `${formatAttackPowerPreviewNumber(value)} м` });
-  push("effectiveRange.max", game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRangeMax"), current.effectiveRangeMax, next.effectiveRangeMax, { formatter: value => `${formatAttackPowerPreviewNumber(value)} м` });
+  push("maxRangeMeters", game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), current.maxRangeMeters, next.maxRangeMeters, { formatter: value => auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatAttackPowerPreviewNumber(value)) }, "{v0} м") });
+  push("effectiveRange.value", game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), current.effectiveRangeValue, next.effectiveRangeValue, { formatter: value => auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatAttackPowerPreviewNumber(value)) }, "{v0} м") });
+  push("effectiveRange.max", game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRangeMax"), current.effectiveRangeMax, next.effectiveRangeMax, { formatter: value => auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatAttackPowerPreviewNumber(value)) }, "{v0} м") });
   push("penetration", game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), current.penetration, next.penetration);
 
   for (const type of changedKeys) {
@@ -4374,7 +4366,6 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
         action,
         sourceUuid
       });
-      await spendWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId);
     } catch (error) {
       ui.notifications.warn(error.message);
       return;
@@ -4407,7 +4398,6 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
           action: "extract",
           sourceUuid: currentSourceUuid
         });
-        await spendWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId);
       }
       const currentWeapon = actor.items.get(weaponId);
       if (!currentWeapon) return;
@@ -4595,7 +4585,7 @@ async function performEndCombatTurnOperation({ combatId = "", actorUuid = "", co
   const actor = await fromUuid(actorUuid);
   if (!actor) throw new Error("Actor not found.");
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (requester && !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
+  if (!requester || !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
   await combat.waitForFalloutMawTurnTransition?.();
   if (!game.user?.isActiveGM) throw new Error("The active GM changed. Retry the turn request.");
   if (!isActorTurnTarget(actor, combat)) throw new Error("Actor is not active in the current combat turn.");
@@ -4611,8 +4601,14 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
   const actor = await fromUuid(actorUuid);
   if (!actor) throw new Error("Actor not found.");
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (requester && !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
-  const weapon = actor.items?.get(weaponId);
+  if (!requester || !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
+  if (!["insert", "extract", "select"].includes(String(action))) throw new Error("Unknown weapon reload action.");
+  return runWeaponReloadTransaction({ actor, weaponId, weaponFunctionId, spendActionPoints: action !== "select" }, weapon => (
+    performLockedWeaponReloadOperation(actor, weapon, weaponFunctionId, action, sourceUuid)
+  ));
+}
+
+async function performLockedWeaponReloadOperation(actor, weapon, weaponFunctionId, action, sourceUuid) {
   if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) throw new Error("Weapon not found.");
   const weaponData = getEffectiveWeaponFunctionData(weapon, weaponFunctionId);
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
@@ -4954,7 +4950,7 @@ async function requestTokenActionHudSocket(action, payload = {}, gm = getRespons
       pendingTokenActionHudSocketRequests.delete(requestId);
       reject(new Error("GM did not answer token HUD request."));
     }, TOKEN_ACTION_HUD_SOCKET_TIMEOUT);
-    pendingTokenActionHudSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingTokenActionHudSocketRequests.set(requestId, { resolve, reject, timeout, gmUserId: gm.id });
   });
 
   game.socket.emit(TOKEN_ACTION_HUD_SOCKET, {
@@ -4969,13 +4965,15 @@ async function requestTokenActionHudSocket(action, payload = {}, gm = getRespons
   return promise;
 }
 
-async function handleTokenActionHudSocketMessage(message = {}) {
+async function handleTokenActionHudSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== TOKEN_ACTION_HUD_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
 
   if (message.type === "response") {
-    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    if (message.recipientUserId !== game.user?.id) return;
     const pending = pendingTokenActionHudSocketRequests.get(message.requestId);
-    if (!pending) return;
+    if (!pending || !sender.isGM || sender.id !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingTokenActionHudSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
@@ -4984,6 +4982,7 @@ async function handleTokenActionHudSocketMessage(message = {}) {
   }
 
   if (message.type !== "request") return;
+  if (String(message.requesterUserId ?? "") !== sender.id) return;
   if (!game.user?.isActiveGM || message.gmUserId !== game.user.id) return;
 
   try {
@@ -5073,11 +5072,13 @@ function applyMeterPreview(meter, spent) {
 }
 
 function addLimitedResourceDisplay(entry, limit = null) {
-  const amount = Math.min(Math.max(0, toInteger(limit?.amount)), Math.max(0, entry.value - entry.min));
+  const value = entry.oneTimeResource ? entry.meterValue : entry.value;
+  const max = entry.oneTimeResource ? entry.meterMax : entry.max;
+  const amount = Math.min(Math.max(0, toInteger(limit?.amount)), Math.max(0, value - entry.min));
   if (!amount) return entry;
-  const range = Math.max(0, entry.max - entry.min);
+  const range = Math.max(0, max - entry.min);
   if (!range) return entry;
-  const left = ((entry.value - amount - entry.min) / range) * 100;
+  const left = ((value - amount - entry.min) / range) * 100;
   const width = (amount / range) * 100;
   const color = String(limit?.color || "#3f8cff");
   return {

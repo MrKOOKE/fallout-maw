@@ -147,7 +147,7 @@ function resolveSubcategoryOrder(categories = []) {
 export function createCraftRecipeGrouping({
   recipes = [],
   itemCategories = [],
-  collator = new Intl.Collator("ru", { numeric: true, sensitivity: "base" })
+  collator = new Intl.Collator(globalThis.game?.i18n?.lang || "en", { numeric: true, sensitivity: "base" })
 } = {}) {
   const categoryOrder = resolveCategoryOrder(itemCategories);
   const subcategoryOrder = resolveSubcategoryOrder(itemCategories);

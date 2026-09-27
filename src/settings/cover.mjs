@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 
 export const DEFAULT_COVER_EFFECT_KEY = "system.resources.dodge.bonus";
@@ -15,16 +16,16 @@ export function getCoverKeyFromBonusPercentEffectKey(effectKey = "") {
     : "";
 }
 
-const DEFAULT_COVER_ICON_ROOT = `systems/${FALLOUT_MAW.id}/assets/HUD`;
+const DEFAULT_COVER_ICON_ROOT = `systems/${FALLOUT_MAW.id}/assets/System/Cover`;
 const COVER_CHANGE_TYPES = new Set(["add", "multiply", "override", "upgrade", "downgrade", "custom"]);
 
 export const COVER_CHANGE_TYPE_CHOICES = Object.freeze([
-  { value: "add", label: "Добавить" },
-  { value: "multiply", label: "Умножить" },
-  { value: "override", label: "Переопределить" },
-  { value: "upgrade", label: "Повысить" },
-  { value: "downgrade", label: "Понизить" },
-  { value: "custom", label: "Особый" }
+  { value: "add", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text043", "Добавить"); } },
+  { value: "multiply", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text044", "Умножить"); } },
+  { value: "override", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text045", "Переопределить"); } },
+  { value: "upgrade", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text046", "Повысить"); } },
+  { value: "downgrade", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text047", "Понизить"); } },
+  { value: "custom", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text048", "Особый"); } }
 ]);
 
 export function createDefaultCoverSettings() {
@@ -32,22 +33,22 @@ export function createDefaultCoverSettings() {
     entries: [
       createCoverEntry({
         key: "partial",
-        label: "Частичное",
-        img: `${DEFAULT_COVER_ICON_ROOT}/shield_low.svg`,
+        label: auditLocalize("FALLOUTMAW.AuditSystem.Text049", "Частичное"),
+        img: `${DEFAULT_COVER_ICON_ROOT}/cover-partial.webp`,
         overlapPercent: 25,
         change: { value: "25" }
       }),
       createCoverEntry({
         key: "half",
-        label: "Половинчатое",
-        img: `${DEFAULT_COVER_ICON_ROOT}/shield_half.svg`,
+        label: auditLocalize("FALLOUTMAW.AuditSystem.Text050", "Половинчатое"),
+        img: `${DEFAULT_COVER_ICON_ROOT}/cover-half.webp`,
         overlapPercent: 50,
         change: { value: "50" }
       }),
       createCoverEntry({
         key: "full",
-        label: "Полное",
-        img: `${DEFAULT_COVER_ICON_ROOT}/shield_full.svg`,
+        label: auditLocalize("FALLOUTMAW.AuditSystem.Text051", "Полное"),
+        img: `${DEFAULT_COVER_ICON_ROOT}/cover-full.webp`,
         overlapPercent: 80,
         change: { value: "100" }
       })
@@ -74,7 +75,7 @@ export function normalizeCoverEntry(entry = {}, index = 0, used = new Set()) {
   return createCoverEntry({
     key,
     label,
-    img: String(entry?.img ?? "").trim() || "icons/svg/shield.svg",
+    img: String(entry?.img ?? "").trim() || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     overlapPercent: clampInteger(entry?.overlapPercent ?? entry?.coveragePercent, 0, 0, 100),
     change: normalizeCoverChange(entry?.change ?? entry?.effect ?? entry)
   });
@@ -83,8 +84,8 @@ export function normalizeCoverEntry(entry = {}, index = 0, used = new Set()) {
 export function createBlankCoverEntry(index = 0) {
   return createCoverEntry({
     key: `cover${index + 1}`,
-    label: "Укрытие",
-    img: "icons/svg/shield.svg",
+    label: auditLocalize("FALLOUTMAW.AuditSystem.Text052", "Укрытие"),
+    img: "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     overlapPercent: 0,
     change: { value: "0" }
   });

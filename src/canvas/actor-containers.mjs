@@ -1,13 +1,17 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevelId } from "./creation-levels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ACTOR_CONTAINER_FLAG,
+  ACTOR_CONTAINER_PASSENGER_FLAG,
   findFirstAvailableActorContainerSeat,
   getActorContainerFlag,
   hasActorContainer,
   isActorInActorContainer,
   resolveActorContainerPassengerActor
 } from "../utils/actor-containers.mjs";
+import { BATCH_EXPECTED_IDS_OPTION } from "../utils/document-batch-integrity.mjs";
+import { prepareActorContainerPassengerRebindings } from "../utils/actor-container-passengers.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import {
   cancelActiveCanvasTargetSelection,
@@ -40,6 +44,17 @@ const pendingRequests = new Map();
 let actorContainerRequestQueue = Promise.resolve();
 
 export function registerActorContainerHooks() {
+  Hooks.on("renderActorDirectory", (_app, element) => {
+    const root = element?.[0] ?? element;
+    for (const row of root?.querySelectorAll?.("[data-entry-id]") ?? []) {
+      const actor = game.actors?.get(row.dataset.entryId);
+      const parked = actor?.getFlag?.(SYSTEM_ID, ACTOR_CONTAINER_PASSENGER_FLAG);
+      if (!parked) continue;
+      const vehicle = getActorByUuid(parked.vehicleActorUuid);
+      // Orphaned records stay visible to permit GM recovery.
+      if (getActorContainerFlag(vehicle).passengers.some(entry => entry.id === parked.passengerId && entry.actorUuid === actor.uuid)) row.remove();
+    }
+  });
   Hooks.on("canvasReady", () => {
     refreshActorContainerHighlights();
     refreshActorContainerExitPreview();
@@ -82,24 +97,36 @@ export function registerActorContainerSocket() {
   game.socket.on(ACTOR_CONTAINER_SOCKET, handleActorContainerSocketMessage);
 }
 
+export function requestActorContainerBoarding(payload = {}) {
+  return requestActorContainerSocket("boardPassenger", payload);
+}
+
+export function requestActorContainerPassengerExit(payload = {}) {
+  return requestActorContainerSocket("exitPassenger", payload);
+}
+
+export function requestActorContainerPassengerRecovery(payload = {}) {
+  return requestActorContainerSocket("recoverPassenger", payload);
+}
+
 export function startActorContainerBoardingMode({ actor = null, token = null } = {}) {
   cancelActiveCanvasTargetSelection({ reason: "superseded" });
   const passengerActor = actor ?? token?.actor ?? token?.document?.actor ?? null;
   const passengerToken = token?.document ?? token ?? null;
   if (!passengerActor?.isOwner || !passengerToken?.id) {
-    ui.notifications.warn("Для посадки нужен выбранный актёр с правами владельца.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0595", "Для посадки нужен выбранный актёр с правами владельца."));
     return false;
   }
   if (isActorInActorContainer(passengerActor)) {
-    ui.notifications.warn(`${passengerActor.name}: уже находится в транспорте.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0596", { p0: (passengerActor.name) }, "{p0}: уже находится в транспорте."));
     return false;
   }
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn("Сцена не готова для посадки в транспорт.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0597", "Сцена не готова для посадки в транспорт."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn("Нет активного GM для посадки в транспорт.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0598", "Нет активного GM для посадки в транспорт."));
     return false;
   }
 
@@ -136,7 +163,7 @@ export function startActorContainerBoardingMode({ actor = null, token = null } =
   bindCanvasInput(mode, onBoardingCanvasEvent);
   window.addEventListener("keydown", onBoardingKeyDown, { capture: true });
   refreshActorContainerHighlights();
-  ui.notifications.info("Посадка в транспорт: выберите подсвеченный транспорт. Esc/ПКМ отменяет.");
+  ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0599", "Посадка в транспорт: выберите подсвеченный транспорт. Esc/ПКМ отменяет."));
   return true;
 }
 
@@ -145,11 +172,11 @@ export function startActorContainerPassengerExitPlacement({ vehicleActor = null,
   const passenger = getActorContainerFlag(vehicleActor).passengers.find(entry => entry.id === passengerId);
   if (!vehicleActor?.isOwner || !passenger) return false;
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn("Сцена не готова для выхода из транспорта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0600", "Сцена не готова для выхода из транспорта."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn("Нет активного GM для выхода из транспорта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0601", "Нет активного GM для выхода из транспорта."));
     return false;
   }
 
@@ -159,7 +186,7 @@ export function startActorContainerPassengerExitPlacement({ vehicleActor = null,
     vehicleActorUuid: vehicleActor.uuid,
     passengerId,
     tokenData: foundry.utils.deepClone(passenger.tokenData ?? {}),
-    previewImage: String(passenger.tokenData?.texture?.src ?? passenger.actorImg ?? "icons/svg/mystery-man.svg"),
+    previewImage: String(passenger.tokenData?.texture?.src ?? passenger.actorImg ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
     preview: null,
     inputShield: null,
     previewPoint: null,
@@ -187,7 +214,7 @@ export function startActorContainerPassengerExitPlacement({ vehicleActor = null,
   bindCanvasInput(placement, onExitPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onExitPlacementKeyDown, { capture: true });
   refreshActorContainerExitPreview();
-  ui.notifications.info("Выход из транспорта: выберите точку размещения. Esc/ПКМ отменяет.");
+  ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0602", "Выход из транспорта: выберите точку размещения. Esc/ПКМ отменяет."));
   return true;
 }
 
@@ -195,7 +222,7 @@ export function prepareHudActorContainerPassengers(actor = null) {
   return getActorContainerFlag(actor).passengers.map(passenger => ({
     id: passenger.id,
     name: passenger.actorName || passenger.actorUuid,
-    img: passenger.actorImg || "icons/svg/mystery-man.svg",
+    img: passenger.actorImg || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     sizeLabel: `${passenger.width} / ${passenger.height}`
   }));
 }
@@ -207,11 +234,11 @@ export function actorHasHudActorContainerPassengers(actor = null) {
 export async function openActorContainerPassengerSheet({ vehicleActor = null, passengerId = "" } = {}) {
   const actor = await resolveActorContainerPassengerActor(vehicleActor, passengerId);
   if (!actor) {
-    ui.notifications.warn("Не удалось найти актера пассажира.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0603", "Не удалось найти актера пассажира."));
     return false;
   }
   if (!actor.testUserPermission?.(game.user, "OBSERVER")) {
-    ui.notifications.warn("Нет прав наблюдателя на этого пассажира.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0604", "Нет прав наблюдателя на этого пассажира."));
     return false;
   }
   actor.sheet?.render?.(true);
@@ -224,7 +251,7 @@ async function onBoardingPointerDown(event) {
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
   const vehicleToken = getActorContainerTokenAtPoint(point, mode);
   if (!vehicleToken) {
-    ui.notifications.warn("Выберите подсвеченный транспорт.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0605", "Выберите подсвеченный транспорт."));
     return;
   }
   const request = {
@@ -285,7 +312,7 @@ function cancelActorContainerBoardingMode({
       cancelled: Boolean(cancelled)
     });
   }
-  if (notify) ui.notifications.info("Посадка в транспорт отменена.");
+  if (notify) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0606", "Посадка в транспорт отменена."));
   return true;
 }
 
@@ -352,7 +379,7 @@ function cancelActorContainerExitPlacement({
       cancelled: Boolean(cancelled)
     });
   }
-  if (notify) ui.notifications.info("Выход из транспорта отменен.");
+  if (notify) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0607", "Выход из транспорта отменен."));
   return true;
 }
 
@@ -628,17 +655,21 @@ async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", pa
   const vehicleActor = await fromUuid(vehicleActorUuid);
   const passengerToken = scene?.tokens?.get(passengerTokenId);
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (!scene || !passengerActor || !vehicleActor || !passengerToken) throw new Error("Не удалось найти актера, транспорт или токен.");
-  if (!requester?.isGM && !passengerActor.testUserPermission?.(requester, "OWNER")) throw new Error("Нет прав на пассажира.");
-  if (passengerActor.uuid === vehicleActor.uuid) throw new Error("Актер не может сесть сам в себя.");
-  if (isActorInActorContainer(passengerActor)) throw new Error("Актер уже находится в транспорте.");
+  if (!scene || !passengerActor || !vehicleActor || !passengerToken) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0608", "Не удалось найти актера, транспорт или токен."));
+  if (passengerToken.actor?.uuid !== passengerActor.uuid) throw new Error("Passenger token does not belong to the requested Actor.");
+  if (!requester?.isGM && !passengerActor.testUserPermission?.(requester, "OWNER")) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0609", "Нет прав на пассажира."));
+  if (passengerActor.uuid === vehicleActor.uuid) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0610", "Актер не может сесть сам в себя."));
+  if (isActorInActorContainer(passengerActor)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0611", "Актер уже находится в транспорте."));
   const seat = findFirstAvailableActorContainerSeat(vehicleActor, passengerActor, passengerToken);
-  if (!seat) throw new Error("В транспорте нет подходящего свободного места.");
+  if (!seat) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0612", "В транспорте нет подходящего свободного места."));
 
   const ownershipUpdate = getTemporaryOwnershipUpdate(vehicleActor, passengerActor);
+  const parkedActorId = passengerToken.actorLink ? "" : foundry.utils.randomID();
   const passenger = {
     id: foundry.utils.randomID(),
-    actorUuid: passengerActor.uuid,
+    actorUuid: parkedActorId ? `Actor.${parkedActorId}` : passengerActor.uuid,
+    parkedActorId,
+    originalActorUuid: passengerActor.uuid,
     actorName: passengerActor.name,
     actorImg: passengerActor.img,
     sceneId,
@@ -653,37 +684,90 @@ async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", pa
     temporaryOwnerLevels: ownershipUpdate.previousLevels
   };
   const passengers = [...getActorContainerFlag(vehicleActor).passengers, passenger];
-  const originalOwnership = foundry.utils.deepClone(vehicleActor.ownership ?? {});
-  const originalPassengers = getActorContainerFlag(vehicleActor).passengers;
-  try {
-    await updateActorContainerActor(vehicleActor, {
-      ...ownershipUpdate.update,
-      [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
-    });
-    await scene.deleteEmbeddedDocuments("Token", [passengerToken.id]);
-  } catch (error) {
-    await updateActorContainerActor(vehicleActor, {
-      ownership: originalOwnership,
-      [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: originalPassengers
-    }).catch(() => {});
-    throw error;
+  const operations = [];
+  if (parkedActorId) {
+    operations.push(createParkedPassengerOperation(passengerActor, vehicleActor, passenger));
   }
-  return { ok: true };
+  operations.push(createActorContainerUpdateOperation(vehicleActor, {
+    ...ownershipUpdate.update,
+    [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
+  }));
+  const childUpdates = await prepareActorContainerPassengerRebindings(passengerActor, passenger.actorUuid);
+  if (childUpdates.length) operations.push(createPassengerRebindingOperation(childUpdates));
+  operations.push({ action: "delete", documentName: "Token", parent: scene,
+    ids: [passengerToken.id], [BATCH_EXPECTED_IDS_OPTION]: [passengerToken.id] });
+  await commitActorContainerBatch(operations);
+  return { ok: true, passengerId: passenger.id, actorUuid: passenger.actorUuid };
+}
+
+function createParkedPassengerOperation(actor, vehicleActor, passenger) {
+  const source = actor.toObject();
+  source._id = passenger.parkedActorId;
+  source.folder = null;
+  foundry.utils.setProperty(source, `flags.${SYSTEM_ID}.${ACTOR_CONTAINER_PASSENGER_FLAG}`, {
+    vehicleActorUuid: vehicleActor.uuid,
+    passengerId: passenger.id,
+    originalActorUuid: passenger.originalActorUuid,
+    originalActorId: passenger.tokenData.actorId
+  });
+  return { action: "create", documentName: "Actor", data: [source], keepId: true, keepEmbeddedIds: true,
+    renderSheet: false, falloutMawParkPassenger: true, [BATCH_EXPECTED_IDS_OPTION]: [passenger.parkedActorId] };
+}
+
+async function performRecoverPassenger({ vehicleActorUuid = "", passengerId = "" } = {}, requesterUserId = "") {
+  const vehicleActor = await fromUuid(vehicleActorUuid);
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (!vehicleActor || (!requester?.isGM && !vehicleActor.testUserPermission?.(requester, "OBSERVER"))) throw new Error("Нет доступа к транспорту пассажира.");
+  const passengers = getActorContainerFlag(vehicleActor).passengers;
+  const passenger = passengers.find(entry => entry.id === passengerId);
+  if (!passenger) throw new Error("Пассажир не найден.");
+  const current = await fromUuid(passenger.actorUuid);
+  if (current) return { actorUuid: current.uuid };
+  const scene = game.scenes?.get(passenger.sceneId);
+  if (passenger.parkedActorId || passenger.tokenData?.actorLink !== false || !scene
+    || !game.actors?.get(passenger.tokenData?.actorId)) throw new Error("Не удалось восстановить сохранённое состояние пассажира.");
+  const TokenClass = CONFIG.Token.documentClass;
+  const token = new TokenClass(foundry.utils.deepClone(passenger.tokenData), { parent: scene });
+  const actor = token.actor;
+  if (!actor || (!requester?.isGM && !actor.testUserPermission?.(requester, "OBSERVER"))) throw new Error("Нет доступа к состоянию пассажира.");
+  passenger.parkedActorId = foundry.utils.randomID();
+  passenger.originalActorUuid = passenger.actorUuid;
+  passenger.actorUuid = `Actor.${passenger.parkedActorId}`;
+  const operations = [
+    createParkedPassengerOperation(actor, vehicleActor, passenger),
+    createActorContainerUpdateOperation(vehicleActor, { [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers })
+  ];
+  const childUpdates = await prepareActorContainerPassengerRebindings(actor, passenger.actorUuid);
+  if (childUpdates.length) operations.push(createPassengerRebindingOperation(childUpdates));
+  await commitActorContainerBatch(operations);
+  return { actorUuid: passenger.actorUuid };
 }
 
 async function performExitPassenger({ sceneId = "", vehicleActorUuid = "", passengerId = "", placement = {} } = {}, requesterUserId = "") {
   const scene = game.scenes?.get(sceneId);
   const vehicleActor = await fromUuid(vehicleActorUuid);
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (!scene || !vehicleActor) throw new Error("Не удалось найти сцену или транспорт.");
-  if (!requester?.isGM && !vehicleActor.testUserPermission?.(requester, "OWNER")) throw new Error("Нет прав на транспорт.");
+  if (!scene || !vehicleActor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0613", "Не удалось найти сцену или транспорт."));
+  if (!requester?.isGM && !vehicleActor.testUserPermission?.(requester, "OWNER")) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0614", "Нет прав на транспорт."));
 
   const passengers = getActorContainerFlag(vehicleActor).passengers;
   const passenger = passengers.find(entry => entry.id === passengerId);
-  if (!passenger?.tokenData) throw new Error("Пассажир не найден.");
+  if (!passenger?.tokenData) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0615", "Пассажир не найден."));
 
   const tokenData = foundry.utils.deepClone(passenger.tokenData);
-  delete tokenData._id;
+  tokenData._id = tokenData._id && !scene.tokens.has(tokenData._id) ? tokenData._id : foundry.utils.randomID();
+  let parkedActor = null;
+  if (passenger.parkedActorId) {
+    parkedActor = await resolveActorContainerPassengerActor(vehicleActor, passenger.id);
+    const parked = parkedActor?.getFlag?.(SYSTEM_ID, ACTOR_CONTAINER_PASSENGER_FLAG);
+    if (!parkedActor || parkedActor.id !== passenger.parkedActorId || parked?.passengerId !== passenger.id
+      || parked?.vehicleActorUuid !== vehicleActor.uuid) throw new Error("Не удалось подтвердить сохранённое состояние пассажира.");
+    const baseActor = game.actors?.get(tokenData.actorId);
+    if (!baseActor) throw new Error("Исходный актёр пассажира удалён. Состояние пассажира сохранено в транспорте.");
+    tokenData.delta = createPassengerDelta(parkedActor, baseActor);
+    tokenData.actorLink = false;
+    if (parkedActor.name !== passenger.actorName) tokenData.name = parkedActor.name;
+  }
   tokenData.x = Math.round(Number(placement.x) || 0);
   tokenData.y = Math.round(Number(placement.y) || 0);
   tokenData.level = getSceneCreationLevelId(scene, placement);
@@ -691,19 +775,49 @@ async function performExitPassenger({ sceneId = "", vehicleActorUuid = "", passe
   tokenData.hidden = false;
   const remaining = passengers.filter(entry => entry.id !== passengerId);
   const ownershipUpdate = getTemporaryOwnershipCleanupUpdate(vehicleActor, passenger, remaining);
-  let createdToken = null;
-  try {
-    [createdToken] = await scene.createEmbeddedDocuments("Token", [tokenData]);
-    if (!createdToken) throw new Error("Не удалось создать токен пассажира.");
-    await updateActorContainerActor(vehicleActor, {
-      ...ownershipUpdate,
-      [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: remaining
-    });
-  } catch (error) {
-    if (createdToken) await scene.deleteEmbeddedDocuments("Token", [createdToken.id]).catch(() => {});
-    throw error;
+  const operations = [{ action: "create", documentName: "Token", parent: scene, data: [tokenData],
+    keepId: true, keepEmbeddedIds: true, [BATCH_EXPECTED_IDS_OPTION]: [tokenData._id] },
+  createActorContainerUpdateOperation(vehicleActor, {
+    ...ownershipUpdate,
+    [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: remaining
+  })];
+  const childUpdates = await prepareActorContainerPassengerRebindings(parkedActor,
+    `${scene.uuid}.Token.${tokenData._id}.Actor.${tokenData.actorId}`);
+  if (childUpdates.length) operations.push(createPassengerRebindingOperation(childUpdates));
+  if (parkedActor) operations.push({ action: "delete", documentName: "Actor", ids: [parkedActor.id],
+    [BATCH_EXPECTED_IDS_OPTION]: [parkedActor.id] });
+  await commitActorContainerBatch(operations);
+  return { ok: true, tokenUuid: `${scene.uuid}.Token.${tokenData._id}` };
+}
+
+function createPassengerRebindingOperation(updates) {
+  return { action: "update", documentName: "Actor", updates, diff: false,
+    [BATCH_EXPECTED_IDS_OPTION]: updates.map(update => update._id) };
+}
+
+function createPassengerDelta(parkedActor, baseActor) {
+  const source = parkedActor.toObject();
+  const base = baseActor.toObject();
+  const flags = foundry.utils.deepClone(source.flags ?? {});
+  if (flags[SYSTEM_ID]) delete flags[SYSTEM_ID][ACTOR_CONTAINER_PASSENGER_FLAG];
+  const delta = { _id: baseActor.id, name: source.name, type: source.type, img: source.img,
+    system: source.system, ownership: source.ownership, flags };
+  for (const collection of ["items", "effects"]) {
+    const current = source[collection] ?? [];
+    const ids = new Set(current.map(entry => entry._id));
+    delta[collection] = [...current, ...(base[collection] ?? []).filter(entry => !ids.has(entry._id))
+      .map(entry => ({ _id: entry._id, _tombstone: true }))];
   }
-  return { ok: true };
+  return delta;
+}
+
+async function commitActorContainerBatch(operations) {
+  const results = await foundry.documents.modifyBatch(operations);
+  if (operations.some((operation, index) => {
+    const expected = operation[BATCH_EXPECTED_IDS_OPTION];
+    const actual = (results?.[index] ?? []).map(document => document?.id ?? document?._id);
+    return actual.length !== expected.length || expected.some(id => !actual.includes(id));
+  })) throw new Error("Операция транспорта не была полностью подтверждена.");
 }
 
 function getTemporaryOwnershipUpdate(vehicleActor, passengerActor) {
@@ -755,17 +869,19 @@ function findTemporaryOwnershipSource(passengers, userId) {
   return sources.find(passenger => Object.hasOwn(passenger.temporaryOwnerLevels ?? {}, userId)) ?? sources[0] ?? null;
 }
 
-async function updateActorContainerActor(actor, update = {}, options = {}) {
+function createActorContainerUpdateOperation(actor, update = {}) {
   const data = { ...update };
   if (Object.hasOwn(data, "ownership")) data.ownership = forceReplaceData(data.ownership ?? {});
   if (actor?.isToken && actor.token && !actor.token.actorLink) {
-    const tokenUpdate = {};
-    for (const [key, value] of Object.entries(data)) {
-      tokenUpdate[`delta.${key}`] = value;
-    }
-    return actor.token.update(tokenUpdate, options);
+    // Native synthetic-Actor operations are translated to ActorDelta by the
+    // backend and return the updated Actor. A delta-only Token update can have
+    // an empty Token result even though its ActorDelta side effect was saved.
+    return { action: "update", documentName: "Actor", parent: actor.token,
+      updates: [{ _id: actor.id, ...data }], diff: false,
+      [BATCH_EXPECTED_IDS_OPTION]: [actor.id] };
   }
-  return actor.update(data, options);
+  return { action: "update", documentName: "Actor", updates: [{ _id: actor.id, ...data }], diff: false,
+    [BATCH_EXPECTED_IDS_OPTION]: [actor.id] };
 }
 
 function forceReplaceData(value) {
@@ -826,16 +942,16 @@ function stopCanvasInputEvent(event) {
 }
 
 async function requestActorContainerSocket(action, payload = {}, gm = getResponsibleGM()) {
-  if (game.user?.isGM) return queueActorContainerSocketRequest(action, payload, game.user.id);
-  if (!gm) throw new Error("Нет активного GM.");
+  if (game.user?.isGM && gm?.id === game.user.id) return queueActorContainerSocketRequest(action, payload, game.user.id);
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0617", "Нет активного GM."));
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingRequests.delete(requestId);
-      reject(new Error("GM не ответил на запрос транспорта."));
+      reject(new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0618", "GM не ответил на запрос транспорта.")));
     }, ACTOR_CONTAINER_SOCKET_TIMEOUT);
-    pendingRequests.set(requestId, { resolve, reject, timeout });
+    pendingRequests.set(requestId, { resolve, reject, timeout, gmUserId: gm.id });
   });
   game.socket.emit(ACTOR_CONTAINER_SOCKET, {
     scope: ACTOR_CONTAINER_SOCKET_SCOPE,
@@ -849,19 +965,22 @@ async function requestActorContainerSocket(action, payload = {}, gm = getRespons
   return promise;
 }
 
-async function handleActorContainerSocketMessage(message = {}) {
+async function handleActorContainerSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== ACTOR_CONTAINER_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
   if (message.type === "response") {
-    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    if (message.recipientUserId !== game.user?.id) return;
     const pending = pendingRequests.get(message.requestId);
-    if (!pending) return;
+    if (!pending || !sender.isGM || sender.id !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
-    else pending.reject(new Error(message.error || "Запрос транспорта не выполнен."));
+    else pending.reject(new Error(message.error || auditLocalize("FALLOUTMAW.AuditRuntime.R0619", "Запрос транспорта не выполнен.")));
     return;
   }
   if (message.type !== "request") return;
+  if (String(message.requesterUserId ?? "") !== sender.id) return;
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
   try {
     const result = await queueActorContainerSocketRequest(message.action, message.payload ?? {}, message.requesterUserId ?? "");
@@ -895,6 +1014,7 @@ function queueActorContainerSocketRequest(action, payload = {}, requesterUserId 
 async function handleActorContainerSocketRequest(action, payload = {}, requesterUserId = "") {
   if (action === "boardPassenger") return performBoardPassenger(payload, requesterUserId);
   if (action === "exitPassenger") return performExitPassenger(payload, requesterUserId);
+  if (action === "recoverPassenger") return performRecoverPassenger(payload, requesterUserId);
   return undefined;
 }
 

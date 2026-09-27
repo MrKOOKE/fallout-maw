@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "./item-functions.mjs";
 import { buildInventoryGridStyle } from "./inventory-containers.mjs";
 import { toInteger } from "./numbers.mjs";
+export { ACTOR_CONTAINER_PASSENGER_FLAG } from "./actor-container-passengers.mjs";
 
 export const ACTOR_CONTAINER_FLAG = "actorContainer";
 
@@ -17,6 +18,8 @@ export function normalizeActorContainerPassengers(passengers = []) {
     .map(passenger => ({
       id: String(passenger?.id ?? passenger?.actorUuid ?? foundry.utils.randomID()),
       actorUuid: String(passenger?.actorUuid ?? ""),
+      parkedActorId: String(passenger?.parkedActorId ?? ""),
+      originalActorUuid: String(passenger?.originalActorUuid ?? ""),
       actorName: String(passenger?.actorName ?? ""),
       actorImg: String(passenger?.actorImg ?? ""),
       sceneId: String(passenger?.sceneId ?? ""),
@@ -185,7 +188,15 @@ export async function resolveActorContainerPassengerActor(vehicleActor = null, p
   if (!passenger) return null;
   const actor = await globalThis.fromUuid?.(passenger.actorUuid);
   if (actor) return actor;
-  return passenger.tokenData?.actorId ? game.actors?.get(passenger.tokenData.actorId) ?? null : null;
+  if (!passenger.parkedActorId && passenger.tokenData?.actorLink === false && passenger.tokenData?.delta
+    && game.scenes?.get(passenger.sceneId)) {
+    const { requestActorContainerPassengerRecovery } = await import("../canvas/actor-containers.mjs");
+    const result = await requestActorContainerPassengerRecovery({ vehicleActorUuid: vehicleActor.uuid, passengerId });
+    return result?.actorUuid ? await globalThis.fromUuid?.(result.actorUuid) ?? null : null;
+  }
+  // A removed unlinked Token is not interchangeable with its world Actor.
+  return passenger.tokenData?.actorLink && passenger.tokenData?.actorId
+    ? game.actors?.get(passenger.tokenData.actorId) ?? null : null;
 }
 
 export function getActorContainerPassengerUsers(actor = null) {

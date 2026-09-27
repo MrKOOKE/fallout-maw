@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getAbilityCatalog } from "../settings/accessors.mjs";
 import {
@@ -126,7 +127,7 @@ export async function grantAbilityItemData(actor, itemData = {}, {
       );
       if (!predecessor || unsafeAcquisitionChanges) {
         if (unsafeAcquisitionChanges) {
-          ui.notifications.warn("Эволюция с изменениями при приобретении заблокирована: прежние изменения нельзя безопасно применить повторно.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0499", "Эволюция с изменениями при приобретении заблокирована: прежние изменения нельзя безопасно применить повторно."));
         }
         return { item: null, cancelled: false, blocked: true };
       }
@@ -163,7 +164,8 @@ export async function grantAbilityItemData(actor, itemData = {}, {
         diff: false,
         recursive: false
       });
-      return { item: updates?.[0] ?? null, cancelled: false };
+      const item = updates?.[0] ?? null;
+      return { item, cancelled: false, ...(!item ? { blocked: true } : {}) };
     }
 
     const preparedItemData = await applyLimitedChangeSelectionsToGrant(normalizedItemData, actor, {
@@ -175,6 +177,7 @@ export async function grantAbilityItemData(actor, itemData = {}, {
 
     const created = await actor.createEmbeddedDocuments("Item", [preparedItemData], createOptions);
     const item = created?.[0] ?? null;
+    if (!item) return { item: null, cancelled: false, blocked: true };
     await applyAbilityAcquisitionChanges(actor, item);
     return { item, cancelled: false };
   });
@@ -209,14 +212,14 @@ export async function grantAbilityResearchReward(actor, research = {}) {
   if (sourceId && actorHasAbility(actor, sourceId)) return null;
 
   const itemData = getAbilityRewardItemData(research) ?? getCatalogAbilityRewardItemData(sourceId);
-  if (!itemData) return null;
+  if (!itemData) return REWARD_SELECTION_ABORTED;
   const result = await grantAbilityItemData(actor, itemData, {
     sourceId,
     limitContext: "ability reward change limit"
   });
   if (result.cancelled || result.blocked) {
     if (result.cancelled) {
-      ui.notifications.warn("Выбор изменений способности не завершён. Завершённое исследование оставлено без выдачи награды.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0500", "Выбор изменений способности не завершён. Завершённое исследование оставлено без выдачи награды."));
     }
     return REWARD_SELECTION_ABORTED;
   }
@@ -431,7 +434,7 @@ export async function requestLimitedChangeSelection({
     const id = String(selectionIds?.[index] ?? "").trim() || getChangeSelectionId(change, index);
     const display = getAbilityChangeDisplayData(change, evaluationActors);
     const tooltip = display.formula
-      ? ` data-tooltip="${escapeAttribute(`Формула: ${display.formula}`)}"`
+      ? ` data-tooltip="${escapeAttribute(auditFormat("FALLOUTMAW.AuditRuntime.R0501", { p0: (display.formula) }, "Формула: {p0}"))}"`
       : "";
     return `
       <label class="checkbox fallout-maw-ability-change-choice">
@@ -446,29 +449,13 @@ export async function requestLimitedChangeSelection({
     classes: ["dialog", "fallout-maw", "fallout-maw-ability-change-dialog"],
     window: {
       icon: "fa-solid fa-list-check",
-      title: `Выбор изменений: ${abilityName}`
+      title: auditFormat("FALLOUTMAW.AuditRuntime.R0502", { p0: (abilityName) }, "Выбор изменений: {p0}")
     },
     position: { width: "auto" },
     modal: true,
-    content: `
-      <section class="fallout-maw-ability-change-picker">
-        <header class="fallout-maw-ability-change-picker-summary">
-          <div>
-            <h3>Выберите ${isUpTo ? "до " : ""}${normalizedLimit} из ${changes.length}</h3>
-            <p class="hint">${isUpTo
-              ? `Можно выбрать от ${normalizedMinimum} до ${normalizedLimit}.`
-              : `Нужно выбрать ровно ${normalizedLimit}.`}</p>
-          </div>
-          <output class="fallout-maw-ability-change-picker-counter" data-limited-change-counter aria-live="polite">
-            <strong data-limited-change-selected>0</strong><span aria-hidden="true"> / </span><strong>${normalizedLimit}</strong>
-          </output>
-        </header>
-        <fieldset class="fallout-maw-ability-change-picker-fieldset">
-          <legend>Доступные изменения</legend>
-          <div class="fallout-maw-ability-change-choice-list" role="group" aria-label="Доступные изменения">${rows}</div>
-        </fieldset>
-      </section>
-    `,
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0503", { p0: (isUpTo ? auditLocalize("FALLOUTMAW.AuditRuntime.R0504", "до ") : ""), p1: (normalizedLimit), p2: (changes.length), p3: (isUpTo
+              ? auditFormat("FALLOUTMAW.AuditRuntime.R0505", { p0: (normalizedMinimum), p1: (normalizedLimit) }, "Можно выбрать от {p0} до {p1}.")
+              : auditFormat("FALLOUTMAW.AuditRuntime.R0506", { p0: (normalizedLimit) }, "Нужно выбрать ровно {p0}.")), p4: (normalizedLimit), p5: (rows) }, "\n      <section class=\"fallout-maw-ability-change-picker\">\n        <header class=\"fallout-maw-ability-change-picker-summary\">\n          <div>\n            <h3>Выберите {p0}{p1} из {p2}</h3>\n            <p class=\"hint\">{p3}</p>\n          </div>\n          <output class=\"fallout-maw-ability-change-picker-counter\" data-limited-change-counter aria-live=\"polite\">\n            <strong data-limited-change-selected>0</strong><span aria-hidden=\"true\"> / </span><strong>{p4}</strong>\n          </output>\n        </header>\n        <fieldset class=\"fallout-maw-ability-change-picker-fieldset\">\n          <legend>Доступные изменения</legend>\n          <div class=\"fallout-maw-ability-change-choice-list\" role=\"group\" aria-label=\"Доступные изменения\">{p5}</div>\n        </fieldset>\n      </section>\n    "),
     render: (_event, dialog) => activateLimitedChangeSelection(dialog, normalizedLimit, {
       minimum: normalizedMinimum,
       selectionMode: normalizedSelectionMode
@@ -476,7 +463,7 @@ export async function requestLimitedChangeSelection({
     buttons: [
       {
         action: "apply",
-        label: "Применить",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0284", "Применить"),
         icon: "fa-solid fa-check",
         default: true,
         disabled: true,
@@ -487,7 +474,7 @@ export async function requestLimitedChangeSelection({
       },
       {
         action: "cancel",
-        label: "Отмена",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"),
         icon: "fa-solid fa-xmark",
         callback: () => false
       }
@@ -513,7 +500,7 @@ function activateLimitedChangeSelection(dialog, limit, {
     if (selectedElement) selectedElement.textContent = String(selected);
     if (counterElement) {
       counterElement.classList.toggle("complete", valid);
-      counterElement.setAttribute("aria-label", `Выбрано ${selected} из ${limit}`);
+      counterElement.setAttribute("aria-label", auditFormat("FALLOUTMAW.AuditRuntime.R0507", { p0: (selected), p1: (limit) }, "Выбрано {p0} из {p1}"));
     }
     if (applyButton) applyButton.disabled = !valid;
     for (const checkbox of form.querySelectorAll("[data-limited-change-choice]")) {
@@ -540,8 +527,8 @@ function collectLimitedChangeSelection(form, limit, {
   if (!isLimitedChangeSelectionCountValid(selected.length, limit, { minimum, selectionMode })) {
     const normalizedMode = normalizeAbilityChangeSelectionMode(selectionMode);
     ui.notifications.warn(normalizedMode === ABILITY_CHANGE_SELECTION_MODES.upTo
-      ? `Нужно выбрать от ${minimum} до ${limit} изменений.`
-      : `Нужно выбрать изменений: ${limit}.`);
+      ? auditFormat("FALLOUTMAW.AuditRuntime.R0508", { p0: (minimum), p1: (limit) }, "Нужно выбрать от {p0} до {p1} изменений.")
+      : auditFormat("FALLOUTMAW.AuditRuntime.R0509", { p0: (limit) }, "Нужно выбрать изменений: {p0}."));
     return null;
   }
   return selected;
@@ -566,7 +553,7 @@ function getAbilityChangeDisplayData(change = {}, evaluationActors = []) {
 
 function getEffectKeyLabel(key = "") {
   const normalized = String(key ?? "").trim();
-  if (!normalized) return "Без ключа";
+  if (!normalized) return auditLocalize("FALLOUTMAW.AuditRuntime.R0510", "Без ключа");
 
   const token = buildEffectKeyTokens().find(entry => entry.path === normalized);
   if (token?.label) return token.label;

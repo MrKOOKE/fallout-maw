@@ -4,41 +4,41 @@
     <div class="fallout-maw-advancement-talent-details-content">
       <div class="fallout-maw-advancement-talent-details-name">{{selectedAbility.name}}</div>
       <div class="fallout-maw-advancement-talent-research-info">
-        <div><span>Статус:</span> {{selectedAbility.statusLabel}}</div>
+        <div><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb90462b6e58d'}}</span> {{selectedAbility.statusLabel}}</div>
         {{#unless selectedAbility.isFeature}}
-        <div><span>Стоимость:</span> {{selectedAbility.cost}} ОИ</div>
-        <div><span>Прогресс:</span> {{selectedAbility.progressLabel}}</div>
-        <div><span>Приобретение:</span> {{selectedAbility.acquisitionLabel}}</div>
-        {{#if selectedAbility.manualLabel}}<div><span>Ручное исследование:</span> {{selectedAbility.manualLabel}}</div>{{/if}}
+        <div><span>{{localize 'FALLOUTMAW.AuditTemplates.Text3f1a804c00c0'}}</span> {{selectedAbility.cost}} {{localize 'FALLOUTMAW.AuditTemplates.Textf34e934b9141'}}</div>
+        <div><span>{{localize 'FALLOUTMAW.AuditTemplates.Textce05233d6ca5'}}</span> {{selectedAbility.progressLabel}}</div>
+        <div><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb3e65a44ae68'}}</span> {{selectedAbility.acquisitionLabel}}</div>
+        {{#if selectedAbility.manualLabel}}<div><span>{{localize 'FALLOUTMAW.AuditTemplates.Text1e997ca6056d'}}</span> {{selectedAbility.manualLabel}}</div>{{/if}}
         {{/unless}}
       </div>
     </div>
   </div>
   <div class="fallout-maw-advancement-talent-action-panel" data-ability-source-id="{{selectedAbility.sourceId}}" data-research-id="{{selectedAbility.researchId}}">
     {{#if isGMMode}}
-    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="grantAbility" {{#unless selectedAbility.canGrant}}disabled{{/unless}}>Выдать</button>
+    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="grantAbility" {{#unless selectedAbility.canGrant}}disabled{{/unless}}>{{localize 'FALLOUTMAW.AuditTemplates.Text01e3e494a7d8'}}</button>
     {{else if selectedAbility.isFeature}}
-    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="purchaseTraitAbility" {{#unless selectedAbility.canPurchaseTrait}}disabled{{/unless}}>Приобрести</button>
-    <div class="fallout-maw-advancement-talents-points">Особенности: {{traitPointsDisplay}}</div>
+    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="purchaseTraitAbility" {{#unless selectedAbility.canPurchaseTrait}}disabled{{/unless}}>{{localize 'FALLOUTMAW.AuditTemplates.Text17b5570185a7'}}</button>
+    <div class="fallout-maw-advancement-talents-points">{{localize 'FALLOUTMAW.AuditTemplates.Text2b91caa76c17'}} {{traitPointsDisplay}}</div>
     {{else}}
-    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="startAbilityResearch" {{#unless selectedAbility.canStartManual}}disabled{{/unless}}>Начать исследование</button>
+    <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="startAbilityResearch" {{#unless selectedAbility.canStartManual}}disabled{{/unless}}>{{localize 'FALLOUTMAW.Research.CreateTitle'}}</button>
     <button type="button" class="fallout-maw-advancement-talent-action-button secondary" data-action="spendAbilityResearch" {{#unless selectedAbility.canSpendFree}}disabled{{/unless}}>
-      {{#if selectedAbility.canSelectRewardChanges}}Выбрать изменения{{else}}Вложить очки{{/if}}
+      {{#if selectedAbility.canSelectRewardChanges}}{{localize 'FALLOUTMAW.AuditTemplates.Text11b34ce09a6b'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Texta594806e1003'}}{{/if}}
     </button>
-    <div class="fallout-maw-advancement-talents-points">Свободные ОИ: {{researchPointsDisplay}}</div>
+    <div class="fallout-maw-advancement-talents-points">{{localize 'FALLOUTMAW.AuditTemplates.Textec04aee737ea'}} {{researchPointsDisplay}}</div>
     {{/if}}
   </div>
   {{else}}
   <div class="fallout-maw-advancement-talents-details">
-    <div class="fallout-maw-advancement-details-placeholder">Выберите способность для просмотра данных исследования</div>
+    <div class="fallout-maw-advancement-details-placeholder">{{localize 'FALLOUTMAW.AuditTemplates.Textba9bcd0df383'}}</div>
   </div>
   <div class="fallout-maw-advancement-talent-action-panel">
     {{#if isGMMode}}
-    <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>Выдать</button>
+    <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>{{localize 'FALLOUTMAW.AuditTemplates.Text01e3e494a7d8'}}</button>
     {{else}}
-    <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>Начать исследование</button>
-    <button type="button" class="fallout-maw-advancement-talent-action-button secondary" disabled>Вложить очки</button>
-    <div class="fallout-maw-advancement-talents-points">Свободные ОИ: {{researchPointsDisplay}}</div>
+    <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>{{localize 'FALLOUTMAW.Research.CreateTitle'}}</button>
+    <button type="button" class="fallout-maw-advancement-talent-action-button secondary" disabled>{{localize 'FALLOUTMAW.AuditTemplates.Texta594806e1003'}}</button>
+    <div class="fallout-maw-advancement-talents-points">{{localize 'FALLOUTMAW.AuditTemplates.Textec04aee737ea'}} {{researchPointsDisplay}}</div>
     {{/if}}
   </div>
   {{/if}}

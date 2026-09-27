@@ -1,3 +1,4 @@
+import { format as auditFormat } from "../utils/i18n.mjs";
 import { DISEASE_CREATE_OPTION, SYSTEM_ID } from "../constants.mjs";
 import {
   getActorNeedSettings,
@@ -357,7 +358,7 @@ function getNextDiseaseStage(disease, currentLevel) {
 }
 
 function buildDiseaseItemData(actor, need, disease, stage, threshold) {
-  const name = stage.name || disease.name || `${need.label}: болезнь ${stage.level}`;
+  const name = stage.name || disease.name || auditFormat("FALLOUTMAW.AuditRuntime.R1173", { p0: (need.label), p1: (stage.level) }, "{p0}: болезнь {p1}");
   const img = stage.img || disease.img || "icons/svg/biohazard.svg";
   const effects = (stage.effects ?? []).map(prepareEffectChange).filter(change => change.key);
   const now = Number(game.time?.worldTime) || 0;

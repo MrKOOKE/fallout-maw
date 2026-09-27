@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { DEFAULT_CURRENCIES } from "../config/defaults.mjs";
 
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -21,7 +22,7 @@ export function normalizeCurrencySettings(settings) {
     used.add(key);
     currencies.push({
       key,
-      label: String(raw?.label ?? raw?.name ?? "").trim() || `Валюта ${currencies.length + 1}`,
+      label: String(raw?.label ?? raw?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditSystem.Text053", { v0: currencies.length + 1 }, "Валюта {v0}"),
       img: String(raw?.img ?? raw?.image ?? "").trim(),
       value: normalizeCurrencyValue(raw?.value),
       primaryTrade

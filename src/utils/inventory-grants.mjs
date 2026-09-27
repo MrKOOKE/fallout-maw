@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { createSourcedInventoryItemData } from "./craft-item-source.mjs";
 import {
@@ -301,5 +302,5 @@ function throwInventoryNoSpace() {
 function throwActorLoadLimit() {
   const key = "FALLOUTMAW.Messages.ActorLoadLimitExceeded";
   const localized = game.i18n.localize(key);
-  throw new Error(localized === key ? "Актёр не может нести такой вес." : localized);
+  throw new Error(localized === key ? auditLocalize("FALLOUTMAW.AuditRuntime.R1299", "Актёр не может нести такой вес.") : localized);
 }

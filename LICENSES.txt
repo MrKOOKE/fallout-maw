@@ -1,0 +1,247 @@
+Fallout-MaW third-party licenses and source notices
+
+These notices preserve the original license and attribution texts supplied with this local installation. Some source paths in the notices describe the original layout before the September 2026 restructuring.
+
+==============================================================================
+Simple Calendar upstream MIT license
+==============================================================================
+
+MIT License
+
+Copyright (c) 2021 Dean Vigoren (Vigorator)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+==============================================================================
+Simple Calendar integration third-party notices
+==============================================================================
+
+# Third-party notices
+
+The calendar implementation is derived from **Simple Calendar Reborn 2.6.1**
+(commit `893ea59cd0cbed47607247a78dbb3538e6c433d7`) by Arctis Fireblight,
+which is in turn derived from **Simple Calendar** by Dean Vigoren (Vigorator).
+
+- Reborn source: https://github.com/Fireblight-Studios/foundryvtt-simple-calendar
+- Original source: https://github.com/vigoren/foundryvtt-simple-calendar
+- License: MIT; the complete upstream license text is included as `LICENSE`.
+
+The moon and calendar SVG icon set includes work by Bas Milius and is distributed
+under the MIT license, as documented by the upstream project.
+
+Fallout-MaW changes the runtime namespace, storage identifiers, system socket,
+templates, styling hooks, time-advance path, Foundry integration, data model, and
+lunar illumination behavior. The integrated runtime uses only the
+`fallout-maw.calendar` system namespace.
+
+==============================================================================
+IBM Plex Mono font license
+==============================================================================
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded, 
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+==============================================================================
+Foundry bundled raster icon license
+==============================================================================
+
+Foundry Virtual Tabletop includes a large number of icons licensed from artists on Humble Bundle, specifically Rexard. These icons are packaged with and provided for use in Foundry Virtual Tabletop and may not be redistributed or used outside of Foundry Virtual Tabletop except as permitted by a separate license agreement between the original copyright holder of these icons. These license terms apply to all icons within the following subdirectories:
+
+/commodities
+/containers
+/environment
+/equipment
+/sundries
+/tools
+/weapons
+
+==============================================
+Humble 7000 Game Dev ICONS Bundle EULA
+==============================================
+
+https://support.humblebundle.com/hc/en-us/articles/360046217533
+
+"End Product" means any digital product, games, websites, software, applications, video content, audio content.
+
+1. Seller grants to the Purchaser a non-exclusive perpetual license to:
+- use and/or modify or manipulate the Licensed Assets and make a Derivative Work from it;
+- use Licensed Assets to create an unlimited number of End Products for Sale, in which the End Product for Sale may be sold an unlimited number of times;
+- use the Licensed Assets in End Product that are either used for the Purchaser's own personal use or used for the Purchaser's commercial use in which case it may be distributed, sold and supplied by the Purchaser for any fee;
+
+2. A License does not allow the Purchaser to:
+- Use, sell, share, transfer, give away, sublicense or redistribute the Licensed Asset or Derivative Works other than as part of the relevant End Product;
+- Extract the Licensed Asset or Derivative Works and use them outside of the relevant End Product.
+- Use or/and incorporated the Licensed Asset or Derivative Works into a logo, service mark or trademark.
+- Purchaser may not use the Licensed Asset or Derivative Works in End Product containing models and/or property in a manner that is unlawful, harmful, abusive, racially or ethnically offensive, defamatory, deceptive, infringing, invasive of personal privacy or publicity rights, harassing, humiliating to other people, libelous, obscene, threatening, profane, or promotes racism, bigotry, hatred or physical harm of any kind against any group or individual, or is otherwise objectionable.
+
+==============================================================================
+Foundry bundled SVG icon attribution
+==============================================================================
+
+Foundry VTT uses icons provided by the awesome https://game-icons.net, where many creators and contributors release their icons for free under a Creative Commons by Attribution license. All icons contained within Foundry VTT in a .svg format were provided by game-icons.net under a CC-BY 3.0 license(https://creativecommons.org/licenses/by/3.0/) and were created by numerous authors. The full list of authors responsible for all game-icons.net content can be found at: https://game-icons.net/about.html#authors
+
+==============================================================================
+Creature audio sources
+==============================================================================
+
+# Источники звуков природных атак
+
+Файлы в этой папке взяты из звуковых ресурсов игр Fallout 3 и Fallout: New Vegas, нормализованы до -18 LUFS и перекодированы в монофонический OGG/Vorbis 48 кГц для локального использования в Foundry VTT. Исходная длительность сохранена, чтобы не обрезать тихое начало и хвост удара.
+
+- Fallout: New Vegas, раздел Creatures: https://sounds.spriters-resource.com/pc_computer/falloutnewvegas/
+  - использованные архивы: 399166, 399167, 399168, 399169, 399170, 399171, 399185, 399186, 399188, 399189, 399190, 399191, 399203, 399204, 399205, 399206, 399207;
+- Fallout 3, раздел Creatures: https://sounds.spriters-resource.com/pc_computer/fallout3/
+  - использованные архивы: 400537, 400543, 400546, 400547.
+
+Отобраны только звуки действий: взмахи, укусы, удары, топот, броски, плевки и специальные атаки. Файлы голосов, боли, смерти, дыхания, ожидания и фоновые циклы не включены.
+
+Fallout и связанные аудиоматериалы принадлежат их правообладателям. Эти файлы не распространяются как свободная аудиобиблиотека и предназначены для данной локальной игровой установки.
+
+==============================================================================
+Animal audio sources
+==============================================================================
+
+# Звуки атак животных
+
+Все файлы в `cc0/` распространяются на условиях CC0. Исходники приведены к mono Ogg Vorbis, 44,1 кГц, с выравниванием громкости для игрового воспроизведения.
+
+| Файлы | Исходный набор | Автор | Лицензия | Страница источника |
+|---|---|---|---|---|
+| `beast-attack-01.ogg` … `beast-attack-10.ogg` | Monster Sound Effects Pack | Ogrebane | CC0 | https://opengameart.org/content/monster-sound-effects-pack |
+| `dog-growl.ogg`, `dog-grumble.ogg`, `dog-snarl.ogg` | Dog Snarl Grunt Grumble | qubodup | CC0 | https://opengameart.org/content/dog-snarl-grunt-grumble |
+| `beast-growl-01.ogg` … `beast-growl-03.ogg`, `beast-voice-01.ogg` … `beast-voice-04.ogg` | Animal or beast sounds | pauliuw | CC0 | https://opengameart.org/content/animal-or-beast-sounds |
+| `water-splash-01.ogg` … `water-splash-06.ogg` | 6 Short water splashes | ezwa, qubodup | CC0 | https://opengameart.org/content/6-short-water-splashes |
+| `organic-impact-01.ogg` … `organic-impact-08.ogg` | 8 wet squish/slurp impacts | Independent.nu, qubodup | CC0 | https://opengameart.org/content/8-wet-squish-slurp-impacts |
+
+Архивные исходники не входят в игровую библиотеку. В системе используются только конвертированные `.ogg` из этой папки.
+
+==============================================================================
+Simple Quest asset notice
+==============================================================================
+
+These assets have been AI generated, feel free to reuse them in any project, no need to credit.
+
+==============================================================================
+Simple Quest original package attribution
+==============================================================================
+
+{
+  "title": "Simple Quest",
+  "id": "simple-quest",
+  "version": "4.0.2",
+  "authors": [
+    {
+      "name": "theripper93",
+      "email": "tsplab@gmail.com",
+      "url": "https://www.patreon.com/theripper93"
+    }
+  ],
+  "url": "https://www.patreon.com/theripper93"
+}

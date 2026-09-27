@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { activeEffectChangesEqual } from "../utils/active-effect-source.mjs";
 import { refreshTokenActionHudForActor } from "../apps/token-action-hud.mjs";
@@ -43,7 +44,7 @@ export function getCoverChoicesForToken(tokenDocument) {
   return [
     {
       key: "",
-      label: "Без укрытия",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0620", "Без укрытия"),
       img: "icons/svg/cancel.svg",
       overlapPercent: 0,
       active: !activeKey
@@ -51,7 +52,7 @@ export function getCoverChoicesForToken(tokenDocument) {
     ...getCoverSettings().entries.map(entry => ({
       key: entry.key,
       label: entry.label,
-      img: entry.img || "icons/svg/shield.svg",
+      img: entry.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
       overlapPercent: entry.overlapPercent,
       active: entry.key === activeKey
     }))
@@ -179,9 +180,9 @@ function decorateTokenHudCoverPalette(app, element) {
   button.dataset.action = "togglePalette";
   button.dataset.palette = "forcedCover";
   button.dataset.falloutMawCoverControl = "true";
-  button.setAttribute("aria-label", "Укрытие");
+  button.setAttribute("aria-label", auditLocalize("FALLOUTMAW.AuditRuntime.R0621", "Укрытие"));
   button.setAttribute("data-tooltip", "");
-  button.innerHTML = `<img src="${escapeAttribute(active?.img || "icons/svg/shield.svg")}" alt="Укрытие">`;
+  button.innerHTML = auditFormat("FALLOUTMAW.AuditRuntime.R0622", { p0: (escapeAttribute(active?.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp")) }, "<img src=\"{p0}\" alt=\"Укрытие\">");
 
   const palette = document.createElement("div");
   palette.className = "palette palette-list fallout-maw-cover-palette";
@@ -189,7 +190,7 @@ function decorateTokenHudCoverPalette(app, element) {
   palette.innerHTML = choices.map(choice => `
     <a class="palette-list-entry ${choice.active ? "active" : ""}" data-cover-key="${escapeAttribute(choice.key)}">
       <span>
-        <img src="${escapeAttribute(choice.img || "icons/svg/shield.svg")}" alt="${escapeAttribute(choice.label)}">
+        <img src="${escapeAttribute(choice.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp")}" alt="${escapeAttribute(choice.label)}">
         ${escapeHtml(choice.label)}
       </span>
     </a>
@@ -245,7 +246,7 @@ function buildCoverEffectData(tokenDocument, cover, signature) {
   return {
     type: "base",
     name: cover.label,
-    img: cover.img || "icons/svg/shield.svg",
+    img: cover.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: tokenDocument?.uuid ?? "",
     transfer: false,
     disabled: false,
@@ -273,7 +274,7 @@ function buildAutoCoverEffectData(state, cover, signature) {
   return {
     type: "base",
     name: cover.label,
-    img: cover.img || "icons/svg/shield.svg",
+    img: cover.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: state.attackerTokenUuid || state.targetTokenUuid || "",
     transfer: false,
     disabled: false,
@@ -511,7 +512,7 @@ async function requestCoverSocket(action, payload = {}) {
       pendingCoverSocketRequests.delete(requestId);
       reject(new Error("GM did not answer cover request."));
     }, COVER_SOCKET_TIMEOUT_MS);
-    pendingCoverSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingCoverSocketRequests.set(requestId, { resolve, reject, timeout, gmUserId: gm.id });
   });
   game.socket.emit(COVER_SOCKET, {
     scope: COVER_SOCKET_SCOPE,
@@ -525,13 +526,15 @@ async function requestCoverSocket(action, payload = {}) {
   return promise;
 }
 
-async function handleCoverSocketMessage(message = {}) {
+async function handleCoverSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== COVER_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
 
   if (message.type === "response") {
-    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    if (message.recipientUserId !== game.user?.id) return;
     const pending = pendingCoverSocketRequests.get(message.requestId);
-    if (!pending) return;
+    if (!pending || !sender.isGM || sender.id !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingCoverSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
@@ -540,9 +543,24 @@ async function handleCoverSocketMessage(message = {}) {
   }
 
   if (message.type !== "request") return;
+  if (String(message.requesterUserId ?? "") !== sender.id) return;
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
 
   try {
+    if (!sender.isGM) {
+      const states = message.payload?.states ?? [];
+      if (!Array.isArray(states)) return;
+      const existing = getAttackAutoCoverEffectEntries(message.payload?.attackId)
+        .map(({ effect }) => effect.getFlag(SYSTEM_ID, AUTO_COVER_FLAG));
+      for (const state of [...states, ...existing]) {
+        const attacker = state.attackerTokenUuid ? await fromUuid(state.attackerTokenUuid) : null;
+        if (!attacker?.actor?.testUserPermission?.(sender, "OWNER")) return;
+        if (state.actorUuid && state.targetTokenUuid) {
+          const target = await fromUuid(state.targetTokenUuid);
+          if (target?.actor?.uuid !== state.actorUuid) return;
+        }
+      }
+    }
     const result = await handleCoverSocketRequest(message.action, message.payload ?? {});
     game.socket.emit(COVER_SOCKET, {
       scope: COVER_SOCKET_SCOPE,

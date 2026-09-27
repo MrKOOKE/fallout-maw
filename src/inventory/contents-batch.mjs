@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { transferInventoryContents } from "./contents-transfer.mjs";
 import { createInventoryMutationPreview } from "./preview.mjs";
 import { executeInventoryMutation } from "./mutation.mjs";
@@ -17,7 +18,7 @@ export async function transferInventoryContentsBatch({ source, target, canTransf
   });
   const plans = preview.getPlans();
   if (plans.length) {
-    if (!canTransfer(source, target)) throw new Error("Нет прав на перенос содержимого.");
+    if (!canTransfer(source, target)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1097", "Нет прав на перенос содержимого."));
     await execute(plans, { reason: "contents-transfer", documentOptions: {
       falloutMawContentsActorUuids: [...new Set([source.actor.uuid, target.actor.uuid])]
     } });

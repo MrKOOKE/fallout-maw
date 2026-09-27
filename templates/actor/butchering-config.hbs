@@ -1,7 +1,7 @@
 <div class="fallout-maw-config-body fallout-maw-butchering-config-body">
   <section class="fallout-maw-panel fallout-maw-butchering-config-summary">
     <label class="fallout-maw-stacked-field">
-      <span>Навык разделки</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text3e64c2a50973'}}</span>
       <select name="skillKey">
         {{#each skillOptions}}
         <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -9,16 +9,16 @@
       </select>
     </label>
     <div class="fallout-maw-checkbox-cell">
-      <input aria-label="Цель разделана" type="checkbox" name="completed" {{#if config.completed}}checked{{/if}}>
-      <span>Цель разделана</span>
+      <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text8b71d50fafa7'}}" type="checkbox" name="completed" {{#if config.completed}}checked{{/if}}>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text8b71d50fafa7'}}</span>
     </div>
-    <p class="notes">Снятие отметки разрешает повторную разделку. Созданный ранее контейнер и его содержимое сохраняются.</p>
+    <p class="notes">{{localize 'FALLOUTMAW.AuditTemplates.Text66fc8c316250'}}</p>
   </section>
 
   <section class="fallout-maw-panel fallout-maw-butchering-stage-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Этапы разделки</h2>
-      <button type="button" data-action="addStage"><i class="fa-solid fa-plus"></i> Добавить этап</button>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textd705147487cc'}}</h2>
+      <button type="button" data-action="addStage"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text538e47fc2b10'}}</button>
     </header>
 
     <div class="fallout-maw-butchering-outcome-headings" aria-hidden="true">
@@ -31,16 +31,16 @@
       {{#each config.stages}}
       <article class="fallout-maw-panel fallout-maw-butchering-stage" data-butchering-stage data-stage-id="{{id}}">
         <header class="fallout-maw-butchering-stage-header">
-          <strong>Этап {{displayIndex}}</strong>
+          <strong>{{localize 'FALLOUTMAW.AuditTemplates.Text73557e6987ae'}} {{displayIndex}}</strong>
           <label>
-            <span>Название</span>
+            <span>{{localize 'FALLOUTMAW.Common.Label'}}</span>
             <input type="text" data-stage-name value="{{name}}">
           </label>
           <label>
-            <span>Сложность</span>
+            <span>{{localize 'FALLOUTMAW.Ability.Actions.EventSkillDifficulty'}}</span>
             <input type="number" data-stage-difficulty value="{{difficulty}}" min="0" step="1">
           </label>
-          <button type="button" class="fallout-maw-icon-button" data-action="deleteStage" title="Удалить этап">
+          <button type="button" class="fallout-maw-icon-button" data-action="deleteStage" title="{{localize 'FALLOUTMAW.AuditTemplates.Text7a04c8978385'}}">
             <i class="fa-solid fa-trash"></i>
           </button>
         </header>
@@ -48,11 +48,11 @@
         <div class="fallout-maw-butchering-tool-requirement">
           <label class="fallout-maw-checkbox-cell">
             <input type="checkbox" data-stage-tool-enabled {{#if tool.enabled}}checked{{/if}}>
-            <span>Требуется инструмент</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Texte8a58dc3635e'}}</span>
           </label>
           <div class="fallout-maw-butchering-tool-fields" data-stage-tool-fields {{#unless tool.enabled}}hidden{{/unless}}>
             <label>
-              <span>Тип инструмента</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text4c45908ff0d2'}}</span>
               <select data-stage-tool-key>
                 {{#each toolOptions}}
                 <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -60,7 +60,7 @@
               </select>
             </label>
             <label>
-              <span>Класс</span>
+              <span>{{localize 'FALLOUTMAW.Item.ConditionRecoveryClass'}}</span>
               <select data-stage-tool-class>
                 {{#each toolClassOptions}}
                 <option value="{{key}}" {{#if selected}}selected{{/if}}>{{key}}</option>
@@ -68,7 +68,7 @@
               </select>
             </label>
             <label>
-              <span>Расход запаса</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Textaf1511c26e8f'}}</span>
               <input type="number" data-stage-tool-cost value="{{tool.supplyCost}}" min="1" step="1">
             </label>
           </div>
@@ -83,24 +83,24 @@
               <div class="fallout-maw-butchering-reward-content">
                 <strong>{{name}}</strong>
                 <div class="fallout-maw-butchering-reward-range">
-                  <input type="number" data-reward-min value="{{min}}" min="1" step="1" aria-label="Минимальное количество">
+                  <input type="number" data-reward-min value="{{min}}" min="1" step="1" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text134428c5d575'}}">
                   <span>—</span>
-                  <input type="number" data-reward-max value="{{max}}" min="1" step="1" aria-label="Максимальное количество">
+                  <input type="number" data-reward-max value="{{max}}" min="1" step="1" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textae3ab3cd3211'}}">
                 </div>
               </div>
-              <button type="button" class="fallout-maw-icon-button" data-action="deleteReward" title="Удалить предмет">
+              <button type="button" class="fallout-maw-icon-button" data-action="deleteReward" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9782f7483fc9'}}">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
             {{else}}
-            <span class="fallout-maw-butchering-drop-placeholder">Перетащите предмет сюда</span>
+            <span class="fallout-maw-butchering-drop-placeholder">{{localize 'FALLOUTMAW.AuditTemplates.Text7050dca0fd79'}}</span>
             {{/each}}
           </section>
           {{/each}}
         </div>
       </article>
       {{else}}
-      <p class="fallout-maw-empty-list">Этапы не настроены.</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textd5bba778bf4a'}}</p>
       {{/each}}
     </div>
   </section>

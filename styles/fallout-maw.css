@@ -4308,7 +4308,10 @@ body #prosemirror-dropdown {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  list-style: none;
+  margin: 0;
   overflow-x: auto;
+  padding: 0;
 }
 
 .fallout-maw-effect-change-row {
@@ -6518,7 +6521,7 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-damage-type-icon {
   --fallout-maw-damage-type-color: #f0d48a;
-  --fallout-maw-damage-type-image: url("/icons/svg/d20-grey.svg");
+  --fallout-maw-damage-type-image: url("/systems/fallout-maw/assets/System/Skills/skill-default.webp");
   align-items: center;
   background:
     linear-gradient(135deg, rgba(255, 244, 185, 0.12), rgba(0, 0, 0, 0.36)),
@@ -13941,6 +13944,12 @@ label.checkbox.fallout-maw-ability-change-choice {
   outline: 0;
 }
 
+.fallout-maw-token-hud-meter-value-editor .fallout-maw-one-time-resource-input,
+.fallout-maw-resource-value .fallout-maw-one-time-resource-input {
+  border-color: #78aee8;
+  color: #b9d9ff;
+}
+
 .fallout-maw-token-hud-meter-value-editor b {
   color: #f3dda0;
   font-size: 0.78rem;
@@ -14293,7 +14302,7 @@ label.checkbox.fallout-maw-ability-change-choice {
 }
 
 .characteristic-settings .fallout-maw-settings-row {
-  grid-template-columns: 2rem 90px minmax(130px, 1fr) minmax(160px, 1.2fr) 2.5rem;
+  grid-template-columns: 2rem 90px minmax(130px, 1fr) minmax(160px, 1.2fr) 2.5rem 2.5rem;
 }
 
 .damage-type-settings .fallout-maw-settings-row {
@@ -14991,7 +15000,7 @@ label.checkbox.fallout-maw-ability-change-choice {
 }
 
 .skill-settings .fallout-maw-settings-row {
-  grid-template-columns: 2rem 80px minmax(120px, 0.8fr) minmax(130px, 0.9fr) minmax(220px, 1.25fr) 2.5rem;
+  grid-template-columns: 2rem 80px minmax(120px, 0.8fr) minmax(130px, 0.9fr) minmax(220px, 1.25fr) 2.5rem 2.5rem;
 }
 
 .skill-cost-threshold-settings .fallout-maw-settings-row {

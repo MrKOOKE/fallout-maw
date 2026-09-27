@@ -1,33 +1,33 @@
 <section class="fallout-maw-craft-window-craft">
   {{#if bulk}}
   <header class="fallout-maw-craft-window-toolbar">
-    <div class="fallout-maw-bulk-heading"><strong>Массовый разбор</strong><span>Сложность: {{bulk.difficulty}}</span></div>
+    <div class="fallout-maw-bulk-heading"><strong>{{localize 'FALLOUTMAW.AuditTemplates.Text28058653358f'}}</strong><span>{{localize 'FALLOUTMAW.AuditTemplates.Text31028322ccd1'}} {{bulk.difficulty}}</span></div>
     <div class="fallout-maw-craft-window-actions">
-      <button type="button" data-bulk-clear {{#if bulk.busy}}disabled{{/if}}>Очистить</button>
-      <button type="button" data-bulk-run {{#unless bulk.canRun}}disabled{{/unless}}>Разобрать</button>
+      <button type="button" data-bulk-clear {{#if bulk.busy}}disabled{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text98b2073ed181'}}</button>
+      <button type="button" data-bulk-run {{#unless bulk.canRun}}disabled{{/unless}}>{{localize 'FALLOUTMAW.AuditTemplates.Text096e09dc8c0f'}}</button>
     </div>
   </header>
   <div class="fallout-maw-bulk-body">
-    <section class="fallout-maw-bulk-bin" data-bulk-drop aria-label="Предметы для массового разбора">
-      <h2>Предметы для разбора</h2>
+    <section class="fallout-maw-bulk-bin" data-bulk-drop aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text9dab46ebb87f'}}">
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text7267ff025291'}}</h2>
       <div class="fallout-maw-bulk-grid">
         {{#each bulk.rows}}
         <article class="fallout-maw-bulk-item {{#if error}}invalid{{/if}}">
           <img src="{{img}}" alt="{{name}}">
           <div><strong>{{name}}</strong>
-            <button type="button" data-bulk-quantity="{{itemId}}" {{#if ../bulk.busy}}disabled{{/if}}>{{quantity}} шт.</button>
-            {{#if hasVariants}}<select data-bulk-recipe="{{itemId}}" aria-label="Вариант разбора" {{#if ../bulk.busy}}disabled{{/if}}>{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select>{{/if}}
+            <button type="button" data-bulk-quantity="{{itemId}}" {{#if ../bulk.busy}}disabled{{/if}}>{{quantity}} {{localize 'FALLOUTMAW.AuditTemplates.Textb14248ecfe85'}}</button>
+            {{#if hasVariants}}<select data-bulk-recipe="{{itemId}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text1ecdb40f287f'}}" {{#if ../bulk.busy}}disabled{{/if}}>{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select>{{/if}}
             {{#if error}}<span class="fallout-maw-bulk-error">{{error}}</span>{{/if}}
           </div>
-          <button type="button" data-bulk-remove="{{itemId}}" aria-label="Убрать из разбора" {{#if ../bulk.busy}}disabled{{/if}}><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" data-bulk-remove="{{itemId}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text230b7d152fde'}}" {{#if ../bulk.busy}}disabled{{/if}}><i class="fa-solid fa-xmark"></i></button>
         </article>
         {{else}}
-        <p class="fallout-maw-empty-list">Перетащите предметы сюда. Shift+ЛКМ — вся пачка, Ctrl+ЛКМ — выбрать количество.</p>
+        <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text8a3ef71f387a'}}</p>
         {{/each}}
       </div>
     </section>
     <section class="fallout-maw-bulk-results">
-      <h2>{{#if bulk.randomOutputs}}Возможный результат при успехе{{else}}Результат при успехе{{/if}}</h2>
+      <h2>{{#if bulk.randomOutputs}}{{localize 'FALLOUTMAW.AuditTemplates.Textec372e189bf7'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text00b63f642f10'}}{{/if}}</h2>
       <div class="fallout-maw-bulk-grid">
         {{#each bulk.outputs}}
         <article class="fallout-maw-bulk-item" data-tooltip-uuid="{{uuid}}"><img src="{{img}}" alt="{{name}}"><strong>{{name}}</strong><b>{{quantityLabel}}</b></article>
@@ -48,14 +48,14 @@
     </div>
     <div class="fallout-maw-craft-window-actions">
       {{#if craft.acquisition}}
-      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к исходной вкладке" {{#unless craft.canReturn}}disabled{{/unless}}>
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="{{localize 'FALLOUTMAW.AuditTemplates.Text1ddbdd2ec8b3'}}" {{#unless craft.canReturn}}disabled{{/unless}}>
         <i class="fa-solid fa-arrow-left"></i>
-        <span>Вернуться</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text5ee12b3f7b05'}}</span>
       </button>
       {{else if craft.usage}}
-      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к исходной вкладке" {{#unless craft.canReturn}}disabled{{/unless}}>
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="{{localize 'FALLOUTMAW.AuditTemplates.Text1ddbdd2ec8b3'}}" {{#unless craft.canReturn}}disabled{{/unless}}>
         <i class="fa-solid fa-arrow-left"></i>
-        <span>Вернуться</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text5ee12b3f7b05'}}</span>
       </button>
       {{else}}
       <div class="fallout-maw-craft-repeat-control {{#if craft.repeatDisabled}}disabled{{/if}}">
@@ -76,7 +76,7 @@
   <div class="fallout-maw-craft-acquisition">
     <header class="fallout-maw-craft-acquisition-header">
       <div>
-        <h2>Показать способы получения</h2>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text4134e313f646'}}</h2>
         <span>{{craft.acquisition.targetName}}</span>
       </div>
       <strong>{{craft.acquisition.entries.length}}</strong>
@@ -84,7 +84,7 @@
     {{#if craft.acquisition.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.acquisition.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" {{#if unknown}}aria-disabled="true" aria-label="Неизвестный рецепт"{{else}}data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0"{{/if}}>
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" {{#if unknown}}aria-disabled="true" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Texte1acfd5a0bb8'}}"{{else}}data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0"{{/if}}>
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -110,7 +110,7 @@
       {{/each}}
     </div>
     {{else}}
-    <div class="fallout-maw-craft-acquisition-empty">Нет разборов, которые дают этот предмет.</div>
+    <div class="fallout-maw-craft-acquisition-empty">{{localize 'FALLOUTMAW.AuditTemplates.Textb2b3351d67a4'}}</div>
     {{/if}}
   </div>
   {{else if craft.usage}}
@@ -125,7 +125,7 @@
     {{#if craft.usage.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.usage.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" {{#if unknown}}aria-disabled="true" aria-label="Неизвестный рецепт"{{else}}data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0"{{/if}}>
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" {{#if unknown}}aria-disabled="true" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Texte1acfd5a0bb8'}}"{{else}}data-tooltip-uuid="{{tooltipUuid}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0"{{/if}}>
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -175,7 +175,7 @@
               {{/each}}
             </div>
             {{#unless candidates.length}}
-            <p>Подходящих инструментов нет.</p>
+            <p>{{localize 'FALLOUTMAW.AuditTemplates.Text518ebecd2f03'}}</p>
             {{/unless}}
           </section>
           {{/each}}
@@ -190,6 +190,6 @@
   </div>
   {{/if}}
   {{else}}
-  <div class="fallout-maw-craft-window-empty">Выберите рецепт</div>
+  <div class="fallout-maw-craft-window-empty">{{localize 'FALLOUTMAW.AuditTemplates.Textd24d4dfc1bd6'}}</div>
   {{/if}}
 </section>

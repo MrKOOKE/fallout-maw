@@ -98,7 +98,12 @@ export async function applyActorNeedChanges(actor = null, changes = [], {
     });
   }
 
-  if (Object.keys(updates).length) await actor.update(updates, documentOptions);
+  if (Object.keys(updates).length) {
+    const updated = await actor.update(updates, documentOptions);
+    // A preUpdate cancellation resolves without a Document. Do not report the
+    // projected changes or spend their active-use modifiers when nothing saved.
+    if (!updated) return [];
+  }
   if (preparation) {
     await commitPreparedActiveUseOperations([preparation], {
       operationId: getActiveUseOperationId(context, createNeedChangeOperationId(actor))

@@ -1,33 +1,33 @@
 <div class="fallout-maw-sheet-body fallout-maw-actor-trade-settings-body">
   <section class="fallout-maw-panel">
-    <h2>Общие настройки</h2>
+    <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textd017760707a5'}}</h2>
     <div class="fallout-maw-inline-check">
-      <input aria-label="Бесконечный инвентарь и нагрузка" type="checkbox" name="trade.infiniteInventory" {{checked settings.infiniteInventory}}>
-      <span>Бесконечный инвентарь и нагрузка</span>
+      <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text0d9de282b94c'}}" type="checkbox" name="trade.infiniteInventory" {{checked settings.infiniteInventory}}>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text0d9de282b94c'}}</span>
     </div>
-    <p class="notes">Корневой инвентарь не ограничен числом строк, а вес предметов не создаёт нагрузку.</p>
+    <p class="notes">{{localize 'FALLOUTMAW.AuditTemplates.Text4bb953f385e5'}}</p>
 
     <div class="fallout-maw-trade-adjustment-grid">
       <label class="fallout-maw-stacked-field">
-        <span>Продаёт на, %</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text1b30cbf5ec8c'}}</span>
         <input type="number" name="trade.sell.percent" value="{{settings.sell.percent}}" min="0" step="1">
       </label>
       <label class="fallout-maw-stacked-field">
-        <span>Направление</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7af7cb1da807'}}</span>
         <select name="trade.sell.direction">
-          <option value="increase" {{#if (eq settings.sell.direction "increase")}}selected{{/if}}>дороже</option>
-          <option value="decrease" {{#if (eq settings.sell.direction "decrease")}}selected{{/if}}>дешевле</option>
+          <option value="increase" {{#if (eq settings.sell.direction "increase")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text31980042bd84'}}</option>
+          <option value="decrease" {{#if (eq settings.sell.direction "decrease")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text60820ac9eec2'}}</option>
         </select>
       </label>
       <label class="fallout-maw-stacked-field">
-        <span>Скупает на, %</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text3fe7dad20e40'}}</span>
         <input type="number" name="trade.buy.percent" value="{{settings.buy.percent}}" min="0" step="1">
       </label>
       <label class="fallout-maw-stacked-field">
-        <span>Направление</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7af7cb1da807'}}</span>
         <select name="trade.buy.direction">
-          <option value="decrease" {{#if (eq settings.buy.direction "decrease")}}selected{{/if}}>дешевле</option>
-          <option value="increase" {{#if (eq settings.buy.direction "increase")}}selected{{/if}}>дороже</option>
+          <option value="decrease" {{#if (eq settings.buy.direction "decrease")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text60820ac9eec2'}}</option>
+          <option value="increase" {{#if (eq settings.buy.direction "increase")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text31980042bd84'}}</option>
         </select>
       </label>
     </div>
@@ -36,11 +36,11 @@
   <section class="fallout-maw-panel">
     <div class="fallout-maw-trade-section-heading">
       <div>
-        <h2>Переопределения категорий</h2>
-        <p class="notes">Имеют приоритет над общими процентами.</p>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text6790488fdf49'}}</h2>
+        <p class="notes">{{localize 'FALLOUTMAW.AuditTemplates.Text61b867d2bd83'}}</p>
       </div>
       <button type="button" data-trade-add-category>
-        <i class="fa-solid fa-plus"></i> Добавить
+        <i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Tile.AddSpecialProperty'}}
       </button>
     </div>
 
@@ -56,40 +56,40 @@
           <input type="hidden" name="trade.categoryOverrides.{{index}}.id" value="{{entry.id}}">
           <div class="fallout-maw-trade-override-title">
             <label class="fallout-maw-stacked-field">
-              <span>Категория</span>
-              <input type="text" name="trade.categoryOverrides.{{index}}.category" value="{{entry.category}}" list="fallout-maw-trade-category-suggestions" placeholder="Название категории">
+              <span>{{localize 'FALLOUTMAW.Ability.Category.Label'}}</span>
+              <input type="text" name="trade.categoryOverrides.{{index}}.category" value="{{entry.category}}" list="fallout-maw-trade-category-suggestions" placeholder="{{localize 'FALLOUTMAW.AuditTemplates.Textca2014a9f22d'}}">
             </label>
-            <button type="button" class="icon" data-trade-remove-category="{{entry.id}}" title="Удалить">
+            <button type="button" class="icon" data-trade-remove-category="{{entry.id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
           <div class="fallout-maw-trade-adjustment-grid">
             <label class="fallout-maw-stacked-field">
-              <span>Продаёт на, %</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text1b30cbf5ec8c'}}</span>
               <input type="number" name="trade.categoryOverrides.{{index}}.sell.percent" value="{{entry.sell.percent}}" min="0" step="1">
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Направление</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7af7cb1da807'}}</span>
               <select name="trade.categoryOverrides.{{index}}.sell.direction">
-                <option value="increase" {{#if (eq entry.sell.direction "increase")}}selected{{/if}}>дороже</option>
-                <option value="decrease" {{#if (eq entry.sell.direction "decrease")}}selected{{/if}}>дешевле</option>
+                <option value="increase" {{#if (eq entry.sell.direction "increase")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text31980042bd84'}}</option>
+                <option value="decrease" {{#if (eq entry.sell.direction "decrease")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text60820ac9eec2'}}</option>
               </select>
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Скупает на, %</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text3fe7dad20e40'}}</span>
               <input type="number" name="trade.categoryOverrides.{{index}}.buy.percent" value="{{entry.buy.percent}}" min="0" step="1">
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Направление</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7af7cb1da807'}}</span>
               <select name="trade.categoryOverrides.{{index}}.buy.direction">
-                <option value="decrease" {{#if (eq entry.buy.direction "decrease")}}selected{{/if}}>дешевле</option>
-                <option value="increase" {{#if (eq entry.buy.direction "increase")}}selected{{/if}}>дороже</option>
+                <option value="decrease" {{#if (eq entry.buy.direction "decrease")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text60820ac9eec2'}}</option>
+                <option value="increase" {{#if (eq entry.buy.direction "increase")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text31980042bd84'}}</option>
               </select>
             </label>
           </div>
         </article>
       {{else}}
-        <p class="notes">Для категорий особые цены не заданы.</p>
+        <p class="notes">{{localize 'FALLOUTMAW.AuditTemplates.Text98d2ffe32f61'}}</p>
       {{/each}}
     </div>
   </section>
@@ -97,13 +97,13 @@
   <section class="fallout-maw-panel">
     <div class="fallout-maw-trade-section-heading">
       <div>
-        <h2>Переопределения предметов</h2>
-        <p class="notes">Имеют наивысший приоритет.</p>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text2fd20c82a81b'}}</h2>
+        <p class="notes">{{localize 'FALLOUTMAW.AuditTemplates.Texta74a42851e87'}}</p>
       </div>
     </div>
     <div class="fallout-maw-trade-item-dropzone" data-trade-item-dropzone>
       <i class="fa-solid fa-arrow-down"></i>
-      <span>Перетащите предмет сюда</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7050dca0fd79'}}</span>
     </div>
 
     <div class="fallout-maw-trade-override-list">
@@ -117,50 +117,50 @@
           <div class="fallout-maw-trade-item-heading">
             <img src="{{entry.img}}" alt="">
             <strong>{{entry.name}}</strong>
-            <button type="button" class="icon" data-trade-remove-item="{{entry.id}}" title="Удалить">
+            <button type="button" class="icon" data-trade-remove-item="{{entry.id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
           <label class="fallout-maw-stacked-field">
-            <span>Режим цены</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text280b342b2c95'}}</span>
             <select name="trade.itemOverrides.{{index}}.mode" data-trade-item-mode>
-              <option value="percent" {{#if entry.isPercent}}selected{{/if}}>Изменение цены</option>
-              <option value="fixed" {{#unless entry.isPercent}}selected{{/unless}}>Фиксированная цена</option>
+              <option value="percent" {{#if entry.isPercent}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text42211d3f3bc7'}}</option>
+              <option value="fixed" {{#unless entry.isPercent}}selected{{/unless}}>{{localize 'FALLOUTMAW.AuditTemplates.Textaaeacc166927'}}</option>
             </select>
           </label>
 
           <div class="fallout-maw-trade-adjustment-grid {{#unless entry.isPercent}}hidden{{/unless}}" data-trade-percent-fields>
             <label class="fallout-maw-stacked-field">
-              <span>Продаёт на, %</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text1b30cbf5ec8c'}}</span>
               <input type="number" name="trade.itemOverrides.{{index}}.sell.percent" value="{{entry.sell.percent}}" min="0" step="1">
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Направление</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7af7cb1da807'}}</span>
               <select name="trade.itemOverrides.{{index}}.sell.direction">
-                <option value="increase" {{#if (eq entry.sell.direction "increase")}}selected{{/if}}>дороже</option>
-                <option value="decrease" {{#if (eq entry.sell.direction "decrease")}}selected{{/if}}>дешевле</option>
+                <option value="increase" {{#if (eq entry.sell.direction "increase")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text31980042bd84'}}</option>
+                <option value="decrease" {{#if (eq entry.sell.direction "decrease")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text60820ac9eec2'}}</option>
               </select>
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Скупает на, %</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text3fe7dad20e40'}}</span>
               <input type="number" name="trade.itemOverrides.{{index}}.buy.percent" value="{{entry.buy.percent}}" min="0" step="1">
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Направление</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7af7cb1da807'}}</span>
               <select name="trade.itemOverrides.{{index}}.buy.direction">
-                <option value="decrease" {{#if (eq entry.buy.direction "decrease")}}selected{{/if}}>дешевле</option>
-                <option value="increase" {{#if (eq entry.buy.direction "increase")}}selected{{/if}}>дороже</option>
+                <option value="decrease" {{#if (eq entry.buy.direction "decrease")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text60820ac9eec2'}}</option>
+                <option value="increase" {{#if (eq entry.buy.direction "increase")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text31980042bd84'}}</option>
               </select>
             </label>
           </div>
 
           <div class="fallout-maw-trade-fixed-grid {{#if entry.isPercent}}hidden{{/if}}" data-trade-fixed-fields>
             <label class="fallout-maw-stacked-field">
-              <span>Фиксированная цена продажи</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text52dea33aab6d'}}</span>
               <input type="number" name="trade.itemOverrides.{{index}}.fixedSell.value" value="{{entry.fixedSell.value}}" min="0" step="1">
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Валюта продажи</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Text21bb3a1b8dee'}}</span>
               <select name="trade.itemOverrides.{{index}}.fixedSell.currencyKey">
                 {{#each entry.currencies as |currency|}}
                   <option value="{{currency.key}}" {{#if currency.selectedSell}}selected{{/if}}>{{currency.label}}</option>
@@ -168,11 +168,11 @@
               </select>
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Фиксированная цена скупки</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Textfb86f7582a3f'}}</span>
               <input type="number" name="trade.itemOverrides.{{index}}.fixedBuy.value" value="{{entry.fixedBuy.value}}" min="0" step="1">
             </label>
             <label class="fallout-maw-stacked-field">
-              <span>Валюта скупки</span>
+              <span>{{localize 'FALLOUTMAW.AuditTemplates.Texte6b6da0fa5a7'}}</span>
               <select name="trade.itemOverrides.{{index}}.fixedBuy.currencyKey">
                 {{#each entry.currencies as |currency|}}
                   <option value="{{currency.key}}" {{#if currency.selectedBuy}}selected{{/if}}>{{currency.label}}</option>
@@ -182,7 +182,7 @@
           </div>
         </article>
       {{else}}
-        <p class="notes">Для отдельных предметов особые цены не заданы.</p>
+        <p class="notes">{{localize 'FALLOUTMAW.AuditTemplates.Text921fbc3e0f5b'}}</p>
       {{/each}}
     </div>
   </section>

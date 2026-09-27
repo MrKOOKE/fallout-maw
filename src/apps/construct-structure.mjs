@@ -1,5 +1,8 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { canDropItemsForActor, commitInventoryWithDroppedItems } from "../items/dropped-items.mjs";
+import { planConstructStructureDepartures } from "./construct-structure-departures.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import {
   ITEM_FUNCTIONS,
@@ -22,12 +25,19 @@ import {
   getConstructPartTypeLabel,
   getInstalledConstructPartForSlot
 } from "../utils/construct-parts.mjs";
-import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
+import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, prepareInventoryContext } from "../utils/actor-display-data.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
-  getContextInventoryItems
+  getAllContainedItems,
+  getContainerContentsWeight,
+  getContainerInventoryGridOptions,
+  getContainerMaxLoad,
+  getContextInventoryItems,
+  getItemQuantity,
+  getItemTotalWeight,
+  isContainerItem
 } from "../utils/inventory-containers.mjs";
 import { applyDestroyedLimbConsequences, clearLimbLossState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 
@@ -52,7 +62,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       height: "auto"
     },
     window: {
-      title: "Строение конструкта",
+      get title() { return auditLocalize("FALLOUTMAW.AuditApps.ConstructStructure", "Строение конструкта"); },
       resizable: true
     },
     form: {
@@ -111,7 +121,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     if (data?.type !== "Item") return;
     const item = await Item.implementation.fromDropData(data).catch(() => null);
     if (!isConstructPartItem(item)) {
-      ui.notifications?.warn?.("Можно добавить только предмет с функцией «Деталь конструкта».");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.OnlyAnItemWithTheConstructPartFunction", "Можно добавить только предмет с функцией «Деталь конструкта»."));
       return;
     }
 
@@ -197,7 +207,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     const entry = this.#entries.find(candidate => candidate.entryId === entryId);
     if (!entry) return;
     if (hasConstructPartWeaponOccupants(this.actor, entry.slot?.id)) {
-      ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.FirstRemoveTheWeaponsInstalledInThisConstruct", "Сначала снимите оружие, установленное в слоты этой детали конструкта."));
       return;
     }
     this.#entries = this.#entries.filter(candidate => candidate !== entry);
@@ -255,11 +265,13 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     if (this.actor.type !== "construct") return;
     const updates = [];
     const createPlans = [];
+    const droppedParts = [];
     const previousEntries = getOwnedConstructPartEntries(this.actor);
     const entriesBySlotId = new Map(this.#entries.map(entry => [entry.slot.id, entry]));
-    const removedSlotIds = previousEntries
-      .filter(entry => !entriesBySlotId.has(entry.slot.id))
-      .map(entry => entry.slot.id);
+    const { removedSlotIds, deletedItemIds, detachedEntries } = planConstructStructureDepartures(
+      previousEntries,
+      this.#entries
+    );
     const installedOwnedIds = new Set(
       this.#entries
         .filter(entry => entry.installed && entry.itemId)
@@ -269,13 +281,6 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     const finalSlots = [];
 
     const { columns, rows } = getActorInventoryGridDimensions(this.actor, null);
-    const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, this.actor.items);
-    const detachedEntries = previousEntries
-      .filter(entry => {
-        const current = entriesBySlotId.get(entry.slot.id);
-        return entry.item && (!current?.installed || current.itemId !== entry.item.id);
-      })
-      .map(entry => ({ entry, item: entry.item }));
     const detachedSlotIds = detachedEntries.map(({ entry }) => entry.slot.id);
     const detachedItems = detachedEntries.filter(({ item }) => !installedOwnedIds.has(item.id));
     const inventoryExcludeIds = Array.from(new Set([
@@ -283,28 +288,55 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       ...detachedItems.map(({ item }) => item.id)
     ]));
     const reservedPlacements = [];
+    const candidateParentIds = [
+      ROOT_CONTAINER_ID,
+      ...prepareInventoryContext(this.actor, null, { includeLocked: false }).containers
+        .map(container => container.id)
+        .filter(id => !deletedItemIds.includes(id) && !detachedItems.some(({ item }) => item.id === id))
+    ];
 
     for (const { entry, item } of detachedItems) {
       if (hasConstructPartWeaponOccupants(this.actor, entry.slot.id)) {
-        ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+        ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.FirstRemoveTheWeaponsInstalledInThisConstruct", "Сначала снимите оружие, установленное в слоты этой детали конструкта."));
         return;
       }
-      const placement = findFirstAvailableInventoryPlacement(
-        rootItems,
-        columns,
-        rows,
-        item,
-        this.actor.items,
-        inventoryExcludeIds,
-        reservedPlacements,
-        getActorRootInventoryGridOptions(this.actor, ROOT_CONTAINER_ID)
-      );
-      if (!placement) {
-        ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-        return;
+      const placementContext = candidateParentIds
+        .map(parentId => {
+          const container = parentId ? this.actor.items.get(parentId) : null;
+          if (parentId && !container) return null;
+          const reserved = reservedPlacements.filter(entry => entry.parentId === parentId);
+          if (container) {
+            const contentsWeight = getContainerContentsWeight(container, this.actor.items);
+            const reservedWeight = reserved.reduce((total, entry) => total + getItemTotalWeight(entry.item, this.actor.items), 0);
+            if (contentsWeight + reservedWeight + getItemTotalWeight(item, this.actor.items) > getContainerMaxLoad(container) + 0.0001) return null;
+          }
+          const grid = container ? getContainerInventoryGridOptions(container) : { columns, rows };
+          const placement = findFirstAvailableInventoryPlacement(
+            getContextInventoryItems(parentId, this.actor.items),
+            grid.columns,
+            grid.rows,
+            item,
+            this.actor.items,
+            inventoryExcludeIds,
+            reserved.map(entry => entry.placement),
+            container ? grid : getActorRootInventoryGridOptions(this.actor, ROOT_CONTAINER_ID)
+          );
+          return placement ? { parentId, placement, item } : null;
+        })
+        .find(Boolean);
+      if (!placementContext) {
+        droppedParts.push({
+          data: item.toObject(),
+          quantity: getItemQuantity(item),
+          containedItems: isContainerItem(item)
+            ? getAllContainedItems(item.id, this.actor.items).map(contained => contained.toObject())
+            : []
+        });
+        deletedItemIds.push(item.id);
+        continue;
       }
-      reservedPlacements.push(placement);
-      updates.push(createConstructPartInventoryUpdate(item, placement));
+      reservedPlacements.push(placementContext);
+      updates.push(createConstructPartInventoryUpdate(item, placementContext.placement, placementContext.parentId));
     }
 
     for (const [order, entry] of this.#entries.entries()) {
@@ -339,12 +371,25 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
         finalEntries: this.#entries
       })
     };
-    await executeInventoryMutation({
+    const mutation = {
       actor: this.actor,
       updates: coalesceConstructPartItemUpdates(updates),
+      deletes: deletedItemIds,
       creates: createPlans.map(plan => plan.data),
       actorUpdates
-    }, { reason: "construct-structure-save" });
+    };
+    if (droppedParts.length) {
+      if (!canDropItemsForActor(this.actor)) {
+        ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.DroppingAPartRequiresTheConstructSToken", "Для выброса детали нужен токен конструкта на текущей сцене."));
+        return;
+      }
+      await commitInventoryWithDroppedItems(this.actor, mutation, droppedParts, {
+        reason: "construct-structure-save"
+      });
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughInventorySpaceRemovedParts", "В инвентаре не хватило места: снятые детали выброшены на землю."));
+    } else {
+      await executeInventoryMutation(mutation, { reason: "construct-structure-save" });
+    }
 
     for (const slotId of detachedSlotIds) {
       if (!entriesBySlotId.has(slotId)) continue;
@@ -550,7 +595,7 @@ function prepareConstructPartEntry(entry, index) {
   const percent = entry.installed
     ? (hasCondition && max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 100)
     : 0;
-  const typeLabel = getConstructPartTypeLabel(item ?? entry.slot) || entry.slot?.profile?.name || "Деталь";
+  const typeLabel = getConstructPartTypeLabel(item ?? entry.slot) || entry.slot?.profile?.name || auditLocalize("FALLOUTMAW.AuditApps.Part", "Деталь");
   const stateColor = entry.installed ? getConstructPartStateColor(hasCondition, value, max) : "#4f9e99";
   return {
     id: entry.entryId,
@@ -565,9 +610,9 @@ function prepareConstructPartEntry(entry, index) {
     hasCondition,
     value: entry.installed ? (hasCondition ? value : 1) : 0,
     max: entry.installed ? (hasCondition ? Math.max(1, max) : 1) : Math.max(1, max),
-    valueLabel: entry.installed ? (hasCondition ? String(value) : "∞") : "ПУСТО",
+    valueLabel: entry.installed ? (hasCondition ? String(value) : "∞") : auditLocalize("FALLOUTMAW.AuditApps.EMPTY", "ПУСТО"),
     maxLabel: entry.installed && hasCondition ? String(max) : "",
-    stateTitle: entry.installed ? (hasCondition ? `${value} / ${max}` : "∞") : "Пустой слот детали",
+    stateTitle: entry.installed ? (hasCondition ? `${value} / ${max}` : "∞") : auditLocalize("FALLOUTMAW.AuditApps.EmptyPartSlot", "Пустой слот детали"),
     meterStyle: `--construct-part-meter-color: ${stateColor};`,
     fillStyle: `width: ${Number(percent.toFixed(2))}%;`
   };
@@ -589,7 +634,7 @@ function isConstructPartItem(item) {
 function createConstructPartPlacementUpdate(itemId, slotId, order) {
   return {
     _id: itemId,
-    "system.equipped": false,
+    "system.equipped": true,
     "system.container.parentId": "",
     "system.placement.mode": ITEM_FUNCTIONS.constructPart,
     "system.placement.equipmentSlot": "",
@@ -607,7 +652,7 @@ function createConstructPartCreateData(itemData, slotId, order) {
   delete createData.id;
   foundry.utils.mergeObject(createData, {
     system: {
-      equipped: false,
+      equipped: true,
       container: {
         parentId: ""
       },
@@ -628,7 +673,7 @@ function createConstructPartCreateData(itemData, slotId, order) {
   return createData;
 }
 
-function createConstructPartInventoryUpdate(item, placement) {
+function createConstructPartInventoryUpdate(item, placement, parentId = ROOT_CONTAINER_ID) {
   const stored = createStoredPlacement({
     ...placement,
     mode: "inventory",
@@ -641,7 +686,7 @@ function createConstructPartInventoryUpdate(item, placement) {
   return {
     _id: item.id,
     "system.equipped": false,
-    "system.container.parentId": ROOT_CONTAINER_ID,
+    "system.container.parentId": parentId,
     "system.placement.mode": "inventory",
     "system.placement.equipmentSlot": "",
     "system.placement.weaponSet": "",

@@ -1,3 +1,7 @@
+import { getOneTimeResourceValue, prepareActorResourceSpend, runOneTimeResourceMutation } from "../combat/one-time-resources.mjs";
+import { RELEASE_ABILITY_DEFINITIONS } from "./release-ability-rules.mjs";
+import { useReleaseAbility, registerReleaseAbilityRuntime } from "./release-abilities.mjs";
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
@@ -217,6 +221,8 @@ import {
   MOVEMENT_RESOURCE_KEY,
   applyCombatMovementCostModifier,
   getCombatMovementResourceState,
+  spendMovementThenActionResourcesWithReceipt,
+  refundMovementThenActionResourceReceipt,
   hasActorCombatMovementInCurrentTurn
 } from "../combat/movement-resources.mjs";
 import {
@@ -324,10 +330,9 @@ import {
 import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
-  getActorEnergy,
   getActorAvailableEnergy,
-  restoreActorEnergy,
-  runActorEnergyMutation
+  spendActorEnergyWithReceipt,
+  refundActorEnergyReceipt
 } from "../combat/energy-resource.mjs";
 import {
   PERFECT_FIT_MAINTAINED_EFFECTS,
@@ -610,11 +615,15 @@ const MAINTAINED_TARGET_DEFINITIONS_BY_KEY = new Map(
 const activeApplicationEffectSyncTimers = new Map();
 const whereAreYouGoingSuppressedReactors = new Map();
 const STEALTH_INCAPACITATIONS = Symbol("falloutMawStealthIncapacitations");
+const atRandomAttackPlans = new Map();
 
 const FIXED_ABILITY_FUNCTIONS = Object.freeze([
+  ...Object.entries(RELEASE_ABILITY_DEFINITIONS).map(([key, definition]) => Object.freeze({
+    key, ...definition, create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, { fixedKey: key })
+  })),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.deusExMachina,
-    label: "Бог из машины",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0069", "Бог из машины"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
@@ -622,7 +631,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing,
-    label: "Порча и благословение",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0070", "Порча и благословение"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -631,7 +640,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.allOrNothing,
-    label: "Все или ничего",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0071", "Все или ничего"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
@@ -639,7 +648,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.reaper,
-    label: "Жнец",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0072", "Жнец"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.reaper
@@ -647,7 +656,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.virtuoso,
-    label: "Виртуоз",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0073", "Виртуоз"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.virtuoso
@@ -655,7 +664,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.cascade,
-    label: "Каскад",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0074", "Каскад"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cascade,
@@ -664,7 +673,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment,
-    label: "Всестороннее развитие",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0075", "Всестороннее развитие"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment,
@@ -673,7 +682,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.aiming,
-    label: "Выцеливание",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0076", "Выцеливание"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -682,7 +691,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.bullseye,
-    label: "В яблочко",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0040", "В яблочко"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -692,7 +701,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.keepAway,
-    label: "Держись подальше",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0077", "Держись подальше"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.keepAway
@@ -700,7 +709,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown,
-    label: "Держись подальше II",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0078", "Держись подальше II"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.keepAwayKnockdown,
@@ -709,7 +718,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.ricochet,
-    label: "Рикошет",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0079", "Рикошет"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.ricochet
@@ -717,7 +726,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery,
-    label: "Рикошет II",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0080", "Рикошет II"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.ricochetMastery,
@@ -726,7 +735,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.lethalShot,
-    label: "Смертельный выстрел",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0081", "Смертельный выстрел"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lethalShot
@@ -734,7 +743,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.lethalStrike,
-    label: "Смертельный удар",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0082", "Смертельный удар"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lethalStrike
@@ -742,7 +751,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
-    label: "Труп за трупом",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0083", "Труп за трупом"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.corpseAfterCorpse,
@@ -751,7 +760,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.slaughter,
-    label: "Резня",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0084", "Резня"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.slaughter,
@@ -760,7 +769,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.hawkEye,
-    label: "Соколиный глаз",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0085", "Соколиный глаз"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.hawkEye
@@ -768,7 +777,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing,
-    label: "Соколиный глаз II",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0086", "Соколиный глаз II"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing,
@@ -777,7 +786,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.hunterRace,
-    label: "Охотник",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0087", "Охотник"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.hunterRace,
@@ -786,7 +795,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.trophyCollector,
-    label: "Собиратель трофеев",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0088", "Собиратель трофеев"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -796,7 +805,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.trueBullet,
-    label: "Верная пуля",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0089", "Верная пуля"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.trueBullet,
@@ -805,7 +814,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover,
-    label: "Клевер-четырёхлистник",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0090", "Клевер-четырёхлистник"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
@@ -813,7 +822,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.atRandom,
-    label: "На обум",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0091", "На обум"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.atRandom
@@ -821,7 +830,8 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.lastChance,
-    label: "Последний шанс",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0092", "Последний шанс"); },
+    active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lastChance
@@ -829,7 +839,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.luckyCoin,
-    label: "Счастливая монетка",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0093", "Счастливая монетка"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
@@ -837,7 +847,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.disarm,
-    label: "Обезоруживание",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0094", "Обезоруживание"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -846,7 +856,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics,
-    label: "Оборонительная тактика",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0095", "Оборонительная тактика"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics
@@ -854,7 +864,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.rage,
-    label: "Ярость",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0096", "Ярость"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.rage
@@ -862,7 +872,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.whirlwind,
-    label: "Вихрь",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0097", "Вихрь"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.whirlwind
@@ -870,7 +880,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.headChopper,
-    label: "Головорезка",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0098", "Головорезка"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.headChopper,
@@ -879,7 +889,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher,
-    label: "Сокрушитель толп",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0099", "Сокрушитель толп"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -889,7 +899,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.reactive,
-    label: "Реактивный",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0100", "Реактивный"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.reactive,
@@ -898,7 +908,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.lunge,
-    label: "Выпад",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0101", "Выпад"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lunge
@@ -906,7 +916,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.cleave,
-    label: "Рассечение",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0102", "Рассечение"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cleave,
@@ -915,7 +925,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery,
-    label: "Рассечение II",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0103", "Рассечение II"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cleaveMastery,
@@ -924,7 +934,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
-    label: "Двоечка",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0104", "Двоечка"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -933,7 +943,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.insuranceAttack,
-    label: "Страховочка",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0105", "Страховочка"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -943,7 +953,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.tripleAttack,
-    label: "Троечка",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0106", "Троечка"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -953,7 +963,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.counterAttack,
-    label: "Контр атака",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0107", "Контр атака"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterAttack
@@ -961,7 +971,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.oversight,
-    label: "Надзор",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0108", "Надзор"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.oversight
@@ -969,7 +979,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.watchOut,
-    label: "Берегись!",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0109", "Берегись!"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.watchOut
@@ -977,7 +987,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.dangerSense,
-    label: "Чутье",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0110", "Чутье"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.dangerSense
@@ -985,7 +995,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.fullControl,
-    label: "Полный контроль",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0111", "Полный контроль"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fullControl
@@ -993,7 +1003,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.counterSniper,
-    label: "Контр-снайпер",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniper
@@ -1001,7 +1011,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.parry,
-    label: "Парирование",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0113", "Парирование"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.parry,
@@ -1010,7 +1020,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.deepPenetration,
-    label: "Глубокое проникновение",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0114", "Глубокое проникновение"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1020,7 +1030,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.deepPenetrationPiercing,
-    label: "Глубокое проникновение II",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0115", "Глубокое проникновение II"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1030,7 +1040,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.toTheBone,
-    label: "До кости",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0116", "До кости"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1040,7 +1050,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed,
-    label: "Контр-снайпер II",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0117", "Контр-снайпер II"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniperGuaranteed,
@@ -1049,7 +1059,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.guardianAngel,
-    label: "Ангел хранитель",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0118", "Ангел хранитель"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.guardianAngel,
@@ -1058,7 +1068,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing,
-    label: "Ты куда собрался?",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0119", "Ты куда собрался?"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
@@ -1066,7 +1076,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.fullForce,
-    label: "Со всей мощи",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0120", "Со всей мощи"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1075,7 +1085,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.twoHands,
-    label: "С двух рук",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0121", "С двух рук"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1084,7 +1094,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
-    label: "Основы командования",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0122", "Основы командования"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
@@ -1093,7 +1103,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance,
-    label: "Выбить из колеи",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0123", "Выбить из колеи"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance,
@@ -1102,7 +1112,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.look,
-    label: "Смотри!",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0124", "Смотри!"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.look,
@@ -1111,7 +1121,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.toTheEnd,
-    label: "До конца!!!",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0125", "До конца!!!"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.toTheEnd,
@@ -1120,7 +1130,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration,
-    label: "Повышенная концентрация",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0126", "Повышенная концентрация"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration,
@@ -1129,7 +1139,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster,
-    label: "Мастер по скручиванию",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0127", "Мастер по скручиванию"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster,
@@ -1138,7 +1148,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.goodEnough,
-    label: "И так сойдет",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0128", "И так сойдет"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.goodEnough,
@@ -1147,7 +1157,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.spinalStrike,
-    label: "Зашибу!",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0129", "Зашибу!"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.spinalStrike,
@@ -1156,7 +1166,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.concussion,
-    label: "Сострясение",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0130", "Сострясение"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.concussion,
@@ -1165,7 +1175,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.cleanStrike,
-    label: "Чистый удар",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0131", "Чистый удар"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.cleanStrike,
@@ -1174,7 +1184,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.idealStrike,
-    label: "Идеальный удар",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0132", "Идеальный удар"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.idealStrike,
@@ -1183,7 +1193,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds,
-    label: "Охотничьи угодья",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0133", "Охотничьи угодья"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.huntingGrounds,
@@ -1192,7 +1202,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.tempo,
-    label: "Темп",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0134", "Темп"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.tempo,
@@ -1201,7 +1211,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.falseBreach,
-    label: "Ложная брешь",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0066", "Ложная брешь"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.falseBreach,
@@ -1210,7 +1220,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
-    label: "Всему свой подход",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0051", "Всему свой подход"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.correspondingToolApproach,
@@ -1219,7 +1229,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.perfectFit,
-    label: "Идеальная подгонка",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0135", "Идеальная подгонка"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1229,7 +1239,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.qualityService,
-    label: "Качественное обслуживание",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0136", "Качественное обслуживание"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.qualityService,
@@ -1238,7 +1248,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy,
-    label: "Изучение анатомии",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0137", "Изучение анатомии"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy,
@@ -1247,7 +1257,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.specialMix,
-    label: "Особый намес",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0138", "Особый намес"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.specialMix,
@@ -1256,7 +1266,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.experimentalSurgery,
-    label: "Эксперементальная хирургия",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0139", "Эксперементальная хирургия"); },
     active: true,
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1266,7 +1276,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.emergencyOperations,
-    label: "Экстренные операции",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0140", "Экстренные операции"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1276,7 +1286,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.inconspicuous,
-    label: "Неприметный",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0141", "Неприметный"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.inconspicuous,
@@ -1285,7 +1295,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.shadow,
-    label: "Тень",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0142", "Тень"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.shadow,
@@ -1294,7 +1304,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.sandman,
-    label: "Песочный человек",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0143", "Песочный человек"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1304,7 +1314,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.nightmare,
-    label: "Кошмар",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0144", "Кошмар"); },
     active: true,
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
@@ -1314,7 +1324,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.phantom,
-    label: "Фантом",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0145", "Фантом"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.phantom,
@@ -1323,7 +1333,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows,
-    label: "Танец тысячи теней",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0052", "Танец тысячи теней"); },
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.danceOfThousandShadows,
@@ -1332,7 +1342,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience,
-    label: "Взрывная стойкость",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0146", "Взрывная стойкость"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.explosiveResilience,
@@ -1341,7 +1351,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.lastDrop,
-    label: "До последней капли",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0147", "До последней капли"); },
     active: true,
     passive: true,
     toggleable: true,
@@ -1352,7 +1362,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.livingSteel,
-    label: "Живая сталь",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0148", "Живая сталь"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.livingSteel,
@@ -1361,7 +1371,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   }),
   Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.painLord,
-    label: "Владыка боли",
+    get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0149", "Владыка боли"); },
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.painLord,
@@ -1423,6 +1433,7 @@ function registerFixedAbilityRuntimeHooks() {
   registerTempoRuntime();
   registerVirtuosoRuntime();
   registerCascadeRuntime();
+  registerReleaseAbilityRuntime();
   registerTrophyCollectorRuntime();
   registerFalseBreachRuntime();
   registerFinalHealthDamageInterceptor(LIVING_STEEL_DAMAGE_INTERCEPTOR_ID, {
@@ -1557,9 +1568,20 @@ function registerFixedAbilityRuntimeHooks() {
     PAIN_LORD_DAMAGE_HANDLER_ID,
     runFixedAbilityRuntimeHandler(context => processPainLordDamageResults(context?.results ?? []))
   );
-  Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, runFixedAbilityRuntimeHandler(context => {
-    void requestCurseAndBlessingAttackResolution(context);
-  }));
+  registerSystemEventObserver({
+    id: "fallout-maw.fixed.curseAndBlessing.attack",
+    eventKeys: ["fallout-maw.weapon.attack.resolved"],
+    priority: 151,
+    observe: runFixedAbilityRuntimeHandler(async ({ event }) => {
+      if (!game.user?.isActiveGM || event?.data?.attackCycleAggregate !== true
+        || event.data.deferredImpactPending || !(event.data.attackCheckCount > 0)) return;
+      await processCurseAndBlessingAttackResolution({
+        attackerUuid: event.participants?.source?.actorUuid,
+        targetUuids: event.data.attackCheckTargetActorUuids ?? event.data.targetActorUuids ?? [],
+        hitTargetUuids: event.data.successfulAttackTargetActorUuids ?? []
+      });
+    })
+  });
   registerWeaponAttackResolvedHandler(
     "fallout-maw.fixed.attackCycleState",
     runFixedAbilityRuntimeHandler(async context => {
@@ -1573,6 +1595,7 @@ function registerFixedAbilityRuntimeHooks() {
       // These transitions must finish before the controller exposes the next
       // attack. Several of them persist state read while building its preview.
       await consumeAllOrNothingResultEffects(context);
+      await processAtRandomAttackResolution(context);
       await processCorpseAfterCorpseResolution(context);
       await consumeLethalAttackPreparationEffects(context);
       await processCrowdCrusherResolution(context);
@@ -1591,6 +1614,7 @@ function registerFixedAbilityRuntimeHooks() {
   Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestDoubleAttackDuplicate(context);
     requestCrowdCrusherDuplicate(context);
+    requestAtRandomDuplicate(context);
   }));
   Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, runFixedAbilityRuntimeHandler(context => {
     requestAnatomyStudyWeaponActionModifiers(context);
@@ -1611,9 +1635,6 @@ function registerFixedAbilityRuntimeHooks() {
     requestHunterRaceWeaponActionModifiers(context);
     requestTrueBulletWeaponActionModifiers(context);
     requestSandmanWeaponActionModifiers(context);
-  }));
-  Hooks.on("fallout-maw.weaponActionResolved", runFixedAbilityRuntimeHandler(context => {
-    void processAtRandomAttackResolution(context);
   }));
   Hooks.on("fallout-maw.modifySkillCheck", runFixedAbilityRuntimeHandler(check => {
     applyFourLeafCloverCriticalBonus(check);
@@ -1654,7 +1675,7 @@ export function getFixedAbilityFunctionDefinition(fixedKey = "") {
 
 export function getFixedAbilityFunctionChoices() {
   return [
-    { value: "", label: "Выберите фиксированную функцию", disabled: true, selected: true },
+    { value: "", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0150", "Выберите фиксированную функцию"), disabled: true, selected: true },
     ...getFixedAbilityFunctionDefinitions().map(entry => ({
       value: entry.key,
       label: entry.label
@@ -1675,6 +1696,7 @@ export function getFixedAbilityFunctionLabel(fixedKey = "") {
 export function isFixedAbilityFunctionActive(abilityFunction = {}) {
   if (!areFixedAbilityFunctionsEnabled()) return false;
   if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.fixed) return false;
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing && abilityFunction.fixedSettings?.passive) return false;
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.active);
 }
 
@@ -1695,6 +1717,7 @@ export function isActiveAbilityFunction(abilityFunction = {}) {
 export function isFixedAbilityFunctionToggleable(abilityFunction = {}) {
   if (!areFixedAbilityFunctionsEnabled()) return false;
   if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.fixed) return false;
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing && abilityFunction.fixedSettings?.passive) return false;
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.toggleable);
 }
 
@@ -1729,7 +1752,7 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         const settings = normalizeFourLeafCloverSettings(entry.fixedSettings);
         return {
           key: getFixedFunctionStateKey(entry),
-          label: "Заряд",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0151", "Заряд"),
           value: String(settings.currentCharges)
         };
       }
@@ -1737,8 +1760,8 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
-          label: "Последнее оружие",
-          value: String(state[stateKey]?.weaponName ?? "").trim() || "Нету"
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0152", "Последнее оружие"),
+          value: String(state[stateKey]?.weaponName ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0153", "Нету")
         };
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.cascade) {
@@ -1757,7 +1780,7 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
             : { stacks: 0 };
         return {
           key: stateKey,
-          label: "Каскад",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0074", "Каскад"),
           current: cascadeState.stacks,
           required: settings.maxStacks
         };
@@ -1769,8 +1792,8 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
-          label: "Следующий выстрел",
-          value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0154", "Следующий выстрел"),
+          value: state[stateKey]?.pending ? auditLocalize("FALLOUTMAW.AuditRuntime.R0155", "Готов") : auditLocalize("FALLOUTMAW.AuditRuntime.R0156", "Не подготовлен")
         };
       }
       if ([
@@ -1780,8 +1803,8 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
-          label: "Следующий выстрел",
-          value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0154", "Следующий выстрел"),
+          value: state[stateKey]?.pending ? auditLocalize("FALLOUTMAW.AuditRuntime.R0155", "Готов") : auditLocalize("FALLOUTMAW.AuditRuntime.R0156", "Не подготовлен")
         };
       }
       if ([
@@ -1792,15 +1815,15 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       ].includes(entry.fixedKey)) {
         return {
           key: getFixedFunctionStateKey(entry),
-          label: "Следующая атака",
-          value: findLethalAttackPreparationEffect(abilityItem.parent, abilityItem, entry) ? "Готова" : "Не подготовлена"
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0157", "Следующая атака"),
+          value: findLethalAttackPreparationEffect(abilityItem.parent, abilityItem, entry) ? auditLocalize("FALLOUTMAW.AuditRuntime.R0158", "Готова") : auditLocalize("FALLOUTMAW.AuditRuntime.R0159", "Не подготовлена")
         };
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
         const knowledge = getAnatomyStudyFunctionState(abilityItem, entry);
         return {
           key: getFixedFunctionStateKey(entry),
-          label: "Память",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0160", "Память"),
           value: `${getAnatomyStudyMemoryUsage(knowledge)} / ${getAnatomyStudyMemoryCapacity(abilityItem.parent, entry.fixedSettings)}`
         };
       }
@@ -1808,15 +1831,15 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
-          label: "Следующая атака",
-          value: state[stateKey]?.pending ? "Готова" : "Не подготовлена"
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0157", "Следующая атака"),
+          value: state[stateKey]?.pending ? auditLocalize("FALLOUTMAW.AuditRuntime.R0158", "Готова") : auditLocalize("FALLOUTMAW.AuditRuntime.R0159", "Не подготовлена")
         };
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.crowdCrusher) {
         const settings = normalizeCrowdCrusherSettings(entry.fixedSettings);
         return {
           key: getFixedFunctionStateKey(entry),
-          label: "Бойня",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0161", "Бойня"),
           current: Math.min(settings.maximumCharges, Math.max(0, toInteger(state[getFixedFunctionStateKey(entry)]?.charges))),
           required: settings.maximumCharges
         };
@@ -1826,7 +1849,7 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         const chargeState = getCleanStrikeChargeState(state[getFixedFunctionStateKey(entry)], settings);
         return {
           key: getFixedFunctionStateKey(entry),
-          label: "Заряды",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0162", "Заряды"),
           current: chargeState.charges,
           required: chargeState.maximum
         };
@@ -1842,8 +1865,8 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         ), 0);
         return {
           key: getFixedFunctionStateKey(entry),
-          label: "Удержание",
-          value: `${holds.length} целей · ${energy} энергии`
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0163", "Удержание"),
+          value: auditFormat("FALLOUTMAW.AuditRuntime.R0164", { p0: (holds.length), p1: (energy) }, "{p0} целей · {p1} энергии")
         };
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
@@ -1855,7 +1878,7 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         );
         return {
           key: stateKey,
-          label: "Накоплено зарядов",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0165", "Накоплено зарядов"),
           value: `${charges} / ${settings.maxCharges}`
         };
       }
@@ -1876,7 +1899,7 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       const stateKey = getFixedFunctionStateKey(entry);
       return {
         key: stateKey,
-        label: "Урон",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0030", "Урон"),
         current: Math.max(0, Math.min(settings.damageRequired, toInteger(state[stateKey]?.damage))),
         required: settings.damageRequired
       };
@@ -2004,7 +2027,7 @@ export function hasActorTwoHandsActive(actor) {
 export function canSpendActorTwoHandsEnergy(actor, entry = getActorTwoHandsEntry(actor)) {
   const cost = Math.max(0, toInteger(entry?.energyCost ?? 0));
   if (hasEnergy(actor, cost)) return true;
-  ui.notifications.warn(`${entry?.label ?? "С двух рук"}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+  ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (entry?.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0121", "С двух рук")), p1: (getActorAvailableEnergy(actor)), p2: (cost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
   return false;
 }
 
@@ -2013,7 +2036,7 @@ export async function spendActorTwoHandsEnergy(actor, entry = getActorTwoHandsEn
   const cost = Math.max(0, toInteger(entry.energyCost));
   if (!hasEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(entry.abilityItem, entry.abilityFunction);
-    await createAbilityChatMessage(actor, entry.abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    await createAbilityChatMessage(actor, entry.abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0167", { p0: (getActorAvailableEnergy(actor)), p1: (cost) }, "Выключено: недостаточно энергии ({p0} / {p1})."));
     return false;
   }
   return spendEnergy(actor, cost);
@@ -2028,7 +2051,7 @@ export async function useFixedAbilityFunctionItem({
 } = {}) {
   if (!areFixedAbilityFunctionsEnabled()) return false;
   if (isReactionSystemLocked()) {
-    ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0168", "Ожидание реакций: способность временно заблокирована."));
     return false;
   }
   if (!actor?.isOwner || item?.type !== "ability") return false;
@@ -2036,11 +2059,19 @@ export async function useFixedAbilityFunctionItem({
     .find(entry => isFixedAbilityFunctionActive(entry) && (!functionId || entry.id === functionId));
   if (!abilityFunction) return false;
 
+  if (RELEASE_ABILITY_DEFINITIONS[abilityFunction.fixedKey]?.active) {
+    const used = await useReleaseAbility(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return used;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
     const used = await useAllOrNothing(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance) return useLastChanceReset(actor, item, abilityFunction);
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin) {
     const used = await useLuckyCoin(actor, item, abilityFunction);
@@ -2079,7 +2110,7 @@ export async function useFixedAbilityFunctionItem({
     const used = await useReactiveAbility(actor, item, abilityFunction);
     if (used) {
       const settings = normalizeReactiveSettings(abilityFunction.fixedSettings);
-      await createAbilityChatMessage(actor, item, `Эффект активен на ${formatDuration(settings.durationSeconds)}.`);
+      await createAbilityChatMessage(actor, item, auditFormat("FALLOUTMAW.AuditRuntime.R0169", { p0: (formatDuration(settings.durationSeconds)) }, "Эффект активен на {p0}."));
       await application?.render?.({ force: true });
     }
     return true;
@@ -2341,7 +2372,7 @@ export async function useFixedAbilityFunctionItem({
     return true;
   }
 
-  ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
+  ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0170", "Фиксированная функция пока не имеет обработчика применения."));
   return true;
 }
 
@@ -2350,9 +2381,9 @@ async function useSpecialMix(actor, abilityItem, abilityFunction) {
   const settings = normalizeSpecialMixSettings(abilityFunction.fixedSettings);
   const medicines = (actor.items?.contents ?? [])
     .filter(isSpecialMixMedicineEligible)
-    .sort((left, right) => String(left.name).localeCompare(String(right.name), "ru"));
+    .sort((left, right) => String(left.name).localeCompare(String(right.name), globalThis.game?.i18n?.lang || "en"));
   if (medicines.length < 2 || !hasDistinctSpecialMixPair(medicines)) {
-    ui.notifications.warn(`${abilityName}: нужны два разных доступных препарата.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0171", { p0: (abilityName) }, "{p0}: нужны два разных доступных препарата."));
     return false;
   }
 
@@ -2364,16 +2395,16 @@ async function useSpecialMix(actor, abilityItem, abilityFunction) {
     || !isSpecialMixMedicineEligible(secondItem)
     || !areDistinctSpecialMixMedicines(firstItem, secondItem)
   ) {
-    ui.notifications.warn(`${abilityName}: выбранные препараты уже недоступны или совпадают.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0172", { p0: (abilityName) }, "{p0}: выбранные препараты уже недоступны или совпадают."));
     return false;
   }
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!canSpendCombatActionPoints(actor, settings.actionPointCost, { label: "особого намеса" })) return false;
+  if (!canSpendCombatActionPoints(actor, settings.actionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0173", "особого намеса") })) return false;
 
   let inventoryPlan;
   try {
@@ -2384,16 +2415,17 @@ async function useSpecialMix(actor, abilityItem, abilityFunction) {
     return false;
   }
 
-  if (!(await spendEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
   const actionPointTransaction = settings.actionPointCost > 0
     ? await spendCombatActionPointsWithReceipt(actor, settings.actionPointCost, {
       suppressResourceNotification: true,
-      label: "особого намеса"
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0173", "особого намеса")
     })
     : { spent: 0, receipt: null };
   if (isActorInActiveCombat(actor) && actionPointTransaction.spent !== settings.actionPointCost) {
-    await refundEnergy(actor, energyCost);
-    ui.notifications.warn(`${abilityName}: не удалось потратить ${settings.actionPointCost} ОД.`);
+    await refundEnergy(actor, energyTransaction.receipt);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0174", { p0: (abilityName), p1: (settings.actionPointCost) }, "{p0}: не удалось потратить {p1} ОД."));
     return false;
   }
 
@@ -2405,18 +2437,18 @@ async function useSpecialMix(actor, abilityItem, abilityFunction) {
     });
   } catch (error) {
     await Promise.allSettled([
-      refundEnergy(actor, energyCost),
-      refundCombatActionPointReceipt(actor, actionPointTransaction.receipt, { label: "особого намеса" })
+      refundEnergy(actor, energyTransaction.receipt),
+      refundCombatActionPointReceipt(actor, actionPointTransaction.receipt, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0173", "особого намеса") })
     ]);
     console.error(`${SYSTEM_ID} | Failed to create special mix`, error);
-    ui.notifications.error(`${abilityName}: не удалось создать препарат; энергия и ОД возвращены.`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditRuntime.R0175", { p0: (abilityName) }, "{p0}: не удалось создать препарат; энергия и ОД возвращены."));
     return false;
   }
 
   if (actionPointTransaction.spent > 0 && actionPointTransaction.receipt?.resourceKey) {
     await notifyCombatResourcesSpent(actor, {
       [actionPointTransaction.receipt.resourceKey]: actionPointTransaction.spent
-    }, { label: "особого намеса" });
+    }, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0173", "особого намеса") });
   }
 
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -2428,7 +2460,7 @@ async function useSpecialMix(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `Создан «${createdItem?.name ?? inventoryPlan.creates[0].name}»: 1/1 заряд, срок годности ${formatDuration(settings.spoilDurationSeconds)}.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0176", { p0: (createdItem?.name ?? inventoryPlan.creates[0].name), p1: (formatDuration(settings.spoilDurationSeconds)) }, "Создан «{p0}»: 1/1 заряд, срок годности {p1}.")
   );
   return true;
 }
@@ -2454,41 +2486,26 @@ async function promptSpecialMixMedicines(abilityName, medicines, settings) {
           <strong>${escapeHTML(item.name)}</strong>
           <small>${escapeHTML(details.durationLabel)} · ${escapeHTML(details.chargesLabel)}</small>
         </span>
-        ${buildSpecialMixDetailRows(details.rows, "Нет числовых эффектов")}
+        ${buildSpecialMixDetailRows(details.rows, auditLocalize("FALLOUTMAW.AuditRuntime.R0177", "Нет числовых эффектов"))}
       </span>
     </label>
   `;
   }).join("");
   const result = await DialogV2.input({
     modal: true,
-    window: { title: `${abilityName}: смешивание` },
-    content: `
-      <div class="fallout-maw-special-mix-dialog">
-        <header>
-          <p>Выберите ровно два разных препарата. Будет потрачено по одному заряду каждого.</p>
-          <strong data-special-mix-counter>Выбрано: 0 / 2</strong>
-        </header>
-        <div class="fallout-maw-special-mix-workspace">
-          <div class="fallout-maw-special-mix-list">${rows}</div>
-          <section class="fallout-maw-special-mix-preview" data-special-mix-preview>
-            <strong>Итоговый препарат</strong>
-            <span>Выберите два препарата — здесь сразу появятся записываемые в предмет значения.</span>
-          </section>
-        </div>
-        <footer><span>Итог эффектов: сумма +${settings.effectivenessPercentBonus}%</span><span>Длительность: целое среднее +${settings.durationPercentBonus}%</span><span>Срок годности ${escapeHTML(formatDuration(settings.spoilDurationSeconds))}</span></footer>
-      </div>
-    `,
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0178", { p0: (abilityName) }, "{p0}: смешивание") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0179", { p0: (rows), p1: (settings.effectivenessPercentBonus), p2: (settings.durationPercentBonus), p3: (escapeHTML(formatDuration(settings.spoilDurationSeconds))) }, "\n      <div class=\"fallout-maw-special-mix-dialog\">\n        <header>\n          <p>Выберите ровно два разных препарата. Будет потрачено по одному заряду каждого.</p>\n          <strong data-special-mix-counter>Выбрано: 0 / 2</strong>\n        </header>\n        <div class=\"fallout-maw-special-mix-workspace\">\n          <div class=\"fallout-maw-special-mix-list\">{p0}</div>\n          <section class=\"fallout-maw-special-mix-preview\" data-special-mix-preview>\n            <strong>Итоговый препарат</strong>\n            <span>Выберите два препарата — здесь сразу появятся записываемые в предмет значения.</span>\n          </section>\n        </div>\n        <footer><span>Итог эффектов: сумма +{p1}%</span><span>Длительность: целое среднее +{p2}%</span><span>Срок годности {p3}</span></footer>\n      </div>\n    "),
     render: (_event, dialog) => bindSpecialMixSelection(
       dialog.element?.querySelector?.("form") ?? dialog.element,
       { medicineById, settings, labels }
     ),
     ok: {
-      label: "Смешать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0180", "Смешать"),
       icon: "fa-solid fa-flask-vial",
       callback: (_event, button) => {
         const selected = [...button.form.querySelectorAll("input[name='medicineIds']:checked")];
         if (selected.length !== 2) {
-          ui.notifications.warn("Выберите ровно два препарата.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0181", "Выберите ровно два препарата."));
           return "cancel";
         }
         return selected.map(input => String(input.value));
@@ -2519,7 +2536,7 @@ function bindSpecialMixSelection(form, { medicineById, settings, labels }) {
       const name = card?.dataset.specialMixIdentity;
       input.disabled = !input.checked && (selected.length >= 2 || selectedNames.has(name));
     }
-    if (counter) counter.textContent = `Выбрано: ${selected.length} / 2`;
+    if (counter) counter.textContent = auditFormat("FALLOUTMAW.AuditRuntime.R0182", { p0: (selected.length) }, "Выбрано: {p0} / 2");
     if (preview) updateSpecialMixPreview(preview, selected, medicineById, settings, labels);
   };
   for (const input of inputs) input.addEventListener("change", () => sync(input));
@@ -2528,10 +2545,7 @@ function bindSpecialMixSelection(form, { medicineById, settings, labels }) {
 
 function updateSpecialMixPreview(preview, selected, medicineById, settings, labels) {
   if (selected.length !== 2) {
-    preview.innerHTML = `
-      <strong>Итоговый препарат</strong>
-      <span>Выберите два препарата — здесь сразу появятся записываемые в предмет значения.</span>
-    `;
+    preview.innerHTML = auditLocalize("FALLOUTMAW.AuditRuntime.R0183", "\n      <strong>Итоговый препарат</strong>\n      <span>Выберите два препарата — здесь сразу появятся записываемые в предмет значения.</span>\n    ");
     return;
   }
   const first = medicineById.get(String(selected[0].value));
@@ -2541,13 +2555,7 @@ function updateSpecialMixPreview(preview, selected, medicineById, settings, labe
     mergeSpecialMixFirstAid(first.system.functions.firstAid, second.system.functions.firstAid, settings),
     labels
   );
-  preview.innerHTML = `
-    <span class="fallout-maw-special-mix-preview-heading">
-      <strong>Итоговый препарат</strong>
-      <small>${escapeHTML(firstAid.durationLabel)} · ${escapeHTML(firstAid.chargesLabel)}</small>
-    </span>
-    ${buildSpecialMixDetailRows(firstAid.rows, "Нет числовых эффектов")}
-  `;
+  preview.innerHTML = auditFormat("FALLOUTMAW.AuditRuntime.R0184", { p0: (escapeHTML(firstAid.durationLabel)), p1: (escapeHTML(firstAid.chargesLabel)), p2: (buildSpecialMixDetailRows(firstAid.rows, auditLocalize("FALLOUTMAW.AuditRuntime.R0177", "Нет числовых эффектов"))) }, "\n    <span class=\"fallout-maw-special-mix-preview-heading\">\n      <strong>Итоговый препарат</strong>\n      <small>{p0} · {p1}</small>\n    </span>\n    {p2}\n  ");
 }
 
 function buildSpecialMixDetailRows(rows, emptyText) {
@@ -2638,9 +2646,9 @@ function getSpecialMixInventoryContext(actor, projectedItems, parentId) {
 
 function formatSpecialMixInventoryError(error) {
   if (error?.code === "inventory-no-space" || error?.code === "actor-load-limit") {
-    return "в инвентаре недостаточно места или грузоподъёмности для нового препарата.";
+    return auditLocalize("FALLOUTMAW.AuditRuntime.R0185", "в инвентаре недостаточно места или грузоподъёмности для нового препарата.");
   }
-  return "не удалось подготовить смешивание выбранных препаратов.";
+  return auditLocalize("FALLOUTMAW.AuditRuntime.R0186", "не удалось подготовить смешивание выбранных препаратов.");
 }
 
 async function useMaintainedTargetAbility(actor, abilityItem, abilityFunction) {
@@ -2672,13 +2680,13 @@ async function addMaintainedTargetHold(actor, abilityItem, abilityFunction, targ
   });
   if (!applied) {
     if (targetActor?.uuid && targetActor.uuid === actor?.uuid && qualityServiceFunctionIsSelfPassive(abilityFunction)) {
-      ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: владелец уже получает бонус пассивно — удержание на себе не требуется.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0187", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: владелец уже получает бонус пассивно — удержание на себе не требуется."));
       return false;
     }
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не удалось включить удержание.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0188", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: не удалось включить удержание."));
     return false;
   }
-  await createAbilityChatMessage(actor, abilityItem, `${targetActor?.name ?? "Цель"}: бонус передан.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0189", { p0: (targetActor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель")) }, "{p0}: бонус передан."));
   return true;
 }
 
@@ -2692,7 +2700,7 @@ async function releaseMaintainedTargetHold(actor, abilityItem, abilityFunction, 
     holdEffectId: String(effectId ?? ""),
     senderUserId: game.user?.id ?? ""
   });
-  if (!released) ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не удалось отключить удержание.`);
+  if (!released) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0191", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: не удалось отключить удержание."));
   return released;
 }
 
@@ -2700,7 +2708,7 @@ async function requestMaintainedTargetOperation(payload = {}) {
   if (game.user?.isActiveGM) return processMaintainedTargetOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0192", "Нет активного GM для выполнения способности."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -2709,7 +2717,7 @@ async function requestMaintainedTargetOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
   });
   game.socket.emit(FIXED_ABILITY_SOCKET, {
     scope: FIXED_ABILITY_SOCKET_SCOPE,
@@ -3100,11 +3108,11 @@ async function completeAnatomyStudyResearch(actor, abilityItem, abilityFunction,
   const targetRaceId = getActorRaceId(targetActor);
   if (!actor?.isOwner || abilityItem?.parent?.uuid !== actor.uuid) return false;
   if (!isActorDeadForAnatomyStudy(targetActor)) {
-    ui.notifications.warn(`${abilityName}: выбранная цель больше не мертва.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0193", { p0: (abilityName) }, "{p0}: выбранная цель больше не мертва."));
     return false;
   }
   if (!targetRaceId || targetRaceId !== String(raceId ?? "").trim()) {
-    ui.notifications.warn(`${abilityName}: раса выбранной цели изменилась или не указана.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0194", { p0: (abilityName) }, "{p0}: раса выбранной цели изменилась или не указана."));
     return false;
   }
 
@@ -3123,10 +3131,10 @@ async function completeAnatomyStudyResearch(actor, abilityItem, abilityFunction,
   const settings = normalizeAnatomyStudySettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!canSpendCombatActionPoints(actor, settings.actionPointCost, { label: "изучения анатомии" })) return false;
+  if (!canSpendCombatActionPoints(actor, settings.actionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0195", "изучения анатомии") })) return false;
   if (!(await spendEnergy(actor, energyCost))) return false;
   if (settings.actionPointCost > 0) await spendCombatActionPoints(actor, settings.actionPointCost);
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -3142,7 +3150,7 @@ async function completeAnatomyStudyResearch(actor, abilityItem, abilityFunction,
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${raceName}: изучено «${bonus?.label ?? bonusKey}» (${bonus?.valueLabel ?? ""}).`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0196", { p0: (raceName), p1: (bonus?.label ?? bonusKey), p2: (bonus?.valueLabel ?? "") }, "{p0}: изучено «{p1}» ({p2}).")
   );
   return true;
 }
@@ -3173,11 +3181,11 @@ async function useHeightenedConcentration(actor, abilityItem, abilityFunction) {
   const settings = normalizeHeightenedConcentrationSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasActiveHeightenedConcentrationEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0197", { p0: (abilityName) }, "{p0}: эффект уже активен."));
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -3187,21 +3195,21 @@ async function useHeightenedConcentration(actor, abilityItem, abilityFunction) {
     durationSeconds: settings.overloadDurationSeconds
   });
   await applyHeightenedConcentrationEffect(actor, abilityItem, abilityFunction, settings);
-  await createAbilityChatMessage(actor, abilityItem, `Следующие проверки: ${settings.checkCount}.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0198", { p0: (settings.checkCount) }, "Следующие проверки: {p0}."));
   return true;
 }
 
 async function useCommandBasics(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const settings = normalizeCommandBasicsSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
@@ -3223,7 +3231,7 @@ async function useCommandBasics(actor, abilityItem, abilityFunction) {
 
   if (command === "duck") {
     if (!game.user?.isGM && !getResponsibleGM()) {
-      ui.notifications.warn(`${abilityName}: нет активного GM для выполнения команды.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0200", { p0: (abilityName) }, "{p0}: нет активного GM для выполнения команды."));
       return false;
     }
     if (!(await spendEnergy(actor, energyCost))) return false;
@@ -3247,7 +3255,7 @@ async function useCommandBasics(actor, abilityItem, abilityFunction) {
       senderUserId: game.user?.id ?? ""
     });
     if (!applied) return false;
-    await createAbilityChatMessage(actor, abilityItem, `Ложись: ${selection.length} целей, +${dodgeBonus} к уклонению на ${formatDuration(settings.dodgeDurationSeconds)}.`);
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0201", { p0: (selection.length), p1: (dodgeBonus), p2: (formatDuration(settings.dodgeDurationSeconds)) }, "Ложись: {p0} целей, +{p1} к уклонению на {p2}."));
     return true;
   }
 
@@ -3256,7 +3264,7 @@ async function useCommandBasics(actor, abilityItem, abilityFunction) {
     .filter(Boolean);
   if (!attacks.length) return false;
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для выполнения команды.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0200", { p0: (abilityName) }, "{p0}: нет активного GM для выполнения команды."));
     return false;
   }
   const controller = startCommandedWeaponAttacks({
@@ -3269,18 +3277,18 @@ async function useCommandBasics(actor, abilityItem, abilityFunction) {
         energyCost: settings.overloadEnergyCost,
         durationSeconds: settings.overloadDurationSeconds
       });
-      await createAbilityChatMessage(actor, abilityItem, `${getCommandBasicsCommandLabel(command)}: ${attacks.length} исполнителей.`);
+      await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0202", { p0: (getCommandBasicsCommandLabel(command)), p1: (attacks.length) }, "{p0}: {p1} исполнителей."));
       return true;
     }
   });
   if (!controller) {
-    ui.notifications.warn(`${abilityName}: не удалось начать командную атаку.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0203", { p0: (abilityName) }, "{p0}: не удалось начать командную атаку."));
     return false;
   }
   return true;
 }
 
-async function requestCommandBasicsChoice({ abilityName = "Основы командования", commander = null, limit = 1 } = {}) {
+async function requestCommandBasicsChoice({ abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0122", "Основы командования"), commander = null, limit = 1 } = {}) {
   const rows = ["shoot", "strike", "duck"].map(command => {
     const available = collectCommandBasicsTargetRows(commander, command).filter(row => row.selectable).length;
     return {
@@ -3308,7 +3316,7 @@ async function requestCommandBasicsChoice({ abilityName = "Основы кома
     window: { title: abilityName },
     content,
     ok: {
-      label: "Выбрать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0204", "Выбрать"),
       icon: "fa-solid fa-check",
       callback: (_event, button) => String(button.form?.querySelector?.("input[name='command']:checked")?.value ?? "")
     },
@@ -3323,15 +3331,15 @@ async function requestCommandBasicsChoice({ abilityName = "Основы кома
   return ["shoot", "strike", "duck"].includes(result) ? result : "";
 }
 
-function selectCommandBasicsTargets({ commander = null, command = "", limit = 1, abilityName = "Основы командования" } = {}) {
+function selectCommandBasicsTargets({ commander = null, command = "", limit = 1, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0122", "Основы командования") } = {}) {
   const collectRows = () => collectCommandBasicsTargetRows(commander, command);
   const sourceToken = getActorSceneToken(commander);
   return requestCustomTokenSelection({
     rows: collectRows(),
     limit,
     title: abilityName,
-    noneWarning: `${abilityName}: нет подходящих исполнителей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0205", { p0: (abilityName) }, "{p0}: нет подходящих исполнителей."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0206", { p0: (abilityName), p1: (limit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет."),
     sourceToken,
     refreshRows: collectRows
   });
@@ -3349,7 +3357,7 @@ export async function useAbilityFunctionItem({
   onInteractionCancelled = null
 } = {}) {
   if (isReactionSystemLocked()) {
-    ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0168", "Ожидание реакций: способность временно заблокирована."));
     return false;
   }
   if (!actor?.isOwner || item?.type !== "ability") return false;
@@ -3451,7 +3459,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     });
   }
   if (activeApplicationFunctionHasRuntimeAura(abilityFunction) && durationSeconds <= 0) {
-    ui.notifications.warn("Для ауры активного применения задайте длительность больше 0 секунд.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0207", "Для ауры активного применения задайте длительность больше 0 секунд."));
     await runTerminalSystemEventWorkflow({
       scope,
       resolvedEventKey: "fallout-maw.ability.use.resolved",
@@ -3921,7 +3929,7 @@ async function executeActiveApplicationUse(scope, {
     requiresRemoteAuthority
     && !remoteAuthority
   ) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: нет активного GM для применения эффекта к чужим актёрам.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0208", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: нет активного GM для применения эффекта к чужим актёрам."));
     for (const entry of allowed) {
       await emitActiveApplicationResolved(scope, entry, {
         actor,
@@ -4004,7 +4012,7 @@ async function executeActiveApplicationUse(scope, {
           });
           if (!effectsApplied) {
             commitFailureReason = "authorityOperationFailed";
-            ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: операция GM не подтверждена; при задержке ответа не запускайте её повторно.`);
+            ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0209", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: операция GM не подтверждена; при задержке ответа не запускайте её повторно."));
             return false;
           }
           return true;
@@ -4139,7 +4147,7 @@ async function executeActiveApplicationUse(scope, {
         operationId: `${scope.rootId}:${paymentContext.occurrenceId}`
       });
     }
-    await createAbilityChatMessage(actor, abilityItem, "Применено.");
+    await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0210", "Применено."));
     for (const entry of allowed) {
       await emitActiveApplicationResolved(scope, entry, {
         actor,
@@ -4415,7 +4423,7 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
         return true;
       });
     if (!targets.length) {
-      ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0211", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: нет подходящих целей."));
     }
     return targets;
   }
@@ -4424,8 +4432,8 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     rows,
     limit: targetLimit,
     title: getAbilityDisplayName(abilityItem),
-    noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
-    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0211", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: нет подходящих целей."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0206", { p0: (getAbilityDisplayName(abilityItem)), p1: (targetLimit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет."),
     sourceToken: sourcePlaceable,
     refreshRows: collectRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? row?.actorUuid ?? "")
@@ -4480,10 +4488,10 @@ function collectActiveApplicationTargetRows(sourceActor, abilityFunction, settin
         && lineOfSightAllowed
         && executorAvailability.available;
       let reason = "";
-      if (!selfAllowed) reason = "активатор исключён";
-      else if (!relationAllowed) reason = "тип цели не подходит";
-      else if (!distanceAllowed) reason = sourcePlaceable ? "вне радиуса" : "нет токена активатора";
-      else if (!lineOfSightAllowed) reason = "цель закрыта стеной";
+      if (!selfAllowed) reason = auditLocalize("FALLOUTMAW.AuditRuntime.R0212", "активатор исключён");
+      else if (!relationAllowed) reason = auditLocalize("FALLOUTMAW.AuditRuntime.R0213", "тип цели не подходит");
+      else if (!distanceAllowed) reason = sourcePlaceable ? auditLocalize("FALLOUTMAW.AuditRuntime.R0214", "вне радиуса") : auditLocalize("FALLOUTMAW.AuditRuntime.R0215", "нет токена активатора");
+      else if (!lineOfSightAllowed) reason = auditLocalize("FALLOUTMAW.AuditRuntime.R0216", "цель закрыта стеной");
       else if (!executorAvailability.available) reason = executorAvailability.reason;
       return {
         token,
@@ -4679,7 +4687,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
       const effectData = {
         type: "base",
         name: getAbilityDisplayName(abilityItem),
-        img: abilityItem.img || "icons/svg/aura.svg",
+        img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
         origin: abilityItem.uuid,
         transfer: false,
         disabled: false,
@@ -4894,7 +4902,7 @@ function notifyActiveApplicationCostPlanFailure(result = {}, abilityItem = null)
       `${String(cost?.label ?? cost?.resourceKey ?? "").trim()}: ${cost.amount} > ${cost.available}`
     )).join("; ");
     ui?.notifications?.warn?.(
-      `${getAbilityDisplayName(abilityItem)}: ${result.actor.name ?? result.actor.uuid} — недостаточно ресурсов. ${details}`
+      auditFormat("FALLOUTMAW.AuditRuntime.R0217", { p0: (getAbilityDisplayName(abilityItem)), p1: (result.actor.name ?? result.actor.uuid), p2: (details) }, "{p0}: {p1} — недостаточно ресурсов. {p2}")
     );
   } else {
     notifyAbilityTriggerCostFailure(result);
@@ -4956,7 +4964,7 @@ async function rollbackActiveApplicationPayment({
       if (restored < Math.max(0, toInteger(combatActionPointReceipt.amount))) complete = false;
     } catch (error) {
       complete = false;
-      console.error("Fallout MaW | Failed to refund active application ОД/ОР", error);
+      console.error("Fallout MaW | Failed to refund active application AP/RP", error);
     }
   }
   const receiptCosts = payment?.execution?.spendReceipt?.costs;
@@ -5026,7 +5034,7 @@ async function requestActiveApplicationEffectOperation(payload = {}) {
     .map(value => String(value ?? "").trim())
     .join(":");
   if (activeApplicationAuthorityRequestsByUse.has(useKey)) {
-    ui.notifications.warn("Предыдущее применение этой способности ещё ожидает подтверждения GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0219", "Предыдущее применение этой способности ещё ожидает подтверждения GM."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -5041,7 +5049,7 @@ async function requestActiveApplicationEffectOperation(payload = {}) {
     return Boolean(applied);
   } catch (error) {
     tracking.state = "uncertain";
-    ui.notifications.warn("Ответ GM на применение способности задерживается. Не повторяйте применение до снятия ожидания.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0220", "Ответ GM на применение способности задерживается. Не повторяйте применение до снятия ожидания."));
     tracking.cleanupTimeout = window.setTimeout(
       () => clearActiveApplicationAuthorityRequest(requestId),
       ACTIVE_APPLICATION_AUTHORITY_CACHE_MS
@@ -5471,7 +5479,7 @@ function createCommandBasicsTargetRow(commander, token, command = "") {
     attack: null
   };
   if (isActorUnableToAct(actor)) {
-    row.reason = "актёр не может действовать.";
+    row.reason = auditLocalize("FALLOUTMAW.AuditRuntime.R0221", "актёр не может действовать.");
     return row;
   }
   if (command === "duck") {
@@ -5482,18 +5490,18 @@ function createCommandBasicsTargetRow(commander, token, command = "") {
   const actionKey = command === "strike" ? "meleeAttack" : "snapshot";
   const candidate = getCommandBasicsWeaponCandidate(actor, actionKey);
   if (!candidate) {
-    row.reason = actionKey === "snapshot" ? "нет неприцельного выстрела." : "нет неприцельной атаки.";
+    row.reason = actionKey === "snapshot" ? auditLocalize("FALLOUTMAW.AuditRuntime.R0222", "нет неприцельного выстрела.") : auditLocalize("FALLOUTMAW.AuditRuntime.R0223", "нет неприцельной атаки.");
     return row;
   }
   const block = getWeaponActionBlockState(actor, actionKey);
   if (block.blocked) {
-    row.reason = `действие заблокировано${block.effect?.name ? ` (${block.effect.name})` : ""}.`;
+    row.reason = auditFormat("FALLOUTMAW.AuditRuntime.R0224", { p0: (block.effect?.name ? ` (${block.effect.name})` : "") }, "действие заблокировано{p0}.");
     return row;
   }
   const attackCount = getActionAttackCount(candidate.weapon, actionKey, candidate.weaponFunctionId);
   const missing = getMissingWeaponResourceCost(candidate.weapon, attackCount, candidate.weaponFunctionId);
   if (missing) {
-    row.reason = `не хватает ${missing.label} (${missing.current} / ${missing.required}).`;
+    row.reason = auditFormat("FALLOUTMAW.AuditRuntime.R0225", { p0: (missing.label), p1: (missing.current), p2: (missing.required) }, "не хватает {p0} ({p1} / {p2}).");
     return row;
   }
   row.selectable = true;
@@ -5558,31 +5566,31 @@ function isCommandBasicsAlly(left, right) {
 }
 
 function getCommandBasicsCommandLabel(command = "") {
-  if (command === "shoot") return "Цельсь, пли";
-  if (command === "strike") return "Коли";
-  if (command === "duck") return "Ложись";
-  return "Команда";
+  if (command === "shoot") return auditLocalize("FALLOUTMAW.AuditRuntime.R0226", "Цельсь, пли");
+  if (command === "strike") return auditLocalize("FALLOUTMAW.AuditRuntime.R0227", "Коли");
+  if (command === "duck") return auditLocalize("FALLOUTMAW.AuditRuntime.R0228", "Ложись");
+  return auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда");
 }
 
 async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInteractionCancelled = null } = {}) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const settings = normalizeKnockOffBalanceSettings(abilityFunction.fixedSettings);
   if (!getSkillSettings().some(skill => skill.key === settings.targetSkillKey)) {
-    ui.notifications.warn(`${abilityName}: навык проверки цели не настроен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0230", { p0: (abilityName) }, "{p0}: навык проверки цели не настроен."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для применения дебафа.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0231", { p0: (abilityName) }, "{p0}: нет активного GM для применения дебафа."));
     return false;
   }
 
@@ -5632,12 +5640,12 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInter
       }
     })),
     requester: "knockOffBalance",
-    title: `${abilityName}: проверка`
+    title: auditFormat("FALLOUTMAW.AuditRuntime.R0232", { p0: (abilityName) }, "{p0}: проверка")
   });
   const outcomes = checks?.outcomes ?? [];
   const failed = outcomes.filter(outcome => !["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? "")));
   if (!failed.length) {
-    await createAbilityChatMessage(actor, abilityItem, "Все цели устояли.");
+    await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0233", "Все цели устояли."));
     return true;
   }
 
@@ -5652,26 +5660,26 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInter
     senderUserId: game.user?.id ?? ""
   });
   if (!applied) {
-    ui.notifications.warn(`${abilityName}: не удалось применить дебаф.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0234", { p0: (abilityName) }, "{p0}: не удалось применить дебаф."));
     return false;
   }
 
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${failed.length} целей выбито из колеи: ${settings.skillDisadvantageCount} помехи к навыкам (${selectedSkills.map(skill => skill.label).join(", ")}) на ${formatDuration(settings.debuffDurationSeconds)}.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0235", { p0: (failed.length), p1: (settings.skillDisadvantageCount), p2: (selectedSkills.map(skill => skill.label).join(", ")), p3: (formatDuration(settings.debuffDurationSeconds)) }, "{p0} целей выбито из колеи: {p1} помехи к навыкам ({p2}) на {p3}.")
   );
   return true;
 }
 
-function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = "Выбить из колеи" } = {}) {
+function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0123", "Выбить из колеи") } = {}) {
   const collectRows = () => collectKnockOffBalanceTargetRows(actor);
   return requestCustomTokenSelection({
     rows: collectRows(),
     limit,
     title: abilityName,
-    noneWarning: `${abilityName}: нет подходящих целей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0211", { p0: (abilityName) }, "{p0}: нет подходящих целей."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0236", { p0: (abilityName), p1: (limit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, Esc/ПКМ отменяет."),
     sourceToken: getActorSceneToken(actor),
     refreshRows: collectRows
   });
@@ -5693,7 +5701,7 @@ function createKnockOffBalanceTargetRow(token) {
     reason: ""
   };
   if (getActorIntelligence(actor) <= 0) {
-    row.reason = "интеллект 0 или ниже.";
+    row.reason = auditLocalize("FALLOUTMAW.AuditRuntime.R0237", "интеллект 0 или ниже.");
     return row;
   }
   row.selectable = true;
@@ -5704,7 +5712,7 @@ function getActorIntelligence(actor) {
   return toInteger(actor?.system?.characteristics?.intelligence);
 }
 
-async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выбить из колеи" } = {}) {
+async function selectKnockOffBalanceSkills({ limit = 1, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0123", "Выбить из колеи") } = {}) {
   const skills = getSkillSettings()
     .map(skill => ({
       key: String(skill?.key ?? "").trim(),
@@ -5712,7 +5720,7 @@ async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выби�
     }))
     .filter(skill => skill.key);
   if (!skills.length) {
-    ui.notifications.warn(`${abilityName}: навыки не настроены.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0238", { p0: (abilityName) }, "{p0}: навыки не настроены."));
     return null;
   }
 
@@ -5723,13 +5731,8 @@ async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выби�
     </label>
   `).join("");
   const formData = await DialogV2.input({
-    window: { title: `${abilityName}: выбор навыков` },
-    content: `
-      <div class="fallout-maw-knock-off-balance-skill-dialog" data-knock-off-balance-skill-limit="${Math.max(1, toInteger(limit))}">
-        <p class="hint">Выберите до ${Math.max(1, toInteger(limit))} навыков. Цели при провале получат двойную помеху к выбранным навыкам.</p>
-        <div class="fallout-maw-knock-off-balance-skill-grid">${options}</div>
-      </div>
-    `,
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0239", { p0: (abilityName) }, "{p0}: выбор навыков") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0240", { p0: (Math.max(1, toInteger(limit))), p1: (Math.max(1, toInteger(limit))), p2: (options) }, "\n      <div class=\"fallout-maw-knock-off-balance-skill-dialog\" data-knock-off-balance-skill-limit=\"{p0}\">\n        <p class=\"hint\">Выберите до {p1} навыков. Цели при провале получат двойную помеху к выбранным навыкам.</p>\n        <div class=\"fallout-maw-knock-off-balance-skill-grid\">{p2}</div>\n      </div>\n    "),
     render: (_event, dialog) => {
       const root = dialog?.element?.querySelector?.(".fallout-maw-knock-off-balance-skill-dialog");
       root?.addEventListener?.("change", event => {
@@ -5739,7 +5742,7 @@ async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выби�
       syncKnockOffBalanceSkillChoices(dialog);
     },
     ok: {
-      label: "Выбрать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0204", "Выбрать"),
       icon: "fa-solid fa-check",
       callback: (_event, button) => ({
         skillKeys: Array.from(button.form?.querySelectorAll?.('input[name="skillKeys"]:checked') ?? [])
@@ -5753,7 +5756,7 @@ async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выби�
   });
   const selected = new Set((formData?.skillKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
   const result = skills.filter(skill => selected.has(skill.key)).slice(0, Math.max(1, toInteger(limit)));
-  if (!result.length) ui.notifications.warn(`${abilityName}: не выбраны навыки.`);
+  if (!result.length) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0241", { p0: (abilityName) }, "{p0}: не выбраны навыки."));
   return result.length ? result : null;
 }
 
@@ -5780,7 +5783,7 @@ async function requestKnockOffBalanceDebuffOperation(payload = {}) {
   if (game.user?.isGM) return processKnockOffBalanceDebuffOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0192", "Нет активного GM для выполнения способности."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -5789,7 +5792,7 @@ async function requestKnockOffBalanceDebuffOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DISARM_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
     game.socket.emit(FIXED_ABILITY_SOCKET, {
       scope: FIXED_ABILITY_SOCKET_SCOPE,
       action: "performKnockOffBalanceDebuff",
@@ -5882,27 +5885,27 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
 async function useLook(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const settings = normalizeLookSettings(abilityFunction.fixedSettings);
   if (!getSkillSettings().some(skill => skill.key === settings.targetSkillKey)) {
-    ui.notifications.warn(`${abilityName}: навык проверки цели не настроен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0230", { p0: (abilityName) }, "{p0}: навык проверки цели не настроен."));
     return false;
   }
   const sourceToken = getActorSceneToken(actor);
   if (!sourceToken) {
-    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0242", { p0: (abilityName) }, "{p0}: токен персонажа не найден на сцене."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для списания ресурсов цели.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0243", { p0: (abilityName) }, "{p0}: нет активного GM для списания ресурсов цели."));
     return false;
   }
 
@@ -5910,11 +5913,11 @@ async function useLook(actor, abilityItem, abilityFunction) {
   const targetToken = selection?.[0]?.token ?? null;
   if (!targetToken?.actor) return false;
   if (!targetToken.actor.system?.skills?.[settings.targetSkillKey]) {
-    ui.notifications.warn(`${abilityName}: у цели нет навыка проверки.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0244", { p0: (abilityName) }, "{p0}: у цели нет навыка проверки."));
     return false;
   }
   if (!isActorInActiveCombat(targetToken.actor)) {
-    ui.notifications.warn(`${abilityName}: цель не участвует в активном бою.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0245", { p0: (abilityName) }, "{p0}: цель не участвует в активном бою."));
     return false;
   }
 
@@ -5941,15 +5944,15 @@ async function useLook(actor, abilityItem, abilityFunction) {
       targetActor: actor
     },
     requester: "look",
-    messageData: { title: `${abilityName}: проверка` }
+    messageData: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0232", { p0: (abilityName) }, "{p0}: проверка") }
   });
   if (!outcome) {
-    ui.notifications.warn(`${abilityName}: проверка цели не выполнена.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0246", { p0: (abilityName) }, "{p0}: проверка цели не выполнена."));
     return false;
   }
   const resultKey = String(outcome?.result?.key ?? "");
   if (["success", "criticalSuccess"].includes(resultKey)) {
-    await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} устоял.`);
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0247", { p0: (targetToken.actor.name) }, "{p0} устоял."));
     return true;
   }
 
@@ -5966,51 +5969,51 @@ async function useLook(actor, abilityItem, abilityFunction) {
     senderUserId: game.user?.id ?? ""
   });
   if (!applied) {
-    ui.notifications.warn(`${abilityName}: не удалось списать ресурсы цели.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0248", { p0: (abilityName) }, "{p0}: не удалось списать ресурсы цели."));
     return false;
   }
 
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${targetToken.actor.name} теряет до ${resourceLoss} ОД и до ${resourceLoss} ОП.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0249", { p0: (targetToken.actor.name), p1: (resourceLoss), p2: (resourceLoss) }, "{p0} теряет до {p1} ОД и до {p2} ОП.")
   );
   return true;
 }
 
-function selectLookTarget({ actor = null, sourceToken = null, abilityName = "Смотри!" } = {}) {
+function selectLookTarget({ actor = null, sourceToken = null, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0124", "Смотри!") } = {}) {
   return requestCustomActorTokenSelection({
     sourceActor: actor,
     sourceToken,
     includeSelf: false,
     title: abilityName,
-    noneWarning: `${abilityName}: нет видимых целей.`,
-    instructions: `${abilityName}: выберите одну цель в пределах видимости. ЛКМ сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.`
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0250", { p0: (abilityName) }, "{p0}: нет видимых целей."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0251", { p0: (abilityName) }, "{p0}: выберите одну цель в пределах видимости. ЛКМ сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.")
   }).then(selection => selection ? [selection] : []);
 }
 
 async function useShadow(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const sourceToken = getActorSceneToken(actor);
   if (!sourceToken) {
-    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0242", { p0: (abilityName) }, "{p0}: токен персонажа не найден на сцене."));
     return false;
   }
 
   const settings = normalizeShadowSettings(abilityFunction.fixedSettings);
   if (findActiveShadowEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0197", { p0: (abilityName) }, "{p0}: эффект уже активен."));
     return false;
   }
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
@@ -6019,10 +6022,10 @@ async function useShadow(actor, abilityItem, abilityFunction) {
     sourceToken,
     includeSelf: false,
     title: abilityName,
-    noneWarning: `${abilityName}: нет видимых врагов или нейтральных целей.`,
-    instructions: `${abilityName}: выберите врага или нейтральную цель в пределах видимости.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0252", { p0: (abilityName) }, "{p0}: нет видимых врагов или нейтральных целей."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0253", { p0: (abilityName) }, "{p0}: выберите врага или нейтральную цель в пределах видимости."),
     getReason: ({ actor: targetActor }) => (
-      isShadowTargetAllowed(actor, targetActor) ? "" : "Союзники не могут быть целью."
+      isShadowTargetAllowed(actor, targetActor) ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0254", "Союзники не могут быть целью.")
     )
   });
   const targetToken = selection?.token ?? null;
@@ -6040,7 +6043,7 @@ async function useShadow(actor, abilityItem, abilityFunction) {
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: abilityName,
-    img: abilityItem.img || "icons/svg/mystery-man.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -6071,7 +6074,7 @@ async function useShadow(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `Цель: ${targetActor.name}. На ${formatDuration(settings.durationSeconds)}: +${settings.stealthBonus} к проверкам Скрытности против неё. Пока вы видите цель, её траты ОД дают вам столько же ОР.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0255", { p0: (targetActor.name), p1: (formatDuration(settings.durationSeconds)), p2: (settings.stealthBonus) }, "Цель: {p0}. На {p1}: +{p2} к проверкам Скрытности против неё. Пока вы видите цель, её траты ОД дают вам столько же ОР.")
   );
   return true;
 }
@@ -6084,17 +6087,17 @@ async function useSandman(actor, abilityItem, abilityFunction) {
   const currentState = state[stateKey] ?? {};
   const charges = Math.min(settings.maxCharges, Math.max(0, toInteger(currentState.charges)));
   if (currentState.pending) {
-    ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0256", { p0: (abilityName) }, "{p0}: следующая атака уже подготовлена."));
     return false;
   }
   if (charges <= 0) {
-    ui.notifications.warn(`${abilityName}: нет накопленных зарядов.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0257", { p0: (abilityName) }, "{p0}: нет накопленных зарядов."));
     return false;
   }
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -6110,7 +6113,7 @@ async function useSandman(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `Потрачено зарядов: ${charges}. Следующая атака из скрытности получит +${settings.damagePercentBonus}% к урону и не вызовет обнаружение.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0258", { p0: (charges), p1: (settings.damagePercentBonus) }, "Потрачено зарядов: {p0}. Следующая атака из скрытности получит +{p1}% к урону и не вызовет обнаружение.")
   );
   return true;
 }
@@ -6118,28 +6121,29 @@ async function useSandman(actor, abilityItem, abilityFunction) {
 async function useNightmare(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const sourceToken = getActorSceneToken(actor);
   const sourceTokenDocument = sourceToken?.document ?? sourceToken;
   if (!sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
-    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0242", { p0: (abilityName) }, "{p0}: токен персонажа не найден на сцене."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для создания области.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0259", { p0: (abilityName) }, "{p0}: нет активного GM для создания области."));
     return false;
   }
 
   const settings = normalizeNightmareSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!(await spendEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
 
   const created = await requestNightmareRegionOperation({
     sourceActorUuid: actor.uuid,
@@ -6150,8 +6154,8 @@ async function useNightmare(actor, abilityItem, abilityFunction) {
     senderUserId: game.user?.id ?? ""
   });
   if (!created) {
-    await refundEnergy(actor, energyCost);
-    ui.notifications.warn(`${abilityName}: не удалось создать область тьмы.`);
+    await refundEnergy(actor, energyTransaction.receipt);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0260", { p0: (abilityName) }, "{p0}: не удалось создать область тьмы."));
     return false;
   }
 
@@ -6166,28 +6170,29 @@ async function useNightmare(actor, abilityItem, abilityFunction) {
 async function usePhantom(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const sourceToken = getActorSceneToken(actor);
   const sourceTokenDocument = sourceToken?.document ?? sourceToken;
   if (!sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
-    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0242", { p0: (abilityName) }, "{p0}: токен персонажа не найден на сцене."));
     return false;
   }
   if (!game.user?.isActiveGM && !game.users?.activeGM) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для создания фантома.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0261", { p0: (abilityName) }, "{p0}: нет активного GM для создания фантома."));
     return false;
   }
 
   const settings = normalizePhantomSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!(await spendEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
 
   const created = await requestPhantomOperation({
     sourceActorUuid: actor.uuid,
@@ -6197,8 +6202,8 @@ async function usePhantom(actor, abilityItem, abilityFunction) {
     senderUserId: game.user?.id ?? ""
   });
   if (!created) {
-    await refundEnergy(actor, energyCost);
-    ui.notifications.warn(`${abilityName}: не удалось создать фантом.`);
+    await refundEnergy(actor, energyTransaction.receipt);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0262", { p0: (abilityName) }, "{p0}: не удалось создать фантом."));
     return false;
   }
 
@@ -6213,14 +6218,14 @@ async function usePhantom(actor, abilityItem, abilityFunction) {
 async function useDanceOfThousandShadows(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const sourceToken = getActorSceneToken(actor);
   const sourceTokenDocument = sourceToken?.document ?? sourceToken;
   if (!sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
-    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0242", { p0: (abilityName) }, "{p0}: токен персонажа не найден на сцене."));
     return false;
   }
 
@@ -6242,17 +6247,18 @@ async function useDanceOfThousandShadows(actor, abilityItem, abilityFunction) {
     preferredUser: game.user
   });
   if (!game.user?.isGM && !authority) {
-    ui.notifications.warn(`${abilityName}: нет GM на текущей сцене для создания фантомов.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0263", { p0: (abilityName) }, "{p0}: нет GM на текущей сцене для создания фантомов."));
     return false;
   }
 
   const settings = normalizeDanceOfThousandShadowsSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!(await spendEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
 
   const created = await requestDanceOfThousandShadowsActivation({
     sourceActorUuid: actor.uuid,
@@ -6262,8 +6268,8 @@ async function useDanceOfThousandShadows(actor, abilityItem, abilityFunction) {
     senderUserId: game.user?.id ?? ""
   }, authority);
   if (!created) {
-    await refundEnergy(actor, energyCost);
-    ui.notifications.warn(`${abilityName}: не удалось создать фантомов.`);
+    await refundEnergy(actor, energyTransaction.receipt);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0264", { p0: (abilityName) }, "{p0}: не удалось создать фантомов."));
     return false;
   }
 
@@ -6300,7 +6306,7 @@ async function useDanceOfThousandShadowsSwap({
     preferredUser: game.user
   });
   if (!game.user?.isGM && !authority) {
-    ui.notifications.warn(`${abilityName}: нет GM на текущей сцене для обмена.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0265", { p0: (abilityName) }, "{p0}: нет GM на текущей сцене для обмена."));
     return false;
   }
   await waitForCombatResourceSpending(actor);
@@ -6314,7 +6320,7 @@ async function useDanceOfThousandShadowsSwap({
     senderUserId: game.user?.id ?? ""
   }, authority);
   if (!swapped) {
-    ui.notifications.warn(`${abilityName}: обмен не выполнен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0266", { p0: (abilityName) }, "{p0}: обмен не выполнен."));
     return false;
   }
   return true;
@@ -6334,19 +6340,19 @@ async function requestDancePhantomSelection({ sourceToken, effectData, abilityNa
         actorUuid: token.actor?.uuid ?? "",
         displayed: visible,
         selectable: visible,
-        reason: visible ? "" : "Фантом не виден персонажу."
+        reason: visible ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0267", "Фантом не виден персонажу.")
       };
     });
   const selected = await requestCustomTokenSelection({
     rows: buildRows(),
     limit: 1,
     title: abilityName,
-    noneWarning: `${abilityName}: нет доступных фантомов.`,
-    instructions: `${abilityName}: выберите фантом для обмена местами. ПКМ или Esc отменяет.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0268", { p0: (abilityName) }, "{p0}: нет доступных фантомов."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0269", { p0: (abilityName) }, "{p0}: выберите фантом для обмена местами. ПКМ или Esc отменяет."),
     sourceToken,
     refreshRows: buildRows,
     getRowId: row => String(row?.token?.document?.uuid ?? ""),
-    getRowLabel: row => String(row?.token?.name ?? "Фантом")
+    getRowLabel: row => String(row?.token?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0145", "Фантом"))
   });
   return selected.at(0) ?? null;
 }
@@ -6356,62 +6362,23 @@ function canSpendMovementThenActionPoints(actor, amount = 0, label = "") {
   const cost = Math.max(0, toInteger(amount));
   const state = getCombatMovementResourceState(actor);
   if (state?.action?.key !== ACTION_RESOURCE_KEY) {
-    ui.notifications.warn(`${label}: обмен за ОП/ОД доступен только в ход персонажа.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0270", { p0: (label) }, "{p0}: обмен за ОП/ОД доступен только в ход персонажа."));
     return false;
   }
   if (!state || state.total >= cost) return true;
-  ui.notifications.warn(`${label}: не хватает ОП/ОД (${state.total} / ${cost}).`);
+  ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0271", { p0: (label), p1: (state.total), p2: (cost) }, "{p0}: не хватает ОП/ОД ({p1} / {p2})."));
   return false;
 }
 
 async function spendMovementThenActionPointsWithReceipt(actor, amount = 0) {
   const cost = Math.max(0, toInteger(amount));
-  if (!isActorInActiveCombat(actor) || cost <= 0) {
-    return { spent: 0, movementSpent: 0, actionSpent: 0, actionReceipt: null };
-  }
-  const state = getCombatMovementResourceState(actor);
-  if (!state || state.action.key !== ACTION_RESOURCE_KEY || state.total < cost) return null;
-  const movementSpent = Math.min(cost, state.movement.value);
-  const actionSpent = Math.min(cost - movementSpent, state.action.value);
-  if (movementSpent > 0) {
-    const nextMovement = Math.max(0, state.movement.current - movementSpent);
-    await actor.update({
-      [`system.resources.${MOVEMENT_RESOURCE_KEY}.value`]: nextMovement,
-      [`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`]: Math.max(0, state.movement.max - nextMovement)
-    });
-  }
-  const actionTransaction = actionSpent > 0
-    ? await spendCombatActionPointsWithReceipt(actor, actionSpent, { suppressResourceNotification: true })
-    : { spent: 0, receipt: null };
-  if (actionTransaction.spent !== actionSpent) {
-    await refundMovementThenActionPoints(actor, {
-      movementSpent,
-      actionSpent: actionTransaction.spent,
-      actionReceipt: actionTransaction.receipt
-    });
-    return null;
-  }
-  return {
-    spent: movementSpent + actionSpent,
-    movementSpent,
-    actionSpent,
-    actionReceipt: actionTransaction.receipt,
-    actionResourceKey: actionTransaction.receipt?.resourceKey ?? state.action.key
-  };
+  if (!isActorInActiveCombat(actor) || !cost) return { spent: 0, movementSpent: 0, actionSpent: 0, resources: {}, onceResources: {} };
+  if (getCombatMovementResourceState(actor)?.action?.key !== ACTION_RESOURCE_KEY) return null;
+  return spendMovementThenActionResourcesWithReceipt(actor, cost);
 }
 
 async function refundMovementThenActionPoints(actor, receipt = {}) {
-  await refundCombatActionPointReceipt(actor, receipt.actionReceipt, { label: "обмена с фантомом" });
-  const movementSpent = Math.max(0, toInteger(receipt.movementSpent));
-  if (!movementSpent) return;
-  const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
-  if (!movement) return;
-  const maximum = Math.max(0, toInteger(movement.max));
-  const next = Math.min(maximum, Math.max(0, toInteger(movement.value)) + movementSpent);
-  await actor.update({
-    [`system.resources.${MOVEMENT_RESOURCE_KEY}.value`]: next,
-    [`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
-  });
+  return refundMovementThenActionResourceReceipt(actor, receipt);
 }
 
 function isShadowTargetAllowed(sourceActor = null, targetActor = null) {
@@ -6476,24 +6443,24 @@ async function observeShadowResourceSpent({ event = null, data = null } = {}) {
 async function useToTheEnd(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
-    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0199", { p0: (abilityName) }, "{p0}: сцена не готова."));
     return false;
   }
 
   const settings = normalizeToTheEndSettings(abilityFunction.fixedSettings);
   const sourceToken = getActorSceneToken(actor);
   if (!sourceToken) {
-    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0242", { p0: (abilityName) }, "{p0}: токен персонажа не найден на сцене."));
     return false;
   }
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для применения эффекта.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0273", { p0: (abilityName) }, "{p0}: нет активного GM для применения эффекта."));
     return false;
   }
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
@@ -6504,7 +6471,7 @@ async function useToTheEnd(actor, abilityItem, abilityFunction) {
   }));
   const targets = collectToTheEndTargets(actor, sourceToken, radiusMeters);
   if (!targets.length) {
-    ui.notifications.warn(`${abilityName}: нет союзников в радиусе ${Math.floor(radiusMeters)} м.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0274", { p0: (abilityName), p1: (Math.floor(radiusMeters)) }, "{p0}: нет союзников в радиусе {p1} м."));
     return false;
   }
 
@@ -6539,14 +6506,14 @@ async function useToTheEnd(actor, abilityItem, abilityFunction) {
     senderUserId: game.user?.id ?? ""
   });
   if (!applied) {
-    ui.notifications.warn(`${abilityName}: не удалось применить эффект.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0275", { p0: (abilityName) }, "{p0}: не удалось применить эффект."));
     return false;
   }
 
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${targets.length} союзников в радиусе ${Math.floor(radiusMeters)} м: восстановлено ${healingAmount} ОЗ, эффект на ${formatDuration(settings.durationSeconds)}.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0276", { p0: (targets.length), p1: (Math.floor(radiusMeters)), p2: (healingAmount), p3: (formatDuration(settings.durationSeconds)) }, "{p0} союзников в радиусе {p1} м: восстановлено {p2} ОЗ, эффект на {p3}.")
   );
   return true;
 }
@@ -6599,7 +6566,7 @@ async function requestToTheEndOperation(payload = {}) {
   if (game.user?.isGM) return processToTheEndOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0192", "Нет активного GM для выполнения способности."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -6608,7 +6575,7 @@ async function requestToTheEndOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DISARM_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
     game.socket.emit(FIXED_ABILITY_SOCKET, {
       scope: FIXED_ABILITY_SOCKET_SCOPE,
       action: "performToTheEnd",
@@ -6685,7 +6652,7 @@ async function processToTheEndOperation(payload = {}) {
     await target.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
       name: getAbilityDisplayName(abilityItem),
-      img: abilityItem.img || "icons/svg/aura.svg",
+      img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
       origin: abilityItem.uuid,
       transfer: false,
       disabled: false,
@@ -6769,7 +6736,7 @@ async function requestLookResourceLossOperation(payload = {}) {
   if (game.user?.isGM) return processLookResourceLossOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0192", "Нет активного GM для выполнения способности."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -6778,7 +6745,7 @@ async function requestLookResourceLossOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DISARM_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
     game.socket.emit(FIXED_ABILITY_SOCKET, {
       scope: FIXED_ABILITY_SOCKET_SCOPE,
       action: "performLookResourceLoss",
@@ -6824,43 +6791,26 @@ async function processLookResourceLossOperation(payload = {}) {
 
 async function spendActorActionAndMovement(actor, amount = 0) {
   const cost = Math.max(0, toInteger(amount));
-  if (!actor || cost <= 0 || !isActorInActiveCombat(actor)) {
-    return { actionSpent: 0, movementSpent: 0 };
-  }
-  const action = actor.system?.resources?.[ACTION_RESOURCE_KEY];
-  const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
-  const actionCurrent = Math.max(0, toInteger(action?.value));
-  const movementCurrent = Math.max(0, toInteger(movement?.value));
-  const actionSpent = Math.min(cost, actionCurrent);
-  const movementSpent = Math.min(cost, movementCurrent);
-  const updates = {};
-  if (actionSpent > 0) {
-    const nextAction = Math.max(0, actionCurrent - actionSpent);
-    updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = nextAction;
-    if (action && Object.hasOwn(action, "spent")) {
-      updates[`system.resources.${ACTION_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(action.max) - nextAction);
-    }
-  }
-  if (movementSpent > 0) {
-    const nextMovement = Math.max(0, movementCurrent - movementSpent);
-    updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = nextMovement;
-    if (movement && Object.hasOwn(movement, "spent")) {
-      updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(movement.max) - nextMovement);
-    }
-  }
-  if (Object.keys(updates).length) await actor.update(updates);
-  await notifyCombatResourcesSpent(actor, {
-    [ACTION_RESOURCE_KEY]: actionSpent,
-    [MOVEMENT_RESOURCE_KEY]: movementSpent
-  }, { type: "ability" });
-  return { actionSpent, movementSpent };
+  if (!actor || cost <= 0 || !isActorInActiveCombat(actor)) return { actionSpent: 0, movementSpent: 0 };
+  const resources = await runOneTimeResourceMutation(actor, async () => {
+    const plans = [ACTION_RESOURCE_KEY, MOVEMENT_RESOURCE_KEY].map(key => {
+      const current = Math.max(0, toInteger(actor.system?.resources?.[key]?.value)) + getOneTimeResourceValue(actor, key);
+      return prepareActorResourceSpend(actor, key, Math.min(cost, current));
+    }).filter(Boolean);
+    const updates = Object.assign({}, ...plans.map(plan => plan.updates));
+    if (Object.keys(updates).length) await actor.update(updates);
+    return Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.amount]));
+  });
+  await notifyCombatResourcesSpent(actor, resources, { type: "ability" });
+  return { actionSpent: resources[ACTION_RESOURCE_KEY] ?? 0, movementSpent: resources[MOVEMENT_RESOURCE_KEY] ?? 0 };
+
 }
 
 async function requestCommandBasicsDodgeOperation(payload = {}) {
   if (game.user?.isGM) return processCommandBasicsDodgeOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения команды.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0277", "Нет активного GM для выполнения команды."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -6869,7 +6819,7 @@ async function requestCommandBasicsDodgeOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DISARM_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
     game.socket.emit(FIXED_ABILITY_SOCKET, {
       scope: FIXED_ABILITY_SOCKET_SCOPE,
       action: "performCommandBasicsDodge",
@@ -6918,7 +6868,7 @@ async function processCommandBasicsDodgeOperation(payload = {}) {
     await target.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
       name: `${getAbilityDisplayName(abilityItem)}: ${getCommandBasicsCommandLabel("duck")}`,
-      img: abilityItem.img || "icons/svg/shield.svg",
+      img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
       origin: abilityItem.uuid,
       transfer: false,
       disabled: false,
@@ -6960,23 +6910,14 @@ async function configureWatchOut(actor, abilityItem, abilityFunction) {
     state[stateKey]?.minimumHitChancePercent ?? settings.defaultMinimumHitChancePercent
   )));
   const formData = await DialogV2.input({
-    window: { title: `${getAbilityDisplayName(abilityItem)}: настройка` },
-    content: `
-      <form>
-        <div class="form-group stacked">
-          <label>Минимальный исходный шанс попадания, %</label>
-          <div class="form-fields">
-            <input type="number" name="minimumHitChancePercent" value="${current}" min="1" max="100" step="1">
-          </div>
-        </div>
-      </form>
-    `,
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0278", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: настройка") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0279", { p0: (current) }, "\n      <form>\n        <div class=\"form-group stacked\">\n          <label>Минимальный исходный шанс попадания, %</label>\n          <div class=\"form-fields\">\n            <input type=\"number\" name=\"minimumHitChancePercent\" value=\"{p0}\" min=\"1\" max=\"100\" step=\"1\">\n          </div>\n        </div>\n      </form>\n    "),
     ok: {
-      label: "Сохранить",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0280", "Сохранить"),
       icon: "fa-solid fa-floppy-disk",
       callback: (_event, button) => new FormDataExtended(button.form).object
     },
-    buttons: [{ action: "cancel", label: "Отмена" }],
+    buttons: [{ action: "cancel", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена") }],
     rejectClose: false
   });
   if (!formData) return false;
@@ -6987,7 +6928,7 @@ async function configureWatchOut(actor, abilityItem, abilityFunction) {
     minimumHitChancePercent
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${getAbilityDisplayName(abilityItem)}: порог реакции ${minimumHitChancePercent}%.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0281", { p0: (getAbilityDisplayName(abilityItem)), p1: (minimumHitChancePercent) }, "{p0}: порог реакции {p1}%."));
   return true;
 }
 
@@ -6995,27 +6936,27 @@ async function useFullControl(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeFullControlSettings(abilityFunction.fixedSettings);
   if (findFullControlEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0197", { p0: (abilityName) }, "{p0}: эффект уже активен."));
     return false;
   }
 
   const distribution = await promptFullControlDistribution(actor, abilityItem, settings);
   if (!distribution) return false;
   if (findFullControlEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0197", { p0: (abilityName) }, "{p0}: эффект уже активен."));
     return false;
   }
 
   const applied = await applyFullControlEffect(actor, abilityItem, abilityFunction, settings, distribution);
   if (!applied) return false;
-  await createAbilityChatMessage(actor, abilityItem, `Эффект активен на ${formatDuration(settings.durationSeconds)}.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0169", { p0: (formatDuration(settings.durationSeconds)) }, "Эффект активен на {p0}."));
   return true;
 }
 
 async function promptFullControlDistribution(actor, abilityItem, settings) {
   const rows = getFullControlCharacteristicRows(actor);
   if (!rows.length) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не настроены характеристики.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0282", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: не настроены характеристики."));
     return null;
   }
 
@@ -7023,12 +6964,7 @@ async function promptFullControlDistribution(actor, abilityItem, settings) {
   const skillValue = getActorSkillValue(actor, settings.limitSkillKey);
   const maxChanges = Math.max(0, toInteger(settings.baseChangeLimit) + Math.floor(skillValue / Math.max(1, toInteger(settings.skillDivisor))));
   const deltas = Object.fromEntries(rows.map(row => [row.key, 0]));
-  const content = `
-    <div class="fallout-maw-full-control-dialog">
-      <p><strong>Энергия: <span data-full-control-energy>${currentEnergyMax}</span> <span class="fallout-maw-full-control-base">(базовое: ${currentEnergyMax})</span></strong></p>
-      <p>Изменения: <span data-full-control-used>0</span> / <span>${maxChanges}</span></p>
-      <div class="fallout-maw-full-control-rows">
-        ${rows.map(row => `
+  const content = auditFormat("FALLOUTMAW.AuditRuntime.R0283", { p0: (currentEnergyMax), p1: (currentEnergyMax), p2: (maxChanges), p3: (rows.map(row => `
           <div class="fallout-maw-full-control-row" data-full-control-row="${escapeAttribute(row.key)}">
             <span class="fallout-maw-full-control-label">${escapeHTML(row.label)} <small>(${row.current})</small></span>
             <div class="fallout-maw-full-control-controls">
@@ -7037,11 +6973,7 @@ async function promptFullControlDistribution(actor, abilityItem, settings) {
               <button type="button" data-full-control-plus="${escapeAttribute(row.key)}"><i class="fa-solid fa-plus"></i></button>
             </div>
           </div>
-        `).join("")}
-      </div>
-      <p class="notes" data-full-control-message></p>
-    </div>
-  `;
+        `).join("")) }, "\n    <div class=\"fallout-maw-full-control-dialog\">\n      <p><strong>Энергия: <span data-full-control-energy>{p0}</span> <span class=\"fallout-maw-full-control-base\">(базовое: {p1})</span></strong></p>\n      <p>Изменения: <span data-full-control-used>0</span> / <span>{p2}</span></p>\n      <div class=\"fallout-maw-full-control-rows\">\n        {p3}\n      </div>\n      <p class=\"notes\" data-full-control-message></p>\n    </div>\n  ");
 
   const result = await DialogV2.wait({
     window: { title: getAbilityDisplayName(abilityItem) },
@@ -7049,14 +6981,14 @@ async function promptFullControlDistribution(actor, abilityItem, settings) {
     buttons: [
       {
         action: "apply",
-        label: "Применить",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0284", "Применить"),
         icon: "fa-solid fa-check",
         default: true,
         disabled: true,
         callback: () => {
           const validation = validateFullControlDistribution(rows, deltas, currentEnergyMax, settings, maxChanges);
           if (!validation.valid) {
-            ui.notifications.warn(validation.reason || `${getAbilityDisplayName(abilityItem)}: распределение недопустимо.`);
+            ui.notifications.warn(validation.reason || auditFormat("FALLOUTMAW.AuditRuntime.R0285", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: распределение недопустимо."));
             return null;
           }
           return {
@@ -7147,13 +7079,13 @@ function validateFullControlDistribution(rows, deltas, currentEnergyMax, setting
   const totalCharacteristicDelta = Object.values(deltas).reduce((total, value) => total + toInteger(value), 0);
   const energyDelta = -totalCharacteristicDelta * Math.max(0, toInteger(settings.energyPerCharacteristicPoint));
   const finalEnergyMax = currentEnergyMax + energyDelta;
-  if (usedChanges <= 0) return { valid: false, reason: "Выберите хотя бы одно изменение.", usedChanges, energyDelta, finalEnergyMax };
-  if (usedChanges > maxChanges) return { valid: false, reason: `Превышен лимит изменений: ${usedChanges} / ${maxChanges}.`, usedChanges, energyDelta, finalEnergyMax };
+  if (usedChanges <= 0) return { valid: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0286", "Выберите хотя бы одно изменение."), usedChanges, energyDelta, finalEnergyMax };
+  if (usedChanges > maxChanges) return { valid: false, reason: auditFormat("FALLOUTMAW.AuditRuntime.R0287", { p0: (usedChanges), p1: (maxChanges) }, "Превышен лимит изменений: {p0} / {p1}."), usedChanges, energyDelta, finalEnergyMax };
   for (const row of rows) {
     const finalValue = row.current + toInteger(deltas[row.key]);
-    if (finalValue < 0) return { valid: false, reason: `${row.label}: итоговая характеристика ниже 0.`, usedChanges, energyDelta, finalEnergyMax };
+    if (finalValue < 0) return { valid: false, reason: auditFormat("FALLOUTMAW.AuditRuntime.R0288", { p0: (row.label) }, "{p0}: итоговая характеристика ниже 0."), usedChanges, energyDelta, finalEnergyMax };
   }
-  if (finalEnergyMax < 0) return { valid: false, reason: "Итоговый максимум энергии ниже 0.", usedChanges, energyDelta, finalEnergyMax };
+  if (finalEnergyMax < 0) return { valid: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0289", "Итоговый максимум энергии ниже 0."), usedChanges, energyDelta, finalEnergyMax };
   return { valid: true, reason: "", usedChanges, energyDelta, finalEnergyMax };
 }
 
@@ -7207,7 +7139,7 @@ async function applyFullControlEffect(actor, abilityItem, abilityFunction, setti
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem.img || "icons/svg/upgrade.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -7284,9 +7216,9 @@ async function collectWatchOutReactionOffers({ eventKey = "", context = {} } = {
       actorUuid: reactor.uuid,
       offerId: `${WATCH_OUT_REACTION_PROVIDER_ID}:${reactor.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
       label: getAbilityDisplayName(entry.abilityItem),
-      description: `Предупредить ${target.name} об атаке ${attacker.name}. Исходный шанс: ${originalHitChance}%.`,
-      img: entry.abilityItem.img || "icons/svg/shield.svg",
-      costLines: [`Энергия: ${entry.settings.reactionEnergyCost} базовая / ${energyCost} итоговая`],
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0290", { p0: (target.name), p1: (attacker.name), p2: (originalHitChance) }, "Предупредить {p0} об атаке {p1}. Исходный шанс: {p2}%."),
+      img: entry.abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
+      costLines: [auditFormat("FALLOUTMAW.AuditRuntime.R0291", { p0: (entry.settings.reactionEnergyCost), p1: (energyCost) }, "Энергия: {p0} базовая / {p1} итоговая")],
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
       reactorTokenUuid: reactorToken.uuid,
@@ -7327,7 +7259,7 @@ async function executeWatchOutReaction({ context = {}, offer = {} } = {}) {
   }
   const difficultyBonus = entry.settings.difficultyBase
     + Math.floor(getActorSkillValue(reactor, entry.settings.sourceSkillKey) / entry.settings.skillDivisor);
-  await createAbilityChatMessage(reactor, entry.abilityItem, `Сложность текущей атаки увеличена на ${difficultyBonus}.`);
+  await createAbilityChatMessage(reactor, entry.abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0292", { p0: (difficultyBonus) }, "Сложность текущей атаки увеличена на {p0}."));
   return { handled: true, status: REACTION_RESULT.success, difficultyBonus };
 }
 
@@ -7350,10 +7282,10 @@ function getActorWatchOutEntry(actor, offer = null) {
 }
 
 const OVERSIGHT_ACTIONS = Object.freeze([
-  { key: "aimedShot", label: "Прицельный выстрел" },
-  { key: "snapshot", label: "Неприцельный выстрел" },
-  { key: "aimedMeleeAttack", label: "Прицельный удар" },
-  { key: "meleeAttack", label: "Неприцельный удар" }
+  { key: "aimedShot", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0293", "Прицельный выстрел"); } },
+  { key: "snapshot", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0294", "Неприцельный выстрел"); } },
+  { key: "aimedMeleeAttack", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0295", "Прицельный удар"); } },
+  { key: "meleeAttack", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0296", "Неприцельный удар"); } }
 ]);
 let oversightVisibilityRefreshTimeout = 0;
 const pendingOversightVisibilityChecks = new Set();
@@ -7365,32 +7297,32 @@ async function useOversight(actor, abilityItem, abilityFunction) {
   const targetToken = getSingleUserTarget();
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!combat?.started || !sourceToken || !isTokenActiveCombatant(combat, sourceToken.document)) {
-    ui.notifications.warn(`${abilityName}: способность применяется только участником активного боя.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0297", { p0: (abilityName) }, "{p0}: способность применяется только участником активного боя."));
     return false;
   }
   if (!targetToken || !isTokenActiveCombatant(combat, targetToken.document)) {
-    ui.notifications.warn(`${abilityName}: выберите одну цель — участника боя.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0298", { p0: (abilityName) }, "{p0}: выберите одну цель — участника боя."));
     return false;
   }
   if (targetToken.actor?.uuid === actor.uuid) {
-    ui.notifications.warn(`${abilityName}: нельзя выбрать себя.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0299", { p0: (abilityName) }, "{p0}: нельзя выбрать себя."));
     return false;
   }
   if (!canTokenPhysicallySeeTarget(sourceToken, targetToken)) {
-    ui.notifications.warn(`${abilityName}: цель не видна.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0300", { p0: (abilityName) }, "{p0}: цель не видна."));
     return false;
   }
   if (findOversightTrackingEffects(targetToken.actor).some(effect => {
     const data = effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
     return data.sourceActorUuid === actor.uuid;
   })) {
-    ui.notifications.warn(`${abilityName}: эта цель уже находится под вашим Надзором.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0301", { p0: (abilityName) }, "{p0}: эта цель уже находится под вашим Надзором."));
     return false;
   }
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   await spendEnergy(actor, energyCost);
@@ -7409,7 +7341,7 @@ async function useOversight(actor, abilityItem, abilityFunction) {
     targetToken: sourceToken
   });
   if (isSuccessfulSkillCheck(outcome)) {
-    await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} избежал Надзора.`);
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0302", { p0: (targetToken.actor.name) }, "{p0} избежал Надзора."));
     return true;
   }
 
@@ -7431,7 +7363,7 @@ async function useOversight(actor, abilityItem, abilityFunction) {
     resourceThreshold: settings.resourceThreshold,
     accumulatedSpend: 0
   });
-  await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} отмечен Надзором.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0303", { p0: (targetToken.actor.name) }, "{p0} отмечен Надзором."));
   return true;
 }
 
@@ -7458,7 +7390,7 @@ function isSuccessfulSkillCheck(outcome) {
 async function createOversightTrackingEffect(actor, data) {
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: `${data.abilityName}: метка`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0304", { p0: (data.abilityName) }, "{p0}: метка"),
     img: data.abilityImg || "icons/svg/eye.svg",
     origin: data.abilityItemUuid,
     transfer: false,
@@ -7517,8 +7449,8 @@ async function refreshOversightEffectVisibility(effect) {
   const visible = canTokenPhysicallySeeTarget(sourceDocument.object ?? sourceDocument, targetDocument.object ?? targetDocument);
   const iconVisible = Number(effect.showIcon ?? effect._source?.showIcon) === ACTIVE_EFFECT_SHOW_ICON_ALWAYS;
   if (!visible) {
-    if (iconVisible || effect.name !== `${data.abilityName}: метка`) {
-      await effect.update({ name: `${data.abilityName}: метка`, showIcon: 0 });
+    if (iconVisible || effect.name !== auditFormat("FALLOUTMAW.AuditRuntime.R0304", { p0: (data.abilityName) }, "{p0}: метка")) {
+      await effect.update({ name: auditFormat("FALLOUTMAW.AuditRuntime.R0304", { p0: (data.abilityName) }, "{p0}: метка"), showIcon: 0 });
     }
     return;
   }
@@ -7532,7 +7464,7 @@ async function refreshOversightEffectVisibility(effect) {
     await deleteOversightActivation(effect.parent, data.activationId);
     return;
   }
-  await effect.update({ name: `${data.abilityName}: метка`, showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS });
+  await effect.update({ name: auditFormat("FALLOUTMAW.AuditRuntime.R0304", { p0: (data.abilityName) }, "{p0}: метка"), showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS });
 }
 
 async function deleteOversightActivation(actor, activationId) {
@@ -7663,8 +7595,8 @@ async function collectOversightReactionOffers({ eventKey, context = {}, semantic
       actorUuid: sourceActor.uuid,
       reactionId: OVERSIGHT_REACTION_PROVIDER_ID,
       offerId: `${OVERSIGHT_REACTION_PROVIDER_ID}:${data.activationId}:${envelope.eventId}`,
-      label: data.abilityName || "Надзор",
-      description: `Атаковать ${targetActor.name}.`,
+      label: data.abilityName || auditLocalize("FALLOUTMAW.AuditRuntime.R0108", "Надзор"),
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0305", { p0: (targetActor.name) }, "Атаковать {p0}."),
       img: data.abilityImg || "icons/svg/eye.svg",
       activationId: data.activationId,
       sourceTokenUuid: sourceToken.uuid,
@@ -7744,7 +7676,7 @@ async function queryOversightAttackOwner(actor, targetToken, candidates) {
     const weapons = Array.from(new Map(candidates.map(candidate => [candidate.weapon.id, {
       weaponId: candidate.weapon.id,
       weaponName: candidate.weapon.name,
-      img: normalizeImagePath(candidate.weapon.img, "icons/svg/sword.svg")
+      img: normalizeImagePath(candidate.weapon.img, "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp")
     }])).values());
     const weaponResponse = await queryOversightOwner(user, {
       mode: "weapon",
@@ -7791,7 +7723,7 @@ async function handleOversightAttackQuery(data = {}) {
       weapon,
       weaponFunctionId: String(data.weaponFunctionId ?? ""),
       actionKey: String(data.actionKey ?? ""),
-      label: "Надзор"
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0108", "Надзор")
     });
   }
   const weaponMode = data.mode === "weapon";
@@ -7810,9 +7742,9 @@ async function handleOversightAttackQuery(data = {}) {
       <span><strong>${escapeHTML(entry.actionLabel)}</strong></span>
     </label>`).join("");
   const formData = await DialogV2.input({
-    window: { title: weaponMode ? "Надзор: выбор оружия" : "Надзор: выбор действия" },
-    content: `<div class="fallout-maw-disarm-choice-grid"><p>Цель: <strong>${escapeHTML(data.targetName)}</strong></p>${weaponMode ? "" : `<p>Оружие: <strong>${escapeHTML(data.weaponName)}</strong></p>`}${options}</div>`,
-    ok: { label: weaponMode ? "Далее" : "Атаковать", icon: weaponMode ? "fa-solid fa-arrow-right" : "fa-solid fa-crosshairs", callback: (_event, button) => new FormDataExtended(button.form).object },
+    window: { title: weaponMode ? auditLocalize("FALLOUTMAW.AuditRuntime.R0306", "Надзор: выбор оружия") : auditLocalize("FALLOUTMAW.AuditRuntime.R0307", "Надзор: выбор действия") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0308", { p0: (escapeHTML(data.targetName)), p1: (weaponMode ? "" : auditFormat("FALLOUTMAW.AuditRuntime.R0309", { p0: (escapeHTML(data.weaponName)) }, "<p>Оружие: <strong>{p0}</strong></p>")), p2: (options) }, "<div class=\"fallout-maw-disarm-choice-grid\"><p>Цель: <strong>{p0}</strong></p>{p1}{p2}</div>"),
+    ok: { label: weaponMode ? auditLocalize("FALLOUTMAW.AuditRuntime.R0310", "Далее") : auditLocalize("FALLOUTMAW.AuditRuntime.R0311", "Атаковать"), icon: weaponMode ? "fa-solid fa-arrow-right" : "fa-solid fa-crosshairs", callback: (_event, button) => new FormDataExtended(button.form).object },
     buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
     position: { width: 520 },
     rejectClose: false
@@ -7826,11 +7758,11 @@ async function useAllOrNothing(actor, abilityItem, abilityFunction) {
   const settings = normalizeAllOrNothingSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasPendingAllOrNothingResultEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: результат первой активации еще не потрачен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0312", { p0: (abilityName) }, "{p0}: результат первой активации еще не потрачен."));
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -7840,7 +7772,7 @@ async function useAllOrNothing(actor, abilityItem, abilityFunction) {
     durationSeconds: settings.overloadDurationSeconds
   });
   await applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings);
-  await createAbilityChatMessage(actor, abilityItem, "Способность успешно применена.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0313", "Способность успешно применена."));
   return true;
 }
 
@@ -7849,18 +7781,18 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
   const settings = normalizeLuckyCoinSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasPendingLuckyCoinEffect(actor)) {
-    ui.notifications.warn(`${abilityName}: предыдущий эффект ещё не потрачен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0314", { p0: (abilityName) }, "{p0}: предыдущий эффект ещё не потрачен."));
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
   const skill = await promptLuckyCoinSkill(actor, abilityItem);
   if (!skill) return false;
   if (hasPendingLuckyCoinEffect(actor)) {
-    ui.notifications.warn(`${abilityName}: предыдущий эффект ещё не потрачен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0314", { p0: (abilityName) }, "{p0}: предыдущий эффект ещё не потрачен."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -7883,16 +7815,16 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
     {
       fallback: 0,
       minimum: 0,
-      context: `${abilityName}: ${lucky ? "удача" : "неудача"}`
+      context: `${abilityName}: ${lucky ? auditLocalize("FALLOUTMAW.AuditRuntime.R0315", "удача") : auditLocalize("FALLOUTMAW.AuditRuntime.R0316", "неудача")}`
     }
   )));
   const modifier = lucky ? magnitude : -magnitude;
 
-  await createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill, modifier);
+  if (modifier) await createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill, modifier);
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${lucky ? "Удача улыбнулась вам." : "Удача отвернулась от вас."} ${skill.label}: ${modifier >= 0 ? "+" : ""}${modifier} к следующей проверке.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0317", { p0: (lucky ? auditLocalize("FALLOUTMAW.AuditRuntime.R0318", "Удача улыбнулась вам.") : auditLocalize("FALLOUTMAW.AuditRuntime.R0319", "Удача отвернулась от вас.")), p1: (skill.label), p2: (modifier >= 0 ? "+" : ""), p3: (modifier) }, "{p0} {p1}: {p2}{p3} к следующей проверке.")
   );
   return true;
 }
@@ -7902,11 +7834,11 @@ async function useRage(actor, abilityItem, abilityFunction) {
   const settings = normalizeRageSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasActiveRageEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0197", { p0: (abilityName) }, "{p0}: эффект уже активен."));
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -7916,7 +7848,7 @@ async function useRage(actor, abilityItem, abilityFunction) {
     durationSeconds: settings.overloadDurationSeconds
   });
   await applyRageEffect(actor, abilityItem, abilityFunction, settings);
-  await createAbilityChatMessage(actor, abilityItem, `Эффект активен на ${formatDuration(settings.durationSeconds)}.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0169", { p0: (formatDuration(settings.durationSeconds)) }, "Эффект активен на {p0}."));
   return true;
 }
 
@@ -7928,13 +7860,13 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
     : normalizeWhirlwindSettings(abilityFunction.fixedSettings);
   const token = getActorSceneToken(actor);
   if (!token) {
-    ui.notifications.warn(`${abilityName}: выберите токен актера на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0320", { p0: (abilityName) }, "{p0}: выберите токен актера на сцене."));
     return false;
   }
 
   const candidate = getWhirlwindWeaponCandidate(actor);
   if (!candidate) {
-    ui.notifications.warn(`${abilityName}: нет оружия в оружейном наборе с неприцельной атакой и рубящим ударом.`);
+    ui.notifications.warn(`${abilityName}: нет оружия в оружейном наборе с неприцельной атакой.`);
     return false;
   }
 
@@ -7946,14 +7878,14 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
     weapon: candidate.weapon,
     actionKey: "meleeAttack",
     weaponFunctionId: candidate.weaponFunctionId,
-    attackModifier: createWhirlwindAttackModifier({
+    attackModifier: { ...createWhirlwindAttackModifier({
       label: abilityName,
       accuracyModifier: settings.accuracyModifier,
       targetLowestCriticalLimb: headChopper,
       onBeforeAttack: async () => {
         const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
         if (!hasEnergy(actor, energyCost)) {
-          ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+          ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
           return false;
         }
         if (!(await spendEnergy(actor, energyCost))) return false;
@@ -7962,14 +7894,14 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
           energyCost: settings.overloadEnergyCost,
           durationSeconds: settings.overloadDurationSeconds
         });
-        await createAbilityChatMessage(actor, abilityItem, "Атака началась.");
+        await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0322", "Атака началась."));
         return true;
       }
-    })
+    }), attackMode: candidate.attackMode }
   });
 
   if (!controller) {
-    ui.notifications.warn(`${abilityName}: не удалось начать атаку выбранным оружием.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0323", { p0: (abilityName) }, "{p0}: не удалось начать атаку выбранным оружием."));
     return false;
   }
   return true;
@@ -7981,11 +7913,11 @@ async function useCrowdCrusher(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const charges = Math.min(settings.maximumCharges, Math.max(0, toInteger(state[stateKey]?.charges)));
   if (charges < settings.activationCharges) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: зарядов Бойни ${charges} / ${settings.activationCharges}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0324", { p0: (getAbilityDisplayName(abilityItem)), p1: (charges), p2: (settings.activationCharges) }, "{p0}: зарядов Бойни {p1} / {p2}."));
     return false;
   }
   if (findCrowdCrusherEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: режим Бойни уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0325", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: режим Бойни уже активен."));
     return false;
   }
   state[stateKey] = {
@@ -7997,8 +7929,8 @@ async function useCrowdCrusher(actor, abilityItem, abilityFunction) {
   const startTime = Number(game.time?.worldTime) || 0;
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: `${getAbilityDisplayName(abilityItem)}: Бойня`,
-    img: abilityItem.img || "icons/svg/sword.svg",
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0326", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: Бойня"),
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -8026,7 +7958,7 @@ async function useCrowdCrusher(actor, abilityItem, abilityFunction) {
       }
     }
   }], { animate: false });
-  await createAbilityChatMessage(actor, abilityItem, `Режим Бойни активен на ${formatDuration(settings.durationSeconds)}.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0327", { p0: (formatDuration(settings.durationSeconds)) }, "Режим Бойни активен на {p0}."));
   return true;
 }
 
@@ -8035,12 +7967,12 @@ async function useConcussion(actor, abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: удар уже подготовлен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0328", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: удар уже подготовлен."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost) || !(await spendEnergy(actor, energyCost))) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (getAbilityDisplayName(abilityItem)), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -8054,7 +7986,7 @@ async function useConcussion(actor, abilityItem, abilityFunction) {
     pending: true
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  await createAbilityChatMessage(actor, abilityItem, "Следующая атака Ближнего боя усилена.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0329", "Следующая атака Ближнего боя усилена."));
   return true;
 }
 
@@ -8063,12 +7995,12 @@ async function useIdealStrike(actor, abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.activePending) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: идеальный удар уже подготовлен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0330", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: идеальный удар уже подготовлен."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost) || !(await spendEnergy(actor, energyCost))) {
-    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (getAbilityDisplayName(abilityItem)), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -8082,7 +8014,7 @@ async function useIdealStrike(actor, abilityItem, abilityFunction) {
     activePending: true
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  await createAbilityChatMessage(actor, abilityItem, "Следующая подходящая атака не промахнётся и обойдёт Сопротивление.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0331", "Следующая подходящая атака не промахнётся и обойдёт Сопротивление."));
   return true;
 }
 
@@ -8092,7 +8024,7 @@ async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
   const sourceToken = getActorSceneToken(actor);
   const sourceTokenDocument = sourceToken?.document ?? sourceToken;
   if (!canvas?.ready || !canvas.scene || !sourceTokenDocument?.uuid || !sourceTokenDocument?.persisted) {
-    ui.notifications.warn(`${abilityName}: выберите токен персонажа на готовой сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0332", { p0: (abilityName) }, "{p0}: выберите токен персонажа на готовой сцене."));
     return false;
   }
 
@@ -8102,7 +8034,7 @@ async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
     const activeSourceDocument = fromUuidSync(String(activeSessionData?.sourceTokenUuid ?? ""));
     const activeSourceToken = activeSourceDocument?.object ?? activeSourceDocument;
     if (!activeSourceToken?.actor || activeSourceDocument?.parent?.id !== canvas.scene.id) {
-      ui.notifications.warn(`${abilityName}: исходный токен зоны недоступен на текущей сцене.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0333", { p0: (abilityName) }, "{p0}: исходный токен зоны недоступен на текущей сцене."));
       return false;
     }
     return useHuntingGroundsMarkedAttack({
@@ -8116,22 +8048,23 @@ async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
   }
 
   if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${abilityName}: нет активного GM для создания зоны.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0334", { p0: (abilityName) }, "{p0}: нет активного GM для создания зоны."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
   const center = await selectHuntingGroundsPlacement(settings, abilityName);
   if (!center) return false;
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: за время выбора зоны энергия изменилась (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0335", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: за время выбора зоны энергия изменилась ({p1} / {p2})."));
     return false;
   }
-  if (!(await spendEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
 
   const created = await requestHuntingGroundsActivation({
     sourceActorUuid: actor.uuid,
@@ -8141,8 +8074,8 @@ async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
     center
   });
   if (!created) {
-    await refundEnergy(actor, energyCost);
-    ui.notifications.warn(`${abilityName}: зону создать не удалось; энергия возвращена.`);
+    await refundEnergy(actor, energyTransaction.receipt);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0336", { p0: (abilityName) }, "{p0}: зону создать не удалось; энергия возвращена."));
     return false;
   }
 
@@ -8154,7 +8087,7 @@ async function useHuntingGrounds(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `Установлена зона ${settings.zoneSizeMeters}×${settings.zoneSizeMeters}×${settings.zoneSizeMeters} м на ${formatDuration(settings.durationSeconds)}.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0337", { p0: (settings.zoneSizeMeters), p1: (settings.zoneSizeMeters), p2: (settings.zoneSizeMeters), p3: (formatDuration(settings.durationSeconds)) }, "Установлена зона {p0}×{p1}×{p2} м на {p3}.")
   );
   return true;
 }
@@ -8163,15 +8096,16 @@ async function useFalseBreach(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeFalseBreachSettings(abilityFunction.fixedSettings);
   if (findActiveFalseBreachEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0197", { p0: (abilityName) }, "{p0}: эффект уже активен."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!(await spendEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
 
   const effect = await activateFalseBreachEffect({
     actor,
@@ -8180,8 +8114,8 @@ async function useFalseBreach(actor, abilityItem, abilityFunction) {
     settings
   });
   if (!effect) {
-    await refundEnergy(actor, energyCost);
-    ui.notifications.warn(`${abilityName}: эффект создать не удалось; энергия возвращена.`);
+    await refundEnergy(actor, energyTransaction.receipt);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0338", { p0: (abilityName) }, "{p0}: эффект создать не удалось; энергия возвращена."));
     return false;
   }
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -8192,12 +8126,12 @@ async function useFalseBreach(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `Уклонение +${settings.dodgeBonus} на ${formatDuration(settings.durationSeconds)}.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0339", { p0: (settings.dodgeBonus), p1: (formatDuration(settings.durationSeconds)) }, "Уклонение +{p0} на {p1}.")
   );
   return true;
 }
 
-async function selectHuntingGroundsPlacement(settings, abilityName = "Охотничьи угодья") {
+async function selectHuntingGroundsPlacement(settings, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0133", "Охотничьи угодья")) {
   if (!canvas?.ready || !canvas?.regions?.placeRegion || !canvas.scene) return null;
   const sidePixels = Math.max(
     1,
@@ -8210,9 +8144,9 @@ async function selectHuntingGroundsPlacement(settings, abilityName = "Охотн
   const elevationCenter = Number(canvas.level?.elevation?.base);
   const halfHeight = Number(settings?.zoneSizeMeters) / 2;
   if (!Number.isFinite(elevationCenter) || !Number.isFinite(halfHeight) || !canvas.level?.id) return null;
-  ui.notifications.info(`${abilityName}: разместите квадрат ЛКМ; Esc или ПКМ отменяет.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0340", { p0: (abilityName) }, "{p0}: разместите квадрат ЛКМ; Esc или ПКМ отменяет."));
   const preview = await canvas.regions.placeRegion({
-    name: `${abilityName}: зона`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0341", { p0: (abilityName) }, "{p0}: зона"),
     color: game.user?.color?.css ?? game.user?.color ?? "#d6a84b",
     visibility: CONST.REGION_VISIBILITY.ALWAYS,
     highlightMode: "shapes",
@@ -8254,7 +8188,7 @@ async function useHuntingGroundsMarkedAttack({
   abilityFunction,
   sourceToken,
   sessionEffect,
-  abilityName = "Охотничьи угодья"
+  abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0133", "Охотничьи угодья")
 } = {}) {
   const session = getHuntingGroundsSessionData(sessionEffect);
   if (!session?.sessionId || !sourceToken?.actor) return false;
@@ -8266,13 +8200,13 @@ async function useHuntingGroundsMarkedAttack({
   const [selected] = await requestCustomTokenSelection({
     rows: collectRows(),
     limit: 1,
-    title: `${abilityName}: Добыча`,
-    noneWarning: `${abilityName}: нет Добычи с 2 Мишенями, доступной для прицельной атаки.`,
-    instructions: `${abilityName}: выберите Добычу с 2 или более Мишенями. ПКМ или Esc отменяет.`,
+    title: auditFormat("FALLOUTMAW.AuditRuntime.R0342", { p0: (abilityName) }, "{p0}: Добыча"),
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0343", { p0: (abilityName) }, "{p0}: нет Добычи с 2 Мишенями, доступной для прицельной атаки."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0344", { p0: (abilityName) }, "{p0}: выберите Добычу с 2 или более Мишенями. ПКМ или Esc отменяет."),
     sourceToken,
     refreshRows: collectRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? ""),
-    getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? "Добыча")
+    getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0345", "Добыча"))
   });
   if (!selected?.token) return false;
 
@@ -8294,7 +8228,7 @@ async function useHuntingGroundsMarkedAttack({
     onBeforeExecute: async () => {
       const currentSession = findActiveHuntingGroundsSession(actor, abilityItem, abilityFunction);
       if (getHuntingGroundsSessionData(currentSession)?.sessionId !== session.sessionId) {
-        ui.notifications.warn(`${abilityName}: действие зоны уже закончилось.`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0346", { p0: (abilityName) }, "{p0}: действие зоны уже закончилось."));
         return false;
       }
       const preyEffect = findHuntingGroundsPreyEffect(
@@ -8304,7 +8238,7 @@ async function useHuntingGroundsMarkedAttack({
         selected.token
       );
       if ((getHuntingGroundsPreyData(preyEffect)?.marks ?? 0) < 2) {
-        ui.notifications.warn(`${abilityName}: у цели уже меньше 2 Мишеней.`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0347", { p0: (abilityName) }, "{p0}: у цели уже меньше 2 Мишеней."));
         return false;
       }
       return true;
@@ -8321,10 +8255,10 @@ async function useHuntingGroundsMarkedAttack({
     sessionId: session.sessionId
   });
   if (!consumed) {
-    ui.notifications.warn(`${abilityName}: атака совершена, но снять 2 Мишени не удалось.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0348", { p0: (abilityName) }, "{p0}: атака совершена, но снять 2 Мишени не удалось."));
     return true;
   }
-  await createAbilityChatMessage(actor, abilityItem, `${selected.token.name}: совершена бесплатная прицельная атака, снято 2 Мишени.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0349", { p0: (selected.token.name) }, "{p0}: совершена бесплатная прицельная атака, снято 2 Мишени."));
   return true;
 }
 
@@ -8344,8 +8278,8 @@ function collectHuntingGroundsMarkedTargetRows({ actor = null, sourceToken = nul
         displayed: Boolean(prey && marks >= 2),
         selectable: candidates.length > 0,
         reason: marks < 2
-          ? "нужно не менее 2 Мишеней."
-          : candidates.length ? "" : "нет доступного прицельного выстрела или атаки.",
+          ? auditLocalize("FALLOUTMAW.AuditRuntime.R0350", "нужно не менее 2 Мишеней.")
+          : candidates.length ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0351", "нет доступного прицельного выстрела или атаки."),
         marks
       };
     });
@@ -8393,11 +8327,11 @@ function getHuntingGroundsAimedAttackCandidates(actor, sourceToken, targetToken)
   ));
 }
 
-async function promptHuntingGroundsAttackCandidate(candidates = [], abilityName = "Охотничьи угодья") {
+async function promptHuntingGroundsAttackCandidate(candidates = [], abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0133", "Охотничьи угодья")) {
   if (candidates.length === 1) return candidates[0];
   if (!candidates.length) return null;
   const rows = candidates.map((candidate, index) => {
-    const actionLabel = candidate.actionKey === "aimedShot" ? "Прицельный выстрел" : "Прицельная атака";
+    const actionLabel = candidate.actionKey === "aimedShot" ? auditLocalize("FALLOUTMAW.AuditRuntime.R0293", "Прицельный выстрел") : auditLocalize("FALLOUTMAW.AuditRuntime.R0352", "Прицельная атака");
     return `
       <label class="fallout-maw-radio-card">
         <input type="radio" name="candidateIndex" value="${index}" ${index === 0 ? "checked" : ""}>
@@ -8406,10 +8340,10 @@ async function promptHuntingGroundsAttackCandidate(candidates = [], abilityName 
     `;
   }).join("");
   const result = await DialogV2.input({
-    window: { title: `${abilityName}: выбор атаки` },
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0353", { p0: (abilityName) }, "{p0}: выбор атаки") },
     content: `<div class="fallout-maw-fixed-choice-grid">${rows}</div>`,
     ok: {
-      label: "Атаковать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0311", "Атаковать"),
       icon: "fa-solid fa-crosshairs",
       callback: (_event, button) => new FormDataExtended(button.form).object
     },
@@ -8425,8 +8359,9 @@ function getWhirlwindWeaponCandidate(actor) {
   const candidates = getWhirlwindWeaponCandidates(actor);
   const selectedId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
   const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
-  return candidates.find(candidate => candidate.weapon.id === selectedId)
+  return candidates.find(candidate => candidate.weaponSet === selectedSet && candidate.weapon.id === selectedId)
     ?? candidates.find(candidate => candidate.weaponSet && candidate.weaponSet === selectedSet)
+    ?? candidates.find(candidate => candidate.weapon.id === selectedId)
     ?? candidates.at(0)
     ?? null;
 }
@@ -8440,11 +8375,13 @@ function getWhirlwindWeaponCandidates(actor) {
     if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) continue;
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
       if (!hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) continue;
-      if (!isWeaponAttackModeEnabled(weapon, "meleeAttack", "swing", weaponFunctionId)) continue;
+      const attackMode = ["swing", "thrust"].find(mode => isWeaponAttackModeEnabled(weapon, "meleeAttack", mode, weaponFunctionId));
+      if (!attackMode) continue;
       rows.push({
         weapon,
         weaponSet,
-        weaponFunctionId
+        weaponFunctionId,
+        attackMode
       });
     }
   }
@@ -8475,13 +8412,13 @@ async function useLunge(actor, abilityItem, abilityFunction) {
       : normalizeLungeSettings(abilityFunction.fixedSettings);
   const token = getActorSceneToken(actor);
   if (!token) {
-    ui.notifications.warn(`${abilityName}: выберите токен актера на сцене.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0320", { p0: (abilityName) }, "{p0}: выберите токен актера на сцене."));
     return false;
   }
 
   const candidate = getLungeWeaponCandidate(actor);
   if (!candidate) {
-    ui.notifications.warn(`${abilityName}: нет оружия в оружейном наборе с ближней атакой.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0354", { p0: (abilityName) }, "{p0}: нет оружия в оружейном наборе с ближней атакой."));
     return false;
   }
 
@@ -8491,7 +8428,7 @@ async function useLunge(actor, abilityItem, abilityFunction) {
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
@@ -8537,11 +8474,11 @@ async function useLunge(actor, abilityItem, abilityFunction) {
         width: Math.max(1, Number(token?.w) || Number(canvas.grid?.size) || 100),
         height: Math.max(1, Number(token?.h) || Number(canvas.grid?.size) || 100)
       })) {
-        ui.notifications.warn(`${abilityName}: выбранная клетка больше недоступна.`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0355", { p0: (abilityName) }, "{p0}: выбранная клетка больше недоступна."));
         return false;
       }
       if (!hasEnergy(actor, energyCost)) {
-        ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
         return false;
       }
       if (!(await spendEnergy(actor, energyCost))) return false;
@@ -8563,11 +8500,11 @@ async function useLunge(actor, abilityItem, abilityFunction) {
 
   if (!controller) {
     phantom?.destroy();
-    ui.notifications.warn(`${abilityName}: не удалось начать ближнюю атаку выбранным оружием.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0356", { p0: (abilityName) }, "{p0}: не удалось начать ближнюю атаку выбранным оружием."));
     return false;
   }
 
-  await createAbilityChatMessage(actor, abilityItem, "Позиция выбрана, атака началась.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0357", "Позиция выбрана, атака началась."));
   return true;
 }
 
@@ -8585,7 +8522,7 @@ async function executeCleaveLunge({
   cleaveMastery = false
 }) {
   if (!hasEnergy(actor, energyCost) || !(await spendEnergy(actor, energyCost))) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -8616,7 +8553,7 @@ async function executeCleaveLunge({
       targetLowestCriticalLimb: cleaveMastery
     });
   }
-  await createAbilityChatMessage(actor, abilityItem, "Рассечение завершено.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0358", "Рассечение завершено."));
   return true;
 }
 
@@ -8732,10 +8669,10 @@ function getLungeWeaponActionKey(weapon, weaponFunctionId = "") {
   return "";
 }
 
-async function selectLungeDestination(token, settings, abilityName = "Способность") {
+async function selectLungeDestination(token, settings, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) {
   let candidates = buildLungeDestinationCandidates(token, settings);
   if (!candidates.length) {
-    ui.notifications.warn(`${abilityName}: нет доступных клеток для перемещения.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0359", { p0: (abilityName) }, "{p0}: нет доступных клеток для перемещения."));
     return null;
   }
 
@@ -8747,7 +8684,7 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
     const layer = canvas.interface ?? canvas.tokens ?? null;
     if (!layer) {
       graphics.destroy();
-      ui.notifications.warn(`${abilityName}: слой предпросмотра атаки недоступен.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0360", { p0: (abilityName) }, "{p0}: слой предпросмотра атаки недоступен."));
       resolve(null);
       return;
     }
@@ -8864,7 +8801,7 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
     });
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
     rightClickGuard.activate();
-    ui.notifications.info(`${abilityName}: выберите клетку перемещения. ПКМ отменяет, зажатие ПКМ двигает камеру.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0361", { p0: (abilityName) }, "{p0}: выберите клетку перемещения. ПКМ отменяет, зажатие ПКМ двигает камеру."));
   });
 }
 
@@ -8995,20 +8932,20 @@ function createLungePhantom(token, position) {
   return container;
 }
 
-async function promptLungeReturnChoice(abilityName = "Способность") {
+async function promptLungeReturnChoice(abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) {
   const action = await DialogV2.wait({
     window: { title: abilityName },
     content: "",
     buttons: [
       {
         action: "return",
-        label: "Вернуться назад",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0362", "Вернуться назад"),
         icon: "fa-solid fa-arrow-rotate-left",
         default: true
       },
       {
         action: "stay",
-        label: "Остаться на месте",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0363", "Остаться на месте"),
         icon: "fa-solid fa-location-dot",
         type: "button"
       }
@@ -9056,15 +8993,15 @@ async function useDisarm(actor, abilityItem, abilityFunction) {
   const token = getActorSceneToken(actor);
   const targetToken = getSingleUserTarget();
   if (!token || !targetToken?.actor) {
-    ui.notifications.warn(`${abilityName}: выберите одну цель.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0364", { p0: (abilityName) }, "{p0}: выберите одну цель."));
     return false;
   }
   if (targetToken.actor.uuid === actor.uuid) {
-    ui.notifications.warn(`${abilityName}: цель не может быть вами.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0365", { p0: (abilityName) }, "{p0}: цель не может быть вами."));
     return false;
   }
   if (!areTokensAdjacent(token.document, targetToken.document)) {
-    ui.notifications.warn(`${abilityName}: цель должна быть на соседней клетке.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0366", { p0: (abilityName) }, "{p0}: цель должна быть на соседней клетке."));
     return false;
   }
 
@@ -9228,10 +9165,10 @@ async function executeWhereAreYouGoingMovementInterruption({
     reactorTokenUuids: event?.reactorTokenUuids ?? [],
     triggerMode: event?.triggerMode === "approach" ? "approach" : "leave",
     chainRef,
-    title: "Реакция на перемещение",
+    title: auditLocalize("FALLOUTMAW.AuditRuntime.R0367", "Реакция на перемещение"),
     message: event?.triggerMode === "approach"
-      ? `${mover.name} встал на соседнюю клетку.`
-      : `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
+      ? auditFormat("FALLOUTMAW.AuditRuntime.R0368", { p0: (mover.name) }, "{p0} встал на соседнюю клетку.")
+      : auditFormat("FALLOUTMAW.AuditRuntime.R0369", { p0: (mover.name) }, "{p0} пытается покинуть соседнюю клетку. Шаг отменён.")
   });
   // A successful reaction cancels the rest of the route. When Foundry has
   // paused its native movement, false tells the coordinator to stop it at the
@@ -9305,8 +9242,8 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
         context.movementId ?? foundry.utils.randomID()
       ].join(":"),
       label: getAbilityDisplayName(entry.abilityItem),
-      description: `${triggerMode === "approach" ? "Встретить" : "Остановить"} ${mover.name} и нанести неприцельный удар.`,
-      img: entry.abilityItem.img || "icons/svg/sword.svg",
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0370", { p0: (triggerMode === "approach" ? auditLocalize("FALLOUTMAW.AuditRuntime.R0371", "Встретить") : auditLocalize("FALLOUTMAW.AuditRuntime.R0372", "Остановить")), p1: (mover.name) }, "{p0} {p1} и нанести неприцельный удар."),
+      img: entry.abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp",
       costLines: buildReactionEnergyCostLines(entry.settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
@@ -9394,7 +9331,7 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
   };
 }
 
-async function queryWhereAreYouGoingWeaponOwner(actor, candidates = [], { targetName = "", abilityName = "Способность" } = {}) {
+async function queryWhereAreYouGoingWeaponOwner(actor, candidates = [], { targetName = "", abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность") } = {}) {
   const userId = getActorResponsibleUserId(actor);
   const user = game.users?.get(userId);
   if (!user) return null;
@@ -9405,7 +9342,7 @@ async function queryWhereAreYouGoingWeaponOwner(actor, candidates = [], { target
     candidates: candidates.map(candidate => ({
       candidateId: getWhereAreYouGoingWeaponCandidateId(candidate),
       weaponName: candidate.weapon.name,
-      img: normalizeImagePath(candidate.weapon.img, "icons/svg/sword.svg")
+      img: normalizeImagePath(candidate.weapon.img, "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp")
     }))
   };
   try {
@@ -9433,15 +9370,15 @@ async function handleWhereAreYouGoingWeaponQuery(data = {}) {
     </label>
   `).join("");
   const formData = await DialogV2.input({
-    window: { title: `${String(data.abilityName ?? "Способность")}: выбор оружия` },
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0373", { p0: (String(data.abilityName ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность"))) }, "{p0}: выбор оружия") },
     content: `
       <div class="fallout-maw-disarm-choice-grid">
-        ${data.targetName ? `<p>Цель: <strong>${escapeHTML(data.targetName)}</strong></p>` : ""}
+        ${data.targetName ? auditFormat("FALLOUTMAW.AuditRuntime.R0374", { p0: (escapeHTML(data.targetName)) }, "<p>Цель: <strong>{p0}</strong></p>") : ""}
         ${options}
       </div>
     `,
     ok: {
-      label: "Атаковать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0311", "Атаковать"),
       icon: "fa-solid fa-sword",
       callback: (_event, button) => new FormDataExtended(button.form).object
     },
@@ -9558,7 +9495,7 @@ function getWhereAreYouGoingTokenKey(tokenDocument) {
 async function createWhereAreYouGoingChatMessage(actor, abilityItem) {
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p>${escapeHTML(actor.name)} применил реакцию: ${escapeHTML(getAbilityDisplayName(abilityItem))}</p>`,
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0375", { p0: (escapeHTML(actor.name)), p1: (escapeHTML(getAbilityDisplayName(abilityItem))) }, "<p>{p0} применил реакцию: {p1}</p>"),
     sound: null
   });
 }
@@ -9582,8 +9519,8 @@ async function requestCounterAttackReaction(context = {}) {
     weaponFunctionId: context?.weaponFunctionId ?? "",
     chainRef: context?.chainRef ?? null,
     damageHubOperationRef: context?.damageHubOperationRef ?? "",
-    title: "Ответная реакция",
-    message: "Атака завершена. Доступна реакция контратаки."
+    title: auditLocalize("FALLOUTMAW.AuditRuntime.R0376", "Ответная реакция"),
+    message: auditLocalize("FALLOUTMAW.AuditRuntime.R0377", "Атака завершена. Доступна реакция контратаки.")
   });
   await (context?.reactionCoordinator?.run
     ? context.reactionCoordinator.run(operation)
@@ -9631,9 +9568,9 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
       offerId: `${COUNTER_ATTACK_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
       label: getAbilityDisplayName(entry.abilityItem),
       description: preemptive
-        ? `Ударить ${attacker.name} до его атаки: ${entry.weapon.name}.`
-        : `Ответить ${entry.weapon.name}: ${attacker.name}.`,
-      img: entry.abilityItem.img || entry.weapon.img || "icons/svg/sword.svg",
+        ? auditFormat("FALLOUTMAW.AuditRuntime.R0378", { p0: (attacker.name), p1: (entry.weapon.name) }, "Ударить {p0} до его атаки: {p1}.")
+        : auditFormat("FALLOUTMAW.AuditRuntime.R0379", { p0: (entry.weapon.name), p1: (attacker.name) }, "Ответить {p0}: {p1}."),
+      img: entry.abilityItem.img || entry.weapon.img || "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp",
       costLines: buildReactionEnergyCostLines(settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
@@ -9687,7 +9624,7 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
     returnOutcome: true
   });
   if (!attackResult?.executed) {
-    await createAbilityChatMessage(defender, entry.abilityItem, "Не удалось выполнить удар.");
+    await createAbilityChatMessage(defender, entry.abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0380", "Не удалось выполнить удар."));
     return { handled: true, status: REACTION_RESULT.failed };
   }
   await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
@@ -9695,7 +9632,7 @@ async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
     energyCost: settings.reactionOverloadEnergyCost,
     durationSeconds: settings.reactionOverloadDurationSeconds
   });
-  await createAbilityChatMessage(defender, entry.abilityItem, "Ответная атака выполнена.");
+  await createAbilityChatMessage(defender, entry.abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0381", "Ответная атака выполнена."));
   const successfulAttack = attackResult.outcome?.successfulAttack === true;
   const attackerUnableToContinue = successfulAttack && isActorUnableToAct(attackerTokenDocument.actor);
   if (attackerUnableToContinue) requestWeaponAttackCompletion({ attackId: context.attackId });
@@ -9819,18 +9756,18 @@ async function collectDisarmReactionOffers({ eventKey = "", context = {} } = {})
   const settings = entry.settings;
   const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
   if (!hasEnergy(defender, energyCost)) return [];
-  if (!canSpendCombatActionPoints(defender, settings.reactionActionPointCost, { label: "реакции" })) return [];
+  if (!canSpendCombatActionPoints(defender, settings.reactionActionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0382", "реакции") })) return [];
 
   return [{
     actorUuid: defender.uuid,
     reactionId: DISARM_REACTION_PROVIDER_ID,
     offerId: `${DISARM_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
     label: getAbilityDisplayName(entry.abilityItem),
-    description: `Отнять ${weapon.name} до проверки атаки.`,
-    img: entry.abilityItem.img || "icons/svg/combat.svg",
+    description: auditFormat("FALLOUTMAW.AuditRuntime.R0383", { p0: (weapon.name) }, "Отнять {p0} до проверки атаки."),
+    img: entry.abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp",
     costLines: [
-      `Энергия: ${settings.reactionEnergyCost} базовая / ${energyCost} итоговая`,
-      `ОР: ${settings.reactionActionPointCost}`
+      auditFormat("FALLOUTMAW.AuditRuntime.R0291", { p0: (settings.reactionEnergyCost), p1: (energyCost) }, "Энергия: {p0} базовая / {p1} итоговая"),
+      auditFormat("FALLOUTMAW.AuditRuntime.R0384", { p0: (settings.reactionActionPointCost) }, "ОР: {p0}")
     ],
     abilityItemId: entry.abilityItem.id,
     abilityFunctionId: entry.abilityFunction.id,
@@ -9850,7 +9787,7 @@ async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
   const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
   if (!isDisarmableWeapon(weapon) || !areTokensAdjacent(defenderToken, attackerToken)) return { handled: false };
   if (!hasEnergy(defender, energyCost)) return { handled: false };
-  if (!canSpendCombatActionPoints(defender, settings.reactionActionPointCost, { label: "реакции" })) return { handled: false };
+  if (!canSpendCombatActionPoints(defender, settings.reactionActionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0382", "реакции") })) return { handled: false };
 
   await spendEnergy(defender, energyCost);
   if (settings.reactionActionPointCost > 0) await spendCombatActionPoints(defender, settings.reactionActionPointCost);
@@ -9866,10 +9803,10 @@ async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
     actorToken: defenderToken.object ?? defenderToken,
     targetToken: attackerToken.object ?? attackerToken,
     difficultyBase: settings.reactionDifficultyBase,
-    label: `${getAbilityDisplayName(entry.abilityItem)}: реакция`
+    label: auditFormat("FALLOUTMAW.AuditRuntime.R0385", { p0: (getAbilityDisplayName(entry.abilityItem)) }, "{p0}: реакция")
   });
   if (!success) {
-    await createAbilityChatMessage(defender, entry.abilityItem, `${defender.name} не смог отнять ${weapon.name}.`);
+    await createAbilityChatMessage(defender, entry.abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0386", { p0: (defender.name), p1: (weapon.name) }, "{p0} не смог отнять {p1}."));
     return { handled: true, status: REACTION_RESULT.failed };
   }
   requestWeaponAttackCompletion({ attackId: context.attackId });
@@ -9885,8 +9822,8 @@ async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
     defender,
     entry.abilityItem,
     moved
-      ? `${defender.name} отнял ${weapon.name} у ${attacker.name}.`
-      : `${defender.name} не смог разместить ${weapon.name}.`
+      ? auditFormat("FALLOUTMAW.AuditRuntime.R0387", { p0: (defender.name), p1: (weapon.name), p2: (attacker.name) }, "{p0} отнял {p1} у {p2}.")
+      : auditFormat("FALLOUTMAW.AuditRuntime.R0388", { p0: (defender.name), p1: (weapon.name) }, "{p0} не смог разместить {p1}.")
   );
   return {
     handled: true,
@@ -9900,7 +9837,7 @@ async function requestDisarmOperation(payload = {}) {
   if (game.user?.isGM) return processDisarmOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0192", "Нет активного GM для выполнения способности."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -9909,7 +9846,7 @@ async function requestDisarmOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DISARM_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
     game.socket.emit(FIXED_ABILITY_SOCKET, {
       scope: FIXED_ABILITY_SOCKET_SCOPE,
       action: "performDisarm",
@@ -9951,10 +9888,10 @@ async function processDisarmOperation(payload = {}) {
   const settings = normalizeDisarmSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activeEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
-  if (!canSpendCombatActionPoints(actor, settings.activeActionPointCost, { label: "обезоруживания" })) return false;
+  if (!canSpendCombatActionPoints(actor, settings.activeActionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0389", "обезоруживания") })) return false;
 
   const sourceWeapon = await promptDisarmSourceWeapon(targetTokenDocument.actor, payload.senderUserId, abilityName);
   if (!sourceWeapon) return false;
@@ -9977,7 +9914,7 @@ async function processDisarmOperation(payload = {}) {
     label: abilityName
   });
   if (!success) {
-    await createAbilityChatMessage(actor, abilityItem, `${actor.name} не смог отнять ${sourceWeapon.name}.`);
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0386", { p0: (actor.name), p1: (sourceWeapon.name) }, "{p0} не смог отнять {p1}."));
     return true;
   }
 
@@ -9993,37 +9930,37 @@ async function processDisarmOperation(payload = {}) {
     actor,
     abilityItem,
     moved
-      ? `${actor.name} отнял ${sourceWeapon.name} у ${targetTokenDocument.actor.name}.`
-      : `${actor.name} не смог разместить ${sourceWeapon.name}.`
+      ? auditFormat("FALLOUTMAW.AuditRuntime.R0387", { p0: (actor.name), p1: (sourceWeapon.name), p2: (targetTokenDocument.actor.name) }, "{p0} отнял {p1} у {p2}.")
+      : auditFormat("FALLOUTMAW.AuditRuntime.R0388", { p0: (actor.name), p1: (sourceWeapon.name) }, "{p0} не смог разместить {p1}.")
   );
   return true;
 }
 
-async function promptDisarmSourceWeapon(actor, userId = "", abilityName = "Способность") {
+async function promptDisarmSourceWeapon(actor, userId = "", abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) {
   const weapons = getDisarmableWeapons(actor);
   if (!weapons.length) {
-    ui.notifications.warn(`${abilityName}: у цели нет оружия, которое можно отнять.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0390", { p0: (abilityName) }, "{p0}: у цели нет оружия, которое можно отнять."));
     return null;
   }
   if (weapons.length === 1) return weapons[0];
   const result = await queryDisarmUser(userId, {
     mode: "sourceWeapon",
-    title: `${abilityName}: выбор оружия`,
+    title: auditFormat("FALLOUTMAW.AuditRuntime.R0373", { p0: (abilityName) }, "{p0}: выбор оружия"),
     weapons: weapons.map(weapon => ({
       id: weapon.id,
       name: weapon.name,
-      img: normalizeImagePath(weapon.img, "icons/svg/combat.svg")
+      img: normalizeImagePath(weapon.img, "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp")
     }))
   });
   return actor.items?.get(String(result?.weaponId ?? "")) ?? null;
 }
 
-async function promptDisarmDestination(actor, sourceWeapon, userId = "", abilityName = "Способность") {
+async function promptDisarmDestination(actor, sourceWeapon, userId = "", abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) {
   return queryDisarmUser(userId || getActorResponsibleUserId(actor), {
     mode: "destination",
-    title: `${abilityName}: размещение оружия`,
+    title: auditFormat("FALLOUTMAW.AuditRuntime.R0391", { p0: (abilityName) }, "{p0}: размещение оружия"),
     weaponName: sourceWeapon?.name ?? "",
-    weaponImg: normalizeImagePath(sourceWeapon?.img, "icons/svg/combat.svg")
+    weaponImg: normalizeImagePath(sourceWeapon?.img, "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp")
   });
 }
 
@@ -10050,10 +9987,10 @@ async function handleDisarmQuery(data = {}) {
       </label>
     `).join("");
     return DialogV2.input({
-      window: { title: String(data.title ?? "Способность") },
+      window: { title: String(data.title ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) },
       content: `<div class="fallout-maw-disarm-choice-grid">${options}</div>`,
       ok: {
-        label: "Выбрать",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0204", "Выбрать"),
         icon: "fa-solid fa-hand",
         callback: (_event, button) => new FormDataExtended(button.form).object
       },
@@ -10064,26 +10001,10 @@ async function handleDisarmQuery(data = {}) {
   }
   if (mode === "destination") {
     return DialogV2.input({
-      window: { title: String(data.title ?? "Способность") },
-      content: `
-        <div class="fallout-maw-disarm-destination">
-          <p>Куда поместить <strong>${escapeHTML(data.weaponName)}</strong>?</p>
-          <label class="fallout-maw-radio-card">
-            <input type="radio" name="destination" value="replace" checked>
-            <span><strong>Заменить текущее оружие</strong></span>
-          </label>
-          <label class="fallout-maw-radio-card">
-            <input type="radio" name="destination" value="inventory">
-            <span><strong>Убрать в инвентарь</strong></span>
-          </label>
-          <label class="fallout-maw-radio-card">
-            <input type="radio" name="destination" value="drop">
-            <span><strong>Бросить на землю</strong></span>
-          </label>
-        </div>
-      `,
+      window: { title: String(data.title ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) },
+      content: auditFormat("FALLOUTMAW.AuditRuntime.R0392", { p0: (escapeHTML(data.weaponName)) }, "\n        <div class=\"fallout-maw-disarm-destination\">\n          <p>Куда поместить <strong>{p0}</strong>?</p>\n          <label class=\"fallout-maw-radio-card\">\n            <input type=\"radio\" name=\"destination\" value=\"replace\" checked>\n            <span><strong>Заменить текущее оружие</strong></span>\n          </label>\n          <label class=\"fallout-maw-radio-card\">\n            <input type=\"radio\" name=\"destination\" value=\"inventory\">\n            <span><strong>Убрать в инвентарь</strong></span>\n          </label>\n          <label class=\"fallout-maw-radio-card\">\n            <input type=\"radio\" name=\"destination\" value=\"drop\">\n            <span><strong>Бросить на землю</strong></span>\n          </label>\n        </div>\n      "),
       ok: {
-        label: "Разместить",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0393", "Разместить"),
         icon: "fa-solid fa-check",
         callback: (_event, button) => new FormDataExtended(button.form).object
       },
@@ -10095,7 +10016,7 @@ async function handleDisarmQuery(data = {}) {
   return null;
 }
 
-async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetToken = null, difficultyBase = 0, label = "Способность" } = {}) {
+async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetToken = null, difficultyBase = 0, label = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность") } = {}) {
   const outcome = await requestSkillCheck({
     actor,
     skillKey: "athletics",
@@ -10114,7 +10035,7 @@ async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetTo
   return ["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? ""));
 }
 
-async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targetToken = null, actingUserId = "", abilityName = "Способность" } = {}) {
+async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targetToken = null, actingUserId = "", abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность") } = {}) {
   if (!sourceActor || !targetActor || !sourceWeapon) return false;
   const destination = await promptDisarmDestination(targetActor, sourceWeapon, actingUserId, abilityName);
   const requested = String(destination?.destination ?? "drop");
@@ -10127,7 +10048,7 @@ async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targ
     const moved = await tryTransferDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, placement });
     if (moved) return true;
   }
-  ui.notifications.warn(`${abilityName}: не удалось разместить ${sourceWeapon.name} у ${targetActor.name}.`);
+  ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0394", { p0: (abilityName), p1: (sourceWeapon.name), p2: (targetActor.name) }, "{p0}: не удалось разместить {p1} у {p2}."));
   return false;
 }
 
@@ -10484,7 +10405,7 @@ async function promptLuckyCoinSkill(actor, abilityItem) {
     }))
     .filter(skill => skill.key);
   if (!skills.length) {
-    ui.notifications.warn(`${abilityName}: у персонажа нет доступных навыков.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0395", { p0: (abilityName) }, "{p0}: у персонажа нет доступных навыков."));
     return null;
   }
 
@@ -10495,10 +10416,10 @@ async function promptLuckyCoinSkill(actor, abilityItem) {
     </label>
   `).join("");
   const formData = await DialogV2.input({
-    window: { title: `${abilityName}: выбор навыка` },
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0396", { p0: (abilityName) }, "{p0}: выбор навыка") },
     content: `<div class="fallout-maw-lucky-coin-skill-grid">${options}</div>`,
     ok: {
-      label: "Подбросить",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0397", "Подбросить"),
       icon: "fa-solid fa-coins",
       callback: (_event, button) => new FormDataExtended(button.form).object
     },
@@ -10515,7 +10436,7 @@ async function createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill,
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: `${getAbilityDisplayName(abilityItem)}: ${skill.label}`,
-    img: abilityItem.img || "icons/svg/aura.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -10533,7 +10454,7 @@ async function createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill,
       [SYSTEM_ID]: {
         kind: "temporary",
         [ONE_TIME_SKILL_MODIFIER_FLAG_KEY]: {
-          remainingUses: 1,
+          remainingUses: normalizeLuckyCoinSettings(abilityFunction.fixedSettings).checkCount,
           source: LUCKY_COIN_EFFECT_SOURCE,
           skillKey: skill.key,
           skillLabel: skill.label,
@@ -10557,7 +10478,7 @@ async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasCurseAndBlessingEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${settings.energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (settings.energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -10566,7 +10487,7 @@ async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -10581,7 +10502,7 @@ async function toggleExperimentalSurgery(abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -10591,7 +10512,7 @@ async function useEmergencyOperations(actor, abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
-    ui.notifications.info(`${abilityName}: усиление уже подготовлено для следующего лечения.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0400", { p0: (abilityName) }, "{p0}: усиление уже подготовлено для следующего лечения."));
     return false;
   }
 
@@ -10602,7 +10523,7 @@ async function useEmergencyOperations(actor, abilityItem, abilityFunction) {
     settings.activationEnergyCost
   );
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -10622,7 +10543,7 @@ async function useEmergencyOperations(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `Следующее лечение инструментом получает +${settings.toolEfficiencyPercentBonus}% эффективности.`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0401", { p0: (settings.toolEfficiencyPercentBonus) }, "Следующее лечение инструментом получает +{p0}% эффективности.")
   );
   return true;
 }
@@ -10636,7 +10557,7 @@ async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -10645,7 +10566,7 @@ async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -10657,7 +10578,7 @@ async function toggleFullForce(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -10666,7 +10587,7 @@ async function toggleFullForce(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -10679,7 +10600,7 @@ async function toggleDeepPenetration(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -10688,7 +10609,7 @@ async function toggleDeepPenetration(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -10700,7 +10621,7 @@ async function toggleTwoHands(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -10709,7 +10630,7 @@ async function toggleTwoHands(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -10885,8 +10806,8 @@ async function collectProtectiveAimedShotOffers({
       actorUuid: reactor.uuid,
       offerId: `${providerId}:${reactor.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
       label: getAbilityDisplayName(entry.abilityItem),
-      description: `Прицельный выстрел по ${attacker.name}: ${entry.weapon.name}.`,
-      img: entry.abilityItem.img || entry.weapon.img || "icons/svg/target.svg",
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0402", { p0: (attacker.name), p1: (entry.weapon.name) }, "Прицельный выстрел по {p0}: {p1}."),
+      img: entry.abilityItem.img || entry.weapon.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp",
       costLines: buildReactionEnergyCostLines(entry.settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
@@ -10958,8 +10879,8 @@ async function executeCounterSniperReaction({ context = {}, offer = {} } = {}) {
     });
   }
   await createAbilityChatMessage(reactor, entry.abilityItem, used
-    ? "Ответный прицельный выстрел выполнен."
-    : "Выбор части тела сорван; исходная атака продолжена.");
+    ? auditLocalize("FALLOUTMAW.AuditRuntime.R0403", "Ответный прицельный выстрел выполнен.")
+    : auditLocalize("FALLOUTMAW.AuditRuntime.R0404", "Выбор части тела сорван; исходная атака продолжена."));
   return { handled: true, status: used ? REACTION_RESULT.success : REACTION_RESULT.failed };
 }
 
@@ -10978,7 +10899,7 @@ async function handleCounterSniperAimQuery(data = {}) {
   });
   if (resourcePreview.missing) return false;
   return startForcedAimedAttackSelection({
-    label: String(data.label ?? "Контр-снайпер"),
+    label: String(data.label ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер")),
     attackerToken: reactorTokenDocument.object ?? reactorTokenDocument,
     targetToken: attackerTokenDocument.object ?? attackerTokenDocument,
     weapon,
@@ -10999,7 +10920,7 @@ async function toggleAiming(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -11008,7 +10929,7 @@ async function toggleAiming(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -11051,7 +10972,7 @@ async function toggleBullseye(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   state[stateKey] = {
@@ -11067,7 +10988,7 @@ async function toggleBullseye(actor, abilityItem, abilityFunction) {
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
   await syncBullseyeStateEffect(actor, abilityItem, abilityFunction, state[stateKey], settings);
-  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0398", "включено") : auditLocalize("FALLOUTMAW.AuditRuntime.R0399", "выключено")}.`);
   return true;
 }
 
@@ -11079,12 +11000,12 @@ async function useKeepAway(actor, abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
-    ui.notifications.warn(`${abilityName}: следующий выстрел уже подготовлен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0405", { p0: (abilityName) }, "{p0}: следующий выстрел уже подготовлен."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -11099,7 +11020,7 @@ async function useKeepAway(actor, abilityItem, abilityFunction) {
     pending: true
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: следующий выстрел подготовлен.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0406", { p0: (abilityName) }, "{p0}: следующий выстрел подготовлен."));
   return true;
 }
 
@@ -11111,12 +11032,12 @@ async function useRicochet(actor, abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
-    ui.notifications.warn(`${abilityName}: следующий выстрел уже подготовлен.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0405", { p0: (abilityName) }, "{p0}: следующий выстрел уже подготовлен."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -11131,7 +11052,7 @@ async function useRicochet(actor, abilityItem, abilityFunction) {
     pending: true
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: следующий выстрел навскидку подготовлен.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0407", { p0: (abilityName) }, "{p0}: следующий выстрел навскидку подготовлен."));
   return true;
 }
 
@@ -11141,12 +11062,12 @@ async function useLethalAttack(actor, abilityItem, abilityFunction) {
     ? normalizeCorpseAfterCorpseSettings(abilityFunction.fixedSettings)
     : normalizeLethalAttackSettings(abilityFunction.fixedSettings);
   if (findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0256", { p0: (abilityName) }, "{p0}: следующая атака уже подготовлена."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -11156,7 +11077,7 @@ async function useLethalAttack(actor, abilityItem, abilityFunction) {
     durationSeconds: settings.overloadDurationSeconds
   });
   await applyLethalAttackPreparationEffect(actor, abilityItem, abilityFunction, settings);
-  ui.notifications.info(`${abilityName}: следующая атака подготовлена на ${settings.attackWaitDurationSeconds} сек.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0408", { p0: (abilityName), p1: (settings.attackWaitDurationSeconds) }, "{p0}: следующая атака подготовлена на {p1} сек."));
   return true;
 }
 
@@ -11621,7 +11542,7 @@ async function syncBullseyeStateEffect(
   const effectData = {
     type: "base",
     name: presentation.name,
-    img: abilityItem.img || "icons/svg/target.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp",
     description: presentation.description,
     origin: abilityItem.uuid,
     transfer: false,
@@ -12001,7 +11922,7 @@ async function processCrowdCrusherResolution(context = {}) {
       lastChargeAttackId: String(context?.attackId ?? "")
     };
     await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-    await createAbilityChatMessage(actor, entry.abilityItem, `Бойня: ${charges} / ${entry.settings.maximumCharges}.`);
+    await createAbilityChatMessage(actor, entry.abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0409", { p0: (charges), p1: (entry.settings.maximumCharges) }, "Бойня: {p0} / {p1}."));
   }
 }
 
@@ -12044,7 +11965,7 @@ async function processConcussionResolution(context = {}) {
           weaponAttackId: String(context?.attackId ?? "")
         },
         source: { abilityItemUuid: entry.abilityItem.uuid, weaponAttackId: String(context?.attackId ?? "") },
-        messageData: { flavor: `${getAbilityDisplayName(entry.abilityItem)}: проверка Стойкости` }
+        messageData: { flavor: auditFormat("FALLOUTMAW.AuditRuntime.R0410", { p0: (getAbilityDisplayName(entry.abilityItem)) }, "{p0}: проверка Стойкости") }
       });
       if (isSuccessfulSkillCheck(outcome)) continue;
       await applyConcussionStunEffect({
@@ -12174,7 +12095,7 @@ async function applyConcussionStunEffect({ sourceActor, targetActor, abilityItem
   const startTime = Number(game.time?.worldTime) || 0;
   return targetActor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: `${getAbilityDisplayName(abilityItem)}: Оглушение ${stunPercent}%`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0411", { p0: (getAbilityDisplayName(abilityItem)), p1: (stunPercent) }, "{p0}: Оглушение {p1}%"),
     img: abilityItem.img || "icons/svg/daze.svg",
     origin: abilityItem.uuid,
     transfer: false,
@@ -12235,15 +12156,15 @@ async function promptIdealStrikeTarget(targets, abilityName) {
   const options = targets.map((token, index) => `
     <label class="fallout-maw-radio-card">
       <input type="radio" name="targetUuid" value="${escapeAttribute(token.document?.uuid ?? "")}" ${index === 0 ? "checked" : ""}>
-      <img src="${escapeAttribute(token.document?.texture?.src ?? token.actor?.img ?? "icons/svg/mystery-man.svg")}" alt="">
-      <span><strong>${escapeHTML(token.actor?.name ?? "Цель")}</strong></span>
+      <img src="${escapeAttribute(token.document?.texture?.src ?? token.actor?.img ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp")}" alt="">
+      <span><strong>${escapeHTML(token.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель"))}</strong></span>
     </label>
   `).join("");
   const formData = await DialogV2.input({
-    window: { title: `${abilityName}: следующая цель` },
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0412", { p0: (abilityName) }, "{p0}: следующая цель") },
     content: `<div class="fallout-maw-lucky-coin-skill-grid">${options}</div>`,
     ok: {
-      label: "Атаковать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0311", "Атаковать"),
       icon: "fa-solid fa-crosshairs",
       callback: (_event, button) => new FormDataExtended(button.form).object
     },
@@ -12465,8 +12386,16 @@ async function requestCurseAndBlessingAttackResolution(context = {}) {
   await processCurseAndBlessingAttackResolution(payload);
 }
 
-function handleFixedAbilitySocketMessage(message = {}) {
+function handleFixedAbilitySocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== FIXED_ABILITY_SOCKET_SCOPE) return;
+  if (!senderUserId) return;
+  if (message.action?.endsWith("Result")) {
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending || senderUserId !== pending.authorityUserId) return;
+  } else {
+    if (message.senderUserId !== senderUserId) return;
+    message = { ...message, senderUserId };
+  }
   if (message.action === "createPhantom") {
     if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
     void processPhantomSocketRequest(message);
@@ -12648,7 +12577,7 @@ async function useHunterRace(actor, abilityItem, abilityFunction) {
   if (!selection?.actor) return false;
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -12665,10 +12594,10 @@ async function useHunterRace(actor, abilityItem, abilityFunction) {
     settings
   });
   if (!result.ok) {
-    ui.notifications.warn(`${abilityName}: ${result.reason || "эффект не создан"}`);
+    ui.notifications.warn(`${abilityName}: ${result.reason || auditLocalize("FALLOUTMAW.AuditRuntime.R0413", "эффект не создан")}`);
     return false;
   }
-  ui.notifications.info(`${abilityName}: выбранная раса отмечена на ${formatDuration(settings.durationSeconds)}.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0414", { p0: (abilityName), p1: (formatDuration(settings.durationSeconds)) }, "{p0}: выбранная раса отмечена на {p1}."));
   return true;
 }
 
@@ -12678,12 +12607,12 @@ async function useTrueBullet(actor, abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   if (state[stateKey]?.pending) {
-    ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0256", { p0: (abilityName) }, "{p0}: следующая атака уже подготовлена."));
     return false;
   }
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityName), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -12698,7 +12627,7 @@ async function useTrueBullet(actor, abilityItem, abilityFunction) {
     pending: true
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`${abilityName}: следующая атака подготовлена.`);
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0415", { p0: (abilityName) }, "{p0}: следующая атака подготовлена."));
   return true;
 }
 
@@ -12798,7 +12727,7 @@ async function requestFixedAbilitySocketOperation(action, payload = {}, { author
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
   });
   game.socket.emit(FIXED_ABILITY_SOCKET, {
     scope: FIXED_ABILITY_SOCKET_SCOPE,
@@ -13123,7 +13052,7 @@ async function processNightmareRegionOperation({
   const regionClass = globalThis.getDocumentClass?.("Region") ?? globalThis.Region;
   if (!regionClass?.createTokenEmanation || durationSeconds <= 0 || settings.darknessRadiusMeters <= 0) return false;
   const created = await regionClass.createTokenEmanation(token, settings.darknessRadiusMeters, {
-    name: `${getAbilityDisplayName(abilityItem)}: тьма`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0416", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: тьма"),
     color: "#171024",
     visibility: CONST.REGION_VISIBILITY.ALWAYS,
     highlightMode: "shapes",
@@ -13142,7 +13071,7 @@ async function processNightmareRegionOperation({
     },
     behaviors: [
       {
-        name: "Поглощение света",
+        name: auditLocalize("FALLOUTMAW.AuditRuntime.R0417", "Поглощение света"),
         type: "adjustDarknessLevel",
         system: {
           mode: 0,
@@ -13150,7 +13079,7 @@ async function processNightmareRegionOperation({
         }
       },
       {
-        name: "Ужас",
+        name: auditLocalize("FALLOUTMAW.AuditRuntime.R0418", "Ужас"),
         type: "fallout-maw.periodicDamage",
         system: {
           damageEntries: [],
@@ -13163,7 +13092,7 @@ async function processNightmareRegionOperation({
           }],
           targetRelations: ["neutral", "enemy"],
           sourceActorUuid: actor.uuid,
-          effectName: "Ужас",
+          effectName: auditLocalize("FALLOUTMAW.AuditRuntime.R0418", "Ужас"),
           effectImg: abilityItem.img || "icons/svg/terror.svg",
           effectChanges: buildNightmareFearChanges(settings),
           intervalSeconds: 6,
@@ -13215,9 +13144,9 @@ async function processNightmareFearOperation({
     if (hasMaximumNightmareFearDuration(target, settings.fearDurationSeconds, now)) continue;
     const effectData = {
       type: "base",
-      name: "Ужас",
+      name: auditLocalize("FALLOUTMAW.AuditRuntime.R0418", "Ужас"),
       img: abilityItem.img || "icons/svg/terror.svg",
-      description: `Ужас, вызванный способностью «${foundry.utils.escapeHTML(getAbilityDisplayName(abilityItem))}».`,
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0419", { p0: (foundry.utils.escapeHTML(getAbilityDisplayName(abilityItem))) }, "Ужас, вызванный способностью «{p0}»."),
       origin: abilityItem.uuid,
       transfer: false,
       disabled: false,
@@ -13250,7 +13179,7 @@ async function processNightmareFearOperation({
   return applied > 0;
 }
 
-async function processCurseAndBlessingAttackResolution({ attackerUuid = "", targetUuids = [], senderUserId = "" } = {}) {
+async function processCurseAndBlessingAttackResolution({ attackerUuid = "", targetUuids = [], hitTargetUuids = targetUuids, senderUserId = "" } = {}) {
   const attacker = await fromUuid(String(attackerUuid ?? ""));
   const targets = (await Promise.all(Array.from(new Set(targetUuids))
     .map(uuid => fromUuid(String(uuid ?? "")))))
@@ -13261,30 +13190,32 @@ async function processCurseAndBlessingAttackResolution({ attackerUuid = "", targ
   await processCurseAndBlessingActorFunctions({
     owner: attacker,
     effectTargets: targets,
+    hitTargetUuids,
     effectKey: ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
-    effectName: "Порча"
+    effectName: auditLocalize("FALLOUTMAW.AuditRuntime.R0420", "Порча")
   });
   for (const target of targets) {
     await processCurseAndBlessingActorFunctions({
       owner: target,
       effectTargets: [target],
+      hitTargetUuids,
       effectKey: ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
-      effectName: "Благословение"
+      effectName: auditLocalize("FALLOUTMAW.AuditRuntime.R0421", "Благословение")
     });
   }
 }
 
-async function processCurseAndBlessingActorFunctions({ owner = null, effectTargets = [], effectKey = "", effectName = "" } = {}) {
+async function processCurseAndBlessingActorFunctions({ owner = null, effectTargets = [], hitTargetUuids = [], effectKey = "", effectName = "" } = {}) {
   const targets = (Array.isArray(effectTargets) ? effectTargets : [effectTargets]).filter(Boolean);
   if (!owner || !targets.length || (!game.user?.isGM && !owner.isOwner)) return;
   for (const abilityItem of owner.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
     const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
       .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing)
-      .filter(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active));
+      .filter(entry => entry.fixedSettings?.passive || Boolean(state[getFixedFunctionStateKey(entry)]?.active));
     for (const abilityFunction of functions) {
       const settings = normalizeCurseAndBlessingSettings(abilityFunction.fixedSettings);
-      const spent = await spendCurseAndBlessingEnergy(owner, abilityItem, abilityFunction, getAbilityEnergyCost(owner, abilityItem, abilityFunction, settings.energyCost));
+      const spent = settings.passive || await spendCurseAndBlessingEnergy(owner, abilityItem, abilityFunction, getAbilityEnergyCost(owner, abilityItem, abilityFunction, settings.energyCost));
       if (!spent) continue;
       const chance = Math.min(100, evaluateActorFormula(settings.triggerFormula, owner, {
         fallback: 0,
@@ -13292,6 +13223,7 @@ async function processCurseAndBlessingActorFunctions({ owner = null, effectTarge
         context: getAbilityDisplayName(abilityItem)
       }));
       for (const target of targets) {
+        if (settings.requireHit && !hitTargetUuids.includes(target.uuid)) continue;
         if ((Math.floor(Math.random() * 100) + 1) > chance) continue;
         await applyCurseAndBlessingEffect(target, abilityItem, abilityFunction, {
           effectKey,
@@ -13304,57 +13236,25 @@ async function processCurseAndBlessingActorFunctions({ owner = null, effectTarge
 }
 
 async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
-  return runActorEnergyMutation(actor, () => (
-    spendCurseAndBlessingEnergyNow(actor, abilityItem, abilityFunction, energyCost)
-  ));
-}
-
-async function spendCurseAndBlessingEnergyNow(actor, abilityItem, abilityFunction, energyCost = 0) {
   const cost = Math.max(0, toInteger(energyCost));
-  if (!hasCurseAndBlessingEnergy(actor, cost)) {
+  const transaction = await spendActorEnergyWithReceipt(actor, cost);
+  if (transaction.spent !== cost) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
-    await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0167", { p0: (getActorAvailableEnergy(actor)), p1: (cost) }, "Выключено: недостаточно энергии ({p0} / {p1})."));
     return false;
   }
-  if (!cost) return true;
-  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
-  const nextValue = Math.max(toInteger(resource?.min), getActorEnergy(actor) - cost);
-  const update = {
-    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue
-  };
-  if (resource && Object.hasOwn(resource, "spent")) {
-    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
-  }
-  await actor.update(update);
   return true;
 }
 
 async function spendEnergy(actor, energyCost = 0, updateOptions = {}) {
   const cost = Math.max(0, toInteger(energyCost));
-  return runActorEnergyMutation(actor, () => spendEnergyNow(actor, cost, updateOptions));
+  const transaction = await spendActorEnergyWithReceipt(actor, cost, updateOptions);
+  return transaction.spent === cost;
 }
 
-async function refundEnergy(actor, energyAmount = 0) {
-  const amount = Math.max(0, toInteger(energyAmount));
-  if (!amount) return true;
-  if (!actor?.system?.resources?.[ENERGY_RESOURCE_KEY]) return false;
-  await restoreActorEnergy(actor, amount, { falloutMawAbilityResourceRefund: true });
-  return true;
-}
-
-async function spendEnergyNow(actor, cost = 0, updateOptions = {}) {
-  if (!hasEnergy(actor, cost)) return false;
-  if (!cost) return true;
-  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
-  const nextValue = Math.max(toInteger(resource?.min), getActorEnergy(actor) - cost);
-  const update = {
-    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue
-  };
-  if (resource && Object.hasOwn(resource, "spent")) {
-    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
-  }
-  await actor.update(update, updateOptions);
-  return true;
+async function refundEnergy(actor, receipt = null) {
+  if (!receipt?.amount) return true;
+  return await refundActorEnergyReceipt(actor, receipt) === receipt.amount;
 }
 
 function getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0) {
@@ -13398,11 +13298,22 @@ async function deactivateFixedAbilityFunction(abilityItem, abilityFunction) {
 
 async function applyCurseAndBlessingEffect(actor, abilityItem, abilityFunction, { effectKey = "", effectName = "", durationSeconds = 0 } = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const settings = normalizeCurseAndBlessingSettings(abilityFunction.fixedSettings);
+  const existing = Array.from(actor.effects ?? []).filter(effect => !effect.disabled && !effect.isExpired
+    && effect.getFlag?.(SYSTEM_ID, CURSE_AND_BLESSING_EFFECT_FLAG_KEY)
+    && (effect.system?.changes ?? []).some(change => change.key === effectKey));
   const startTime = Number(game.time?.worldTime) || 0;
+  if (existing.length >= settings.maxStacks) {
+    const oldest = existing.sort((a, b) => Number(a.getFlag(SYSTEM_ID, CURSE_AND_BLESSING_EFFECT_FLAG_KEY).createdAt)
+      - Number(b.getFlag(SYSTEM_ID, CURSE_AND_BLESSING_EFFECT_FLAG_KEY).createdAt))[0];
+    await oldest.update({ start: { time: startTime }, duration: { value: durationSeconds, units: "seconds", expired: false },
+      [`flags.${SYSTEM_ID}.${CURSE_AND_BLESSING_EFFECT_FLAG_KEY}.createdAt`]: startTime });
+    return true;
+  }
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: effectName,
-    img: abilityItem.img || "icons/svg/aura.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -13481,7 +13392,7 @@ async function applyRageEffect(actor, abilityItem, abilityFunction, settings = {
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem.img || "icons/svg/explosion.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-volley.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -13514,7 +13425,7 @@ async function applyHeightenedConcentrationEffect(actor, abilityItem, abilityFun
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem.img || "icons/svg/aura.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -13588,7 +13499,7 @@ async function applyLethalAttackPreparationEffect(actor, abilityItem, abilityFun
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem.img || "icons/svg/target.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -13638,18 +13549,18 @@ async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction
   })));
   const result = (Math.floor(Math.random() * 100) + 1) <= chance
     ? "criticalSuccess"
-    : "criticalFailure";
+    : settings.failureResult;
   const effectKey = SMART_FUDGE_RESULT_EFFECT_KEYS[result];
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem.img || "icons/svg/aura.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
     showIcon: 0,
     system: {
-      changes: [{
+      changes: result === "normal" ? [] : [{
         key: effectKey,
         type: "add",
         value: "1",
@@ -13667,6 +13578,7 @@ async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction
           functionId: abilityFunction.id,
           fixedKey: abilityFunction.fixedKey,
           result,
+          burstFirstOnly: settings.burstFirstOnly,
           pelletCoveragePercent: Math.max(0, Math.min(100, toInteger(settings.pelletCoveragePercent))),
           burstCoveragePercent: Math.max(0, Math.min(100, toInteger(settings.burstCoveragePercent))),
           createdAt: startTime
@@ -13704,17 +13616,20 @@ async function processReaperAttackResolution(context = {}) {
       .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper);
     if (!abilityFunction) continue;
     const settings = normalizeReaperSettings(abilityFunction.fixedSettings);
-    const restored = killed && rollReaperChance(actor, settings.killChanceFormula, `${getAbilityDisplayName(abilityItem)}: убийство`)
-      ? await restoreReaperActionPoints(actor, actionPointCost)
+    const refund = () => context?.actionPointSpendReceipt?.resourceKey === "actionPoints"
+      ? refundCombatActionPointReceipt(actor, context.actionPointSpendReceipt, { chainRef: context.chainRef })
+      : restoreReaperActionPoints(actor, actionPointCost);
+    const restored = killed && rollReaperChance(actor, settings.killChanceFormula, auditFormat("FALLOUTMAW.AuditRuntime.R0422", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: убийство"))
+      ? await refund()
       : 0;
     if (restored > 0) {
-      await createAbilityChatMessage(actor, abilityItem, `Восстановлено ${restored} ОД за убийство.`);
+      await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0423", { p0: (restored) }, "Восстановлено {p0} ОД за убийство."));
       return;
     }
-    if (!rollReaperChance(actor, settings.attackChanceFormula, `${getAbilityDisplayName(abilityItem)}: атака`)) continue;
-    const attackRestored = await restoreReaperActionPoints(actor, actionPointCost);
+    if (!rollReaperChance(actor, settings.attackChanceFormula, auditFormat("FALLOUTMAW.AuditRuntime.R0424", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: атака"))) continue;
+    const attackRestored = await refund();
     if (attackRestored > 0) {
-      await createAbilityChatMessage(actor, abilityItem, `Восстановлено ${attackRestored} ОД за атаку.`);
+      await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0425", { p0: (attackRestored) }, "Восстановлено {p0} ОД за атаку."));
       return;
     }
   }
@@ -13771,8 +13686,8 @@ async function processSandmanAttackResolution(context = {}) {
       [stateKey]: nextState
     });
     const messages = [];
-    if (chargeGain > 0) messages.push(`получено зарядов: ${chargeGain}`);
-    if (restored > 0) messages.push(`восстановлено ОД: ${restored}`);
+    if (chargeGain > 0) messages.push(auditFormat("FALLOUTMAW.AuditRuntime.R0426", { p0: (chargeGain) }, "получено зарядов: {p0}"));
+    if (restored > 0) messages.push(auditFormat("FALLOUTMAW.AuditRuntime.R0427", { p0: (restored) }, "восстановлено ОД: {p0}"));
     if (messages.length) await createAbilityChatMessage(actor, entry.abilityItem, messages.join(", ") + ".");
   }
 }
@@ -13957,6 +13872,7 @@ function getActorSandmanEntries(actor) {
 }
 
 async function processAtRandomAttackResolution(context = {}) {
+  if (context?.canceledByReaction || !(context?.attackCheckCount > 0)) return;
   const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
   const actor = context?.actor ?? (actorUuid ? fromUuidSync(actorUuid) : null);
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
@@ -13967,19 +13883,45 @@ async function processAtRandomAttackResolution(context = {}) {
   const actionKey = String(context?.actionKey ?? "").trim();
   if (!ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)) return;
 
-  const blockedActionKeys = new Set();
-  if (rollAtRandomChance(actor, entry.settings.blockChanceFormula, `${getAbilityDisplayName(entry.abilityItem)}: текущее действие`)) {
+  const attackId = String(context.attackId ?? context.weaponAttackId ?? "");
+  const planned = atRandomAttackPlans.get(attackId);
+  atRandomAttackPlans.delete(attackId);
+  const blockedActionKeys = planned ?? new Set();
+  if (!planned) {
+  if (rollAtRandomChance(actor, entry.settings.blockChanceFormula, auditFormat("FALLOUTMAW.AuditRuntime.R0428", { p0: (getAbilityDisplayName(entry.abilityItem)) }, "{p0}: текущее действие"))) {
     blockedActionKeys.add(actionKey);
   }
 
-  if (rollAtRandomChance(actor, entry.settings.extraBlockChanceFormula, `${getAbilityDisplayName(entry.abilityItem)}: случайное действие`)) {
+  if (blockedActionKeys.has(actionKey) && rollAtRandomChance(actor, entry.settings.extraBlockChanceFormula, auditFormat("FALLOUTMAW.AuditRuntime.R0429", { p0: (getAbilityDisplayName(entry.abilityItem)) }, "{p0}: случайное действие"))) {
     const candidates = getAtRandomExtraActionCandidates(actionKey);
     if (candidates.length) {
       blockedActionKeys.add(candidates[Math.floor(Math.random() * candidates.length)]);
     }
   }
+  }
 
   await replaceAtRandomActionBlockEffect(actor, entry.abilityItem, entry.abilityFunction, [...blockedActionKeys]);
+}
+
+function requestAtRandomDuplicate(context = {}) {
+  const actor = context.actor;
+  const entry = getActorAtRandomEntry(actor);
+  if (!entry?.settings.duplicateOnUnblocked) return;
+  const actionKey = context.actionKey;
+  if (!ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)) return;
+  const attackId = String(context.controller?.attackId ?? "");
+  const blocked = new Set();
+  if (rollAtRandomChance(actor, entry.settings.blockChanceFormula)) {
+    blocked.add(actionKey);
+    if (rollAtRandomChance(actor, entry.settings.extraBlockChanceFormula)) {
+      const candidates = getAtRandomExtraActionCandidates(actionKey);
+      if (candidates.length) blocked.add(candidates[Math.floor(Math.random() * candidates.length)]);
+    }
+  } else context.addDuplicateRequest({ count: 1 });
+  if (attackId) {
+    if (atRandomAttackPlans.size >= 128) atRandomAttackPlans.delete(atRandomAttackPlans.keys().next().value);
+    atRandomAttackPlans.set(attackId, blocked);
+  }
 }
 
 async function applyDefensiveTacticsAtTurnEnd({
@@ -14042,7 +13984,7 @@ async function createDefensiveTacticsEffect(actor, abilityItem, abilityFunction,
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem?.img || "icons/svg/shield.svg",
+    img: abilityItem?.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: abilityItem?.uuid ?? actor.uuid,
     transfer: false,
     disabled: false,
@@ -14141,7 +14083,7 @@ async function createOrRefreshInconspicuousEffect(actor, entry) {
   const effectData = {
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem?.img || "icons/svg/mystery-man.svg",
+    img: abilityItem?.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     origin: abilityItem?.uuid ?? actor.uuid,
     transfer: false,
     disabled: false,
@@ -14247,35 +14189,54 @@ async function processLastChanceLethalDamage({ actor = null, amount = 0 } = {}) 
   const entry = getActorLastChanceEntry(actor);
   if (!entry) return { handled: false, prevented: false };
 
-  const energyCost = getAbilityEnergyCost(actor, entry.abilityItem, entry.abilityFunction, entry.settings.energyCost);
-  if (!hasEnergy(actor, energyCost)) return { handled: false, prevented: false };
-  if (!(await spendEnergy(actor, energyCost))) return { handled: false, prevented: false };
-
-  try {
-    await applyAbilityOverloadEffect(actor, entry.abilityItem, entry.abilityFunction, {
-      name: getAbilityOverloadName(entry.abilityItem),
-      energyCost: entry.settings.overloadEnergyCost,
-      durationSeconds: entry.settings.overloadDurationSeconds
-    });
-  } catch (error) {
-    console.error("Fallout MaW | Failed to apply Last Chance overload", error);
-  }
+  const state = foundry.utils.deepClone(getFixedAbilityState(entry.abilityItem));
+  const key = getFixedFunctionStateKey(entry.abilityFunction);
+  if (state[key]?.passiveSpent) return { handled: false, prevented: false };
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(entry.settings.chanceFormula, actor, {
     fallback: 0,
     minimum: 0,
     context: getAbilityDisplayName(entry.abilityItem)
   })));
   const prevented = (Math.floor(Math.random() * 100) + 1) <= chance;
+  if (prevented) {
+    state[key] = { ...state[key], passiveSpent: true };
+    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+    if (actor.statuses?.has("unconscious")) {
+      await actor.update({ "system.resources.consciousness.value": actor.system.resources.consciousness.max,
+        "system.combat.consciousnessRecoveryTarget": 0 });
+    }
+  }
   try {
     await createLastChanceChatMessage(actor, entry.abilityItem, {
       prevented,
       damage: Math.max(0, toInteger(amount)),
-      energyCost
+      energyCost: 0
     });
   } catch (error) {
     console.error("Fallout MaW | Failed to publish Last Chance result", error);
   }
   return { handled: true, prevented };
+}
+
+async function useLastChanceReset(actor, abilityItem, abilityFunction) {
+  const settings = normalizeLastChanceSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const key = getFixedFunctionStateKey(abilityFunction);
+  if (!state[key]?.passiveSpent) {
+    ui.notifications.info(`${getAbilityDisplayName(abilityItem)}: пассивная способность уже готова.`);
+    return false;
+  }
+  if (!await spendEnergy(actor, getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem), energyCost: settings.overloadEnergyCost, durationSeconds: settings.overloadDurationSeconds
+  });
+  const reset = rollReaperChance(actor, settings.resetChanceFormula);
+  if (reset) {
+    state[key] = { ...state[key], passiveSpent: false };
+    await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  }
+  await createAbilityChatMessage(actor, abilityItem, reset ? "Перезарядка сброшена." : "Сброс перезарядки не удался.");
+  return true;
 }
 
 function getActorLastChanceEntry(actor) {
@@ -14297,21 +14258,21 @@ async function createLastChanceChatMessage(actor, abilityItem, { prevented = fal
     stateClass: prevented ? "success" : "failure",
     actor: {
       name: actor.name,
-      img: actor.img || "icons/svg/mystery-man.svg"
+      img: actor.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"
     },
     ability: {
       name: getAbilityDisplayName(abilityItem),
-      img: abilityItem?.img || "icons/svg/aura.svg"
+      img: abilityItem?.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp"
     },
     prevented,
     damage: Math.max(0, toInteger(damage)),
     energyCost: Math.max(0, toInteger(energyCost)),
     labels: {
       title: getAbilityDisplayName(abilityItem),
-      success: "Смертельный урон отменён",
-      failure: `${getAbilityDisplayName(abilityItem)} не сработал`,
-      energy: "Потрачено энергии",
-      damage: prevented ? "Отменено урона" : "Смертельный урон"
+      success: auditLocalize("FALLOUTMAW.AuditRuntime.R0430", "Смертельный урон отменён"),
+      failure: auditFormat("FALLOUTMAW.AuditRuntime.R0431", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0} не сработал"),
+      energy: auditLocalize("FALLOUTMAW.AuditRuntime.R0432", "Потрачено энергии"),
+      damage: prevented ? auditLocalize("FALLOUTMAW.AuditRuntime.R0433", "Отменено урона") : auditLocalize("FALLOUTMAW.AuditRuntime.R0434", "Смертельный урон")
     }
   };
   const content = await renderTemplate(TEMPLATES.lastChanceChatCard, context);
@@ -14352,7 +14313,7 @@ function getAtRandomExtraActionCandidates(currentActionKey = "") {
   return ATTACKING_WEAPON_ACTION_KEYS.filter(actionKey => actionKey !== current);
 }
 
-function rollAtRandomChance(actor, formula = "", context = "Способность") {
+function rollAtRandomChance(actor, formula = "", context = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) {
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(formula, actor, {
     fallback: 0,
     minimum: 0,
@@ -14403,7 +14364,7 @@ async function replaceAtRandomActionBlockEffect(actor, abilityItem, abilityFunct
   }], { animate: false });
 }
 
-function rollReaperChance(actor, formula = "", context = "Способность") {
+function rollReaperChance(actor, formula = "", context = auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность")) {
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(formula, actor, {
     fallback: 0,
     minimum: 0,
@@ -14441,7 +14402,7 @@ function applyShadowStealthBonus(check = {}) {
   check.situationalModifier = toInteger(check.situationalModifier) + bonus;
   check.modifiers?.push?.({
     source: ABILITY_FIXED_FUNCTION_KEYS.shadow,
-    label: "Тень",
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0142", "Тень"),
     value: bonus
   });
 }
@@ -14455,7 +14416,7 @@ function applyNightmareStealthCriticalFailureImmunity(check = {}) {
   check.disabledResults.criticalFailure = true;
   check.modifiers?.push?.({
     source: ABILITY_FIXED_FUNCTION_KEYS.nightmare,
-    label: "Кошмар: критический провал исключён",
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0435", "Кошмар: критический провал исключён"),
     value: 0
   });
 }
@@ -14464,12 +14425,16 @@ async function updateFourLeafCloverCharges(outcome = {}) {
   const actor = outcome?.actor;
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
   const resultKey = String(outcome?.result?.key ?? "");
-  if (!["failure", "criticalFailure", "criticalSuccess"].includes(resultKey)) return;
+  if (!["success", "failure", "criticalFailure", "criticalSuccess"].includes(resultKey)) return;
 
   for (const { abilityItem, abilityFunction, settings } of getActorFourLeafCloverEntries(actor)) {
     let nextCharges = settings.currentCharges;
-    if (resultKey === "criticalSuccess") nextCharges = 0;
+    if (resultKey === "criticalSuccess") {
+      nextCharges = rollReaperChance(actor, settings.keepChanceFormula) ? nextCharges
+        : rollReaperChance(actor, settings.halfChanceFormula) ? Math.floor(nextCharges / 2) : 0;
+    }
     else if (resultKey === "criticalFailure") nextCharges += settings.criticalFailureCharges;
+    else if (resultKey === "success") nextCharges += settings.successCharges;
     else nextCharges += settings.failureCharges;
     if (nextCharges === settings.currentCharges) continue;
     await updateFixedAbilityFunctionSettings(abilityItem, abilityFunction, {
@@ -14577,11 +14542,11 @@ function getCombinedReactionEnergyCost(reactionEnergyCost = 0, attackEnergyCost 
 function buildReactionEnergyCostLines(baseReactionEnergyCost = 0, reactionEnergyCost = 0, attackEnergyCost = 0) {
   const reactionCost = Math.max(0, toInteger(reactionEnergyCost));
   const attackCost = Math.max(0, toInteger(attackEnergyCost));
-  if (!attackCost) return [`Энергия: ${Math.max(0, toInteger(baseReactionEnergyCost))} базовая / ${reactionCost} итоговая`];
+  if (!attackCost) return [auditFormat("FALLOUTMAW.AuditRuntime.R0291", { p0: (Math.max(0, toInteger(baseReactionEnergyCost))), p1: (reactionCost) }, "Энергия: {p0} базовая / {p1} итоговая")];
   return [
-    `Энергия реакции: ${Math.max(0, toInteger(baseReactionEnergyCost))} базовая / ${reactionCost} итоговая`,
-    `Энергия атаки: ${attackCost}`,
-    `Энергия всего: ${reactionCost + attackCost}`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0436", { p0: (Math.max(0, toInteger(baseReactionEnergyCost))), p1: (reactionCost) }, "Энергия реакции: {p0} базовая / {p1} итоговая"),
+    auditFormat("FALLOUTMAW.AuditRuntime.R0437", { p0: (attackCost) }, "Энергия атаки: {p0}"),
+    auditFormat("FALLOUTMAW.AuditRuntime.R0438", { p0: (reactionCost + attackCost) }, "Энергия всего: {p0}")
   ];
 }
 
@@ -14699,7 +14664,7 @@ async function advanceDeusExMachinaProgressFromDamage(results = []) {
       [DEUS_EX_MACHINA_PROGRESS_OPTION]: true
     });
     for (const abilityItem of readyMessages) {
-      await createAbilityChatMessage(actor, abilityItem, "Накопление завершено. Способность готова к применению.");
+      await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0439", "Накопление завершено. Способность готова к применению."));
     }
   }
 }
@@ -14744,7 +14709,7 @@ async function useDeusExMachina(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const progress = Math.max(0, toInteger(state[stateKey]?.damage));
   if (progress < settings.damageRequired) {
-    ui.notifications.warn(`${abilityName}: накоплено ${progress} / ${settings.damageRequired}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0059", { p0: (abilityName), p1: (progress), p2: (settings.damageRequired) }, "{p0}: накоплено {p1} / {p2}."));
     return false;
   }
 
@@ -14770,27 +14735,27 @@ async function requestDeusExMachinaChoice(actor, settings, abilityItem) {
   const choices = [
     {
       value: "insight",
-      label: "Прозрение",
-      description: `+${settings.insight.skillBonus} ко всем навыкам на ${formatDuration(settings.insight.durationSeconds)}.`,
-      disabledReason: insightActive ? "Бонус уже активен." : ""
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0440", "Прозрение"),
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0441", { p0: (settings.insight.skillBonus), p1: (formatDuration(settings.insight.durationSeconds)) }, "+{p0} ко всем навыкам на {p1}."),
+      disabledReason: insightActive ? auditLocalize("FALLOUTMAW.AuditRuntime.R0442", "Бонус уже активен.") : ""
     },
     {
       value: "disintegrate",
-      label: "Забавный случай",
-      description: `Уничтожить ключевые конечности цели и ${settings.disintegrate.destroyPercent}% предметов/валюты.`,
-      disabledReason: canDisintegrate ? "" : "Нужна ровно одна цель в таргете."
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0443", "Забавный случай"),
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0444", { p0: (settings.disintegrate.destroyPercent) }, "Уничтожить ключевые конечности цели и {p0}% предметов/валюты."),
+      disabledReason: canDisintegrate ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0445", "Нужна ровно одна цель в таргете.")
     },
     {
       value: "luckyFind",
-      label: "Удачная находка",
-      description: `Найти валюту общей ценностью ${settings.luckyFind.valueMin}-${settings.luckyFind.valueMax}.`,
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0446", "Удачная находка"),
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0447", { p0: (settings.luckyFind.valueMin), p1: (settings.luckyFind.valueMax) }, "Найти валюту общей ценностью {p0}-{p1}."),
       disabledReason: ""
     },
     {
       value: "rescue",
-      label: "Чудесное спасение",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0448", "Чудесное спасение"),
       description: getRescueChoiceDescription(settings),
-      disabledReason: canRescue ? "" : "Доступно только если владелец мертв."
+      disabledReason: canRescue ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0449", "Доступно только если владелец мертв.")
     }
   ];
   const defaultChoice = choices.find(choice => !choice.disabledReason)?.value ?? "";
@@ -14817,7 +14782,7 @@ async function requestDeusExMachinaChoice(actor, settings, abilityItem) {
       window: { title: getAbilityDisplayName(abilityItem) },
       content,
       ok: {
-        label: "Применить",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0284", "Применить"),
         icon: "fa-solid fa-check",
         callback: (_event, button) => new FormDataExtended(button.form).object
       },
@@ -14862,7 +14827,7 @@ function syncDeusExMachinaTargetChoice(dialog) {
   input.disabled = !canDisintegrate;
   choice.classList.toggle("disabled", !canDisintegrate);
   reason.hidden = canDisintegrate;
-  reason.textContent = canDisintegrate ? "" : "Нужна ровно одна цель в таргете.";
+  reason.textContent = canDisintegrate ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0445", "Нужна ровно одна цель в таргете.");
 
   if (!canDisintegrate && input.checked) {
     input.checked = false;
@@ -14872,11 +14837,11 @@ function syncDeusExMachinaTargetChoice(dialog) {
 
 async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, settings) {
   if (hasDeusExMachinaInsightEffect(actor)) {
-    ui.notifications.warn("Прозрение уже активно.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0450", "Прозрение уже активно."));
     return false;
   }
   if (!getSkillSettings().length) {
-    ui.notifications.warn("Навыки не настроены.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0451", "Навыки не настроены."));
     return false;
   }
   const changes = [{
@@ -14891,7 +14856,7 @@ async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, se
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: getAbilityDisplayName(abilityItem),
-    img: abilityItem.img || "icons/svg/aura.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
@@ -14913,14 +14878,14 @@ async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, se
       }
     }
   }], { animate: false });
-  await createAbilityChatMessage(actor, abilityItem, "Прозрение применено.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0452", "Прозрение применено."));
   return true;
 }
 
 async function applyDeusExMachinaDisintegrate(actor, abilityItem, abilityFunction) {
   const targets = Array.from(game.user?.targets ?? []).filter(token => token?.actor);
   if (targets.length !== 1) {
-    ui.notifications.warn("Для Забавного случая нужна ровно одна цель.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0453", "Для Забавного случая нужна ровно одна цель."));
     return false;
   }
   const targetToken = targets[0];
@@ -14933,7 +14898,7 @@ async function applyDeusExMachinaDisintegrate(actor, abilityItem, abilityFunctio
     senderUserId: game.user?.id ?? ""
   });
   if (!applied) {
-    ui.notifications.warn("Не удалось применить Забавный случай.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0454", "Не удалось применить Забавный случай."));
     return false;
   }
   return true;
@@ -14943,7 +14908,7 @@ async function requestDeusExMachinaDisintegrateOperation(payload = {}) {
   if (game.user?.isGM) return processDeusExMachinaDisintegrateOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0192", "Нет активного GM для выполнения способности."));
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -14952,7 +14917,7 @@ async function requestDeusExMachinaDisintegrateOperation(payload = {}) {
       pendingFixedAbilitySocketRequests.delete(requestId);
       resolve(false);
     }, DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, authorityUserId: gm.id });
     game.socket.emit(FIXED_ABILITY_SOCKET, {
       scope: FIXED_ABILITY_SOCKET_SCOPE,
       action: "performDeusExMachinaDisintegrate",
@@ -15000,7 +14965,7 @@ async function processDeusExMachinaDisintegrateOperation(payload = {}) {
   for (const limbKey of criticalLimbKeys) await setLimbMissingState(targetActor, limbKey, { syncStatus: false });
   await applyDestroyedLimbConsequences(targetActor, criticalLimbKeys);
   await destroyTargetPossessions(targetActor, settings.disintegrate.destroyPercent);
-  await createAbilityChatMessage(actor, abilityItem, `Цель ${targetActor.name} постиг забавный случай.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0455", { p0: (targetActor.name) }, "Цель {p0} постиг забавный случай."));
   return true;
 }
 
@@ -15010,7 +14975,7 @@ async function applyDeusExMachinaLuckyFind(actor, settings, abilityItem) {
   const totalValue = min + Math.floor(Math.random() * ((max - min) + 1));
   const awards = createRandomCurrencyAwards(totalValue);
   if (!awards.length) {
-    ui.notifications.warn("Валюты не настроены.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0456", "Валюты не настроены."));
     return false;
   }
 
@@ -15019,13 +14984,13 @@ async function applyDeusExMachinaLuckyFind(actor, settings, abilityItem) {
     update[`system.currencies.${award.key}`] = Math.max(0, toInteger(actor.system?.currencies?.[award.key])) + award.amount;
   }
   await actor.update(update);
-  await createAbilityChatMessage(actor, abilityItem, `Найдена валюта общей ценностью ${totalValue}.`);
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0457", { p0: (totalValue) }, "Найдена валюта общей ценностью {p0}."));
   return true;
 }
 
 async function applyDeusExMachinaRescue(actor, settings, abilityItem) {
   if (!isActorDeadForDeusExMachina(actor)) {
-    ui.notifications.warn("Чудесное спасение доступно только если владелец мертв.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0458", "Чудесное спасение доступно только если владелец мертв."));
     return false;
   }
 
@@ -15040,7 +15005,7 @@ async function applyDeusExMachinaRescue(actor, settings, abilityItem) {
   if (toInteger(health?.value) <= min) {
     await actor.update({ "system.resources.health.value": min + 1 });
   }
-  await createAbilityChatMessage(actor, abilityItem, "Чудесное спасение применено.");
+  await createAbilityChatMessage(actor, abilityItem, auditLocalize("FALLOUTMAW.AuditRuntime.R0459", "Чудесное спасение применено."));
   return true;
 }
 
@@ -15167,16 +15132,16 @@ function hasDeusExMachinaInsightEffect(actor) {
 }
 
 function getRescueChoiceDescription(settings) {
-  if (settings.rescue.restoreMode === "all") return "Восстановить все ключевые конечности и прийти в сознание.";
-  return `Восстановить ключевые конечности: ${Math.max(1, toInteger(settings.rescue.restoreCount))}.`;
+  if (settings.rescue.restoreMode === "all") return auditLocalize("FALLOUTMAW.AuditRuntime.R0460", "Восстановить все ключевые конечности и прийти в сознание.");
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0461", { p0: (Math.max(1, toInteger(settings.rescue.restoreCount))) }, "Восстановить ключевые конечности: {p0}.");
 }
 
 function formatDuration(seconds = 0) {
   const safeSeconds = Math.max(0, toInteger(seconds));
-  if (!safeSeconds) return "без ограничения времени";
-  if (safeSeconds % 3600 === 0) return `${safeSeconds / 3600} ч.`;
-  if (safeSeconds % 60 === 0) return `${safeSeconds / 60} мин.`;
-  return `${safeSeconds} сек.`;
+  if (!safeSeconds) return auditLocalize("FALLOUTMAW.AuditRuntime.R0462", "без ограничения времени");
+  if (safeSeconds % 3600 === 0) return auditFormat("FALLOUTMAW.AuditRuntime.R0463", { p0: (safeSeconds / 3600) }, "{p0} ч.");
+  if (safeSeconds % 60 === 0) return auditFormat("FALLOUTMAW.AuditRuntime.R0464", { p0: (safeSeconds / 60) }, "{p0} мин.");
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0465", { p0: (safeSeconds) }, "{p0} сек.");
 }
 
 async function createAbilityChatMessage(actor, item, message = "") {
@@ -15195,7 +15160,7 @@ function getResponsibleActorOwner(actor) {
 }
 
 function getAbilityDisplayName(item) {
-  return String(item?.name ?? "").trim() || "Способность";
+  return String(item?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность");
 }
 
 function escapeHTML(value) {

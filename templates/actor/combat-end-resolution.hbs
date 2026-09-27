@@ -6,7 +6,7 @@
         <img class="fallout-maw-combat-end-portrait" src="{{img}}" alt="">
       </div>
       <div class="fallout-maw-combat-end-cell fallout-maw-combat-end-action-cell">
-        <button type="button" class="fallout-maw-combat-end-action" data-action="search" title="{{searchTitle}}" aria-label="Обыскать" {{#if searchDisabled}}disabled{{/if}}>
+        <button type="button" class="fallout-maw-combat-end-action" data-action="search" title="{{searchTitle}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text45d6f874ee77'}}" {{#if searchDisabled}}disabled{{/if}}>
           <span class="fallout-maw-combat-end-action-icon">
             <img src="{{../actionIcons.search}}" alt="">
           </span>
@@ -14,7 +14,7 @@
       </div>
       <div class="fallout-maw-combat-end-cell fallout-maw-combat-end-action-cell">
         {{#if showFinish}}
-        <button type="button" class="fallout-maw-combat-end-action danger" data-action="finish" title="{{finishTitle}}" aria-label="Добить" {{#if finishDisabled}}disabled{{/if}}>
+        <button type="button" class="fallout-maw-combat-end-action danger" data-action="finish" title="{{finishTitle}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text18a918481cc4'}}" {{#if finishDisabled}}disabled{{/if}}>
           <span class="fallout-maw-combat-end-action-icon">
             <img src="{{../actionIcons.finish}}" alt="">
           </span>
@@ -27,7 +27,7 @@
   <footer class="form-footer">
     <button type="button" data-action="dismiss">
       <i class="fa-solid fa-check" inert></i>
-      <span>Завершить</span>
+      <span>{{localize 'FALLOUTMAW.Item.WeaponReloadFinish'}}</span>
     </button>
   </footer>
 </section>

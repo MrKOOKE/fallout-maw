@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
@@ -27,7 +28,7 @@ export function getItemEnergyConsumptionConditions(item = null) {
       seen.add(id);
       conditions.push({
         id,
-        name: String(condition?.name ?? "").trim() || item.name || "Потребление энергии",
+        name: String(condition?.name ?? "").trim() || item.name || auditLocalize("FALLOUTMAW.AuditRuntime.R1138", "Потребление энергии"),
         amountPerHour: Math.max(0, Number(condition?.amountPerHour) || 0)
       });
     }

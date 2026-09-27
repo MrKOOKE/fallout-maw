@@ -1,7 +1,7 @@
 import { MODULE_ID, SYSTEM_PATH } from "../constants.js";
 import { setSetting } from "../settings.js";
 
-const getSystemAssetRoute = (path) => foundry.utils.getRoute(`${SYSTEM_PATH}/assets/${path}`);
+const getSystemAssetRoute = (path) => foundry.utils.getRoute(path);
 
 const THEMES = {
     default: {
@@ -28,7 +28,7 @@ const THEMES = {
         headerOnlyFont: "Modesto Condensed",
     },
     "D&D": {
-        backgroundColor: `url("${getSystemAssetRoute("dnd5e-theme/texture1.webp")}") no-repeat top center / 150% auto, #f1ebe8 url("${getSystemAssetRoute("dnd5e-theme/texture2.webp")}") no-repeat bottom center / 150% auto`,
+        backgroundColor: `url("${getSystemAssetRoute("systems/fallout-maw/assets/System/Quests/quest-dnd5e-theme-texture1.webp")}") no-repeat top center / 150% auto, #f1ebe8 url("${getSystemAssetRoute("systems/fallout-maw/assets/System/Quests/quest-dnd5e-theme-texture2.webp")}") no-repeat bottom center / 150% auto`,
         textColor: "#1c1c1c",
         secretColor: "#0091ff",
         failedColor: "#ff0000",

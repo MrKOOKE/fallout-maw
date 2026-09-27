@@ -7,7 +7,8 @@ const FALLBACK_DRAG_RESISTANCE_PX = 10;
  */
 export function createRightClickPanGuard({
   isCanvasEvent = event => Boolean(event),
-  onClick = null
+  onClick = null,
+  clickOnRelease = false
 } = {}) {
   let candidate = null;
   const canvasView = globalThis.canvas?.app?.view ?? null;
@@ -70,20 +71,45 @@ export function createRightClickPanGuard({
   const onContextMenu = event => {
     if (!isCanvasEvent(event)) return false;
     event.preventDefault?.();
+    // Foundry's active left-drag manager also listens for contextmenu and
+    // cancels the native TokenRuler plan. Swallow it even after a camera pan.
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+    if (clickOnRelease) {
+      // Context menus can arrive before or after the release of a camera pan.
+      // The pointerup handler owns the click decision in this mode.
+      return true;
+    }
     if (wasPan(event)) {
       candidate = null;
       return true; // pan — swallow browser menu, do not cancel workflow
     }
-    event.stopPropagation?.();
-    event.stopImmediatePropagation?.();
     candidate = null;
     onClick?.(event);
     return true;
   };
 
+  const onPointerUp = event => {
+    if (!clickOnRelease || !candidate || event.button !== 2) return;
+    if (
+      event.pointerId !== undefined
+      && candidate.pointerId !== undefined
+      && event.pointerId !== candidate.pointerId
+    ) return;
+    const panned = wasPan(event);
+    candidate = null;
+    if (!panned) onClick?.(event);
+  };
+
+  const onPointerCancel = () => { candidate = null; };
+
   const activate = () => {
     window.addEventListener("mousemove", onPointerMove, { capture: true });
     document.addEventListener("pointermove", onPointerMove, { capture: true });
+    if (clickOnRelease) {
+      document.addEventListener("pointerup", onPointerUp, { capture: true });
+      document.addEventListener("pointercancel", onPointerCancel, { capture: true });
+    }
     canvas.stage?.on?.("mousemove", onPointerMove);
     if (canvasView) canvasView.addEventListener("contextmenu", onContextMenu, { capture: true });
   };
@@ -91,6 +117,10 @@ export function createRightClickPanGuard({
   const deactivate = () => {
     window.removeEventListener("mousemove", onPointerMove, { capture: true });
     document.removeEventListener("pointermove", onPointerMove, { capture: true });
+    if (clickOnRelease) {
+      document.removeEventListener("pointerup", onPointerUp, { capture: true });
+      document.removeEventListener("pointercancel", onPointerCancel, { capture: true });
+    }
     canvas.stage?.off?.("mousemove", onPointerMove);
     if (canvasView) canvasView.removeEventListener("contextmenu", onContextMenu, { capture: true });
     candidate = null;

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 export function createDefaultDiseaseSettings() {
   return { diseases: [] };
 }
@@ -7,7 +8,7 @@ export function normalizeDiseaseSettings(settings = {}) {
   return {
     diseases: source.map((entry, index) => ({
       id: String(entry?.id ?? `disease-${index + 1}`).trim() || `disease-${index + 1}`,
-      name: String(entry?.name ?? "").trim() || `Болезнь ${index + 1}`,
+      name: String(entry?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditSystem.Text054", { v0: index + 1 }, "Болезнь {v0}"),
       img: String(entry?.img ?? "").trim(),
       stages: normalizeDiseaseStages(entry?.stages)
     })).filter(entry => entry.stages.length)

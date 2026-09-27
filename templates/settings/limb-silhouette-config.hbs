@@ -1,9 +1,9 @@
 <div class="fallout-maw-silhouette-editor">
   <div class="fallout-maw-silhouette-body">
-    <aside class="fallout-maw-silhouette-tools" aria-label="Инструменты силуэта">
-      <button type="button" class="fallout-maw-silhouette-tool command {{#if hasSilhouette}}danger{{/if}}" data-action="chooseImage" title="{{#if hasSilhouette}}Удалить силуэт{{else}}Загрузить контур{{/if}}">
+    <aside class="fallout-maw-silhouette-tools" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text6d9c150fd308'}}">
+      <button type="button" class="fallout-maw-silhouette-tool command {{#if hasSilhouette}}danger{{/if}}" data-action="chooseImage" title="{{#if hasSilhouette}}{{localize 'FALLOUTMAW.AuditTemplates.Text4b05713b8886'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text47a39353960c'}}{{/if}}">
         <i class="fa-solid {{#if hasSilhouette}}fa-trash{{else}}fa-image{{/if}}"></i>
-        <span>{{#if hasSilhouette}}Удалить{{else}}Загрузить{{/if}}</span>
+        <span>{{#if hasSilhouette}}{{localize 'FALLOUTMAW.Common.Delete'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Textf909c7e10ef6'}}{{/if}}</span>
       </button>
 
       <div class="fallout-maw-silhouette-tool-group">
@@ -16,13 +16,13 @@
       </div>
 
       <div class="fallout-maw-silhouette-tool-group">
-        <button type="button" class="fallout-maw-silhouette-tool command" data-action="undo" {{#unless canUndo}}disabled{{/unless}} title="Отменить">
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="undo" {{#unless canUndo}}disabled{{/unless}} title="{{localize 'FALLOUTMAW.AuditTemplates.Text555ad1c0c33d'}}">
           <i class="fa-solid fa-rotate-left"></i>
-          <span>Назад</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Textf6dab074d7bb'}}</span>
         </button>
-        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearSilhouette" {{#unless canClearSilhouette}}disabled{{/unless}} title="Очистить области">
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearSilhouette" {{#unless canClearSilhouette}}disabled{{/unless}} title="{{localize 'FALLOUTMAW.AuditTemplates.Text9cffc97c95a8'}}">
           <i class="fa-solid fa-xmark"></i>
-          <span>Очистить</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text98b2073ed181'}}</span>
         </button>
       </div>
     </aside>
@@ -67,13 +67,13 @@
       {{else}}
       <div class="fallout-maw-silhouette-empty">
         <i class="fa-solid fa-image"></i>
-        <span>Загрузите прозрачное изображение, чтобы снять контур.</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text779c9ed28cee'}}</span>
       </div>
       {{/if}}
     </div>
 
     <aside class="fallout-maw-silhouette-side">
-      <div class="fallout-maw-silhouette-side-title">Части тела</div>
+      <div class="fallout-maw-silhouette-side-title">{{localize 'FALLOUTMAW.Item.FirstAidLimbs'}}</div>
       <div class="fallout-maw-silhouette-limb-list">
         {{#each limbs}}
         <button type="button" class="fallout-maw-silhouette-limb {{#if active}}active{{/if}}" data-action="selectLimb" data-limb-key="{{key}}">
@@ -82,15 +82,15 @@
           <strong>{{areaPercent}}%</strong>
         </button>
         {{else}}
-        <p class="fallout-maw-empty-list">Сначала добавьте конечности в расу.</p>
+        <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Texteeacd7d526a2'}}</p>
         {{/each}}
       </div>
-      <p class="hint">Остаток: {{unassignedPercent}}%.</p>
+      <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textb462d4a9f285'}} {{unassignedPercent}}%.</p>
     </aside>
   </div>
 
   <footer class="sheet-footer flexrow">
-    <button type="button" data-action="save" {{#unless canSave}}disabled{{/unless}}><i class="fa-solid fa-save"></i> Сохранить</button>
-    <button type="button" data-action="close"><i class="fa-solid fa-xmark"></i> Закрыть</button>
+    <button type="button" data-action="save" {{#unless canSave}}disabled{{/unless}}><i class="fa-solid fa-save"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
+    <button type="button" data-action="close"><i class="fa-solid fa-xmark"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4ae50d30739d'}}</button>
   </footer>
 </div>

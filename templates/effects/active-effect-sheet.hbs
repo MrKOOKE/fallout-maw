@@ -67,7 +67,7 @@
       {{#if canConfigureCarrierExpiration}}
       <div class="fallout-maw-list-grid">
         <label>
-          <span>После истечения</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text3d45b3f6aba4'}}</span>
           <select name="flags.fallout-maw.onExpire">
             {{#each expirationActionChoices}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -89,16 +89,16 @@
         <h2>{{localize "FALLOUTMAW.Effects.EffectsTab"}}</h2>
         <button type="button" data-action="addChange"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
       </div>
-      <div class="fallout-maw-effect-change-list">
-        <div class="fallout-maw-effect-change-row fallout-maw-grid-header">
+      <ol class="fallout-maw-effect-change-list">
+        <li class="fallout-maw-effect-change-row fallout-maw-grid-header">
           <span>{{localize "FALLOUTMAW.Common.Path"}}</span>
           <span>{{localize "FALLOUTMAW.Effects.Mode"}}</span>
           <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
           <span>{{localize "FALLOUTMAW.Effects.Priority"}}</span>
           <span></span>
-        </div>
+        </li>
         {{#each changes}}
-        <div class="fallout-maw-effect-change-row" data-change-index="{{index}}">
+        <li class="fallout-maw-effect-change-row" data-change-index="{{index}}">
           <input type="text" name="{{paths.key}}" value="{{key}}" data-effect-key-autocomplete>
           <select name="{{paths.type}}">
             {{#each typeChoices}}
@@ -109,11 +109,11 @@
           <input type="text" name="{{paths.value}}" value="{{value}}" data-formula-autocomplete="all">
           <input type="number" name="{{paths.priority}}" value="{{priority}}" placeholder="{{priorityPlaceholder}}" step="1">
           <button type="button" data-action="deleteChange" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-        </div>
+        </li>
         {{else}}
-        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+        <li class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</li>
         {{/each}}
-      </div>
+      </ol>
     </section>
   </section>
 

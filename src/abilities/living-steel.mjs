@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { refreshActorEffectExpiration } from "../effects/registry.mjs";
 import {
@@ -18,8 +19,8 @@ export const LIVING_STEEL_RESILIENCE_EFFECT_FLAG_KEY = "livingSteelResilience";
 export const LIVING_STEEL_DAMAGE_INTERCEPTOR_ID = "fallout-maw.fixed.livingSteel";
 export const LIVING_STEEL_EXPIRY_EVENT = "fallout-maw.livingSteelInactivity";
 
-const LIVING_STEEL_EFFECT_NAME = "Живая сталь";
-const LIVING_STEEL_RESILIENCE_EFFECT_NAME = "Живая сталь: Стойкость";
+const LIVING_STEEL_EFFECT_NAME = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0148", "Живая сталь");
+const LIVING_STEEL_RESILIENCE_EFFECT_NAME = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0479", "Живая сталь: Стойкость");
 const ACTIVE_EFFECT_SHOW_ICON_NEVER = 0;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 export const LIVING_STEEL_RESILIENCE_BONUS_KEY = "system.skills.resilience.bonus";
@@ -36,7 +37,7 @@ const pendingLivingSteelBonusSyncs = new Map();
  */
 export function registerLivingSteelEffectLifecycle() {
   if (livingSteelEffectLifecycleRegistered) return;
-  CONFIG.ActiveEffect.expiryEvents[LIVING_STEEL_EXPIRY_EVENT] = "Живая сталь: без повреждений";
+  CONFIG.ActiveEffect.expiryEvents[LIVING_STEEL_EXPIRY_EVENT] = auditLocalize("FALLOUTMAW.AuditRuntime.R0480", "Живая сталь: без повреждений");
   livingSteelEffectActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasLivingSteelTrackerEffect);
   registerQueuedWorldTimeFinalizer(expireInactiveLivingSteelEffects);
   Hooks.on("updateActor", requestLivingSteelBonusSyncFromActorUpdate);
@@ -224,8 +225,8 @@ export function getLivingSteelAbilityProgressEntry(abilityItem, abilityFunction,
   const presentation = getLivingSteelPresentation(actor, getLivingSteelEffectState(effect), settings, { worldTime });
   return {
     key: `${String(abilityFunction?.id ?? "")}:${ABILITY_FIXED_FUNCTION_KEYS.livingSteel}`,
-    label: "Аннулировано",
-    value: `${presentation.progress} / ${presentation.limit} · порог: урон < ${presentation.threshold} · ${presentation.modeLabel}`
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0481", "Аннулировано"),
+    value: auditFormat("FALLOUTMAW.AuditRuntime.R0482", { p0: (presentation.progress), p1: (presentation.limit), p2: (presentation.threshold), p3: (presentation.modeLabel) }, "{p0} / {p1} · порог: урон < {p2} · {p3}")
   };
 }
 
@@ -235,9 +236,9 @@ export function getLivingSteelEffectTooltipRows(effect, actor = effect?.parent, 
   const settings = getLivingSteelSettingsForEffect(actor, state) ?? state.settings;
   const presentation = getLivingSteelPresentation(actor, state, settings, { worldTime });
   return [
-    { label: "Аннулировано", value: `${presentation.progress} / ${presentation.limit}` },
-    { label: "Порог", value: `урон < ${presentation.threshold}` },
-    { label: "Режим", value: presentation.modeLabel }
+    { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0481", "Аннулировано"), value: `${presentation.progress} / ${presentation.limit}` },
+    { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0483", "Порог"), value: auditFormat("FALLOUTMAW.AuditRuntime.R0484", { p0: (presentation.threshold) }, "урон < {p0}") },
+    { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0485", "Режим"), value: presentation.modeLabel }
   ];
 }
 
@@ -263,7 +264,7 @@ export function getLivingSteelPresentation(actor, state = {}, settings = {}, { w
     threshold: formatNumber(threshold),
     weakened,
     weakenedSecondsRemaining,
-    modeLabel: weakened ? `ослабление · ${weakenedSecondsRemaining} сек.` : "полная сила"
+    modeLabel: weakened ? auditFormat("FALLOUTMAW.AuditRuntime.R0486", { p0: (weakenedSecondsRemaining) }, "ослабление · {p0} сек.") : auditLocalize("FALLOUTMAW.AuditRuntime.R0487", "полная сила")
   };
 }
 
@@ -366,8 +367,8 @@ export async function reconcileLivingSteelEffectsForAbilityItem(item) {
     const settings = normalizeLivingSteelSettings(abilityFunction.fixedSettings);
     try {
       await effect.update({
-        name: LIVING_STEEL_EFFECT_NAME,
-        img: item.img || item.parent.img || "icons/svg/shield.svg",
+        name: LIVING_STEEL_EFFECT_NAME(),
+        img: item.img || item.parent.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
         origin: item.uuid ?? item.parent.uuid,
         "duration.value": settings.resetAfterSeconds,
         "duration.units": "seconds",
@@ -481,8 +482,8 @@ async function upsertLivingSteelEffect(actor, effect, context, state, worldTime)
   };
   const effectData = {
     type: "base",
-    name: LIVING_STEEL_EFFECT_NAME,
-    img: context.abilityItem.img || actor.img || "icons/svg/shield.svg",
+    name: LIVING_STEEL_EFFECT_NAME(),
+    img: context.abilityItem.img || actor.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: context.abilityItem.uuid ?? actor.uuid,
     transfer: false,
     disabled: false,
@@ -551,8 +552,8 @@ async function upsertLivingSteelResilienceEffect(actor, effect, context, {
   const changes = buildLivingSteelResilienceChanges(actor, trackerState, context.settings, now);
   const effectData = {
     type: "base",
-    name: LIVING_STEEL_RESILIENCE_EFFECT_NAME,
-    img: context.abilityItem.img || actor.img || "icons/svg/shield.svg",
+    name: LIVING_STEEL_RESILIENCE_EFFECT_NAME(),
+    img: context.abilityItem.img || actor.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: context.abilityItem.uuid ?? actor.uuid,
     transfer: false,
     disabled: false,

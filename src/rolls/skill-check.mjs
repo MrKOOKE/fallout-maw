@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { isAttackingWeaponAction } from "../abilities/runtime-state.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
@@ -559,7 +560,7 @@ async function publishSkillCheckMessageSafely(publisher) {
     return await publisher();
   } catch (error) {
     console.error(`${SYSTEM_ID} | Skill check chat card failed`, error);
-    ui.notifications.warn("Проверка выполнена, но карточка проверки навыка не была создана.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1188", "Проверка выполнена, но карточка проверки навыка не была создана."));
     return undefined;
   }
 }
@@ -801,6 +802,7 @@ function serializeSkillCheckRequest(data = {}) {
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    allOrNothingProjectilesPerAttack: Math.max(1, toInteger(data.allOrNothingProjectilesPerAttack ?? 1)),
     damageHubOperationRef: String(data.damageHubOperationRef ?? ""),
     smartFudgeResult: String(data.smartFudgeResult ?? ""),
     resultPolicy: normalizeSkillCheckResultPolicy(data.resultPolicy)
@@ -1057,7 +1059,7 @@ function buildSkillCheckViewContext(outcome) {
 function prepareSkillCheckActorView(actor) {
   return {
     name: actor?.name ?? "",
-    img: normalizeImagePath(actor?.img, "icons/svg/mystery-man.svg")
+    img: normalizeImagePath(actor?.img, "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp")
   };
 }
 
@@ -1529,6 +1531,7 @@ function normalizeRequestData(data, requester = "") {
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    allOrNothingProjectilesPerAttack: Math.max(1, toInteger(data.allOrNothingProjectilesPerAttack ?? 1)),
     damageHubOperationRef: String(data.damageHubOperationRef ?? ""),
     smartFudgeResult: normalizeForcedResult(data.smartFudgeResult),
     resultPolicy: normalizeSkillCheckResultPolicy(data.resultPolicy)
@@ -1710,6 +1713,7 @@ function createMutableCheck(actor, skill, data) {
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    allOrNothingProjectilesPerAttack: Math.max(1, toInteger(data.allOrNothingProjectilesPerAttack ?? 1)),
     skillCheckMode: getActiveRulesProfile().skillCheckMode,
     modifiers: toolWorkflowModifiers.sources
       .filter(source => toInteger(source.skillBonus) !== 0)

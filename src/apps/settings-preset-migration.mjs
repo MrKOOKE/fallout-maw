@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -35,23 +36,23 @@ const APP_SETTINGS = Object.freeze({
 export function openPresetMigrationForApplication(app) {
   const keys = APP_SETTINGS[app.constructor.name];
   if (!keys?.length) {
-    ui.notifications.warn("Для этого окна не настроена миграция пресетов.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.PresetMigrationIsNotConfiguredForThisWindow", "Для этого окна не настроена миграция пресетов."));
     return Promise.resolve();
   }
   return openSettingsPresetMigration(app, keys.map(key => `${SYSTEM_ID}.${key}`)).catch(error => {
     console.error(`${SYSTEM_ID} | Settings preset migration failed`, error);
-    ui.notifications.error(`Миграция не выполнена: ${error?.message ?? error}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.MigrationFailed", { v0: (error?.message ?? error) }, "Миграция не выполнена: {v0}"));
   });
 }
 
 export async function openSettingsPresetMigration(app, settingIds) {
   const api = CONFIG.FalloutMaW?.settingsPresets;
   if (!api?.migrationSources || !api?.migrate || !api?.status) {
-    ui.notifications.error("Менеджер пресетов ещё не готов.");
+    ui.notifications.error(auditLocalize("FALLOUTMAW.AuditApps.ThePresetManagerIsNotReadyYet", "Менеджер пресетов ещё не готов."));
     return;
   }
   const activeId = String(api.status()?.activePresetId ?? "");
-  if (!activeId) throw new Error("Активный пресет не найден.");
+  if (!activeId) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ActivePresetNotFound", "Активный пресет не найден."));
   const sourceDataPromise = buildSources(api, activeId, settingIds);
 
   let sourceKey = "";
@@ -62,14 +63,14 @@ export async function openSettingsPresetMigration(app, settingIds) {
       return;
     }
     const { sources, target } = await sourceDataPromise;
-    if (!target) throw new Error("Активный пресет не найден.");
+    if (!target) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ActivePresetNotFound", "Активный пресет не найден."));
     sourceKey = selected;
     const source = sources.find(entry => entry.key === sourceKey);
-    if (!source) throw new Error("Выбранный пресет больше недоступен.");
+    if (!source) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheSelectedPresetIsNoLongerAvailable", "Выбранный пресет больше недоступен."));
     const result = await compareAndApply(api, target, source, settingIds);
     if (result === "change") continue;
     if (result === "applied") {
-      ui.notifications.info("Настройки перенесены в активный пресет.");
+      ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.SettingsMigratedToTheActivePreset", "Настройки перенесены в активный пресет."));
       await app.close();
       new app.constructor().render({ force: true });
     }
@@ -93,11 +94,11 @@ async function buildSources(api, activeId, settingIds) {
 
 async function chooseSource(sourceDataPromise, selected) {
   return DialogV2.wait({
-    window: { title: "Источник миграции", icon: "fa-solid fa-code-compare" },
-    content: `<label class="form-group"><span>Пресет</span><select name="source" disabled><option value="">Загрузка пресетов…</option></select></label><p class="hint">Сравнение использует актуальные сохранённые настройки выбранного пресета. Несохранённые поля открытой формы в него не входят.</p>`,
+    window: { title: auditLocalize("FALLOUTMAW.AuditApps.MigrationSource", "Источник миграции"), icon: "fa-solid fa-code-compare" },
+    content: auditLocalize("FALLOUTMAW.AuditApps.PresetLoadingPresetsTheComparisonUsesTheSelected", "<label class=\"form-group\"><span>Пресет</span><select name=\"source\" disabled><option value=\"\">Загрузка пресетов…</option></select></label><p class=\"hint\">Сравнение использует актуальные сохранённые настройки выбранного пресета. Несохранённые поля открытой формы в него не входят.</p>"),
     buttons: [
-      { action: "compare", label: "Сравнить", default: true, callback: (_event, button) => button.form.elements.source.value },
-      { action: "cancel", label: "Отмена", callback: () => false }
+      { action: "compare", label: auditLocalize("FALLOUTMAW.AuditApps.Compare", "Сравнить"), default: true, callback: (_event, button) => button.form.elements.source.value },
+      { action: "cancel", label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена"), callback: () => false }
     ],
     render: (_event, dialog) => {
       const form = dialog.element.querySelector("form");
@@ -106,7 +107,7 @@ async function chooseSource(sourceDataPromise, selected) {
       if (compare) compare.disabled = true;
       void sourceDataPromise.then(({ sources }) => {
         if (!sources.length) {
-          ui.notifications.warn("Нет другого пресета для миграции.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoOtherPresetToMigrateFrom", "Нет другого пресета для миграции."));
           return dialog.close();
         }
         if (!select) return;
@@ -116,7 +117,7 @@ async function chooseSource(sourceDataPromise, selected) {
         if (compare) compare.disabled = false;
       }).catch(error => {
         console.error(`${SYSTEM_ID} | Failed to load migration presets`, error);
-        ui.notifications.error(`Не удалось загрузить пресеты: ${error?.message ?? error}`);
+        ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToLoadPresets", { v0: (error?.message ?? error) }, "Не удалось загрузить пресеты: {v0}"));
         return dialog.close();
       });
     },
@@ -131,7 +132,7 @@ async function compareAndApply(api, targetPreset, source, settingIds) {
   const sourceMap = new Map((source.settings ?? []).map(entry => [entry.id, entry.value]));
   const ids = settingIds.filter(id => sourceMap.has(id));
   if (!ids.length) {
-    ui.notifications.warn("В выбранном источнике нет настроек этого окна.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheSelectedSourceHasNoSettingsForThis", "В выбранном источнике нет настроек этого окна."));
     return "change";
   }
   if (ids.includes(`${SYSTEM_ID}.creatureOptions`)) return compareCreatures(api, targetMap, sourceMap, source.name);
@@ -146,13 +147,13 @@ async function compareGeneric(api, ids, targetMap, sourceMap, sourceName) {
     const source = sourceMap.get(id);
     const differences = collectDifferences(target, source).slice(0, 2000);
     if (!differences.length) continue;
-    rows.push(`<fieldset data-setting="${escapeAttribute(id)}"><legend><label><input type="checkbox" data-whole-setting value="${escapeAttribute(id)}"> ${escapeHTML(id)}</label></legend>${differences.map((difference, index) => `<label class="fallout-maw-migration-row"><input type="checkbox" data-setting-path data-setting-id="${escapeAttribute(id)}" value="${escapeAttribute(difference.pointer)}"><code>${escapeHTML(difference.label || "(всё значение)")}</code><span>${escapeHTML(preview(difference.target))}</span><i class="fa-solid fa-arrow-right"></i><span>${escapeHTML(preview(difference.source))}</span></label>`).join("")}</fieldset>`);
+    rows.push(`<fieldset data-setting="${escapeAttribute(id)}"><legend><label><input type="checkbox" data-whole-setting value="${escapeAttribute(id)}"> ${escapeHTML(id)}</label></legend>${differences.map((difference, index) => `<label class="fallout-maw-migration-row"><input type="checkbox" data-setting-path data-setting-id="${escapeAttribute(id)}" value="${escapeAttribute(difference.pointer)}"><code>${escapeHTML(difference.label || auditLocalize("FALLOUTMAW.AuditApps.EntireValue", "(всё значение)"))}</code><span>${escapeHTML(preview(difference.target))}</span><i class="fa-solid fa-arrow-right"></i><span>${escapeHTML(preview(difference.source))}</span></label>`).join("")}</fieldset>`);
   }
   if (!rows.length) {
-    ui.notifications.info("Различий с выбранным источником нет.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoDifferencesFromTheSelectedSource", "Различий с выбранным источником нет."));
     return "change";
   }
-  const result = await migrationDialog(`Сравнение: ${sourceName}`, rows.join(""), form => {
+  const result = await migrationDialog(auditFormat("FALLOUTMAW.AuditApps.Comparison", { v0: (sourceName) }, "Сравнение: {v0}"), rows.join(""), form => {
     const values = [];
     for (const id of ids) {
       if (!sourceMap.has(id)) continue;
@@ -168,7 +169,7 @@ async function compareGeneric(api, ids, targetMap, sourceMap, sourceName) {
   });
   if (result === "change" || !result) return result;
   if (!result.length) {
-    ui.notifications.warn("Не выбраны данные для миграции.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.NoDataSelectedForMigration", "Не выбраны данные для миграции."));
     return null;
   }
   await api.migrate(result);
@@ -182,13 +183,8 @@ async function compareCreatures(api, targetMap, sourceMap, sourceName) {
   const types = source.types ?? [];
   const typeRows = types.map(type => {
     const raceCount = (source.races ?? []).filter(race => race.typeId === type.id).length;
-    const status = target.types?.some(entry => entry.id === type.id) ? "заменить" : "добавить";
-    return `<label class="fallout-maw-option-row fallout-maw-migration-option-row" data-creature-type-row="${escapeAttribute(type.id)}">
-      <input type="checkbox" data-creature-type value="${escapeAttribute(type.id)}">
-      <span class="fallout-maw-migration-option-name">${escapeHTML(type.name || type.id)}</span>
-      <span class="fallout-maw-migration-count">${raceCount} рас</span>
-      <span class="fallout-maw-migration-status">${status}</span>
-    </label>`;
+    const status = target.types?.some(entry => entry.id === type.id) ? auditLocalize("FALLOUTMAW.AuditApps.Replace", "заменить") : auditLocalize("FALLOUTMAW.AuditApps.Add", "добавить");
+    return auditFormat("FALLOUTMAW.AuditApps.Races", { v0: (escapeAttribute(type.id)), v1: (escapeAttribute(type.id)), v2: (escapeHTML(type.name || type.id)), v3: (raceCount), v4: (status) }, "<label class=\"fallout-maw-option-row fallout-maw-migration-option-row\" data-creature-type-row=\"{v0}\">\n      <input type=\"checkbox\" data-creature-type value=\"{v1}\">\n      <span class=\"fallout-maw-migration-option-name\">{v2}</span>\n      <span class=\"fallout-maw-migration-count\">{v3} рас</span>\n      <span class=\"fallout-maw-migration-status\">{v4}</span>\n    </label>");
   }).join("");
   const raceGroups = types.map(type => {
     const races = (source.races ?? []).filter(race => race.typeId === type.id);
@@ -197,15 +193,12 @@ async function compareCreatures(api, targetMap, sourceMap, sourceName) {
       <div class="fallout-maw-option-list">${races.map(race => `<label class="fallout-maw-option-row fallout-maw-migration-option-row">
         <input type="checkbox" data-creature-race data-type-id="${escapeAttribute(type.id)}" value="${escapeAttribute(race.id)}">
         <span class="fallout-maw-migration-option-name">${escapeHTML(race.name || race.id)}</span>
-        <span class="fallout-maw-migration-status">${target.races?.some(entry => entry.id === race.id) ? "заменить" : "добавить"}</span>
-      </label>`).join("") || '<p class="fallout-maw-empty-list">В этом типе нет рас.</p>'}</div>
+        <span class="fallout-maw-migration-status">${target.races?.some(entry => entry.id === race.id) ? auditLocalize("FALLOUTMAW.AuditApps.Replace", "заменить") : auditLocalize("FALLOUTMAW.AuditApps.Add", "добавить")}</span>
+      </label>`).join("") || auditLocalize("FALLOUTMAW.AuditApps.ThisTypeHasNoRaces", "<p class=\"fallout-maw-empty-list\">В этом типе нет рас.</p>")}</div>
     </section>`;
   }).join("");
-  const body = `<div class="fallout-maw-migration-creatures fallout-maw-two-pane">
-    <aside class="fallout-maw-sidebar"><section class="fallout-maw-panel"><header class="fallout-maw-panel-header"><h2>Типы</h2></header><p class="hint">Чекбокс типа выбирает или снимает все его расы.</p><div class="fallout-maw-option-list">${typeRows}</div></section></aside>
-    <section class="fallout-maw-panel fallout-maw-migration-race-list"><header class="fallout-maw-panel-header"><h2>Расы</h2></header>${raceGroups}</section>
-  </div>`;
-  const result = await migrationDialog(`Расы и типы: ${sourceName}`, body, form => {
+  const body = auditFormat("FALLOUTMAW.AuditApps.TypesATypeSCheckboxSelectsOrDeselects", { v0: (typeRows), v1: (raceGroups) }, "<div class=\"fallout-maw-migration-creatures fallout-maw-two-pane\">\n    <aside class=\"fallout-maw-sidebar\"><section class=\"fallout-maw-panel\"><header class=\"fallout-maw-panel-header\"><h2>Типы</h2></header><p class=\"hint\">Чекбокс типа выбирает или снимает все его расы.</p><div class=\"fallout-maw-option-list\">{v0}</div></section></aside>\n    <section class=\"fallout-maw-panel fallout-maw-migration-race-list\"><header class=\"fallout-maw-panel-header\"><h2>Расы</h2></header>{v1}</section>\n  </div>");
+  const result = await migrationDialog(auditFormat("FALLOUTMAW.AuditApps.RacesAndTypes", { v0: (sourceName) }, "Расы и типы: {v0}"), body, form => {
     const wholeTypeIds = new Set(Array.from(form.querySelectorAll("[data-creature-type]:checked"), input => input.value));
     const typeIds = new Set(wholeTypeIds);
     const raceIds = new Set(Array.from(form.querySelectorAll("[data-creature-race]:checked"), input => input.value));
@@ -234,31 +227,8 @@ async function compareAbilities(api, targetMap, sourceMap, sourceName) {
   const id = `${SYSTEM_ID}.abilitiesCatalog`;
   const source = sourceMap.get(id) ?? { categories: [] };
   const target = targetMap.get(id) ?? { categories: [] };
-  const body = `<label class="fallout-maw-migration-category-check fallout-maw-migration-ability-select-all">
-    <input type="checkbox" data-ability-select-all>
-    <strong>Выбрать всё</strong>
-  </label>
-  <div class="fallout-maw-ability-category-list fallout-maw-migration-ability-list">${(source.categories ?? []).map(category => `<div class="fallout-maw-ability-category-shell" data-migration-ability-category="${escapeAttribute(category.id)}">
-    <article class="fallout-maw-panel fallout-maw-ability-category">
-      <header class="fallout-maw-ability-category-header">
-        <button type="button" class="fallout-maw-icon-button" data-migration-ability-category-toggle aria-expanded="false" title="Развернуть категорию">
-          <i class="fa-solid fa-chevron-right"></i>
-        </button>
-        <label class="fallout-maw-migration-category-check"><input type="checkbox" data-ability-category value="${escapeAttribute(category.id)}"><strong>${escapeHTML(category.name || category.id)}</strong></label>
-        <span class="fallout-maw-migration-count">${category.abilities?.length ?? 0} способностей</span>
-      </header>
-      <div class="fallout-maw-ability-compact-list" data-migration-ability-category-body hidden>${(category.abilities ?? []).map(ability => `<div class="fallout-maw-ability-compact-row fallout-maw-migration-ability-row">
-        <img src="${escapeAttribute(ability.img || "icons/svg/aura.svg")}" alt="">
-        <label class="fallout-maw-ability-compact-main"><span>Название</span><input type="text" value="${escapeAttribute(ability.name || ability.id)}" readonly></label>
-        <div class="fallout-maw-migration-ability-controls">
-          <input type="checkbox" data-ability-id="${escapeAttribute(ability.id)}" data-source-category="${escapeAttribute(category.id)}" title="Перенести способность">
-          <span class="fallout-maw-icon-button" aria-hidden="true"><i class="fa-solid fa-arrow-right-arrow-left"></i></span>
-          <select data-ability-destination="${escapeAttribute(ability.id)}" title="Целевая категория">${buildAbilityDestinationOptions(target.categories, category)}</select>
-        </div>
-      </div>`).join("") || '<p class="fallout-maw-empty-list">В категории нет способностей.</p>'}</div>
-    </article>
-  </div>`).join("")}</div>`;
-  const result = await migrationDialog(`Способности: ${sourceName}`, body, form => {
+  const body = auditFormat("FALLOUTMAW.AuditApps.SelectAll", { v0: ((source.categories ?? []).map(category => auditFormat("FALLOUTMAW.AuditApps.Abilities", { v0: (escapeAttribute(category.id)), v1: (escapeAttribute(category.id)), v2: (escapeHTML(category.name || category.id)), v3: (category.abilities?.length ?? 0), v4: ((category.abilities ?? []).map(ability => auditFormat("FALLOUTMAW.AuditApps.Name", { v0: (escapeAttribute(ability.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp")), v1: (escapeAttribute(ability.name || ability.id)), v2: (escapeAttribute(ability.id)), v3: (escapeAttribute(category.id)), v4: (escapeAttribute(ability.id)), v5: (buildAbilityDestinationOptions(target.categories, category)) }, "<div class=\"fallout-maw-ability-compact-row fallout-maw-migration-ability-row\">\n        <img src=\"{v0}\" alt=\"\">\n        <label class=\"fallout-maw-ability-compact-main\"><span>Название</span><input type=\"text\" value=\"{v1}\" readonly></label>\n        <div class=\"fallout-maw-migration-ability-controls\">\n          <input type=\"checkbox\" data-ability-id=\"{v2}\" data-source-category=\"{v3}\" title=\"Перенести способность\">\n          <span class=\"fallout-maw-icon-button\" aria-hidden=\"true\"><i class=\"fa-solid fa-arrow-right-arrow-left\"></i></span>\n          <select data-ability-destination=\"{v4}\" title=\"Целевая категория\">{v5}</select>\n        </div>\n      </div>")).join("") || '<p class="fallout-maw-empty-list">В категории нет способностей.</p>') }, "<div class=\"fallout-maw-ability-category-shell\" data-migration-ability-category=\"{v0}\">\n    <article class=\"fallout-maw-panel fallout-maw-ability-category\">\n      <header class=\"fallout-maw-ability-category-header\">\n        <button type=\"button\" class=\"fallout-maw-icon-button\" data-migration-ability-category-toggle aria-expanded=\"false\" title=\"Развернуть категорию\">\n          <i class=\"fa-solid fa-chevron-right\"></i>\n        </button>\n        <label class=\"fallout-maw-migration-category-check\"><input type=\"checkbox\" data-ability-category value=\"{v1}\"><strong>{v2}</strong></label>\n        <span class=\"fallout-maw-migration-count\">{v3} способностей</span>\n      </header>\n      <div class=\"fallout-maw-ability-compact-list\" data-migration-ability-category-body hidden>{v4}</div>\n    </article>\n  </div>")).join("")) }, "<label class=\"fallout-maw-migration-category-check fallout-maw-migration-ability-select-all\">\n    <input type=\"checkbox\" data-ability-select-all>\n    <strong>Выбрать всё</strong>\n  </label>\n  <div class=\"fallout-maw-ability-category-list fallout-maw-migration-ability-list\">{v0}</div>");
+  const result = await migrationDialog(auditFormat("FALLOUTMAW.AuditApps.Abilities_985", { v0: (sourceName) }, "Способности: {v0}"), body, form => {
     const next = clone(target);
     next.categories ??= [];
     const wholeCategories = new Set(Array.from(form.querySelectorAll("[data-ability-category]:checked"), input => input.value));
@@ -296,7 +266,7 @@ async function compareAbilities(api, targetMap, sourceMap, sourceName) {
   });
   if (result === "change" || !result) return result;
   if (!result.length) {
-    ui.notifications.warn("Не выбраны способности или категории для миграции.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.NoAbilitiesOrCategoriesSelectedForMigration", "Не выбраны способности или категории для миграции."));
     return null;
   }
   await api.migrate(result);
@@ -307,11 +277,11 @@ async function migrationDialog(title, content, collect, { width = 900, mode = "g
   return DialogV2.wait({
     window: { title, icon: "fa-solid fa-code-compare" },
     classes: ["fallout-maw", "fallout-maw-settings-migration-dialog", `mode-${mode}`],
-    content: `<div class="fallout-maw-settings-migration"><p class="hint">Отметьте данные источника, которыми нужно заменить текущие. Неотмеченные значения не меняются.</p>${content}</div>`,
+    content: auditFormat("FALLOUTMAW.AuditApps.SelectSourceDataToReplaceTheCurrentValues", { v0: (content) }, "<div class=\"fallout-maw-settings-migration\"><p class=\"hint\">Отметьте данные источника, которыми нужно заменить текущие. Неотмеченные значения не меняются.</p>{v0}</div>"),
     buttons: [
-      { action: "apply", label: "Мигрировать выбранное", default: true, callback: (_event, button) => collect(button.form) },
-      { action: "change", label: "Сменить источник", callback: () => "change" },
-      { action: "cancel", label: "Отмена", callback: () => false }
+      { action: "apply", label: auditLocalize("FALLOUTMAW.AuditApps.MigrateSelected", "Мигрировать выбранное"), default: true, callback: (_event, button) => collect(button.form) },
+      { action: "change", label: auditLocalize("FALLOUTMAW.AuditApps.ChangeSource", "Сменить источник"), callback: () => "change" },
+      { action: "cancel", label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена"), callback: () => false }
     ],
     render: (_event, dialog) => attach?.(dialog.element.querySelector("form")),
     rejectClose: false,
@@ -399,7 +369,7 @@ function activateAbilityGroupSelection(form) {
     const expanded = body.hidden;
     body.hidden = !expanded;
     toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.title = expanded ? "Свернуть категорию" : "Развернуть категорию";
+    toggle.title = expanded ? auditLocalize("FALLOUTMAW.AuditApps.CollapseCategory", "Свернуть категорию") : auditLocalize("FALLOUTMAW.AuditApps.ExpandCategory", "Развернуть категорию");
     const icon = toggle.querySelector("i");
     icon?.classList.toggle("fa-chevron-right", !expanded);
     icon?.classList.toggle("fa-chevron-down", expanded);

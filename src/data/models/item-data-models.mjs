@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../../utils/i18n.mjs";
 import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
 import { getPreviewItemValidationOptions } from "../../documents/token-clone-initialization.mjs";
 import { MODULE_ACTION_LABELS, getModuleActionNumericFields } from "../../utils/weapon-module-actions.mjs";
@@ -80,6 +81,17 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
 }
 
 export class GearDataModel extends BaseItemDataModel {
+  prepareBaseData() {
+    super.prepareBaseData();
+    // An installed construct part occupies a body slot even in worlds created
+    // before parts were persisted as equipped items.
+    if (
+      this.parent?.parent?.type === "construct"
+      && this.placement?.mode === "constructPart"
+      && this.functions?.constructPart?.enabled
+    ) this.equipped = true;
+  }
+
   static defineSchema() {
     return {
       ...super.defineSchema(),
@@ -1400,7 +1412,7 @@ function craftRecipeField() {
 function craftRecipeVariantField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
-    name: new StringField({ required: true, blank: false, initial: "Рецепт_1" }),
+    name: new StringField({ required: true, blank: false, initial: () => auditLocalize("FALLOUTMAW.AuditRuntime.R1320", "Рецепт_1") }),
     nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
     links: new ArrayField(craftLinkField(), { required: true, initial: [] }),
     viewport: craftViewportField(),

@@ -2,34 +2,34 @@
   <header class="fallout-maw-anatomy-study-header">
     <img src="{{actorImg}}" alt="{{actorName}}">
     <div>
-      <span>Исследователь</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Textc5a7b8ebc6b8'}}</span>
       <strong>{{actorName}}</strong>
     </div>
     <button type="button" data-action="research" {{#if researchDisabled}}disabled{{/if}} title="{{researchDisabledReason}}">
       <i class="fa-solid fa-microscope"></i>
-      Начать исследование
+      {{localize 'FALLOUTMAW.Research.CreateTitle'}}
     </button>
   </header>
 
   <section class="fallout-maw-anatomy-memory">
     <div>
-      <strong>Память</strong>
+      <strong>{{localize 'FALLOUTMAW.AuditTemplates.Textf63c10e017ba'}}</strong>
       <span>{{memory.used}} / {{memory.capacity}}</span>
     </div>
-    <div class="fallout-maw-anatomy-memory-track" aria-label="Память {{memory.used}} из {{memory.capacity}}">
+    <div class="fallout-maw-anatomy-memory-track" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textf63c10e017ba'}} {{memory.used}} {{localize 'FALLOUTMAW.AuditTemplates.Textbeed16881732'}} {{memory.capacity}}">
       <span style="width: {{memory.percent}}%"></span>
     </div>
     {{#if researchDisabledReason}}<p>{{researchDisabledReason}}</p>{{/if}}
   </section>
 
   <section class="fallout-maw-anatomy-costs">
-    <span><i class="fa-solid fa-bolt"></i> Активация: <strong>{{energyCost}} энергии</strong></span>
-    <span><i class="fa-solid fa-hourglass-half"></i> <strong>{{actionPointCost}} ОД</strong></span>
-    <span><i class="fa-solid fa-wave-square"></i> Перегрузка: <strong>{{overloadEnergyCost}} энергии · {{overloadDurationLabel}}</strong></span>
+    <span><i class="fa-solid fa-bolt"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text22b4857b4393'}} <strong>{{energyCost}} {{localize 'FALLOUTMAW.AuditTemplates.Text3c4db44df13d'}}</strong></span>
+    <span><i class="fa-solid fa-hourglass-half"></i> <strong>{{actionPointCost}} {{localize 'FALLOUTMAW.Ability.Actions.ActionPoints'}}</strong></span>
+    <span><i class="fa-solid fa-wave-square"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textf2497fb2db6e'}} <strong>{{overloadEnergyCost}} {{localize 'FALLOUTMAW.AuditTemplates.Text3e6fffa4626c'}} {{overloadDurationLabel}}</strong></span>
   </section>
 
   <section class="fallout-maw-anatomy-knowledge">
-    <h2>Изученные расы</h2>
+    <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text2c340531b7a0'}}</h2>
     {{#if hasKnowledge}}
       {{#each races}}
       <article class="fallout-maw-anatomy-race">
@@ -38,7 +38,7 @@
           {{#each bonuses}}
           <div class="fallout-maw-anatomy-bonus">
             <span title="{{label}}: {{valueLabel}}"><strong>{{label}}:</strong><em>{{valueLabel}}</em></span>
-            <button type="button" data-action="forget" data-race-id="{{raceId}}" data-bonus-key="{{key}}" title="Забыть">
+            <button type="button" data-action="forget" data-race-id="{{raceId}}" data-bonus-key="{{key}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Text90bc7dd8b586'}}">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
@@ -47,7 +47,7 @@
       </article>
       {{/each}}
     {{else}}
-      <p class="fallout-maw-anatomy-empty">Знаний пока нет. Начните исследование и выберите подсвеченную мёртвую цель.</p>
+      <p class="fallout-maw-anatomy-empty">{{localize 'FALLOUTMAW.AuditTemplates.Textac91d047532b'}}</p>
     {{/if}}
   </section>
 </section>

@@ -1,6 +1,7 @@
 import {
   DEFAULT_FACTION_NAME,
-  getActorPrimaryFaction
+  getActorPrimaryFaction,
+  getFactionDisplayLabel
 } from "../../settings/factions.mjs";
 import { localize } from "../../utils/i18n.mjs";
 import { MODULE_ID } from "./main.mjs";
@@ -136,6 +137,7 @@ function buildCombatInitiativeGroups(combat) {
     if (!groups.has(factionName)) {
       groups.set(factionName, {
         name: factionName,
+        label: getFactionDisplayLabel(factionName),
         combatants: []
       });
     }
@@ -146,7 +148,7 @@ function buildCombatInitiativeGroups(combat) {
   }
 
   return Array.from(groups.values())
-    .sort((left, right) => left.name.localeCompare(right.name, game.i18n.lang))
+    .sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang))
     .map((group, index) => ({
       ...group,
       index,

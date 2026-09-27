@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevels } from "./creation-levels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
@@ -84,7 +85,7 @@ export async function createThrownItemTile({
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для создания брошенного предмета.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0641", "Нет активного GM для создания брошенного предмета."));
     return null;
   }
 
@@ -98,15 +99,19 @@ export async function createThrownItemTile({
     return result?.success ? result : null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Thrown item creation request failed`, error);
-    ui.notifications.warn("GM не подтвердил создание брошенного предмета.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0642", "GM не подтвердил создание брошенного предмета."));
     return null;
   }
 }
 
-async function handleThrownItemSocketMessage(payload = {}) {
+async function handleThrownItemSocketMessage(payload = {}, senderUserId = "") {
   if (!payload || payload.scope !== THROWN_ITEM_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
   if (payload.type === "response") {
-    if (payload.recipientUserId && payload.recipientUserId !== game.user?.id) return;
+    if (payload.recipientUserId !== game.user?.id) return;
+    const pending = pendingThrownItemSocketRequests.get(String(payload.requestId ?? ""));
+    if (!pending || !sender.isGM || sender.id !== pending.gmUserId) return;
     settleThrownItemSocketRequest(payload);
     return;
   }
@@ -114,6 +119,7 @@ async function handleThrownItemSocketMessage(payload = {}) {
   if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
 
   const requesterUserId = String(payload.requesterUserId ?? "");
+    if (requesterUserId !== sender.id) return;
   const requestId = String(payload.requestId ?? "");
   if (!requesterUserId || !requestId) return;
   const cacheKey = `${requesterUserId}:${requestId}`;
@@ -698,17 +704,17 @@ async function promptPickupThrownItem(tileDocument) {
 
   const actor = getPickupActor();
   if (!actor) {
-    ui.notifications.warn("Выберите свой токен или назначьте персонажа для подбора предмета.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0643", "Выберите свой токен или назначьте персонажа для подбора предмета."));
     return;
   }
   if (!actor.isOwner) {
-    ui.notifications.warn(`Нет прав на добавление предмета актеру ${actor.name}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0644", { p0: (actor.name) }, "Нет прав на добавление предмета актеру {p0}."));
     return;
   }
 
   const confirmed = await DialogV2.confirm({
-    window: { title: "Подбор предмета" },
-    content: `<p>Забрать <strong>${escapeHTML(thrownItem.itemData.name ?? tileDocument.name)}</strong> в инвентарь <strong>${escapeHTML(actor.name)}</strong>?</p>`,
+    window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0645", "Подбор предмета") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0646", { p0: (escapeHTML(thrownItem.itemData.name ?? tileDocument.name)), p1: (escapeHTML(actor.name)) }, "<p>Забрать <strong>{p0}</strong> в инвентарь <strong>{p1}</strong>?</p>"),
     rejectClose: false,
     modal: true
   });
@@ -736,7 +742,7 @@ async function requestPickupThrownItemTile(tileDocument, actor) {
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для подбора брошенного предмета.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0647", "Нет активного GM для подбора брошенного предмета."));
     return false;
   }
 
@@ -750,7 +756,7 @@ async function requestPickupThrownItemTile(tileDocument, actor) {
     return Boolean(result?.success);
   } catch (error) {
     console.error(`${SYSTEM_ID} | Thrown item pickup request failed`, error);
-    ui.notifications.warn("GM не подтвердил подбор брошенного предмета.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0648", "GM не подтвердил подбор брошенного предмета."));
     return false;
   }
 }
@@ -865,22 +871,14 @@ async function promptThrownItemPickupForCombat(combat) {
   combatPickupPromptKeys.add(promptKey);
 
   const pickedIndexes = new Set();
-  const itemList = entries.map((entry, index) => `
-    <li data-thrown-item-row="${index}" style="display:flex; align-items:center; gap:0.5rem; margin:0.35rem 0;">
-      <span style="flex:1;"><strong>${escapeHTML(entry.thrownItem.itemData?.name ?? entry.tile.name)}</strong> -> ${escapeHTML(entry.actor.name)}</span>
-      <button type="button" data-thrown-item-pickup="${index}">
-        <i class="fa-solid fa-hand"></i>
-        <span>Забрать</span>
-      </button>
-    </li>
-  `).join("");
+  const itemList = entries.map((entry, index) => auditFormat("FALLOUTMAW.AuditRuntime.R0649", { p0: (index), p1: (escapeHTML(entry.thrownItem.itemData?.name ?? entry.tile.name)), p2: (escapeHTML(entry.actor.name)), p3: (index) }, "\n    <li data-thrown-item-row=\"{p0}\" style=\"display:flex; align-items:center; gap:0.5rem; margin:0.35rem 0;\">\n      <span style=\"flex:1;\"><strong>{p1}</strong> -> {p2}</span>\n      <button type=\"button\" data-thrown-item-pickup=\"{p3}\">\n        <i class=\"fa-solid fa-hand\"></i>\n        <span>Забрать</span>\n      </button>\n    </li>\n  ")).join("");
 
   await DialogV2.wait({
-    window: { title: "Возврат метнутых предметов" },
-    content: `<p>Забрать метнутые в этом бою предметы?</p><ul style="list-style:none; padding-left:0;">${itemList}</ul>`,
+    window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0650", "Возврат метнутых предметов") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0651", { p0: (itemList) }, "<p>Забрать метнутые в этом бою предметы?</p><ul style=\"list-style:none; padding-left:0;\">{p0}</ul>"),
     buttons: [{
       action: "takeAll",
-      label: "Забрать все",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0652", "Забрать все"),
       icon: "fa-solid fa-check",
       callback: async (_event, _button, dialog) => {
         for (const [index, entry] of entries.entries()) {
@@ -1114,7 +1112,7 @@ function requestThrownItemSocket(action, request, gm, requestId = "") {
       error.code = "socket-timeout";
       reject(error);
     }, THROWN_ITEM_SOCKET_TIMEOUT_MS);
-    entry = { resolve, reject, timeout, promise: null };
+    entry = { resolve, reject, timeout, promise: null, gmUserId: gm.id };
   });
   entry.promise = promise;
   pendingThrownItemSocketRequests.set(id, entry);

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import {
   COMBAT_DELETION_SETTLED_HOOK,
   SYSTEM_ID,
@@ -106,7 +107,7 @@ function createSessionEntry(actor, combatant = null, status = getDefeatedActorSt
     actorUuid: actor.uuid,
     tokenUuid: combatant?.token?.uuid ?? "",
     name: combatant?.name || actor.name || game.i18n.localize("DOCUMENT.Actor"),
-    img: combatant?.img || actor.img || "icons/svg/mystery-man.svg",
+    img: combatant?.img || actor.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     status,
     finishing: false,
     finishClaim: null,
@@ -282,7 +283,7 @@ function refreshSessionEntry(entry, actor) {
 
 async function requestCombatEndFinish(payload = {}) {
   const gm = getResponsibleGM();
-  if (!gm) throw new Error("Нет активного GM для добивания.");
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0727", "Нет активного GM для добивания."));
   const request = {
     ...payload,
     requesterUserId: game.user?.id ?? ""
@@ -305,15 +306,16 @@ async function runCombatEndFinish(payload = {}) {
     if (!result?.ok && result?.message) ui.notifications.warn(result.message);
     return result;
   } catch (error) {
-    ui.notifications.error(error.message || "Добивание не выполнено.");
+    ui.notifications.error(error.message || auditLocalize("FALLOUTMAW.AuditRuntime.R0728", "Добивание не выполнено."));
     return { ok: false, message: error.message };
   }
 }
 
-async function handleCombatEndSocketMessage(message = {}) {
+async function handleCombatEndSocketMessage(message = {}, senderUserId = "") {
   if (message.scope !== COMBAT_END_SOCKET_SCOPE) return;
 
   if (message.type === "state") {
+    if (!senderUserId || senderUserId !== message.authorityUserId) return;
     if (!isCurrentCombatEndAuthority(message.authorityUserId)) return;
     renderCombatEndSession(message.session, { open: message.open === true });
     return;
@@ -351,7 +353,7 @@ function enqueuePinnedCombatEndFinish(payload = {}) {
   if (pendingFinishOperations.size >= COMBAT_END_MAX_PENDING_FINISHES) {
     return Promise.resolve({
       ok: false,
-      message: "Слишком много операций завершения боя. Дождитесь их окончания и повторите действие."
+      message: auditLocalize("FALLOUTMAW.AuditRuntime.R0729", "Слишком много операций завершения боя. Дождитесь их окончания и повторите действие.")
     });
   }
 
@@ -361,7 +363,7 @@ function enqueuePinnedCombatEndFinish(payload = {}) {
   if (!session || !entry || !isCombatEndAuthority(authorityUserId)) {
     return Promise.resolve({
       ok: false,
-      message: "Сессия завершения боя недоступна."
+      message: auditLocalize("FALLOUTMAW.AuditRuntime.R0730", "Сессия завершения боя недоступна.")
     });
   }
 
@@ -369,14 +371,14 @@ function enqueuePinnedCombatEndFinish(payload = {}) {
   if (activeClaim) {
     return Promise.resolve({
       ok: false,
-      message: "Эту цель уже добивают."
+      message: auditLocalize("FALLOUTMAW.AuditRuntime.R0731", "Эту цель уже добивают.")
     });
   }
   clearCombatEndFinishClaim(entry);
   if (!combatEndSessionRegistry.pin(sessionId)) {
     return Promise.resolve({
       ok: false,
-      message: "Сессия завершения боя недоступна."
+      message: auditLocalize("FALLOUTMAW.AuditRuntime.R0730", "Сессия завершения боя недоступна.")
     });
   }
 
@@ -393,7 +395,7 @@ function enqueuePinnedCombatEndFinish(payload = {}) {
     if (!isCombatEndAuthority(authorityUserId)) {
       return {
         ok: false,
-        message: "Активный GM изменился. Повторите действие."
+        message: auditLocalize("FALLOUTMAW.AuditRuntime.R0732", "Активный GM изменился. Повторите действие.")
       };
     }
     const currentSession = combatEndSessionRegistry.get(sessionId);
@@ -402,7 +404,7 @@ function enqueuePinnedCombatEndFinish(payload = {}) {
       || !isMatchingCombatEndFinishClaim(currentEntry, operationId, authorityUserId)) {
       return {
         ok: false,
-        message: "Операция завершения боя устарела."
+        message: auditLocalize("FALLOUTMAW.AuditRuntime.R0733", "Операция завершения боя устарела.")
       };
     }
     setCombatEndFinishClaim(currentEntry, {
@@ -453,19 +455,19 @@ async function handleCombatEndFinish({
   authorityUserId = ""
 } = {}) {
   const session = combatEndSessionRegistry.get(sessionId);
-  if (!session) return { ok: false, message: "Сессия завершения боя недоступна." };
+  if (!session) return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0730", "Сессия завершения боя недоступна.") };
 
   const entry = session.entries.find(candidate => candidate.actorUuid === actorUuid);
-  if (!entry) return { ok: false, message: "Цель больше недоступна." };
+  if (!entry) return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0734", "Цель больше недоступна.") };
   if (!isMatchingCombatEndFinishClaim(entry, operationId, authorityUserId)) {
-    return { ok: false, message: "Эту цель уже добивают." };
+    return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0731", "Эту цель уже добивают.") };
   }
 
   const targetActor = await resolveActor(actorUuid);
   if (!targetActor) {
     session.entries = session.entries.filter(candidate => candidate.actorUuid !== actorUuid);
     broadcastCombatEndSession(session);
-    return { ok: false, message: "Цель больше не существует." };
+    return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0735", "Цель больше не существует.") };
   }
 
   const status = getDefeatedActorStatus(targetActor);
@@ -477,7 +479,7 @@ async function handleCombatEndFinish({
   if (status !== STATUS_UNCONSCIOUS) {
     session.entries = session.entries.filter(candidate => candidate.actorUuid !== actorUuid);
     broadcastCombatEndSession(session);
-    return { ok: false, message: "Цель уже не без сознания." };
+    return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0736", "Цель уже не без сознания.") };
   }
 
   const attacker = await resolveActor(attackerActorUuid);
@@ -487,7 +489,7 @@ async function handleCombatEndFinish({
   if (!limb) {
     refreshSessionEntry(entry, targetActor);
     broadcastCombatEndSession(session);
-    return { ok: false, message: "У цели нет доступной критической части для добивания." };
+    return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0737", "У цели нет доступной критической части для добивания.") };
   }
 
   entry.finishing = true;
@@ -498,22 +500,22 @@ async function handleCombatEndFinish({
     if (!isCombatEndAuthority(authorityUserId)) {
       return {
         ok: false,
-        message: "Активный GM изменился. Повторите действие."
+        message: auditLocalize("FALLOUTMAW.AuditRuntime.R0732", "Активный GM изменился. Повторите действие.")
       };
     }
     if (!(await destroyActorLimbExplicitly(targetActor, limb.limbKey))) {
-      return { ok: false, message: "Не удалось уничтожить критическую часть цели." };
+      return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0738", "Не удалось уничтожить критическую часть цели.") };
     }
 
     const freshTarget = await resolveActor(actorUuid);
     if (!freshTarget) {
       session.entries = session.entries.filter(candidate => candidate.actorUuid !== actorUuid);
-      return { ok: false, message: "Цель больше не существует." };
+      return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0735", "Цель больше не существует.") };
     }
 
     refreshSessionEntry(entry, freshTarget);
     if (entry.status !== STATUS_DEAD) {
-      return { ok: false, message: "Добивание не перевело цель в состояние смерти." };
+      return { ok: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R0739", "Добивание не перевело цель в состояние смерти.") };
     }
     return { ok: true };
   } finally {
@@ -588,11 +590,11 @@ function isCombatEndAuthority(authorityUserId = "") {
 
 function validateRequesterActionActor(actor, requesterUserId = "") {
   const requester = game.users?.get?.(requesterUserId);
-  if (!actor) throw new Error("Не найден актер, выполняющий действие.");
+  if (!actor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0740", "Не найден актер, выполняющий действие."));
   if (!requester?.isGM && !actor.testUserPermission?.(requester, "OWNER")) {
-    throw new Error("Нет прав владельца на актера, выполняющего действие.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0741", "Нет прав владельца на актера, выполняющего действие."));
   }
-  if (getDefeatedActorStatus(actor)) throw new Error("Повергнутый актер не может добивать цель.");
+  if (getDefeatedActorStatus(actor)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0742", "Повергнутый актер не может добивать цель."));
 }
 
 function selectFinishingCriticalLimb(actor) {
@@ -699,7 +701,7 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
   };
 
   get title() {
-    return "Завершение боя";
+    return auditLocalize("FALLOUTMAW.AuditRuntime.R0743", "Завершение боя");
   }
 
   get session() {
@@ -719,7 +721,7 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
       actionActorName: actionActor?.name ?? "",
       actionIcons: {
         search: icons.search || "icons/svg/item-bag.svg",
-        finish: icons.finish || "icons/svg/skull.svg"
+        finish: icons.finish || "systems/fallout-maw/assets/System/TokenActionHud/combat-end-finish.webp"
       },
       entries: (this.#session.entries ?? []).map(entry => this.#prepareEntryContext(entry, actionActor))
     };
@@ -751,22 +753,22 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     const showFinish = entry.status === STATUS_UNCONSCIOUS;
     const finishDisabled = missingActor || !hasActionActor || pendingFinish || !entry.canFinish;
     const finishTitle = missingActor
-      ? "Цель недоступна"
+      ? auditLocalize("FALLOUTMAW.AuditRuntime.R0744", "Цель недоступна")
       : !hasActionActor
-        ? "Нет доступного актера для действия"
+        ? auditLocalize("FALLOUTMAW.AuditRuntime.R0745", "Нет доступного актера для действия")
         : pendingFinish
-          ? "Добивание выполняется"
+          ? auditLocalize("FALLOUTMAW.AuditRuntime.R0746", "Добивание выполняется")
           : !entry.canFinish
-            ? "Нет доступной критической части"
-            : "Добить";
+            ? auditLocalize("FALLOUTMAW.AuditRuntime.R0747", "Нет доступной критической части")
+            : auditLocalize("FALLOUTMAW.AuditRuntime.R0748", "Добить");
     return {
       ...entry,
       searchDisabled: missingActor || !hasActionActor,
       searchTitle: missingActor
-        ? "Цель недоступна"
+        ? auditLocalize("FALLOUTMAW.AuditRuntime.R0744", "Цель недоступна")
         : hasActionActor
-          ? `Обыскать${actionActor?.name ? `: ${actionActor.name}` : ""}`
-          : "Нет доступного актера для обыска",
+          ? auditFormat("FALLOUTMAW.AuditRuntime.R0749", { p0: (actionActor?.name ? `: ${actionActor.name}` : "") }, "Обыскать{p0}")
+          : auditLocalize("FALLOUTMAW.AuditRuntime.R0750", "Нет доступного актера для обыска"),
       showFinish,
       finishDisabled,
       finishTitle,
@@ -780,12 +782,12 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     if (!entry) return;
     const searcherActor = resolveCombatEndActionActor(this.#session);
     if (!searcherActor) {
-      ui.notifications.warn("Нет доступного актера для обыска.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0751", "Нет доступного актера для обыска."));
       return;
     }
     const searchedActor = await resolveActor(entry.actorUuid);
     if (!searchedActor) {
-      ui.notifications.warn("Цель обыска недоступна.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0752", "Цель обыска недоступна."));
       return;
     }
     await openSearchInventoryWindow({ searcherActor, searchedActor });
@@ -797,7 +799,7 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     if (!entry) return;
     const attackerActor = resolveCombatEndActionActor(this.#session);
     if (!attackerActor) {
-      ui.notifications.warn("Нет доступного актера для добивания.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0753", "Нет доступного актера для добивания."));
       return;
     }
 

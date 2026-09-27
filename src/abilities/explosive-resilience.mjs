@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getEventParticipantActorUuid } from "../events/event-reaction-schema.mjs";
 import { getSystemEventNumericValue } from "../events/event-values.mjs";
@@ -73,12 +74,12 @@ export async function activateExplosiveResilience({
   const entry = buildExplosiveResilienceEntry(actor, abilityItem, abilityFunction);
   if (!entry) return false;
   if (findExplosiveResilienceEffect(actor, entry)) {
-    notifyWarning(`${entry.abilityItem.name}: бонус уже действует.`);
+    notifyWarning(auditFormat("FALLOUTMAW.AuditRuntime.R0058", { p0: (entry.abilityItem.name) }, "{p0}: бонус уже действует."));
     return false;
   }
   const progress = getExplosiveResilienceProgress(entry);
   if (progress < entry.settings.damageRequired) {
-    notifyWarning(`${entry.abilityItem.name}: накоплено ${progress} / ${entry.settings.damageRequired}.`);
+    notifyWarning(auditFormat("FALLOUTMAW.AuditRuntime.R0059", { p0: (entry.abilityItem.name), p1: (progress), p2: (entry.settings.damageRequired) }, "{p0}: накоплено {p1} / {p2}."));
     return false;
   }
 
@@ -117,7 +118,7 @@ export function getExplosiveResilienceProgressEntry(abilityItem, abilityFunction
   const entry = { abilityItem, abilityFunction, settings };
   return {
     key: getStateKey(abilityFunction),
-    label: "Получено урона",
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0060", "Получено урона"),
     current: Math.min(settings.damageRequired, getExplosiveResilienceProgress(entry)),
     required: settings.damageRequired
   };
@@ -207,33 +208,23 @@ async function promptExplosiveResiliencePackage(entry) {
   return DialogV2.wait({
     window: { title: abilityItem.name, icon: "fa-solid fa-shield-halved" },
     classes: ["fallout-maw", "fallout-maw-explosive-resilience-dialog"],
-    content: `
-      <section class="fallout-maw-fixed-function-dialog">
-        <p>Выберите бонус на ${settings.durationSeconds} сек.</p>
-        <dl>
-          <dt><strong>Натиск</strong></dt>
-          <dd>Урон +${settings.offenseDamagePercent}%, точность +${settings.offenseAccuracy}, ОД +${settings.offenseActionPoints}.</dd>
-          <dt><strong>Оборона</strong></dt>
-          <dd>Сопротивления +${escapeHtml(settings.defenseResistanceFormula)}, уклонение +${settings.defenseDodge}, ОП +${settings.defenseMovementPoints}.</dd>
-        </dl>
-      </section>
-    `,
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0061", { p0: (settings.durationSeconds), p1: (settings.offenseDamagePercent), p2: (settings.offenseAccuracy), p3: (settings.offenseActionPoints), p4: (escapeHtml(settings.defenseResistanceFormula)), p5: (settings.defenseDodge), p6: (settings.defenseMovementPoints) }, "\n      <section class=\"fallout-maw-fixed-function-dialog\">\n        <p>Выберите бонус на {p0} сек.</p>\n        <dl>\n          <dt><strong>Натиск</strong></dt>\n          <dd>Урон +{p1}%, точность +{p2}, ОД +{p3}.</dd>\n          <dt><strong>Оборона</strong></dt>\n          <dd>Сопротивления +{p4}, уклонение +{p5}, ОП +{p6}.</dd>\n        </dl>\n      </section>\n    "),
     buttons: [
       {
         action: PACKAGE_OFFENSE,
-        label: "Натиск",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0062", "Натиск"),
         icon: "fa-solid fa-burst",
         callback: () => PACKAGE_OFFENSE
       },
       {
         action: PACKAGE_DEFENSE,
-        label: "Оборона",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0063", "Оборона"),
         icon: "fa-solid fa-shield",
         callback: () => PACKAGE_DEFENSE
       },
       {
         action: "cancel",
-        label: globalThis.game?.i18n?.localize?.("FALLOUTMAW.Common.Cancel") || "Отмена",
+        label: globalThis.game?.i18n?.localize?.("FALLOUTMAW.Common.Cancel") || auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"),
         icon: "fa-solid fa-xmark",
         callback: () => null
       }
@@ -245,12 +236,12 @@ async function promptExplosiveResiliencePackage(entry) {
 }
 
 function buildExplosiveResilienceEffectData(entry, packageKey) {
-  const packageLabel = packageKey === PACKAGE_OFFENSE ? "Натиск" : "Оборона";
+  const packageLabel = packageKey === PACKAGE_OFFENSE ? auditLocalize("FALLOUTMAW.AuditRuntime.R0062", "Натиск") : auditLocalize("FALLOUTMAW.AuditRuntime.R0063", "Оборона");
   const worldTime = Math.max(0, Number(game.time?.worldTime) || 0);
   return {
     type: "base",
     name: `${entry.abilityItem.name}: ${packageLabel}`,
-    img: entry.abilityItem.img || "icons/svg/shield.svg",
+    img: entry.abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: entry.abilityItem.uuid ?? entry.actor.uuid,
     transfer: false,
     disabled: false,

@@ -1,4 +1,6 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { readCraftWindowState, writeCraftWindowState } from "../utils/craft-window-state.mjs";
 import { filterCompatibleCraftRecipes, getCraftCompatibilityActions } from "../utils/craft-recipe-compatibility.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
@@ -68,6 +70,7 @@ import {
   getItemId,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackParts,
   getItemStackAdditionOverflowQuantity,
   getItemStackPartQuantity,
   getItemTotalWeight,
@@ -160,9 +163,9 @@ const CRAFT_MODE_CREATE = "craft";
 const CRAFT_MODE_DISASSEMBLY = "disassembly";
 const CRAFT_LEGACY_BEND_PIXEL_THRESHOLD = 80;
 const DEFAULT_CRAFT_RECIPE_ID = "recipe1";
-const DEFAULT_CRAFT_RECIPE_NAME = "Рецепт_1";
+const DEFAULT_CRAFT_RECIPE_NAME = () => auditLocalize("FALLOUTMAW.AuditApps.Recipe1", "Рецепт_1");
 const CRAFT_RECIPE_SELECTION_SEPARATOR = "::recipe:";
-const DEFAULT_CRAFT_TAB_NAME = "Вкладка";
+const DEFAULT_CRAFT_TAB_NAME = () => auditLocalize("FALLOUTMAW.AuditApps.Tab", "Вкладка");
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 let craftWindow = null;
@@ -258,7 +261,8 @@ function recipeProducesTargetItem(recipe, targetItem, targetProfile = null) {
   targetProfile ??= getCraftItemMatchProfile(targetItem);
   const layout = ensureWorldRecipeLayout(recipe.uuid, recipe)?.[CRAFT_MODE_DISASSEMBLY];
   const nodes = layout?.nodes ?? getCraftNodesWithRoot(recipe, CRAFT_MODE_DISASSEMBLY, recipe.recipeId);
-  return getCraftOutputs(nodes).some(output => craftOutputMatchesItem(targetItem, output, targetProfile));
+  const links = getCraftLinksLite(recipe, CRAFT_MODE_DISASSEMBLY, recipe.recipeId, nodes);
+  return getCraftOutputs(nodes, { links }).some(output => craftOutputMatchesItem(targetItem, output, targetProfile));
 }
 
 function recipeUsesTargetItem(recipe, targetItem, targetProfile = null) {
@@ -292,7 +296,8 @@ function buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes 
     if (!hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY)) continue;
     const layout = ensureWorldRecipeLayout(recipe.uuid, recipe)?.[CRAFT_MODE_DISASSEMBLY] ?? null;
     const nodes = layout?.nodes ?? getCraftNodesWithRoot(recipe, CRAFT_MODE_DISASSEMBLY, recipe.recipeId);
-    const outputs = getCraftOutputs(nodes);
+    const links = getCraftLinksLite(recipe, CRAFT_MODE_DISASSEMBLY, recipe.recipeId, nodes);
+    const outputs = getCraftOutputs(nodes, { links });
     if (!outputs.length) continue;
 
     let targetQuantity = 0;
@@ -303,7 +308,7 @@ function buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes 
       if (target) targetQuantity += quantity;
       return {
         uuid: source?.uuid ?? output.sourceUuid,
-        name: String(source?.name ?? "Неизвестный предмет"),
+        name: String(source?.name ?? auditLocalize("FALLOUTMAW.AuditApps.UnknownItem", "Неизвестный предмет")),
         img: normalizeImagePath(source?.img, FALLBACK_ICON),
         quantityLabel: `x${quantity}`,
         target
@@ -323,7 +328,7 @@ function buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes 
       img: normalizeImagePath(recipe.img, FALLBACK_ICON),
       targetQuantityLabel: `x${targetQuantity}`,
       available: !missing,
-      statusLabel: missing ? "Недоступно: нет предмета или инструмента" : "Доступно: можно разобрать",
+      statusLabel: missing ? auditLocalize("FALLOUTMAW.AuditApps.UnavailableMissingItemOrTool", "Недоступно: нет предмета или инструмента") : auditLocalize("FALLOUTMAW.AuditApps.AvailableCanBeDismantled", "Доступно: можно разобрать"),
       statusClass: missing ? "missing" : "ready",
       outputs: outputChips
     });
@@ -351,7 +356,7 @@ function buildUsageCraftEntries(targetItem, targetProfile, candidateRecipes = []
       img: normalizeImagePath(recipe.img, FALLBACK_ICON),
       targetQuantityLabel: `x${matchingRequirements.reduce((total, requirement) => total + Math.max(1, toInteger(requirement.quantity) || 1), 0)}`,
       available: !missing,
-      statusLabel: missing ? "Недоступно: нет компонентов или инструмента" : "Доступно: можно создать",
+      statusLabel: missing ? auditLocalize("FALLOUTMAW.AuditApps.UnavailableMissingComponentsOrTool", "Недоступно: нет компонентов или инструмента") : auditLocalize("FALLOUTMAW.AuditApps.AvailableCanBeCrafted", "Доступно: можно создать"),
       statusClass: missing ? "missing" : "ready",
       outputs: []
     });
@@ -374,7 +379,7 @@ function buildCompatibleCraftEntries(targetItem, kind, candidateRecipes = [], ac
         category: getCraftRecipeCategory(recipe),
         img: normalizeImagePath(recipe.img, FALLBACK_ICON),
         available: !missing,
-        statusLabel: missing ? "Недоступно: нет компонентов или инструмента" : "Доступно: можно создать",
+        statusLabel: missing ? auditLocalize("FALLOUTMAW.AuditApps.UnavailableMissingComponentsOrTool", "Недоступно: нет компонентов или инструмента") : auditLocalize("FALLOUTMAW.AuditApps.AvailableCanBeCrafted", "Доступно: можно создать"),
         statusClass: missing ? "missing" : "ready"
       };
     }).map(prepareCraftRecipeDisplay);
@@ -385,7 +390,7 @@ function prepareCraftRecipeDisplay(entry) {
   return {
     ...entry,
     uuid: "", itemUuid: "", tooltipUuid: "", recipeSelectionUuid: "",
-    name: "Неизвестный рецепт", displayName: "Неизвестный рецепт",
+    name: auditLocalize("FALLOUTMAW.AuditApps.UnknownRecipe", "Неизвестный рецепт"), displayName: auditLocalize("FALLOUTMAW.AuditApps.UnknownRecipe", "Неизвестный рецепт"),
     recipeName: "", category: "", targetQuantityLabel: "", outputs: [],
     img: FALLBACK_ICON,
     available: false, missing: false, selected: false,
@@ -579,15 +584,15 @@ export async function getQuickDisassemblyItems(actor, skillActor = actor) {
 
 export function notifyQuickDisassemblyResult(result) {
   if (!result) return;
-  if (result.dropped) ui.notifications.warn("В инвентаре не хватило места, лишние предметы выброшены на землю.");
-  ui.notifications.info(`Быстрый разбор: выполнено ${result.completed}${result.skipped?.length ? `, пропущено ${result.skipped.length}` : ""}`);
+  if (result.dropped) ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughInventorySpaceExcessItems", "В инвентаре не хватило места, лишние предметы выброшены на землю."));
+  ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.QuickDismantlingCompleted", { v0: (result.completed), v1: (result.skipped?.length ? auditFormat("FALLOUTMAW.AuditApps.Skipped", { v0: (result.skipped.length) }, ", пропущено {v0}") : "") }, "Быстрый разбор: выполнено {v0}{v1}"));
   if (result.skipped?.length) ui.notifications.warn(result.skipped.map(entry => `${entry.name}: ${entry.reason}`).join("; "));
 }
 
 export async function quickDisassembleItems({ actor, skillActor = actor, itemIds = null } = {}) {
-  if (!actor?.isOwner || !skillActor?.isOwner) throw new Error("Нет прав на разбор.");
+  if (!actor?.isOwner || !skillActor?.isOwner) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToDismantle", "Нет прав на разбор."));
   const ids = [...new Set([actor.uuid, skillActor.uuid])];
-  if (ids.some(id => quickDisassemblyActors.has(id))) throw new Error("Разбор уже выполняется.");
+  if (ids.some(id => quickDisassemblyActors.has(id))) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.DismantlingIsAlreadyInProgress", "Разбор уже выполняется."));
   ids.forEach(id => quickDisassemblyActors.add(id));
   try {
     return await CraftWindowApplication.runQuickDisassembly({ actor, skillActor, itemIds });
@@ -598,6 +603,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #contentsTransfer = new InventoryTransferMode();
   #actorUuid = "";
   #actor = null;
+  #renderedActorUuid = "";
   #selectedRecipeUuid = "";
   #selectedRecipeId = DEFAULT_CRAFT_RECIPE_ID;
   #selectedRecipe = null;
@@ -650,6 +656,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #resizeObserver = null;
   #scrollPositions = new Map();
   #viewportResizeHandler = null;
+  #pageHideHandler = null;
   #uiScale = 1;
 
   static DEFAULT_OPTIONS = {
@@ -672,7 +679,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   get title() {
-    return "Крафт";
+    return auditLocalize("FALLOUTMAW.AuditApps.Crafting", "Крафт");
   }
 
   openSelection(selection = {}) {
@@ -705,7 +712,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   setActor(actor) {
     invalidateCraftRecipeAvailabilityCaches();
     const actorUuid = String(actor?.uuid ?? "");
-    if (actorUuid !== this.#actorUuid && this.#actorUuid) {
+    if (actorUuid !== this.#actorUuid) {
+      this.#captureScrollPositions();
+      this.#rememberActorWorkspace();
       this.#selectedRecipe = null;
       this.#craftViewportOverride = null;
       this.#craftToolPickerNodeId = "";
@@ -713,7 +722,18 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#startedOperationId = "";
       this.#animatingOperationId = "";
       this.#bulkEntries.clear();
-      this.#resetCraftTabs();
+      this.#craftToolSelections.clear();
+      this.#scrollPositions.clear();
+      this.#actorUuid = actorUuid;
+      this.#actor = actor ?? null;
+      const remembered = readCraftWindowState(actorUuid);
+      if (remembered) {
+        this.#craftTabs = remembered.tabs.map(tab => this.#createCraftTab(tab));
+        this.#craftToolSelections = new Map(remembered.craftToolSelections);
+        this.#bulkEntries = new Map(remembered.bulkEntries);
+        this.#scrollPositions = new Map(remembered.scrollPositions);
+        this.#loadCraftTabState(this.#craftTabs.find(tab => tab.id === remembered.activeCraftTabId) ?? this.#craftTabs[0]);
+      } else this.#resetCraftTabs();
     } else if (actorUuid === this.#actorUuid) {
       this.#selectedRecipe = null;
     }
@@ -722,21 +742,33 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#ensureCraftTabs();
   }
 
+  #rememberActorWorkspace() {
+    if (!this.#actorUuid || !this.#craftTabs.length) return;
+    this.#saveActiveCraftTabState();
+    writeCraftWindowState(this.#actorUuid, {
+      tabs: this.#craftTabs,
+      activeCraftTabId: this.#activeCraftTabId,
+      craftToolSelections: Array.from(this.#craftToolSelections),
+      bulkEntries: Array.from(this.#bulkEntries),
+      scrollPositions: Array.from(this.#scrollPositions)
+    });
+  }
+
   static async runQuickDisassembly({ actor, skillActor, itemIds }) {
     const app = new CraftWindowApplication();
     app.#craftMode = CRAFT_MODE_DISASSEMBLY;
     const eligible = await getQuickDisassemblyItems(actor, skillActor);
     const selected = itemIds ? eligible.filter(item => itemIds.includes(item.id)) : eligible;
-    if (!selected.length) throw new Error("Нет предметов для быстрого разбора.");
+    if (!selected.length) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoItemsForQuickDismantling", "Нет предметов для быстрого разбора."));
     const expectedItems = actor.items.contents.map(item => item.toObject());
     const expectedToolItems = skillActor === actor ? expectedItems : skillActor.items.contents.map(item => item.toObject());
-    const collector = createSkillCheckBatchCollector({ requester: "Разбор", title: "Быстрый разбор" });
+    const collector = createSkillCheckBatchCollector({ requester: auditLocalize("FALLOUTMAW.Craft.Disassembly", "Разбор"), title: auditLocalize("FALLOUTMAW.AuditApps.QuickDismantling", "Быстрый разбор") });
     const operations = [], skipped = [], reservedTools = [], toolSelections = {};
     let completed = 0;
     try {
       for (const item of selected) {
         const candidates = findCraftRecipesForItem(item).filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY));
-        let chosen = null, problem = "Нет доступного разбора";
+        let chosen = null, problem = auditLocalize("FALLOUTMAW.AuditApps.NoDismantlingAvailable", "Нет доступного разбора");
         for (const candidate of candidates) {
           const { item: recipe, recipeId } = resolveCraftRecipeSelection(candidate.uuid);
           const validation = await validateCraftRequest(actor, recipe, CRAFT_MODE_DISASSEMBLY, {}, recipeId, { sourceItemId: item.id, skillActor });
@@ -749,7 +781,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           const plan = createCraftToolRequirementSpendPlan(skillActor, [...reservedTools, ...tools], { ...toolSelections, ...choices });
           if (!plan.valid) { problem = plan.message; continue; }
           if (actor === skillActor && Object.values(choices).some(id => selected.some(entry => entry.id === id))) {
-            problem = "Инструмент также выбран для разбора"; continue;
+            problem = auditLocalize("FALLOUTMAW.AuditApps.TheToolIsAlsoSelectedForDismantling", "Инструмент также выбран для разбора"); continue;
           }
           reservedTools.push(...tools); Object.assign(toolSelections, choices);
           chosen = { recipe, recipeId, validation, repeats }; break;
@@ -762,7 +794,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           const current = attempt === 0 ? validation : await validateCraftRequest(actor, recipe, CRAFT_MODE_DISASSEMBLY, validation.toolSelections, recipeId, { sourceItemId: item.id, skillActor });
           if (!current.valid) throw new Error(current.message);
           const results = await app.#resolveCraftLinkResults(skillActor, current.links, { createMessages: false, collector, mode: CRAFT_MODE_DISASSEMBLY });
-          if (!results) throw new Error("Проверка разбора отменена");
+          if (!results) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.DismantlingCheckCanceled", "Проверка разбора отменена"));
           const operation = { ...app.#buildCraftOperation(actor, recipe, current, results), recipeId, repetitions };
           if (repetitions > 1) for (const key of ["requirements", "toolRequirements", "outputs", "failureOutputs"]) {
             operation[key] = (operation[key] ?? []).map(entry => ({ ...entry, quantity: entry.quantity * repetitions }));
@@ -771,7 +803,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         }
         completed += repeats;
       }
-      if (!operations.length) throw new Error(skipped[0]?.reason || "Нет доступного разбора.");
+      if (!operations.length) throw new Error(skipped[0]?.reason || auditLocalize("FALLOUTMAW.AuditApps.NoDismantlingAvailable_307", "Нет доступного разбора."));
       const result = await applyBulkCraftOperations(actor, operations, expectedItems, { skillActor, expectedToolItems });
       invalidateCraftRecipeAvailabilityCaches();
       if (collector.size) {
@@ -798,7 +830,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const maximum = Math.min(available, stackQuantity);
     if (!maximum) return;
     const quantity = event.ctrlKey ? await promptSearchItemStackQuantity({
-      item, title: "Массовый разбор", actionLabel: "Добавить", max: maximum, value: maximum
+      item, title: auditLocalize("FALLOUTMAW.AuditApps.BulkDismantling", "Массовый разбор"), actionLabel: auditLocalize("FALLOUTMAW.Item.ConditionAddRecoveryMethod", "Добавить"), max: maximum, value: maximum
     }) : maximum;
     if (!quantity || this.#busy) return;
     this.#bulkEntries.set(item.id, { ...existing, stackOrder: [...new Set([...(existing?.stackOrder ?? []), Math.max(0, toInteger(stack.stackIndex))])], itemId: item.id, name: item.name, img: item.img,
@@ -833,21 +865,21 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const item = this.#actor?.items.get(entry.itemId);
       const row = { ...entry, error: "", options: [], repeats: 0 };
       rows.push(row);
-      if (!item) { row.error = "Предмета больше нет в инвентаре"; continue; }
+      if (!item) { row.error = auditLocalize("FALLOUTMAW.AuditApps.TheItemIsNoLongerInTheInventory", "Предмета больше нет в инвентаре"); continue; }
       const candidates = findCraftRecipesForItem(item).filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY));
       const selected = candidates.find(recipe => recipe.uuid === entry.selectionUuid) ?? candidates[0];
       row.hasVariants = candidates.length > 1;
       row.options = candidates.map(recipe => ({ value: recipe.uuid, name: recipe.recipeName, selected: recipe === selected }));
-      if (!selected) { row.error = "Нет разбора"; continue; }
+      if (!selected) { row.error = auditLocalize("FALLOUTMAW.AuditApps.NoDismantlingRecipe", "Нет разбора"); continue; }
       entry.selectionUuid = selected.uuid;
       const { item: recipe, recipeId } = resolveCraftRecipeSelection(selected.uuid);
       row.recipe = recipe; row.recipeId = recipeId;
       if (!actorKnowsCraftItem(this.#actor, recipe) && recipe.system?.craft?.disassemblyRequiresRecipe) {
-        row.error = "Необходимо знание рецепта"; continue;
+        row.error = auditLocalize("FALLOUTMAW.AuditApps.RecipeKnowledgeRequired", "Необходимо знание рецепта"); continue;
       }
-      if (isNaturalRaceItem(item) || item.system?.locked) { row.error = "Предмет недоступен для разбора"; continue; }
+      if (isNaturalRaceItem(item) || item.system?.locked) { row.error = auditLocalize("FALLOUTMAW.AuditApps.TheItemCannotBeDismantled", "Предмет недоступен для разбора"); continue; }
       if ((this.#actor.items.contents ?? []).some(child => getItemContainerParentId(child) === item.id)) {
-        row.error = "Сначала освободите контейнер"; continue;
+        row.error = auditLocalize("FALLOUTMAW.AuditApps.EmptyTheContainerFirst", "Сначала освободите контейнер"); continue;
       }
       const craft = getCraftRenderData(recipe, this.#actor, CRAFT_MODE_DISASSEMBLY, { recipeId });
       const links = prepareCraftOperationLinks(craft.links, craft.nodes);
@@ -855,15 +887,15 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const sourceRequirements = craft.requirements.filter(req => craftItemMatchesRequirement(item, req));
       const perAttempt = sourceRequirements.reduce((sum, req) => sum + req.quantity, 0);
       row.perAttempt = perAttempt;
-      if (!perAttempt || !links.length || !craft.outputs.length) { row.error = "Некорректная схема разбора"; continue; }
-      if (entry.quantity > getItemQuantity(item)) { row.error = "Не хватает предметов"; continue; }
+      if (!perAttempt || !links.length || !craft.outputs.length) { row.error = auditLocalize("FALLOUTMAW.AuditApps.InvalidDismantlingDiagram", "Некорректная схема разбора"); continue; }
+      if (entry.quantity > getItemQuantity(item)) { row.error = auditLocalize("FALLOUTMAW.AuditApps.NotEnoughItems", "Не хватает предметов"); continue; }
       if (entry.quantity < perAttempt || entry.quantity % perAttempt) {
-        row.error = `Для разбора нужно количество, кратное ${perAttempt}`; continue;
+        row.error = auditFormat("FALLOUTMAW.AuditApps.DismantlingRequiresAQuantityDivisibleBy", { v0: (perAttempt) }, "Для разбора нужно количество, кратное {v0}"); continue;
       }
       row.repeats = entry.quantity / perAttempt;
       const unmet = getUnmetCraftSkillThreshold(this.#actor, links);
       if (unmet) { row.error = getCraftSkillThresholdMessage(unmet, CRAFT_MODE_DISASSEMBLY); continue; }
-      row.requirements = craft.requirements.map(req => ({ ...req, ...(sourceRequirements.includes(req) ? { itemId: item.id } : {}) }));
+      row.requirements = craft.requirements.map(req => ({ ...req, ...(sourceRequirements.includes(req) ? { itemId: item.id, stackOrder: entry.stackOrder } : {}) }));
       try { createCraftRequirementSpendPlan(this.#actor, row.requirements.map(req => ({ ...req, quantity: req.quantity * row.repeats }))); }
       catch (error) { row.error = error.message; continue; }
       const toolPlan = createCraftToolRequirementSpendPlan(this.#actor, craft.toolRequirements);
@@ -877,14 +909,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       requirements.push(...row.requirements.map(req => ({ ...req, quantity: req.quantity * row.repeats })));
       const resources = prepareCraftDisassemblyResources(this.#actor, row.requirements, craft.outputs);
       row.outputs = [...resources.outputs, ...resources.embedded];
-      if (resources.embedded.some(output => !output.data)) row.error = "Не найден встроенный предмет";
+      if (resources.embedded.some(output => !output.data)) row.error = auditLocalize("FALLOUTMAW.AuditApps.EmbeddedItemNotFound", "Не найден встроенный предмет");
       row.randomOutputs = craft.nodes.some(node => !node.root && Number(node.blockLimit) > 0);
       randomOutputs ||= row.randomOutputs;
     }
     const fullToolPlan = createCraftToolRequirementSpendPlan(this.#actor, tools, toolSelections);
     if (!fullToolPlan.valid) for (const row of rows) if (!row.error && Object.keys(row.toolSelections ?? {}).length) row.error = fullToolPlan.message;
     const selectedIds = new Set(rows.map(row => row.itemId));
-    for (const row of rows) if (!row.error && Object.values(row.toolSelections ?? {}).some(id => selectedIds.has(id))) row.error = "Инструмент также выбран для разбора";
+    for (const row of rows) if (!row.error && Object.values(row.toolSelections ?? {}).some(id => selectedIds.has(id))) row.error = auditLocalize("FALLOUTMAW.AuditApps.TheToolIsAlsoSelectedForDismantling", "Инструмент также выбран для разбора");
     try { createCraftRequirementSpendPlan(this.#actor, requirements); }
     catch (error) { for (const row of rows) if (!row.error) row.error = error.message; }
     for (const row of rows) {
@@ -892,7 +924,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       for (const output of row.outputs ?? []) {
         if (output.quantity <= 0 && !(output.fullQuantity > 0)) continue;
         const item = output.data ?? resolveWorldItemSync(output.sourceUuid);
-        if (!item) { row.error = "Не найден результат разбора"; continue; }
+        if (!item) { row.error = auditLocalize("FALLOUTMAW.AuditApps.DismantlingResultNotFound", "Не найден результат разбора"); continue; }
         const key = output.data ? `${output.sourceUuid}:${getCraftItemFingerprint(output.data)}` : output.sourceUuid;
         const current = outputTotals.get(key) ?? { uuid: output.sourceUuid, name: item.name, img: item.img, quantity: 0, fullQuantity: 0, embedded: Boolean(output.embedded) };
         current.quantity += output.quantity * row.repeats;
@@ -936,7 +968,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #bindBulkControls() {
     this.#syncBulkInventorySelection();
     for (const button of this.element?.querySelectorAll("[data-bulk-open]") ?? []) {
-      button.textContent = this.#getActiveCraftTab()?.bulk ? "Автоматическое заполнение" : "Массовый разбор";
+      button.textContent = this.#getActiveCraftTab()?.bulk ? auditLocalize("FALLOUTMAW.AuditApps.AutomaticFilling", "Автоматическое заполнение") : auditLocalize("FALLOUTMAW.AuditApps.BulkDismantling", "Массовый разбор");
       button.disabled = this.#busy;
     }
     const bind = (selector, callback, type = "click") => {
@@ -953,7 +985,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     bind("[data-bulk-quantity]", async (_event, element) => {
       const entry = this.#bulkEntries.get(element.dataset.bulkQuantity), item = this.#actor?.items.get(entry?.itemId);
       if (!item) return;
-      const quantity = await promptSearchItemStackQuantity({ item, title: "Массовый разбор", actionLabel: "Изменить", max: getItemQuantity(item), value: entry.quantity });
+      const quantity = await promptSearchItemStackQuantity({ item, title: auditLocalize("FALLOUTMAW.AuditApps.BulkDismantling", "Массовый разбор"), actionLabel: auditLocalize("FALLOUTMAW.Common.Edit", "Изменить"), max: getItemQuantity(item), value: entry.quantity });
       if (quantity) { entry.quantity = quantity; await this.#updateCraftPanel(); }
     });
     bind("[data-bulk-run]", () => this.#runBulk());
@@ -968,7 +1000,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!preview.canRun) { await this.#updateCraftPanel(); return; }
     this.#busy = true;
     await this.#updateCraftPanel();
-    const collector = createSkillCheckBatchCollector({ requester: "Разбор", title: "Массовый разбор" });
+    const collector = createSkillCheckBatchCollector({ requester: auditLocalize("FALLOUTMAW.Craft.Disassembly", "Разбор"), title: auditLocalize("FALLOUTMAW.AuditApps.BulkDismantling", "Массовый разбор") });
     let completed = 0, dropped = false;
     try {
       const expectedItems = this.#actor.items.contents.map(item => item.toObject());
@@ -979,12 +1011,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           const validation = await validateCraftRequest(this.#actor, row.recipe, CRAFT_MODE_DISASSEMBLY, row.toolSelections, row.recipeId, { sourceItemId: row.itemId });
           if (!validation.valid) throw new Error(validation.message);
           const item = this.#actor.items.get(row.itemId);
-          if (!item) throw new Error("Предмета больше нет в инвентаре");
-          if (item.system?.locked || (this.#actor.items.contents ?? []).some(child => getItemContainerParentId(child) === item.id)) throw new Error("Предмет заблокирован или содержит другие предметы");
-          validation.requirements = validation.requirements.map(req => ({ ...req, ...(craftItemMatchesRequirement(item, req) ? { itemId: row.itemId } : {}) }));
+          if (!item) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheItemIsNoLongerInTheInventory", "Предмета больше нет в инвентаре"));
+          if (item.system?.locked || (this.#actor.items.contents ?? []).some(child => getItemContainerParentId(child) === item.id)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheItemIsLockedOrContainsOtherItems", "Предмет заблокирован или содержит другие предметы"));
+          validation.requirements = validation.requirements.map(req => ({ ...req, ...(craftItemMatchesRequirement(item, req) ? { itemId: row.itemId, stackOrder: row.stackOrder } : {}) }));
           createCraftRequirementSpendPlan(this.#actor, validation.requirements);
           const linkResults = await this.#resolveCraftLinkResults(this.#actor, validation.links, { createMessages: false, collector, mode: CRAFT_MODE_DISASSEMBLY });
-          if (!linkResults) throw new Error("Проверка разбора отменена");
+          if (!linkResults) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.DismantlingCheckCanceled", "Проверка разбора отменена"));
           const operation = { ...this.#buildCraftOperation(this.#actor, row.recipe, validation, linkResults),
             mode: CRAFT_MODE_DISASSEMBLY, recipeId: row.recipeId, repetitions, suppressOverflowNotification: true };
           if (repetitions > 1) {
@@ -1003,12 +1035,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         const entry = this.#bulkEntries.get(row.itemId);
         if (entry) { entry.quantity -= row.perAttempt * row.repeats; if (entry.quantity <= 0) this.#bulkEntries.delete(row.itemId); }
       }
-    } catch (error) { console.error(`${SYSTEM_ID} | Bulk disassembly`, error); ui.notifications.warn(error.message || "Разбор остановлен"); }
+    } catch (error) { console.error(`${SYSTEM_ID} | Bulk disassembly`, error); ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.DismantlingStopped", "Разбор остановлен")); }
     finally {
       try { if (collector.size) await collector.publish({ forceBatch: true }); }
       finally { await Promise.allSettled([collector.abort()]); this.#busy = false; await this.#renderPreservingWindowStack(); }
-      if (dropped) ui.notifications.warn("В инвентаре не хватило места, лишние предметы выброшены на землю.");
-      else if (completed) ui.notifications.info(`Массовый разбор: выполнено ${completed}`);
+      if (dropped) ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughInventorySpaceExcessItems", "В инвентаре не хватило места, лишние предметы выброшены на землю."));
+      else if (completed) ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.BulkDismantlingCompleted", { v0: (completed) }, "Массовый разбор: выполнено {v0}"));
     }
   }
 
@@ -1023,6 +1055,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#craftViewportOverride = null;
     this.#expandedRecipeNodes = new Set();
     this.#recipeSearch = "";
+    this.#craftTabs = [];
     const tab = this.#createCraftTab();
     this.#craftTabs = [tab];
     this.#activeCraftTabId = tab.id;
@@ -1044,7 +1077,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       id,
       bulk: Boolean(data.bulk),
       returnTabId: String(data.returnTabId ?? ""),
-      name: String(data.name ?? `${DEFAULT_CRAFT_TAB_NAME} ${index}`),
+      name: String(data.name ?? `${DEFAULT_CRAFT_TAB_NAME()} ${index}`),
       mode: normalizeCraftMode(data.mode),
       selectedRecipeUuid: String(data.selectedRecipeUuid ?? ""),
       selectedRecipeId: String(data.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID,
@@ -1107,22 +1140,22 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #updateCraftTabTitle(tab = null, recipe = null) {
     if (!tab) return;
-    if (tab.bulk) { tab.name = "Массовый разбор"; return; }
+    if (tab.bulk) { tab.name = auditLocalize("FALLOUTMAW.AuditApps.BulkDismantling", "Массовый разбор"); return; }
     const acquisitionTarget = tab.acquisitionTargetUuid ? resolveCraftAcquisitionTargetItem(tab.acquisitionTargetUuid) : null;
     if (acquisitionTarget) {
-      tab.name = `Способы: ${String(acquisitionTarget.name ?? "").trim() || "предмет"}`;
+      tab.name = auditFormat("FALLOUTMAW.AuditApps.Methods", { v0: (String(acquisitionTarget.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.Item", "предмет")) }, "Способы: {v0}");
       return;
     }
     const usageTarget = tab.usageTargetUuid ? resolveCraftAcquisitionTargetItem(tab.usageTargetUuid) : null;
     if (usageTarget) {
-      const prefix = tab.usageKind === "ammo" ? "Боеприпасы" : tab.usageKind === "modules" ? "Модули" : "Участвует";
-      tab.name = `${prefix}: ${String(usageTarget.name ?? "").trim() || "предмет"}`;
+      const prefix = tab.usageKind === "ammo" ? auditLocalize("FALLOUTMAW.AuditApps.Ammunition", "Боеприпасы") : tab.usageKind === "modules" ? auditLocalize("FALLOUTMAW.AuditApps.Modules", "Модули") : auditLocalize("FALLOUTMAW.AuditApps.UsedIn", "Участвует");
+      tab.name = `${prefix}: ${String(usageTarget.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.Item", "предмет")}`;
       return;
     }
     const selection = tab.selectedRecipeUuid ? resolveCraftRecipeSelection(tab.selectedRecipeUuid) : null;
     const source = recipe ?? selection?.item ?? null;
     if (!source) {
-      tab.name = `${DEFAULT_CRAFT_TAB_NAME} ${Math.max(1, this.#craftTabs.indexOf(tab) + 1)}`;
+      tab.name = `${DEFAULT_CRAFT_TAB_NAME()} ${Math.max(1, this.#craftTabs.indexOf(tab) + 1)}`;
       return;
     }
     const summary = craftRecipeCatalog?.byUuid.get(tab.selectedRecipeUuid) ?? source;
@@ -1133,7 +1166,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#ensureCraftTabs();
     return this.#craftTabs.map((tab, index) => ({
       id: tab.id,
-      name: tab.name || `${DEFAULT_CRAFT_TAB_NAME} ${index + 1}`,
+      name: tab.name || `${DEFAULT_CRAFT_TAB_NAME()} ${index + 1}`,
       active: tab.id === this.#activeCraftTabId,
       mode: normalizeCraftMode(tab.mode),
       icon: normalizeCraftMode(tab.mode) === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
@@ -1310,7 +1343,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (acquisition) {
       craft.acquisition = acquisition;
       craft.canShowAcquisitionWays = false;
-      craft.summary = `${acquisition.entries.length} способов получения`;
+      craft.summary = auditFormat("FALLOUTMAW.AuditApps.AcquisitionMethods", { v0: (acquisition.entries.length) }, "{v0} способов получения");
       this.#craftLinkData = { nodes: [], links: [] };
     } else if (usage) {
       craft.usage = usage;
@@ -1400,6 +1433,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#renderedActorUuid = this.#actorUuid;
     this.#hoverPreviewInputKey = "";
     this.#hoverPreviewKey = "";
     this.setPosition();
@@ -1425,12 +1459,19 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#activateControls();
     this.#activateCraftViewer();
     this.#startPendingOperation();
+    this.#rememberActorWorkspace();
 }
 
   #renderPreservingWindowStack(options = {}) {
     if (this.rendered) this.#captureScrollPositions();
     this.#saveActiveCraftTabState();
     return this.render({ ...options, force: !this.rendered });
+  }
+
+  async close(options = {}) {
+    this.#captureScrollPositions();
+    this.#rememberActorWorkspace();
+    return super.close(options);
   }
 
   async _onClose(options) {
@@ -1494,13 +1535,20 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const view = this.element?.ownerDocument?.defaultView ?? window;
     this.#viewportResizeHandler = () => this.setPosition();
     view.addEventListener("resize", this.#viewportResizeHandler);
+    this.#pageHideHandler = () => {
+      this.#captureScrollPositions();
+      this.#rememberActorWorkspace();
+    };
+    view.addEventListener("pagehide", this.#pageHideHandler);
   }
 
   #unbindViewportResize() {
     if (!this.#viewportResizeHandler) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     view.removeEventListener("resize", this.#viewportResizeHandler);
+    view.removeEventListener("pagehide", this.#pageHideHandler);
     this.#viewportResizeHandler = null;
+    this.#pageHideHandler = null;
   }
 
   #activateWeaponSlotAspectSizing() {
@@ -1513,6 +1561,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #captureScrollPositions() {
+    if (this.#renderedActorUuid !== this.#actorUuid) return;
     this.element?.querySelectorAll("[data-search-scroll-key]").forEach(element => {
       const key = String(element.dataset.searchScrollKey ?? "");
       if (!key) return;
@@ -1576,7 +1625,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (acquisition) {
       craft.acquisition = acquisition;
       craft.canShowAcquisitionWays = false;
-      craft.summary = `${acquisition.entries.length} способов получения`;
+      craft.summary = auditFormat("FALLOUTMAW.AuditApps.AcquisitionMethods", { v0: (acquisition.entries.length) }, "{v0} способов получения");
       this.#craftLinkData = { nodes: [], links: [] };
     } else if (usage) {
       craft.usage = usage;
@@ -1652,12 +1701,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     entries.sort(compareCraftRecipeAvailability);
     return {
       title: isCompatibility
-        ? (this.#usageKind === "ammo" ? "Подходящие боеприпасы" : "Подходящие модули")
-        : "Показать в каких крафтах участвует",
+        ? (this.#usageKind === "ammo" ? auditLocalize("FALLOUTMAW.AuditApps.CompatibleAmmunition", "Подходящие боеприпасы") : auditLocalize("FALLOUTMAW.Item.SuitableModules", "Подходящие модули"))
+        : auditLocalize("FALLOUTMAW.AuditApps.ShowRecipesThatUseThisItem", "Показать в каких крафтах участвует"),
       emptyMessage: isCompatibility
-        ? (this.#usageKind === "ammo" ? "Нет крафтов подходящих боеприпасов." : "Нет крафтов подходящих модулей.")
-        : "Нет крафтов, где используется этот предмет.",
-      summary: `${entries.length} ${isCompatibility ? "подходящих крафтов" : "крафтов с участием"}`,
+        ? (this.#usageKind === "ammo" ? auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoCraftingRecipesForCompatibleAmmunition", "Нет крафтов подходящих боеприпасов.") : auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoCraftingRecipesForCompatibleModules", "Нет крафтов подходящих модулей."))
+        : auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoCraftingRecipesThatUseThis", "Нет крафтов, где используется этот предмет."),
+      summary: `${entries.length} ${isCompatibility ? auditLocalize("FALLOUTMAW.AuditApps.CompatibleRecipes", "подходящих крафтов") : auditLocalize("FALLOUTMAW.AuditApps.RecipesUsingThisItem", "крафтов с участием")}`,
       targetUuid: targetItem.uuid,
       targetName: String(targetItem.name ?? ""),
       targetImg: normalizeImagePath(targetItem.img, FALLBACK_ICON),
@@ -1678,6 +1727,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     panel.replaceWith(replacement);
     this.#activateCraftPanelControls();
     this.#activateCraftViewer();
+    this.#rememberActorWorkspace();
   }
 
   #activateCraftPanelControls() {
@@ -2820,24 +2870,24 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
-    if (canQuickDisassemble) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+    if (canQuickDisassemble) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", auditLocalize("FALLOUTMAW.AuditApps.Dismantle", "Разобрать")]);
     for (const [index, option] of craftOpenOptions.entries()) {
       menuOptions.push([`craft-open-${index}`, option.icon, option.label]);
     }
     if (item?.type === "gear") {
       if (hasAcquisitionWaysForItem(item)) {
-        menuOptions.push(["show-acquisition", "fa-route", "Показать способы получения"]);
+        menuOptions.push(["show-acquisition", "fa-route", auditLocalize("FALLOUTMAW.AuditApps.ShowAcquisitionMethods", "Показать способы получения")]);
       }
       if (findUsageRecipesForItem(item).recipes.length) {
-        menuOptions.push(["show-usage", "fa-diagram-project", "Показать в каких крафтах участвует"]);
+        menuOptions.push(["show-usage", "fa-diagram-project", auditLocalize("FALLOUTMAW.AuditApps.ShowRecipesThatUseThisItem", "Показать в каких крафтах участвует")]);
       }
       menuOptions.push(...getCraftCompatibilityActions(item).map(option => [option.action, option.icon, option.label]));
     }
     if (getItemInteractionState(this.#actor, item).hasInteraction) {
-      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+      menuOptions.push(["interact", "fa-hand-pointer", auditLocalize("FALLOUTMAW.AuditApps.Interaction", "Взаимодействие")]);
     }
     if (canUseActiveItem(item)) {
-      menuOptions.push(["use", "fa-play", "Применить"]);
+      menuOptions.push(["use", "fa-play", auditLocalize("FALLOUTMAW.Common.Apply", "Применить")]);
     }
     const canRotate = canShowInventoryRotateAction(item);
     const rotationResolution = canRotate ? this.#resolveCraftItemRotation(item) : null;
@@ -2853,7 +2903,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
       : getItemQuantity(item);
     if (selectedQuantity > 1) {
-      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+      menuOptions.push(["split", "fa-code-branch", auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить")]);
     }
     if (game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
@@ -2921,10 +2971,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }));
     if (item?.type === "gear") {
       if (hasAcquisitionWaysForItem(item)) {
-        menuOptions.push({ action: "show-acquisition", icon: "fa-route", label: "Показать способы получения" });
+        menuOptions.push({ action: "show-acquisition", icon: "fa-route", label: auditLocalize("FALLOUTMAW.AuditApps.ShowAcquisitionMethods", "Показать способы получения") });
       }
       if (findUsageRecipesForItem(item).recipes.length) {
-        menuOptions.push({ action: "show-usage", icon: "fa-diagram-project", label: "Показать в каких крафтах участвует" });
+        menuOptions.push({ action: "show-usage", icon: "fa-diagram-project", label: auditLocalize("FALLOUTMAW.AuditApps.ShowRecipesThatUseThisItem", "Показать в каких крафтах участвует") });
       }
       menuOptions.push(...getCraftCompatibilityActions(item));
     }
@@ -3077,8 +3127,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (quantity <= 1) return null;
     const amount = await promptSearchItemStackQuantity({
       item,
-      title: "Разделить предмет",
-      actionLabel: "Разделить",
+      title: auditLocalize("FALLOUTMAW.AuditApps.SplitItem", "Разделить предмет"),
+      actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить"),
       max: quantity - 1,
       value: Math.max(1, Math.floor(quantity / 2))
     });
@@ -3109,7 +3159,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       return await splitActorInventoryItem(this.#actor, item, amount, { allowLocked: true });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Craft inventory split failed`, error);
-      ui.notifications.warn(error.message || "Не удалось разделить предмет.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToSplitTheItem", "Не удалось разделить предмет."));
     }
     return null;
   }
@@ -3203,7 +3253,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const linkResults = await this.#resolveCraftLinkResults(actor, validation.links);
     if (!linkResults) {
       this.#busy = false;
-      ui.notifications.warn("Проверка крафта не выполнена.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.CraftingCheckFailed", "Проверка крафта не выполнена."));
       return undefined;
     }
 
@@ -3257,7 +3307,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         animate: false,
         createMessage: createMessages,
         completionCollector: createMessages ? null : collector,
-        requester: mode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт"
+        requester: mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.Craft.Disassembly", "Разбор") : auditLocalize("FALLOUTMAW.AuditApps.Crafting", "Крафт")
       });
       if (!outcome) return null;
       collector?.add(outcome);
@@ -3296,7 +3346,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const requested = normalizeCraftRepeatCount(repeatCount, repeatCount) + 1;
     const summary = createCraftBatchSummary(requested, this.#craftMode);
     const collector = createSkillCheckBatchCollector({
-      requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт",
+      requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.Craft.Disassembly", "Разбор") : auditLocalize("FALLOUTMAW.AuditApps.Crafting", "Крафт"),
       title: game.i18n.format("FALLOUTMAW.Craft.BatchChatTitle", { name: recipe.name })
     });
     let warning = "";
@@ -3315,7 +3365,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
             this.#craftResourceOptions
           );
         if (!validation.valid) {
-          warning = validation.message || "Недостаточно ресурсов для следующей попытки.";
+          warning = validation.message || auditLocalize("FALLOUTMAW.AuditApps.NotEnoughResourcesForTheNextAttempt", "Недостаточно ресурсов для следующей попытки.");
           break;
         }
         this.#storeCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, validation.toolSelections);
@@ -3325,7 +3375,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           collector
         });
         if (!linkResults) {
-          warning = "Проверка крафта не выполнена.";
+          warning = auditLocalize("FALLOUTMAW.AuditApps.CraftingCheckFailed", "Проверка крафта не выполнена.");
           break;
         }
 
@@ -3334,7 +3384,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           await applyCraftOperation(operation);
         } catch (error) {
           console.error(`${SYSTEM_ID} | Craft batch operation failed`, error);
-          warning = error.message || "Следующая попытка крафта не завершена.";
+          warning = error.message || auditLocalize("FALLOUTMAW.AuditApps.TheNextCraftingAttemptDidNotComplete", "Следующая попытка крафта не завершена.");
           break;
         }
 
@@ -3348,7 +3398,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           await collector.publish({ forceBatch: true });
         } catch (error) {
           console.error(`${SYSTEM_ID} | Craft batch chat card failed`, error);
-          ui.notifications.warn("Серия выполнена, но карточка проверок не была создана.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheSeriesCompletedButTheCheckCardWas", "Серия выполнена, но карточка проверок не была создана."));
         }
       }
       if (warning) ui.notifications.warn(warning);
@@ -3470,7 +3520,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         await animateCraftCompletionNodes(this.element, operation);
       } catch (error) {
         console.error(`${SYSTEM_ID} | Craft operation failed`, error);
-        ui.notifications.warn(error.message || "Крафт не завершен.");
+        ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.CraftingDidNotComplete", "Крафт не завершен."));
       }
     } finally {
       if (this.#animatingOperationId === operation.id) this.#animatingOperationId = "";
@@ -3741,10 +3791,13 @@ function createCraftBatchSummary(requested = 0, mode = CRAFT_MODE_CREATE) {
 }
 
 async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID, resourceOptions = {}) {
+  // Transactions may continue after closing the window and removing its Item
+  // hooks. Cached display quantities must never authorize another attempt.
+  invalidateCraftRecipeAvailabilityCaches();
   mode = normalizeCraftMode(mode);
   const skillActor = resourceOptions.skillActor ?? actor;
-  if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
-  if (!recipe) return { valid: false, message: "Рецепт не выбран." };
+  if (!actor?.isOwner) return { valid: false, message: auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToCraftWith", "Нет прав на крафт этим актером.") };
+  if (!recipe) return { valid: false, message: auditLocalize("FALLOUTMAW.AuditApps.NoRecipeSelected", "Рецепт не выбран.") };
   if (!actorKnowsCraftItem(skillActor, recipe) && !(mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) {
     return { valid: false, message: game.i18n.localize("FALLOUTMAW.Craft.KnowledgeRequired") };
   }
@@ -3758,7 +3811,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
     try { createCraftRequirementSpendPlan(actor, craft.requirements); }
     catch (error) { return { valid: false, message: error.message }; }
   }
-  if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
+  if (!craft.links.length) return { valid: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheRecipeHasNoLinksForChecks", "В рецепте нет связей для проверок.") };
   const links = prepareCraftOperationLinks(craft.links, craft.nodes);
   const unmetSkillThreshold = getUnmetCraftSkillThreshold(skillActor, links);
   if (unmetSkillThreshold) {
@@ -3767,25 +3820,25 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   if (!craft.requirements.length && !craft.toolRequirements.length) {
     return {
       valid: false,
-      message: mode === CRAFT_MODE_DISASSEMBLY ? "В рецепте нет предмета для разбора." : "В рецепте нет компонентов или инструментов."
+      message: mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.TheRecipeHasNoItemToDismantle", "В рецепте нет предмета для разбора.") : auditLocalize("FALLOUTMAW.AuditApps.TheRecipeHasNoComponentsOrTools", "В рецепте нет компонентов или инструментов.")
     };
   }
   if (craft.requirements.some(requirement => !requirement.sourceUuid)) {
     return {
       valid: false,
-      message: mode === CRAFT_MODE_DISASSEMBLY ? "В рецепте есть предмет разбора без исходного документа." : "В рецепте есть компонент без исходного документа."
+      message: mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.TheRecipeContainsADismantlingItemWithoutA", "В рецепте есть предмет разбора без исходного документа.") : auditLocalize("FALLOUTMAW.AuditApps.TheRecipeContainsAComponentWithoutASource", "В рецепте есть компонент без исходного документа.")
     };
   }
   if (mode === CRAFT_MODE_DISASSEMBLY && !craft.outputs.length) {
-    return { valid: false, message: "В рецепте нет результатов разбора." };
+    return { valid: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheRecipeHasNoDismantlingResults", "В рецепте нет результатов разбора.") };
   }
   if (mode === CRAFT_MODE_DISASSEMBLY && craft.outputs.some(output => !output.sourceUuid)) {
-    return { valid: false, message: "В рецепте есть результат разбора без исходного документа." };
+    return { valid: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheRecipeContainsADismantlingResultWithoutA", "В рецепте есть результат разбора без исходного документа.") };
   }
   if (craft.requirements.some(requirement => requirement.owned < requirement.quantity)) {
     return {
       valid: false,
-      message: mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора." : "Недостаточно компонентов для крафта."
+      message: mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoItemToDismantle", "Нет предмета для разбора.") : auditLocalize("FALLOUTMAW.AuditApps.NotEnoughComponentsForCrafting", "Недостаточно компонентов для крафта.")
     };
   }
   const toolRequirements = craft.toolRequirements.map(requirement => ({
@@ -3824,7 +3877,8 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
 }
 
 async function applyBulkCraftOperations(actor, operations, expectedItems, { skillActor = actor, expectedToolItems = null } = {}) {
-  if (!actor?.isOwner || !skillActor?.isOwner) throw new Error("Нет прав на разбор этим актёром.");
+  invalidateCraftRecipeAvailabilityCaches();
+  if (!actor?.isOwner || !skillActor?.isOwner) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToDismantleWith", "Нет прав на разбор этим актёром."));
   const requirements = new Map(), tools = new Map(), toolSelections = {}, outputs = new Map();
   const settings = getCraftingSettings();
   const recipes = new Set();
@@ -3835,11 +3889,11 @@ async function applyBulkCraftOperations(actor, operations, expectedItems, { skil
     else map.set(key, { ...entry });
   };
   for (const operation of operations) {
-    if (operation.actorUuid !== actor.uuid || operation.mode !== CRAFT_MODE_DISASSEMBLY) throw new Error("Некорректная операция разбора.");
+    if (operation.actorUuid !== actor.uuid || operation.mode !== CRAFT_MODE_DISASSEMBLY) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidDismantlingOperation", "Некорректная операция разбора."));
     if (!recipes.has(operation.recipeUuid)) {
       const recipe = resolveWorldItemSync(operation.recipeUuid);
-      if (!recipe) throw new Error("Рецепт не найден.");
-      if (!actorKnowsCraftItem(skillActor, recipe) && !canUseOwnedDisassembly(actor, recipe)) throw new Error("Необходимо знание рецепта.");
+      if (!recipe) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RecipeNotFound", "Рецепт не найден."));
+      if (!actorKnowsCraftItem(skillActor, recipe) && !canUseOwnedDisassembly(actor, recipe)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RecipeKnowledgeRequired_364", "Необходимо знание рецепта."));
       recipes.add(operation.recipeUuid);
     }
     const hasFailureOutput = !operation.success && operation.failureOutputs?.length > 0;
@@ -3868,7 +3922,7 @@ async function applyBulkCraftOperations(actor, operations, expectedItems, { skil
   for (const requirement of requirements.values()) {
     const item = actor.items.get(requirement.itemId);
     if (item && (item.system?.locked || isNaturalRaceItem(item)
-      || actor.items.contents.some(child => getItemContainerParentId(child) === item.id))) throw new Error("Предмет недоступен для разбора.");
+      || actor.items.contents.some(child => getItemContainerParentId(child) === item.id))) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheItemCannotBeDismantled_365", "Предмет недоступен для разбора."));
   }
   const spendPlan = createCraftRequirementSpendPlan(actor, [...requirements.values()]);
   const toolPlan = createCraftToolRequirementSpendPlan(skillActor, [...tools.values()], toolSelections);
@@ -3887,13 +3941,14 @@ async function applyBulkCraftOperations(actor, operations, expectedItems, { skil
 }
 
 async function applyCraftOperation(operation) {
+  invalidateCraftRecipeAvailabilityCaches();
   const actor = await resolveActor(operation.actorUuid);
   const recipe = resolveWorldItemSync(operation.recipeUuid);
-  if (!actor?.isOwner) throw new Error("Нет прав на крафт этим актером.");
-  if (!recipe) throw new Error("Рецепт не найден.");
+  if (!actor?.isOwner) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToCraftWith", "Нет прав на крафт этим актером."));
+  if (!recipe) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RecipeNotFound", "Рецепт не найден."));
   const expectedItems = actor.items.contents.map(item => foundry.utils.deepClone(item.toObject?.() ?? item));
 
-  if (!actorKnowsCraftItem(actor, recipe) && !(operation.mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) throw new Error("Необходимо знание рецепта.");
+  if (!actorKnowsCraftItem(actor, recipe) && !(operation.mode === CRAFT_MODE_DISASSEMBLY && canUseOwnedDisassembly(actor, recipe))) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RecipeKnowledgeRequired_364", "Необходимо знание рецепта."));
   const craftingSettings = getCraftingSettings();
   const hasFailureOutput = !operation.success && operation.failureOutputs?.length > 0;
   const refundPercent = !operation.success && !hasFailureOutput
@@ -3950,7 +4005,7 @@ async function applyCraftOperation(operation) {
   const dropped = Boolean(outputPlan.overflow?.length);
   if (dropped) {
     await commitInventoryWithDroppedItems(actor, mutation, outputPlan.overflow, { reason });
-    if (!operation.suppressOverflowNotification) ui.notifications.warn("В инвентаре не хватило места, лишние предметы выброшены на землю.");
+    if (!operation.suppressOverflowNotification) ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughInventorySpaceExcessItems", "В инвентаре не хватило места, лишние предметы выброшены на землю."));
   } else await executeInventoryMutation(mutation, { reason });
   return { dropped };
 }
@@ -3978,6 +4033,7 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
     index.items.map(entry => [entry.item.id, Math.max(0, entry.quantity)])
   );
   const consumedByItemId = new Map();
+  const stackOrderByItemId = new Map();
 
   for (const requirement of requirements) {
     let remaining = Math.max(0, toInteger(requirement.quantity));
@@ -3991,10 +4047,13 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
       const consumed = Math.min(quantity, remaining);
       availableByItemId.set(item.id, quantity - consumed);
       consumedByItemId.set(item.id, (consumedByItemId.get(item.id) ?? 0) + consumed);
+      if (Array.isArray(requirement.stackOrder)) {
+        stackOrderByItemId.set(item.id, [...new Set([...(stackOrderByItemId.get(item.id) ?? []), ...requirement.stackOrder])]);
+      }
       remaining -= consumed;
     }
 
-    if (remaining > 0) throw new Error("Компоненты закончились до завершения крафта.");
+    if (remaining > 0) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ComponentsRanOutBeforeCraftingWasCompleted", "Компоненты закончились до завершения крафта."));
   }
 
   const updates = [];
@@ -4008,7 +4067,7 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
       continue;
     }
     if (usesVirtualInventoryStacks(item)) {
-      const updateData = createItemStackPartRemovalUpdate(item, consumed, 0);
+      const updateData = createCraftStackConsumptionUpdate(item, consumed, stackOrderByItemId.get(itemId));
       if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) deletes.push(itemId);
       else updates.push(updateData);
     } else {
@@ -4016,6 +4075,33 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
     }
   }
   return { updates, deletes, consumedByItemId };
+}
+
+function createCraftStackConsumptionUpdate(item, amount, stackOrder = []) {
+  if (!stackOrder.length) return createItemStackPartRemovalUpdate(item, amount, 0);
+  const parts = getItemStackParts(item);
+  const order = [...new Set([...stackOrder, ...parts.map((_, index) => index)])]
+    .filter(index => Number.isInteger(index) && index >= 0 && index < parts.length);
+  let remaining = amount;
+  const allocations = [];
+  for (const index of order) {
+    const quantity = Math.min(remaining, parts[index].quantity);
+    if (quantity > 0) allocations.push({ index, quantity });
+    remaining -= quantity;
+    if (remaining <= 0) break;
+  }
+  const projected = foundry.utils.deepClone(item.toObject?.() ?? item);
+  let result = null;
+  // Work backwards so removing a full selected stack cannot renumber the
+  // earlier stacks whose quantities were chosen by the same UI selection.
+  for (const allocation of allocations.sort((left, right) => right.index - left.index)) {
+    result = createItemStackPartRemovalUpdate(projected, allocation.quantity, allocation.index);
+    if (!result) continue;
+    for (const [key, value] of Object.entries(result)) {
+      if (key !== "_id") foundry.utils.setProperty(projected, key, value);
+    }
+  }
+  return result;
 }
 
 function createCraftToolRequirementSpendPlan(actor, requirements = [], selections = {}, index = null) {
@@ -4073,8 +4159,8 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
   return {
     valid: missingKeys.size === 0,
     message: unavailableSelectedKeys.size
-      ? "Выбранный инструмент больше недоступен для крафта."
-      : (missingKeys.size ? "Недостаточно зарядов подходящих инструментов для крафта." : ""),
+      ? auditLocalize("FALLOUTMAW.AuditApps.TheSelectedToolIsNoLongerAvailableFor", "Выбранный инструмент больше недоступен для крафта.")
+      : (missingKeys.size ? auditLocalize("FALLOUTMAW.AuditApps.CompatibleToolsDoNotHaveEnoughChargesFor", "Недостаточно зарядов подходящих инструментов для крафта.") : ""),
     updates: Array.from(updatesByItemId.entries())
       .filter(([itemId]) => !depletedItemIds.has(itemId))
       .map(([, update]) => update),
@@ -4161,7 +4247,7 @@ async function createCraftFailureOutputPlan(actor, recipe, mode = CRAFT_MODE_CRE
   for (const output of failureOutputs) {
     if (Number(output.quantity) <= 0) continue;
     const source = resolveWorldItemSync(output.sourceUuid);
-    if (!source) return { valid: false, message: "Результат при провале не найден." };
+    if (!source) return { valid: false, message: auditLocalize("FALLOUTMAW.AuditApps.FailureResultNotFound", "Результат при провале не найден.") };
     specs.push({
       data: createCraftOutputItemData(source, { mode, emptyContents: true }),
       quantity: Math.max(1, toInteger(output.quantity) || 1)
@@ -4223,7 +4309,7 @@ async function getCraftOutputSpecs(recipe, mode = CRAFT_MODE_CREATE, outputs = [
   const specs = [];
   for (const output of outputs) {
     if (Number(output.quantity) <= 0) continue;
-    if (output.embedded && !output.data) throw new Error(`Не найден встроенный предмет: ${output.name}`);
+    if (output.embedded && !output.data) throw new Error(auditFormat("FALLOUTMAW.AuditApps.EmbeddedItemNotFound_370", { v0: (output.name) }, "Не найден встроенный предмет: {v0}"));
     if (output.data) {
       specs.push({ quantity: output.quantity, data: createCraftOutputItemData({
         uuid: output.sourceUuid,
@@ -4232,7 +4318,7 @@ async function getCraftOutputSpecs(recipe, mode = CRAFT_MODE_CREATE, outputs = [
       continue;
     }
     const source = resolveWorldItemSync(output.sourceUuid);
-    if (!source) throw new Error("Результат разбора не найден.");
+    if (!source) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.DismantlingResultNotFound_371", "Результат разбора не найден."));
     specs.push({
       data: createCraftOutputItemData(source, { mode, emptyContents: true }),
       quantity: Math.max(1, toInteger(output.quantity) || 1)
@@ -4377,7 +4463,7 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
       if (!target) {
         return {
           valid: false,
-          message: "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта."
+          message: auditLocalize("FALLOUTMAW.AuditApps.EvenAfterConsumingTheComponentsThereIsNot", "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта.")
         };
       }
       if (virtualStack) {
@@ -4385,7 +4471,7 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
         if (!stackParts) {
           return {
             valid: false,
-            message: "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта."
+            message: auditLocalize("FALLOUTMAW.AuditApps.EvenAfterConsumingTheComponentsThereIsNot", "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта.")
           };
         }
         foundry.utils.setProperty(createData, "system.stackParts", stackParts);
@@ -4490,14 +4576,11 @@ function findCraftOutputTarget(actor, itemData, planningItems = [], outputContex
 function getCraftOutputContexts(actor, planningItems = []) {
   const race = getActorRace(actor);
   const inventorySize = getActorInventoryGridDimensions(actor, race);
-  const contexts = [{
+  const contexts = inventorySize.columns > 0 && inventorySize.rows > 0 ? [{
     parentId: ROOT_CONTAINER_ID,
-    dimensions: {
-      columns: Math.max(1, toInteger(inventorySize.columns)),
-      rows: Math.max(1, toInteger(inventorySize.rows))
-    },
+    dimensions: inventorySize,
     options: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
-  }];
+  }] : [];
 
   for (const item of planningItems) {
     if (!isContainerItem(item) || !item.system?.equipped) continue;
@@ -4581,7 +4664,7 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
       });
       data.outputs = resources.outputs;
       data.embeddedChips = resources.embedded;
-      if (resources.embedded.some(output => !output.data)) resourceError = "Не найден встроенный предмет";
+      if (resources.embedded.some(output => !output.data)) resourceError = auditLocalize("FALLOUTMAW.AuditApps.EmbeddedItemNotFound", "Не найден встроенный предмет");
     } else {
       data.embeddedChips = prepareCraftEmbeddedCreation(actor, recipe, spendPlan, recipeId, resourceOptions).chips;
     }
@@ -4608,7 +4691,7 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     mode,
     ...data,
     embeddedBusy: busy,
-    actionTitle: mode === CRAFT_MODE_DISASSEMBLY ? "Разобрать" : "Произвести крафт",
+    actionTitle: mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.Dismantle", "Разобрать") : auditLocalize("FALLOUTMAW.AuditApps.Craft", "Произвести крафт"),
     actionIcon: mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
     nodes: data.nodes.map(node => ({
       ...node,
@@ -4620,8 +4703,8 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     summary: resourceError || (unmetSkillThreshold
       ? getCraftSkillThresholdMessage(unmetSkillThreshold, mode)
       : (missingCount
-        ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов/инструментов: ${missingCount}`)
-        : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}, инструменты: ${data.toolRequirements.length}`)))
+        ? (mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.NoItemToDismantle", "Нет предмета для разбора") : auditFormat("FALLOUTMAW.AuditApps.MissingComponentsTools", { v0: (missingCount) }, "Не хватает компонентов/инструментов: {v0}"))
+        : (mode === CRAFT_MODE_DISASSEMBLY ? auditFormat("FALLOUTMAW.AuditApps.Results", { v0: (data.outputs.length) }, "Результаты: {v0}") : auditFormat("FALLOUTMAW.AuditApps.ComponentsTools", { v0: (data.requirements.length), v1: (data.toolRequirements.length) }, "Компоненты: {v0}, инструменты: {v1}"))))
   };
 }
 
@@ -4666,8 +4749,8 @@ function getCraftCheckSummaries(links = []) {
 }
 
 function getCraftCheckLabel(check) {
-  const suffix = check.count > 1 ? ` (${check.count}х)` : "";
-  return `${check.skillLabel}: Сложность ${check.difficulty}${suffix}`;
+  const suffix = check.count > 1 ? auditFormat("FALLOUTMAW.AuditApps.X", { v0: (check.count) }, " ({v0}х)") : "";
+  return auditFormat("FALLOUTMAW.AuditApps.Difficulty", { v0: (check.skillLabel), v1: (check.difficulty), v2: (suffix) }, "{v0}: Сложность {v1}{v2}");
 }
 
 function getCraftSkillLabel(skillKey = "") {
@@ -4705,8 +4788,8 @@ function getUnmetCraftSkillThreshold(actor, links = []) {
 }
 
 function getCraftSkillThresholdMessage(threshold = {}, mode = CRAFT_MODE_CREATE) {
-  const action = normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? "разбора" : "крафта";
-  return `Для ${action} нужно ${threshold.difficulty} ${threshold.skillLabel} (сейчас ${threshold.skillValue}).`;
+  const action = normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.Dismantling", "разбора") : auditLocalize("FALLOUTMAW.AuditApps.Crafting_381", "крафта");
+  return auditFormat("FALLOUTMAW.AuditApps.RequiresCurrently", { v0: (action), v1: (threshold.difficulty), v2: (threshold.skillLabel), v3: (threshold.skillValue) }, "Для {v0} нужно {v1} {v2} (сейчас {v3}).");
 }
 
 function getCraftLinkTooltipData(link = null) {
@@ -4734,24 +4817,7 @@ function getCraftLinkTooltipDocumentKey(anchor = null) {
 }
 
 function renderCraftLinkTooltipHTML({ skillLabel = "", difficulty = 0 } = {}) {
-  return `
-    <section class="content fallout-maw-craft-link-tooltip-content">
-      <section class="functions">
-        <div class="function-section">
-          <div class="function-grid">
-            <div class="function-row">
-              <span>Навык</span>
-              <strong>${escapeHTML(skillLabel)}</strong>
-            </div>
-            <div class="function-row">
-              <span>Сложность</span>
-              <strong>${escapeHTML(String(difficulty))}</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-    </section>
-  `;
+  return auditFormat("FALLOUTMAW.AuditApps.SkillDifficulty", { v0: (escapeHTML(skillLabel)), v1: (escapeHTML(String(difficulty))) }, "\n    <section class=\"content fallout-maw-craft-link-tooltip-content\">\n      <section class=\"functions\">\n        <div class=\"function-section\">\n          <div class=\"function-grid\">\n            <div class=\"function-row\">\n              <span>Навык</span>\n              <strong>{v0}</strong>\n            </div>\n            <div class=\"function-row\">\n              <span>Сложность</span>\n              <strong>{v1}</strong>\n            </div>\n          </div>\n        </div>\n      </section>\n    </section>\n  ");
 }
 
 function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID, randomizeBlocks = false } = {}) {
@@ -4767,7 +4833,7 @@ function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelec
       randomize: randomizeBlocks
     }));
   const toolRequirements = getCraftToolRequirements(nodes, { index, actor });
-  const outputs = mode === CRAFT_MODE_DISASSEMBLY ? getCraftOutputs(nodes, { randomize: randomizeBlocks }) : [];
+  const outputs = mode === CRAFT_MODE_DISASSEMBLY ? getCraftOutputs(nodes, { links, randomize: randomizeBlocks }) : [];
   const requirementByNodeId = new Map(requirements.flatMap(requirement => requirement.nodeIds.map(nodeId => [nodeId, requirement])));
   const ownedByRequirement = index
     ? getActorOwnedCraftRequirementsFromIndex(index, requirements)
@@ -4835,8 +4901,8 @@ function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelec
         name: selectedTool?.name ?? node.name,
         img: selectedTool?.img ?? node.img,
         quantityLabel: node.root && mode !== CRAFT_MODE_DISASSEMBLY
-          ? `${quantity}х`
-          : (toolRequirement ? `${toolOwned}/${quantity}` : (requirement ? `${owned}/${quantity}` : `${quantity}х`)),
+          ? auditFormat("FALLOUTMAW.AuditApps.X_384", { v0: (quantity) }, "{v0}х")
+          : (toolRequirement ? `${toolOwned}/${quantity}` : (requirement ? `${owned}/${quantity}` : auditFormat("FALLOUTMAW.AuditApps.X_384", { v0: (quantity) }, "{v0}х"))),
         missing: Boolean((requirement && sourceMissing.has(requirement.key)) || missingToolNodeIds.has(node.id)),
         style: buildCraftNodeStyle(node)
       };
@@ -5268,8 +5334,9 @@ function getCraftToolRequirementKey({ toolKey = "", toolClass = "D" } = {}) {
   return `tool:${toolKey}:${normalizeToolClass(toolClass)}`;
 }
 
-function getCraftOutputs(nodes = [], { randomize = false } = {}) {
-  return getCraftBlockLimitedNodes(nodes, { randomize })
+function getCraftOutputs(nodes = [], { links = [], randomize = false } = {}) {
+  const excludeNodeIds = getCraftFailureOutputNodeIds(nodes, links, CRAFT_MODE_DISASSEMBLY);
+  return getCraftBlockLimitedNodes(nodes, { randomize, excludeNodeIds })
     .filter(node => !node.root)
     .filter(node => !isCraftNodeToolRequirement(node))
     .map(node => ({
@@ -5312,6 +5379,7 @@ function getCraftMaterialBlockLimitedNodes(nodes = [], {
   excludeNodeIds = new Set()
 } = {}) {
   const output = [];
+  const choices = [];
   const groupedIds = new Set();
   const excluded = excludeNodeIds instanceof Set ? excludeNodeIds : new Set(excludeNodeIds ?? []);
   for (const [blockId, blockNodes] of groupCraftNodesByBlock(nodes).entries()) {
@@ -5320,10 +5388,8 @@ function getCraftMaterialBlockLimitedNodes(nodes = [], {
       .filter(node => !excluded.has(node.id))
       .filter(node => !isCraftNodeToolRequirement(node));
     const limit = normalizeCraftBlockLimit(getCraftBlockLimit(blockNodes));
-    const selected = Number.isInteger(limit) && limit > 0
-      ? selectAvailableCraftMaterialBlockNodes(candidates, limit, { actor, index, randomize })
-      : candidates;
-    output.push(...selected);
+    if (Number.isInteger(limit) && limit > 0 && limit < candidates.length) choices.push({ nodes: candidates, limit });
+    else output.push(...candidates);
   }
   for (const node of nodes) {
     const blockId = String(node.blockId ?? "");
@@ -5331,7 +5397,66 @@ function getCraftMaterialBlockLimitedNodes(nodes = [], {
     if (excluded.has(node.id) || isCraftNodeToolRequirement(node)) continue;
     output.push(node);
   }
+  output.push(...selectAvailableCraftMaterialBlocks(choices, output, { actor, index, randomize }));
   return output;
+}
+
+function selectAvailableCraftMaterialBlocks(groups = [], mandatory = [], { actor = null, index = null, randomize = false } = {}) {
+  const fallback = () => groups.flatMap(group => selectAvailableCraftMaterialBlockNodes(group.nodes, group.limit, { actor, index, randomize }));
+  if (!groups.length || (!actor && !index)) return fallback();
+  const allNodes = [...mandatory, ...groups.flatMap(group => group.nodes)];
+  const requirements = getCraftRequirements(allNodes);
+  const owned = index ? getActorOwnedCraftRequirementsFromIndex(index, requirements) : getActorOwnedCraftRequirements(actor, requirements);
+  const nodeRequirements = new Map(allNodes.map(node => [node.id, getCraftRequirements([node])[0] ?? null]));
+  const remaining = new Map(owned);
+  for (const requirement of getCraftRequirements(mandatory)) {
+    const available = (remaining.get(requirement.key) ?? 0) - requirement.quantity;
+    if (available < 0) return fallback();
+    remaining.set(requirement.key, available);
+  }
+
+  // Reserve mandatory materials first, then find compatible choices across
+  // blocks. A locally attractive A must not starve a later block when B works.
+  const ordered = [...groups].sort((left, right) => left.nodes.length - left.limit - (right.nodes.length - right.limit));
+  let attempts = 0;
+  const rejected = new Set();
+  const chooseGroup = (groupIndex, available) => {
+    if (groupIndex === ordered.length) return [];
+    // Authored graphs can contain many alternatives; bound backtracking so a
+    // pathological diagram cannot freeze the recipe browser.
+    if (++attempts > 4096) return null;
+    const cacheKey = `${groupIndex}:${JSON.stringify([...available])}`;
+    if (rejected.has(cacheKey)) return null;
+    const group = ordered[groupIndex];
+    const candidates = group.nodes.map((node, order) => {
+      const requirement = nodeRequirements.get(node.id);
+      const quantity = requirement?.quantity ?? 0;
+      const owned = requirement ? available.get(requirement.key) ?? 0 : 0;
+      return { node, order, requirement, owned, quantity, batches: quantity ? Math.floor(owned / quantity) : 0 };
+    }).filter(entry => entry.requirement && entry.owned >= entry.quantity)
+      .sort((left, right) => right.batches - left.batches || right.owned - left.owned || left.order - right.order);
+    const chooseNodes = (start, needed, rest, selected) => {
+      if (!needed) {
+        const following = chooseGroup(groupIndex + 1, rest);
+        return following ? [...selected, ...following] : null;
+      }
+      for (let i = start; i <= candidates.length - needed; i += 1) {
+        if (++attempts > 4096) return null;
+        const entry = candidates[i];
+        const quantity = (rest.get(entry.requirement.key) ?? 0) - entry.quantity;
+        if (quantity < 0) continue;
+        const next = new Map(rest);
+        next.set(entry.requirement.key, quantity);
+        const result = chooseNodes(i + 1, needed - 1, next, [...selected, entry.node]);
+        if (result) return result;
+      }
+      return null;
+    };
+    const result = chooseNodes(0, group.limit, available, []);
+    if (!result) rejected.add(cacheKey);
+    return result;
+  };
+  return chooseGroup(0, remaining) ?? fallback();
 }
 
 function selectAvailableCraftMaterialBlockNodes(nodes = [], limit = 1, {
@@ -5606,12 +5731,12 @@ function getCraftModeChoices(activeMode = CRAFT_MODE_CREATE) {
   return [
     {
       key: CRAFT_MODE_CREATE,
-      label: "Создание",
+      label: auditLocalize("FALLOUTMAW.Craft.Creation", "Создание"),
       selected: mode === CRAFT_MODE_CREATE
     },
     {
       key: CRAFT_MODE_DISASSEMBLY,
-      label: "Разбор",
+      label: auditLocalize("FALLOUTMAW.Craft.Disassembly", "Разбор"),
       selected: mode === CRAFT_MODE_DISASSEMBLY
     }
   ];
@@ -5649,7 +5774,7 @@ function createDefaultCraftRecipeEntry(itemOrCraft = {}) {
   const craft = itemOrCraft?.system?.craft ?? itemOrCraft ?? {};
   return normalizeCraftRecipeEntry({
     id: DEFAULT_CRAFT_RECIPE_ID,
-    name: DEFAULT_CRAFT_RECIPE_NAME,
+    name: DEFAULT_CRAFT_RECIPE_NAME(),
     nodes: craft.nodes ?? [],
     links: craft.links ?? [],
     viewport: craft.viewport ?? {},
@@ -5663,7 +5788,7 @@ function normalizeCraftRecipeEntry(entry = {}, index = 0, usedIds = new Set()) {
   id = getUniqueCraftRecipeId(id, usedIds);
   return {
     id,
-    name: String(entry?.name ?? (index === 0 ? DEFAULT_CRAFT_RECIPE_NAME : `Рецепт_${index + 1}`)).trim() || `Рецепт_${index + 1}`,
+    name: String(entry?.name ?? (index === 0 ? DEFAULT_CRAFT_RECIPE_NAME() : auditFormat("FALLOUTMAW.AuditApps.Recipe", { v0: (index + 1) }, "Рецепт_{v0}"))).trim() || auditFormat("FALLOUTMAW.AuditApps.Recipe", { v0: (index + 1) }, "Рецепт_{v0}"),
     ...normalizeCraftRecipeLayout(entry),
     disassembly: normalizeCraftRecipeLayout(entry?.disassembly)
   };
@@ -5888,8 +6013,15 @@ function getCraftFailureOutputNodeIds(nodes = [], links = [], mode = CRAFT_MODE_
   const failureNodeIds = new Set();
   for (const link of links) {
     if (!isCraftLinkFailureResult(link)) continue;
-    if (outputResourceIds.has(link.fromNodeId)) failureNodeIds.add(link.toNodeId);
-    if (outputResourceIds.has(link.toNodeId)) failureNodeIds.add(link.fromNodeId);
+    if (mode === CRAFT_MODE_DISASSEMBLY) {
+      // The root is the consumed object here; the marked output endpoint is
+      // the failed dismantling result. Creation instead branches off its root.
+      if (outputResourceIds.has(link.fromNodeId)) failureNodeIds.add(link.fromNodeId);
+      if (outputResourceIds.has(link.toNodeId)) failureNodeIds.add(link.toNodeId);
+    } else {
+      if (outputResourceIds.has(link.fromNodeId)) failureNodeIds.add(link.toNodeId);
+      if (outputResourceIds.has(link.toNodeId)) failureNodeIds.add(link.fromNodeId);
+    }
   }
   return failureNodeIds;
 }
@@ -6250,7 +6382,7 @@ function appendCraftLinkPath(svg, geometry, link, { result = null, recipeUuid = 
     group.dataset.craftLinkTooltip = "true";
     group.dataset.craftLinkSkillLabel = tooltipData.skillLabel;
     group.dataset.craftLinkDifficulty = String(tooltipData.difficulty);
-    group.setAttribute("aria-label", `${tooltipData.skillLabel}: Сложность ${tooltipData.difficulty}`);
+    group.setAttribute("aria-label", auditFormat("FALLOUTMAW.AuditApps.Difficulty_387", { v0: (tooltipData.skillLabel), v1: (tooltipData.difficulty) }, "{v0}: Сложность {v1}"));
   }
   const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
   hitPath.classList.add("fallout-maw-craft-link-hit");
@@ -7001,7 +7133,7 @@ function buildCraftOpenOptionsForMode(recipes = [], mode = CRAFT_MODE_CREATE) {
   const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, mode));
   const multiple = modeRecipes.length > 1;
   const icon = mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer";
-  const baseLabel = mode === CRAFT_MODE_DISASSEMBLY ? "Открыть разбор" : "Открыть крафт";
+  const baseLabel = mode === CRAFT_MODE_DISASSEMBLY ? auditLocalize("FALLOUTMAW.AuditApps.OpenDismantling", "Открыть разбор") : auditLocalize("FALLOUTMAW.AuditApps.OpenCrafting", "Открыть крафт");
   return modeRecipes.map(recipe => ({
     action: `${mode}:${recipe.uuid}`,
     icon,
@@ -7050,7 +7182,7 @@ function getCraftRecipeCategory(recipe) {
 function getCraftRecipeDisplayName(recipe) {
   const name = String(recipe?.name ?? "");
   const quantity = Math.max(1, toInteger(recipe?.system?.quantity) || 1);
-  return quantity > 1 ? `${name} (${quantity}х)` : name;
+  return quantity > 1 ? auditFormat("FALLOUTMAW.AuditApps.X_390", { v0: (name), v1: (quantity) }, "{v0} ({v1}х)") : name;
 }
 
 function normalizeCraftSearchText(value = "") {
@@ -7103,7 +7235,7 @@ function getCraftRecipeCatalogEntries(item = null) {
   const craft = item?.system?.craft ?? {};
   const legacy = {
     id: DEFAULT_CRAFT_RECIPE_ID,
-    name: DEFAULT_CRAFT_RECIPE_NAME,
+    name: DEFAULT_CRAFT_RECIPE_NAME(),
     nodes: craft.nodes ?? [],
     links: craft.links ?? [],
     viewport: craft.viewport ?? {},
@@ -7121,7 +7253,7 @@ function getCraftRecipeCatalogEntries(item = null) {
     return {
       ...merged,
       id: String(merged.id ?? (index ? `recipe${index + 1}` : DEFAULT_CRAFT_RECIPE_ID)).trim() || DEFAULT_CRAFT_RECIPE_ID,
-      name: String(merged.name ?? (index ? `Рецепт_${index + 1}` : DEFAULT_CRAFT_RECIPE_NAME)).trim() || DEFAULT_CRAFT_RECIPE_NAME,
+      name: String(merged.name ?? (index ? auditFormat("FALLOUTMAW.AuditApps.Recipe", { v0: (index + 1) }, "Рецепт_{v0}") : DEFAULT_CRAFT_RECIPE_NAME())).trim() || DEFAULT_CRAFT_RECIPE_NAME(),
       nodes: merged.nodes ?? [],
       links: merged.links ?? [],
       viewport: merged.viewport ?? {},
@@ -7149,9 +7281,9 @@ function hasCraftRecipeData(craft = {}) {
 }
 
 function hasCraftRecipeDataForMode(craft = {}, mode = CRAFT_MODE_CREATE) {
-  if (Array.isArray(craft?.recipes)) {
-    return craft.recipes.some(recipe => hasCraftRecipeDataForMode(recipe, mode));
-  }
+  // The model initializes recipes to [], even on items which still keep their
+  // default recipe in the legacy layout fields used by both recipe editors.
+  if (Array.isArray(craft?.recipes) && craft.recipes.some(recipe => hasCraftRecipeDataForMode(recipe, mode))) return true;
   const recipe = normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? craft?.disassembly : craft;
   return hasCraftKnowledgeLayoutData(recipe);
 }
@@ -7228,6 +7360,19 @@ function getCraftInventoryGridItemElementAtPointer(event = null, root = null) {
   const itemElement = element?.closest?.("[data-inventory-grid-item][data-item-id]") ?? null;
   if (!itemElement || (root && !root.contains(itemElement))) return null;
   return itemElement;
+}
+
+function createEmptyActorContext() {
+  // A token-backed Actor can disappear while this window is still open.
+  // Keep the context renderable until an available Actor is selected again.
+  return {
+    uuid: "",
+    name: "",
+    img: FALLBACK_ICON,
+    canInteract: false,
+    inventory: createEmptyInventoryContext(),
+    load: { value: 0, max: 0, percent: 0, trend: "normal", state: "normal" }
+  };
 }
 
 function createEmptyInventoryContext() {

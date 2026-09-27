@@ -1,12 +1,12 @@
 <div class="fallout-maw-sheet fallout-maw-trap-disarm-terminal">
   <div class="fallout-maw-trap-disarm-body">
     <section class="fallout-maw-trap-disarm-column">
-      <div class="fallout-maw-trap-disarm-line">Объект: <strong>{{targetName}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line {{statusClass}}">Статус: {{statusLabel}}</div>
-      <div class="fallout-maw-trap-disarm-line">Сложность: <strong>{{difficulty}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line">Класс ловушки: <strong>{{requiredClass}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line">Метод обезвреживания: <strong>{{toolLabel}}</strong></div>
-      <div class="fallout-maw-trap-disarm-line">Попытки: <strong>{{attemptsRemaining}}</strong> / {{attemptsTotal}}</div>
+      <div class="fallout-maw-trap-disarm-line">{{localize 'FALLOUTMAW.AuditTemplates.Text39431344b0a1'}} <strong>{{targetName}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line {{statusClass}}">{{localize 'FALLOUTMAW.AuditTemplates.Textb90462b6e58d'}} {{statusLabel}}</div>
+      <div class="fallout-maw-trap-disarm-line">{{localize 'FALLOUTMAW.AuditTemplates.Text31028322ccd1'}} <strong>{{difficulty}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">{{localize 'FALLOUTMAW.AuditTemplates.Text013e82987594'}} <strong>{{requiredClass}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">{{localize 'FALLOUTMAW.AuditTemplates.Textfdc743de2d47'}} <strong>{{toolLabel}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">{{localize 'FALLOUTMAW.AuditTemplates.Texta76977b72bd0'}} <strong>{{attemptsRemaining}}</strong> / {{attemptsTotal}}</div>
     </section>
 
     <section class="fallout-maw-trap-disarm-column">
@@ -14,9 +14,9 @@
         <table>
           <thead>
             <tr>
-              <th>Название</th>
-              <th>Кл.</th>
-              <th>Заряд</th>
+              <th>{{localize 'FALLOUTMAW.Common.Label'}}</th>
+              <th>{{localize 'FALLOUTMAW.AuditTemplates.Text42fc187aa188'}}</th>
+              <th>{{localize 'FALLOUTMAW.AuditTemplates.Textb1ad9148b1c2'}}</th>
             </tr>
           </thead>
           <tbody>
@@ -30,7 +30,7 @@
               {{/each}}
             {{else}}
               <tr class="fallout-maw-trap-disarm-tool-row disabled">
-                <td colspan="3">Нет подходящих инструментов</td>
+                <td colspan="3">{{localize 'FALLOUTMAW.AuditTemplates.Texta3b5615c82d6'}}</td>
               </tr>
             {{/if}}
           </tbody>
@@ -42,15 +42,15 @@
   <footer class="fallout-maw-trap-disarm-footer">
     {{#if disarmed}}
       <button type="button" data-action="pickupTrap" {{#unless canPickup}}disabled{{/unless}}>
-        <i class="fa-solid fa-hand"></i> Забрать
+        <i class="fa-solid fa-hand"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text5ac14b464fbb'}}
       </button>
     {{else}}
       <button type="button" data-action="disarmTrap" {{#if disarmDisabled}}disabled{{/if}}>
-        <i class="fa-solid fa-screwdriver-wrench"></i> Обезвредить
+        <i class="fa-solid fa-screwdriver-wrench"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text6754aab59c93'}}
       </button>
     {{/if}}
     <button type="button" data-action="closeDialog">
-      <i class="fa-solid fa-xmark"></i> Отмена
+      <i class="fa-solid fa-xmark"></i> {{localize 'FALLOUTMAW.Common.Cancel'}}
     </button>
   </footer>
 </div>

@@ -41,7 +41,12 @@ export function createDamageBarrierLedger(actor, {
 
   for (const effect of effects ?? getApplicableActorEffects(actor)) {
     if (!isUsableBarrierEffect(effect)) continue;
-    const changes = Array.from(effect?.system?.changes ?? []);
+    // Prepared rows include effective priorities and a back-reference to the
+    // document. Spending a barrier must preserve the persisted source rows.
+    const preparedChanges = Array.from(effect?.system?.changes ?? []);
+    const changes = Array.from(effect?._source?.system?.changes
+      ?? effect?.toObject?.()?.system?.changes
+      ?? preparedChanges);
     const effectId = String(effect?.id ?? effect?._id ?? "").trim();
     if (!effectId || !changes.length) continue;
 
@@ -70,7 +75,7 @@ export function createDamageBarrierLedger(actor, {
         damageTypeKey: parsed.damageTypeKey,
         initial: remaining,
         remaining,
-        priority: normalizePriority(change?.priority),
+        priority: normalizePriority(preparedChanges[changeIndex]?.priority ?? change?.priority),
         createdTime: normalizeSortNumber(effect?._stats?.createdTime),
         effectSort: normalizeSortNumber(effect?.sort),
         effectId

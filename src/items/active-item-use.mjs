@@ -1,3 +1,5 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { recoverInventoryConsumption } from "../inventory/consumption-receipt.mjs";
 ﻿import { isTargetInFirstAidRange, useFirstAidItem } from "./first-aid.mjs";
 import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
@@ -27,14 +29,18 @@ export async function useActiveItem({
   options = {},
   source = {}
 } = {}) {
+  if (item && (actor ?? item.actor ?? item.parent)?.isOwner) {
+    const recovery = await recoverInventoryConsumption(item);
+    if (recovery.handled) return recovery.result;
+  }
   if (isReactionSystemLocked()) {
-    ui.notifications.warn("Ожидание реакций: предмет временно заблокирован.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1110", "Ожидание реакций: предмет временно заблокирован."));
     return false;
   }
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !canUseActiveItem(item)) return false;
   if (isActorUnableToAct(sourceActor)) {
-    ui.notifications.warn(`${sourceActor.name}: невозможно использовать предмет без сознания или после смерти.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1111", { p0: (sourceActor.name) }, "{p0}: невозможно использовать предмет без сознания или после смерти."));
     return false;
   }
 
@@ -313,12 +319,12 @@ async function requestFirstAidItemTarget(sourceActor = null, sourceToken = null,
     sourceActor,
     sourceToken,
     includeSelf: true,
-    title: "Первая помощь",
-    noneWarning: "Нет подходящих целей для первой помощи.",
-    instructions: "Первая помощь: выберите цель. Esc/ПКМ отменяет.",
+    title: auditLocalize("FALLOUTMAW.AuditRuntime.R0523", "Первая помощь"),
+    noneWarning: auditLocalize("FALLOUTMAW.AuditRuntime.R1112", "Нет подходящих целей для первой помощи."),
+    instructions: auditLocalize("FALLOUTMAW.AuditRuntime.R1113", "Первая помощь: выберите цель. Esc/ПКМ отменяет."),
     getReason: ({ token }) => {
       if (isTargetInFirstAidRange(sourceToken, token, firstAid, { warn: false })) return "";
-      return "Цель слишком далеко.";
+      return auditLocalize("FALLOUTMAW.AuditRuntime.R1114", "Цель слишком далеко.");
     }
   });
   if (!selected?.actor) return { actor: null, token: null };

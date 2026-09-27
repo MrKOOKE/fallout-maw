@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { CRAFTING_RESOLUTION_MODES } from "../settings/crafting.mjs";
 import { getCraftingSettings, setCraftingSettings } from "../settings/accessors.mjs";
@@ -31,7 +32,7 @@ export class CraftingSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Ремесло";
+    return auditLocalize("FALLOUTMAW.AuditApps.Crafting_391", "Ремесло");
   }
 
   async _prepareContext(options) {
@@ -58,7 +59,7 @@ export class CraftingSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData(_event, _form, formData) {
     await setCraftingSettings(getExpandedFormData(formData));
     this.settings = getCraftingSettings();
-    ui.notifications.info("Настройки ремесла сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.CraftingSettingsSaved", "Настройки ремесла сохранены."));
     return this.forceRender();
   }
 
@@ -75,19 +76,19 @@ function createModeChoices(activeMode, { allowGuaranteed = false } = {}) {
   const choices = [
     {
       key: CRAFTING_RESOLUTION_MODES.skillChecks,
-      label: "Проверки навыков",
+      label: auditLocalize("FALLOUTMAW.Events.Groups.skill.Label", "Проверки навыков"),
       selected: activeMode === CRAFTING_RESOLUTION_MODES.skillChecks
     },
     {
       key: CRAFTING_RESOLUTION_MODES.skillThreshold,
-      label: "Навык как порог",
+      label: auditLocalize("FALLOUTMAW.AuditApps.SkillThreshold", "Навык как порог"),
       selected: activeMode === CRAFTING_RESOLUTION_MODES.skillThreshold
     }
   ];
   if (allowGuaranteed) {
     choices.push({
       key: CRAFTING_RESOLUTION_MODES.guaranteed,
-      label: "Гарантированный результат",
+      label: auditLocalize("FALLOUTMAW.AuditApps.GuaranteedResult", "Гарантированный результат"),
       selected: activeMode === CRAFTING_RESOLUTION_MODES.guaranteed
     });
   }

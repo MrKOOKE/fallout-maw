@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
@@ -25,7 +26,7 @@ export {
 
 const DEFAULT_NATURAL_WEAPON_NAME = "Natural Weapon";
 const DEFAULT_NATURAL_FEATURE_NAME = "Natural Feature";
-const DEFAULT_NATURAL_SET_LABEL = "Основной";
+const DEFAULT_NATURAL_SET_LABEL = () => auditLocalize("FALLOUTMAW.AuditRuntime.R1174", "Основной");
 const naturalItemSyncActors = new Set();
 
 export function createDefaultNaturalItemSetEntry(existingIds = []) {
@@ -45,7 +46,7 @@ export function createDefaultNaturalWeaponEntry() {
     item: {
       name: DEFAULT_NATURAL_WEAPON_NAME,
       type: "gear",
-      img: "icons/svg/combat.svg",
+      img: "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp",
       system: {
         itemFunction: "",
         quantity: 1,
@@ -66,7 +67,7 @@ export function createDefaultNaturalFeatureEntry() {
     item: {
       name: DEFAULT_NATURAL_FEATURE_NAME,
       type: "ability",
-      img: "icons/svg/upgrade.svg",
+      img: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
       system: {
         cost: 0,
         formula: "",
@@ -139,7 +140,7 @@ export function normalizeNaturalRaceItemData(itemData = {}, kind = NATURAL_RACE_
   );
   data.type = kind === NATURAL_RACE_ITEM_KINDS.feature ? "ability" : "gear";
   data.img = String(data.img ?? "").trim() || (
-    kind === NATURAL_RACE_ITEM_KINDS.feature ? "icons/svg/upgrade.svg" : "icons/svg/combat.svg"
+    kind === NATURAL_RACE_ITEM_KINDS.feature ? "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp" : "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp"
   );
   data.system ??= {};
   if (kind === NATURAL_RACE_ITEM_KINDS.weapon) {
@@ -356,7 +357,7 @@ function getUniqueNaturalSetId(baseId = "naturalSet", existingIds = []) {
 }
 
 function getDefaultNaturalSetLabel() {
-  return globalThis.game?.i18n?.localize?.("FALLOUTMAW.Settings.CreatureOptions.DefaultNaturalSet") || DEFAULT_NATURAL_SET_LABEL;
+  return globalThis.game?.i18n?.localize?.("FALLOUTMAW.Settings.CreatureOptions.DefaultNaturalSet") || DEFAULT_NATURAL_SET_LABEL();
 }
 
 function createNaturalWeaponDisplayItem(item, currencies = []) {
@@ -365,7 +366,7 @@ function createNaturalWeaponDisplayItem(item, currencies = []) {
     id: item.id,
     uuid: item.uuid,
     name: item.name,
-    img: item.img || "icons/svg/combat.svg",
+    img: item.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp",
     type: item.type,
     quantity: 1,
     maxStack: 1,

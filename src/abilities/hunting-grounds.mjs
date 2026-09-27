@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
@@ -17,7 +18,7 @@ export const HUNTING_GROUNDS_PREY_EFFECT_FLAG_KEY = "huntingGroundsPrey";
 export const HUNTING_GROUNDS_RESOURCE_OBSERVER_ID = "fallout-maw.fixed.huntingGrounds.resourceSpent";
 
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
-const DEFAULT_ICON = "icons/svg/target.svg";
+const DEFAULT_ICON = "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp";
 const RESOURCE_EVENT_KEY = "fallout-maw.combat.resource.spent";
 const INDEX_SEPARATOR = "\u0000";
 
@@ -204,7 +205,7 @@ export function createHuntingGroundsSquareRegionData({
     settings: cloneData(runtime)
   };
   return {
-    name: `${String(abilityItem?.name ?? "Охотничьи угодья")}: зона`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0341", { p0: (String(abilityItem?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0133", "Охотничьи угодья"))) }, "{p0}: зона"),
     color: "#7f9f55",
     shapes: [{
       type: "rectangle",
@@ -432,7 +433,7 @@ function registerHuntingGroundsDetectionMode() {
     constructor() {
       super({
         id: HUNTING_GROUNDS_DETECTION_MODE_ID,
-        label: "Охотничьи угодья: Добыча",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0474", "Охотничьи угодья: Добыча"),
         tokenConfig: false,
         walls: false,
         angle: false,
@@ -710,7 +711,7 @@ async function performHuntingGroundsPreyCheck({
 function buildHuntingGroundsSessionEffectData({ sourceActor, abilityItem, runtime, identifiers }) {
   return {
     type: "base",
-    name: String(abilityItem?.name ?? "Охотничьи угодья"),
+    name: String(abilityItem?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0133", "Охотничьи угодья")),
     img: abilityItem?.img || DEFAULT_ICON,
     origin: abilityItem?.uuid ?? sourceActor?.uuid ?? "",
     transfer: false,
@@ -1117,7 +1118,7 @@ function metersToPixels(meters, scene) {
 
 function buildPreyEffectName(marks) {
   const count = Math.max(0, toInteger(marks));
-  return count > 0 ? `Охотничьи угодья: Добыча · Мишень ×${count}` : "Охотничьи угодья: Добыча";
+  return count > 0 ? auditFormat("FALLOUTMAW.AuditRuntime.R0475", { p0: (count) }, "Охотничьи угодья: Добыча · Мишень ×{p0}") : auditLocalize("FALLOUTMAW.AuditRuntime.R0474", "Охотничьи угодья: Добыча");
 }
 
 export function buildPreyEffectChanges(marks, incomingDamagePercentPerMark, accuracyPerMark) {

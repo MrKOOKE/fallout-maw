@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { toInteger } from "./numbers.mjs";
 
 const DURATION_UNIT_MULTIPLIERS = {
@@ -7,9 +8,9 @@ const DURATION_UNIT_MULTIPLIERS = {
 };
 
 const DURATION_UNIT_SHORT_LABELS = {
-  seconds: "сек.",
-  minutes: "мин.",
-  hours: "ч."
+  get seconds() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1214", "сек."); },
+  get minutes() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1215", "мин."); },
+  get hours() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1216", "ч."); }
 };
 
 export function splitDurationSeconds(value) {
@@ -21,9 +22,9 @@ export function splitDurationSeconds(value) {
 
 export function buildDurationUnitChoices(selected = "seconds") {
   return [
-    { value: "seconds", label: "секунды" },
-    { value: "minutes", label: "минуты" },
-    { value: "hours", label: "часы" }
+    { value: "seconds", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1217", "секунды") },
+    { value: "minutes", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1218", "минуты") },
+    { value: "hours", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1219", "часы") }
   ].map(choice => ({
     ...choice,
     selected: choice.value === selected

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../constants.mjs";
 
@@ -216,7 +217,7 @@ export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0
 
 export function getDefaultTraumaProfileName(damageType = {}) {
   const label = String(damageType?.label ?? damageType?.key ?? "").trim();
-  return label ? `Травма ${label}` : "Травма";
+  return label ? auditFormat("FALLOUTMAW.AuditSystem.Text086", { v0: label }, "Травма {v0}") : auditLocalize("FALLOUTMAW.AuditSystem.Text087", "Травма");
 }
 
 export function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = []) {

@@ -558,33 +558,33 @@
 }
 
 .parchment-note-1 {
-  -o-border-image: url("../assets/parchment1.webp");
-     border-image: url("../assets/parchment1.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-parchment1.webp");
+     border-image: url("../../assets/System/Quests/quest-parchment1.webp");
 }
 
 .parchment-note-2 {
-  -o-border-image: url("../assets/parchment2.webp");
-     border-image: url("../assets/parchment2.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-parchment2.webp");
+     border-image: url("../../assets/System/Quests/quest-parchment2.webp");
 }
 
 .parchment-note-3 {
-  -o-border-image: url("../assets/parchment3.webp");
-     border-image: url("../assets/parchment3.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-parchment3.webp");
+     border-image: url("../../assets/System/Quests/quest-parchment3.webp");
 }
 
 .parchment-note-4 {
-  -o-border-image: url("../assets/parchment4.webp");
-     border-image: url("../assets/parchment4.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-parchment4.webp");
+     border-image: url("../../assets/System/Quests/quest-parchment4.webp");
 }
 
 .parchment-book-1 {
-  -o-border-image: url("../assets/book1.webp");
-     border-image: url("../assets/book1.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-book1.webp");
+     border-image: url("../../assets/System/Quests/quest-book1.webp");
 }
 
 .parchment-book-2 {
-  -o-border-image: url("../assets/book2.webp");
-     border-image: url("../assets/book2.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-book2.webp");
+     border-image: url("../../assets/System/Quests/quest-book2.webp");
 }
 
 .parchment-note-1,
@@ -603,8 +603,8 @@
 .parchment-scroll-1 {
   border-width: 3rem;
   border-style: solid;
-  -o-border-image: url("../assets/scroll1.webp");
-     border-image: url("../assets/scroll1.webp");
+  -o-border-image: url("../../assets/System/Quests/quest-scroll1.webp");
+     border-image: url("../../assets/System/Quests/quest-scroll1.webp");
   border-image-slice: 20% fill;
   color: var(--color-text-dark-primary);
 }
@@ -640,7 +640,7 @@ p.initial::first-letter {
 
 .chat-message:has(#simple-quest-image-override).chat-message:has(#simple-quest-image-override) img {
   padding: 38px 38px 0px 0px;
-  background-image: url("../assets/icons/exclamation2.webp");
+  background-image: url("../../assets/System/Quests/quest-icons-exclamation2.webp");
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -1907,4 +1907,4 @@ p.initial::first-letter {
           backdrop-filter: blur(5px);
   overflow: auto;
   cursor: default;
-}/*# sourceMappingURL=module.css.map */
+}

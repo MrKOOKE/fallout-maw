@@ -1,19 +1,19 @@
 <div class="fallout-maw-global-map-form">
-  {{#if levels.length}}<div class="form-group"><label>Уровень</label><div class="form-fields"><select name="entry.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
+  {{#if levels.length}}<div class="form-group"><label>{{localize 'FALLOUTMAW.Actor.Level'}}</label><div class="form-fields"><select name="entry.levelId">{{#each levels}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></div></div>{{/if}}
   <div class="form-group">
-    <label>Цвет связанной зоны</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text31225c2c79aa'}}</label>
     <div class="form-fields"><input type="color" name="entry.color" value="{{entry.entryColor}}"></div>
   </div>
   <div class="form-group">
-    <label>Радиус кисти</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text2f3e5c154a7d'}}</label>
     <div class="form-fields"><input type="number" name="entry.brushRadius" value="{{entry.brushRadius}}" min="1" max="12"></div>
   </div>
   <div class="hint">
-    <div>ЛКМ добавляет клетки.</div>
-    <div>Shift+ЛКМ удаляет клетки.</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text1e486ceef92f'}}</div>
+    <div>{{localize 'FALLOUTMAW.AuditTemplates.Text8414e5081205'}}</div>
   </div>
   <footer class="form-footer">
-    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
-    {{#if hasCells}}<button type="button" data-action="clear" class="danger"><i class="fa-solid fa-trash"></i> Удалить зону</button>{{/if}}
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
+    {{#if hasCells}}<button type="button" data-action="clear" class="danger"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4860c7008209'}}</button>{{/if}}
   </footer>
 </div>

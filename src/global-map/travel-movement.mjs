@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { getMapTokenLevelId, isMapAreaOnLevel } from "./levels.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { GLOBAL_MAP_SOCKET, TRAVEL_GROUP_FLAG } from "./constants.mjs";
@@ -56,7 +57,7 @@ export function getTravelMovementPreview(token = null, waypoint = null) {
     distanceKm: metrics.distanceKm,
     seconds: metrics.seconds,
     distanceLabel: formatTravelDistance(metrics.distanceKm),
-    timeLabel: blocked ? "Вход запрещён" : formatTravelDuration(metrics.seconds / 3600)
+    timeLabel: blocked ? auditLocalize("FALLOUTMAW.AuditRuntime.R1062", "Вход запрещён") : formatTravelDuration(metrics.seconds / 3600)
   };
 }
 
@@ -65,12 +66,12 @@ export async function armTravelMovement(token = null) {
   const actor = document?.actor;
   if (!document?.parent || !isTravelGroupCarrierActor(actor)) return false;
   if (!actor.testUserPermission?.(game.user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
-    ui.notifications.warn("Нет прав на перемещение этой путешествующей группы.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1063", "Нет прав на перемещение этой путешествующей группы."));
     return false;
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Путешествие недоступно: нет активного GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0996", "Путешествие недоступно: нет активного GM."));
     return false;
   }
   const payload = {
@@ -82,9 +83,9 @@ export async function armTravelMovement(token = null) {
   };
   const result = isResponsibleGM()
     ? await handleArmRequest(payload)
-    : await requestRemoteArm(payload);
+    : await requestRemoteArm(payload, gm.id);
   if (!result?.success) {
-    ui.notifications.warn(result?.message || "Не удалось подготовить перемещение группы.");
+    ui.notifications.warn(result?.message || auditLocalize("FALLOUTMAW.AuditRuntime.R1064", "Не удалось подготовить перемещение группы."));
     return false;
   }
   setLocalArmedMovement({
@@ -111,19 +112,23 @@ export async function disarmTravelMovement({ notifyGM = true } = {}) {
   return true;
 }
 
-function requestRemoteArm(payload) {
+function requestRemoteArm(payload, gmUserId) {
   return new Promise(resolve => {
     const timeout = window.setTimeout(() => {
       pendingArmRequests.delete(payload.requestId);
-      resolve({ success: false, message: "GM не подтвердил режим путешествия." });
+      resolve({ success: false, message: auditLocalize("FALLOUTMAW.AuditRuntime.R1065", "GM не подтвердил режим путешествия.") });
     }, REQUEST_TIMEOUT_MS);
-    pendingArmRequests.set(payload.requestId, { resolve, timeout });
+    pendingArmRequests.set(payload.requestId, { resolve, timeout, gmUserId });
     game.socket.emit(GLOBAL_MAP_SOCKET, payload);
   });
 }
 
-async function handleTravelMovementSocket(payload = {}) {
+async function handleTravelMovementSocket(payload = {}, senderUserId = "") {
   if (!payload || typeof payload !== "object") return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
+  if (!authenticatedSenderId) return;
+  if ([ACTION_ARM, ACTION_DISARM].includes(payload.action)
+    && authenticatedSenderId !== String(payload.requestingUserId ?? "")) return;
   if (payload.action === ACTION_ARM && isResponsibleGM()) {
     const result = await handleArmRequest(payload).catch(error => ({ success: false, message: error.message }));
     game.socket.emit(GLOBAL_MAP_SOCKET, {
@@ -137,6 +142,7 @@ async function handleTravelMovementSocket(payload = {}) {
   if (payload.action === ACTION_ARM_RESULT && payload.requestingUserId === game.user?.id) {
     const pending = pendingArmRequests.get(payload.requestId);
     if (!pending) return;
+    if (authenticatedSenderId !== pending.gmUserId) return;
     pendingArmRequests.delete(payload.requestId);
     window.clearTimeout(pending.timeout);
     pending.resolve(payload);
@@ -147,6 +153,7 @@ async function handleTravelMovementSocket(payload = {}) {
     return;
   }
   if (payload.action === ACTION_COMPLETE && payload.requestingUserId === game.user?.id) {
+    if (authenticatedSenderId !== getResponsibleGM()?.id) return;
     clearLocalArmedMovement();
     if (payload.message) ui.notifications.info(payload.message);
   }
@@ -157,13 +164,13 @@ async function handleArmRequest(payload) {
   const token = scene?.tokens?.get(payload.tokenId);
   const user = game.users?.get(payload.requestingUserId);
   if (!scene || !token?.actor || !user || !isTravelGroupCarrierActor(token.actor)) {
-    throw new Error("Путешествующая группа не найдена.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1066", "Путешествующая группа не найдена."));
   }
   if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
-    throw new Error("Нет прав на перемещение этой группы.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1067", "Нет прав на перемещение этой группы."));
   }
   const speedKmh = await calculateTravelGroupSpeed(token.actor);
-  if (!(speedKmh > 0)) throw new Error("Скорость группы должна быть больше нуля.");
+  if (!(speedKmh > 0)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1068", "Скорость группы должна быть больше нуля."));
   const expiresAt = Date.now() + ARM_TIMEOUT_MS;
   const key = armKey(scene.id, token.id, user.id);
   gmArmedMovements.set(key, { speedKmh, expiresAt });
@@ -183,12 +190,12 @@ function validateArmedTravelMovement(tokenDocument, movement) {
   const cells = movementCells(tokenDocument.parent, tokenDocument, movement, "pending");
   const blocked = findImpassableEntry(tokenDocument.parent, cells, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
   if (blocked) {
-    ui.notifications.warn(`Вход в местность «${blocked.name || "Непроходимая местность"}» запрещён.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1069", { p0: (blocked.name || auditLocalize("FALLOUTMAW.AuditRuntime.R1070", "Непроходимая местность")) }, "Вход в местность «{p0}» запрещён."));
     void disarmTravelMovement();
     return false;
   }
   if (!(localArmedMovement?.speedKmh > 0)) {
-    ui.notifications.warn("Скорость группы должна быть больше нуля.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1068", "Скорость группы должна быть больше нуля."));
     void disarmTravelMovement();
     return false;
   }
@@ -204,12 +211,12 @@ async function processCompletedTravelMovement(tokenDocument, movement, _operatio
   gmArmedMovements.delete(key);
   if (armed.expiresAt <= Date.now() || !isTravelGroupCarrierActor(tokenDocument.actor)) return;
   const finished = await movement.finished;
-  if (!finished) return emitMovementComplete(user.id, "Перемещение группы отменено.");
+  if (!finished) return emitMovementComplete(user.id, auditLocalize("FALLOUTMAW.AuditRuntime.R1071", "Перемещение группы отменено."));
   const cells = movementCells(tokenDocument.parent, tokenDocument, movement, "passed");
   const blocked = findImpassableEntry(tokenDocument.parent, cells, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
-  if (blocked) return emitMovementComplete(user.id, "Маршрут пересекает непроходимую местность; время не изменено.");
+  if (blocked) return emitMovementComplete(user.id, auditLocalize("FALLOUTMAW.AuditRuntime.R1072", "Маршрут пересекает непроходимую местность; время не изменено."));
   const speedKmh = await calculateTravelGroupSpeed(tokenDocument.actor);
-  if (!(speedKmh > 0)) return emitMovementComplete(user.id, "Скорость группы равна нулю; время не изменено.");
+  if (!(speedKmh > 0)) return emitMovementComplete(user.id, auditLocalize("FALLOUTMAW.AuditRuntime.R1073", "Скорость группы равна нулю; время не изменено."));
   const { seconds, distanceKm } = calculateTravelMetrics(tokenDocument.parent, cells, speedKmh, getMapTokenLevelId(tokenDocument.parent, tokenDocument));
   await withSystemEventRoot({
     kind: "travelMovement",
@@ -237,8 +244,8 @@ async function processCompletedTravelMovement(tokenDocument, movement, _operatio
   });
   const hours = seconds / 3600;
   emitMovementComplete(user.id, seconds > 0
-    ? `Путешествие заняло ${formatTravelDuration(hours)}.`
-    : "Группа осталась в текущей клетке.");
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R1074", { p0: (formatTravelDuration(hours)) }, "Путешествие заняло {p0}.")
+    : auditLocalize("FALLOUTMAW.AuditRuntime.R1075", "Группа осталась в текущей клетке."));
 }
 
 function movementCells(scene, tokenDocument, movement, sectionKey) {
@@ -341,14 +348,14 @@ function formatTravelDuration(hours) {
   const totalMinutes = Math.ceil(Math.max(0, hours) * 60);
   const wholeHours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  if (!wholeHours) return `${minutes} мин.`;
-  if (!minutes) return `${wholeHours} ч.`;
-  return `${wholeHours} ч. ${minutes} мин.`;
+  if (!wholeHours) return auditFormat("FALLOUTMAW.AuditRuntime.R0464", { p0: (minutes) }, "{p0} мин.");
+  if (!minutes) return auditFormat("FALLOUTMAW.AuditRuntime.R0463", { p0: (wholeHours) }, "{p0} ч.");
+  return auditFormat("FALLOUTMAW.AuditRuntime.R1076", { p0: (wholeHours), p1: (minutes) }, "{p0} ч. {p1} мин.");
 }
 
 function formatTravelDistance(distanceKm) {
   const value = Math.max(0, Number(distanceKm) || 0);
-  return `${Number.isInteger(value) ? value : value.toFixed(2)} км`;
+  return auditFormat("FALLOUTMAW.AuditRuntime.R1077", { p0: (Number.isInteger(value) ? value : value.toFixed(2)) }, "{p0} км");
 }
 
 function getResponsibleGM() {

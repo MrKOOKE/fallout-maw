@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import {
   DEFAULT_CHARACTERISTICS,
   DEFAULT_DAMAGE_TYPES,
@@ -17,7 +18,7 @@ import { BLEEDING_DAMAGE_TYPE_KEY } from "../constants.mjs";
 import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
-const FALLBACK_ICON = "icons/svg/d20-grey.svg";
+const FALLBACK_ICON = "systems/fallout-maw/assets/System/Skills/skill-default.webp";
 
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_TRACK_COLOR = "#8f8456";
@@ -46,9 +47,9 @@ const LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS = Object.freeze({
 });
 const BLEEDING_DAMAGE_TYPE = Object.freeze({
   key: BLEEDING_DAMAGE_TYPE_KEY,
-  label: "Кровотечение",
+  get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0767", "Кровотечение"); },
   color: "#b82020",
-  img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+  img: "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp",
   locked: true,
   system: true
 });
@@ -108,8 +109,8 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
 const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
   bleeding: Object.freeze({
     enabled: false,
-    effectName: "Кровотечение",
-    img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+    get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0767", "Кровотечение"); },
+    img: "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp",
     percent: 0,
     durationSeconds: 24
   }),
@@ -145,8 +146,8 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   piercing: Object.freeze({
     bleeding: Object.freeze({
       enabled: true,
-      effectName: "Кровотечение",
-      img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+      get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0767", "Кровотечение"); },
+      img: "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp",
       percent: 20,
       durationSeconds: 24
     })
@@ -154,8 +155,8 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   firearm: Object.freeze({
     bleeding: Object.freeze({
       enabled: true,
-      effectName: "Кровотечение",
-      img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+      get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0767", "Кровотечение"); },
+      img: "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp",
       percent: 20,
       durationSeconds: 24
     })
@@ -163,8 +164,8 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   slashing: Object.freeze({
     bleeding: Object.freeze({
       enabled: true,
-      effectName: "Обильное кровотечение",
-      img: "icons/skills/wounds/injury-triple-slash-bleed.webp",
+      get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0891", "Обильное кровотечение"); },
+      img: "systems/fallout-maw/assets/System/DamageTypes/effect-severe-bleeding.webp",
       percent: 40,
       durationSeconds: 12
     })
@@ -172,8 +173,8 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   fire: Object.freeze({
     periodic: Object.freeze({
       enabled: true,
-      effectName: "Горение",
-      img: "icons/magic/fire/flame-burning-creature-skeleton.webp",
+      get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0892", "Горение"); },
+      img: "systems/fallout-maw/assets/System/DamageTypes/effect-burning.webp",
       immediatePercent: 50,
       delayedPercent: 50,
       tickCount: 1,
@@ -183,8 +184,8 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   poison: Object.freeze({
     periodic: Object.freeze({
       enabled: true,
-      effectName: "Яд",
-      img: "icons/magic/death/skull-poison-green.webp",
+      get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0893", "Яд"); },
+      img: "systems/fallout-maw/assets/System/DamageTypes/effect-poison.webp",
       immediatePercent: 0,
       delayedPercent: 100,
       tickCount: 3,
@@ -200,8 +201,8 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   cryo: Object.freeze({
     resourceLimit: Object.freeze({
       enabled: true,
-      effectName: "Крио-ограничение",
-      img: "icons/magic/water/barrier-ice-crystal-wall-jagged-blue.webp",
+      get effectName() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0894", "Крио-ограничение"); },
+      img: "systems/fallout-maw/assets/System/DamageTypes/effect-cryo-restriction.webp",
       color: "#3f8cff",
       durationSeconds: 12,
       resources: DEFAULT_RESOURCE_LIMIT_RESOURCES
@@ -288,10 +289,11 @@ export function normalizeCharacteristicSettings(settings) {
       return {
         key,
         abbr: String(entry?.abbr ?? "").trim(),
-        label: String(entry?.label ?? entry?.name ?? "").trim()
+        label: String(entry?.label ?? entry?.name ?? "").trim(),
+        description: String(entry?.description ?? "").trim()
       };
     },
-    "Характеристика"
+    auditLocalize("FALLOUTMAW.AuditRuntime.R0561", "Характеристика")
   );
 }
 
@@ -306,10 +308,11 @@ export function normalizeSkillSettings(settings) {
         abbr: String(entry?.abbr ?? "").trim(),
         label: String(entry?.label ?? entry?.name ?? "").trim(),
         formula: String(entry?.formula ?? "0").trim() || "0",
+        description: String(entry?.description ?? "").trim(),
         img: normalizeImagePath(entry?.img)
       };
     },
-    "Навык"
+    auditLocalize("FALLOUTMAW.AuditRuntime.R0562", "Навык")
   );
 }
 
@@ -370,7 +373,7 @@ export function normalizeProficiencySettings(settings) {
         }
       };
     },
-    "Владение"
+    auditLocalize("FALLOUTMAW.AuditRuntime.R0895", "Владение")
   );
 }
 
@@ -400,7 +403,7 @@ export function normalizeResourceSettings(settings, {
 } = {}) {
   const source = normalizeCollectionInput(settings, createDefaultResourceSettings());
   const sourceByKey = new Map(source.map(setting => [String(setting?.key ?? "").trim(), setting]));
-  const normalized = normalizeFormulaSettings(source, createDefaultResourceSettings(), "Ресурс")
+  const normalized = normalizeFormulaSettings(source, createDefaultResourceSettings(), auditLocalize("FALLOUTMAW.AuditRuntime.R0896", "Ресурс"))
     .map(setting => setting.key === "health"
       ? {
         ...setting,
@@ -442,7 +445,7 @@ export function normalizeNeedSettings(settings) {
         settings: normalizeNeedBehavior(entry?.settings, key)
       };
     },
-    "Потребность"
+    auditLocalize("FALLOUTMAW.AuditRuntime.R0897", "Потребность")
   );
 }
 
@@ -451,7 +454,7 @@ export function normalizeDamageTypeSettings(settings) {
   return ensureSystemDamageTypes(normalizeKeyedEntries(
     source,
     entry => normalizeDamageTypeEntry(entry),
-    "Тип урона"
+    auditLocalize("FALLOUTMAW.AuditRuntime.R0898", "Тип урона")
   ));
 }
 
@@ -772,7 +775,7 @@ function normalizeNeedDiseases(diseases, defaults = []) {
   const source = Array.isArray(diseases) ? diseases : defaults;
   return source.map((entry, index) => ({
     id: String(entry?.id ?? `disease-${index + 1}`).trim() || `disease-${index + 1}`,
-    name: String(entry?.name ?? "").trim() || `Болезнь ${index + 1}`,
+    name: String(entry?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditRuntime.R0899", { p0: (index + 1) }, "Болезнь {p0}"),
     img: String(entry?.img ?? "").trim(),
     stages: normalizeNeedDiseaseStages(entry?.stages)
   })).filter(entry => entry.stages.length);

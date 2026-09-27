@@ -183,57 +183,23 @@ function isCurrentActiveGM() {
   return Boolean(game.users?.activeGM?.id && game.users.activeGM.id === game.user?.id);
 }
 
-function pullCoalescedWorldTimeUpdate() {
-  if (!pendingWorldTimeUpdates.length) return null;
-  const first = pendingWorldTimeUpdates.shift();
-  const sourceUpdates = [first];
-  let worldTime = Number(first.worldTime) || 0;
-  let deltaTime = Number(first.deltaTime) || 0;
-  const current = Number(game.time?.worldTime) || 0;
-
-  while (pendingWorldTimeUpdates.length) {
-    const peek = pendingWorldTimeUpdates[0];
-    const peekW = Number(peek.worldTime) || 0;
-    if (peekW > current) break;
-    const next = pendingWorldTimeUpdates.shift();
-    sourceUpdates.push(next);
-    deltaTime += Number(next.deltaTime) || 0;
-    worldTime = Number(next.worldTime) || worldTime;
-  }
-
-  if (current > worldTime) {
-    deltaTime += current - worldTime;
-    worldTime = current;
-  }
-
-  return {
-    worldTime,
-    deltaTime,
-    options: first.options,
-    userId: first.userId,
-    sourceUpdates
-  };
-}
-
 async function processWorldTimeQueue() {
   if (processingWorldTimeQueue) return;
   processingWorldTimeQueue = true;
   try {
     while (pendingWorldTimeUpdates.length) {
-      const update = pullCoalescedWorldTimeUpdate();
-      if (!update) break;
+      // A hook describes one committed interval and its own rest/camp context.
+      // The live clock may already contain later queued updates while a
+      // processor awaits document work. Extending this interval to that clock
+      // would charge the later time twice and apply the wrong rest modifiers.
+      const update = pendingWorldTimeUpdates.shift();
       const processors = Array.from(queuedWorldTimeProcessors.entries())
         .sort((left, right) => right[1] - left[1])
         .map(([processor]) => processor);
-      let wt = update.worldTime;
-      let dt = update.deltaTime;
+      const wt = update.worldTime;
+      const dt = update.deltaTime;
       for (const processor of processors) {
         try {
-          const clock = Number(game.time?.worldTime) || 0;
-          if (clock > wt) {
-            dt += clock - wt;
-            wt = clock;
-          }
           await processor(wt, dt, update.options, update.userId);
         } catch (error) {
           console.error("Fallout MaW | World time processor failed", error);
@@ -241,27 +207,15 @@ async function processWorldTimeQueue() {
       }
       for (const finalizer of Array.from(queuedWorldTimeFinalizers)) {
         try {
-          const clock = Number(game.time?.worldTime) || 0;
-          if (clock > wt) {
-            dt += clock - wt;
-            wt = clock;
-          }
           await finalizer(wt, dt, update.options, update.userId);
         } catch (error) {
           console.error("Fallout MaW | World time finalizer failed", error);
         }
       }
-      for (const sourceUpdate of update.sourceUpdates) {
-        try {
-          await emitExternalWorldTimeUpdate(
-            sourceUpdate.worldTime,
-            sourceUpdate.deltaTime,
-            sourceUpdate.options,
-            sourceUpdate.userId
-          );
-        } catch (error) {
-          console.error("Fallout MaW | World time event dispatch failed", error);
-        }
+      try {
+        await emitExternalWorldTimeUpdate(wt, dt, update.options, update.userId);
+      } catch (error) {
+        console.error("Fallout MaW | World time event dispatch failed", error);
       }
     }
   } finally {

@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "../apps/base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
@@ -25,7 +26,7 @@ export class GlobalMapTravelSettings extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-global-map-travel-settings",
     classes: [...super.DEFAULT_OPTIONS.classes, "standard-form", "fallout-maw-global-map-editor"],
     position: { width: 420, height: "auto" },
-    window: { title: "Путешествие", resizable: false },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0947", "Путешествие"); }, resizable: false },
     form: {
       handler: GlobalMapTravelSettings.handleFormSubmit,
       submitOnChange: false,

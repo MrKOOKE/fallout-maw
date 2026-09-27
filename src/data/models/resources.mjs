@@ -1,7 +1,10 @@
 const { NumberField, SchemaField } = foundry.data.fields;
 
 export function resourceField(value = 0, max = value, options = {}) {
+  const { oneTime = false, ...fieldOptions } = options;
   return new SchemaField({
+    // Legacy ActorDelta documents may apply without cleaning newly added fields.
+    ...(oneTime ? { once: new NumberField({ required: false, integer: true, min: 0, initial: 0 }) } : {}),
     min: new NumberField({ required: true, integer: true, initial: 0 }),
     spent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     bonus: new NumberField({ required: true, integer: true, initial: 0 }),
@@ -14,7 +17,7 @@ export function resourceField(value = 0, max = value, options = {}) {
       initial: 0,
       persisted: false
     })
-  }, options);
+  }, fieldOptions);
 }
 
 export function clampPreparedResource(resource) {

@@ -20,7 +20,7 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { applyTokenPrototypeDefaults } from "../settings/token-prototype-defaults.mjs";
-import { syncTrackedResourceValueUpdates } from "./actor-resource-updates.mjs";
+import { prepareSparseActorResourceUpdate, syncTrackedResourceValueUpdates } from "./actor-resource-updates.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import {
   DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
@@ -75,9 +75,35 @@ import { expandDetectionModeRangeEffectChange } from "../canvas/vision-effect-ke
 import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
 import { withUnchangedActorItemSources } from "./item-model-initialization.mjs";
 import { initializeValidatedPreviewActor } from "./token-clone-initialization.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
+import { assertBatchPreflightIds } from "../utils/document-batch-integrity.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
+const researchMutationLock = createActorOperationLock();
 
 export class FalloutMaWActor extends Actor {
+  static cleanData(data = {}, options = {}, context = {}) {
+    return super.cleanData(prepareSparseActorResourceUpdate(data, options, context), options, context);
+  }
+
+  static async createDocuments(data = [], operation = {}) {
+    const documents = await super.createDocuments(data, operation);
+    assertBatchPreflightIds(operation, "create");
+    return documents;
+  }
+
+  static async updateDocuments(updates = [], operation = {}) {
+    const documents = await super.updateDocuments(updates, operation);
+    assertBatchPreflightIds(operation, "update");
+    return documents;
+  }
+
+  static async deleteDocuments(ids = [], operation = {}) {
+    const documents = await super.deleteDocuments(ids, operation);
+    assertBatchPreflightIds(operation, "delete");
+    return documents;
+  }
+
   _initialize(options = {}) {
     if (this.constructor !== FalloutMaWActor) return super._initialize(options);
     return initializeValidatedPreviewActor(this, options, () => super._initialize(options));
@@ -128,6 +154,7 @@ export class FalloutMaWActor extends Actor {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
+    if (options?.falloutMawParkPassenger) return undefined;
     if (foundry.utils.getProperty(data, `flags.${SYSTEM_ID}.${DROPPED_ITEMS_ACTOR_FLAG}`)) return undefined;
     if (!["character", "construct"].includes(this.type)) return undefined;
 
@@ -509,78 +536,121 @@ export class FalloutMaWActor extends Actor {
   }
 
   async createResearch(data = {}, options = {}) {
-    const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
-    const research = prepareResearchForStorage(data);
-    researches.push(research);
-    return commitResearchEvent({
-      actor: this,
-      eventKey: RESEARCH_EVENT_KEYS.started,
-      beforeResearch: null,
-      afterResearch: research,
-      options: {
-        ...options,
-        reason: String(options?.reason ?? "started")
-      },
-      operation: documentOptions => this.update({ "system.researches": researches }, documentOptions)
+    return runResearchMutation(this, options, async options => {
+      const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+      const research = prepareResearchForStorage(data);
+      researches.push(research);
+      return commitResearchEvent({
+        actor: this,
+        eventKey: RESEARCH_EVENT_KEYS.started,
+        beforeResearch: null,
+        afterResearch: research,
+        options: {
+          ...options,
+          reason: String(options?.reason ?? "started")
+        },
+        operation: documentOptions => this.update({ "system.researches": researches }, documentOptions)
+      });
     });
   }
 
   async updateResearch(researchId = "", data = {}, options = {}) {
-    const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
-    const index = researches.findIndex(research => research.id === researchId);
-    if (index < 0) return this;
+    return runResearchMutation(this, options, async options => {
+      const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+      const index = researches.findIndex(research => research.id === researchId);
+      if (index < 0) return this;
 
-    const beforeResearch = researches[index];
-    researches[index] = prepareResearchForStorage({
-      ...beforeResearch,
-      ...data,
-      id: beforeResearch.id
-    }, {
-      generateId: false
-    });
-    const afterResearch = researches[index];
-    const documentOptions = {
-      ...(options?.documentOptions ?? {}),
-      falloutMawSystemEventChainRef: resolveResearchChainRef(options),
-      chainRef: resolveResearchChainRef(options)
-    };
+      const beforeResearch = researches[index];
+      researches[index] = prepareResearchForStorage({
+        ...beforeResearch,
+        ...data,
+        ...(options.progressDelta === undefined ? {} : {
+          progress: Number(beforeResearch.progress) + (Number(options.progressDelta) || 0)
+        }),
+        id: beforeResearch.id
+      }, {
+        generateId: false
+      });
+      const afterResearch = researches[index];
+      const documentOptions = {
+        ...(options?.documentOptions ?? {}),
+        falloutMawSystemEventChainRef: resolveResearchChainRef(options),
+        chainRef: resolveResearchChainRef(options)
+      };
 
-    // Research metadata can be edited independently. A semantic progress event
-    // represents only a real increase of the filled amount.
-    if (Number(afterResearch.progress) <= Number(beforeResearch.progress)) {
-      return this.update({ "system.researches": researches }, documentOptions);
-    }
+      // Research metadata can be edited independently. A semantic progress event
+      // represents only a real increase of the filled amount.
+      if (Number(afterResearch.progress) <= Number(beforeResearch.progress)) {
+        return this.update({ "system.researches": researches }, documentOptions);
+      }
 
-    return commitResearchEvent({
-      actor: this,
-      eventKey: RESEARCH_EVENT_KEYS.progressed,
-      beforeResearch,
-      afterResearch,
-      options: {
-        ...options,
-        reason: String(options?.reason ?? "progressed")
-      },
-      operation: eventDocumentOptions => this.update({ "system.researches": researches }, eventDocumentOptions)
+      return commitResearchEvent({
+        actor: this,
+        eventKey: RESEARCH_EVENT_KEYS.progressed,
+        beforeResearch,
+        afterResearch,
+        options: {
+          ...options,
+          reason: String(options?.reason ?? "progressed")
+        },
+        operation: eventDocumentOptions => this.update({ "system.researches": researches }, eventDocumentOptions)
+      });
     });
   }
 
   async deleteResearch(researchId = "", options = {}) {
-    const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
-    const research = researches.find(entry => entry.id === researchId) ?? null;
-    const nextResearches = researches.filter(research => research.id !== researchId);
-    if (nextResearches.length === researches.length) return this;
-    const completionRequested = options?.event === "completed" || options?.completed === true;
-    const completed = completionRequested && Number(research.progress) >= Number(research.target);
-    return commitResearchEvent({
-      actor: this,
-      eventKey: completed ? RESEARCH_EVENT_KEYS.completed : RESEARCH_EVENT_KEYS.cancelled,
-      beforeResearch: research,
-      afterResearch: completed ? research : null,
-      options: {
-        ...options,
-        reason: String(options?.reason ?? (completed ? "completed" : "cancelled"))
-      },
-      operation: documentOptions => this.update({ "system.researches": nextResearches }, documentOptions)
+    return runResearchMutation(this, options, async options => {
+      const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+      const research = researches.find(entry => entry.id === researchId) ?? null;
+      const nextResearches = researches.filter(research => research.id !== researchId);
+      if (nextResearches.length === researches.length) return this;
+      const completionRequested = options?.event === "completed" || options?.completed === true;
+      const completed = completionRequested && Number(research.progress) >= Number(research.target);
+      return commitResearchEvent({
+        actor: this,
+        eventKey: completed ? RESEARCH_EVENT_KEYS.completed : RESEARCH_EVENT_KEYS.cancelled,
+        beforeResearch: research,
+        afterResearch: completed ? research : null,
+        options: {
+          ...options,
+          reason: String(options?.reason ?? (completed ? "completed" : "cancelled"))
+        },
+        operation: documentOptions => this.update({ "system.researches": nextResearches }, documentOptions)
+      });
+    });
+  }
+
+  async investResearchPoints(researchId = "", options = {}) {
+    return runResearchMutation(this, options, async options => {
+      const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+      const index = researches.findIndex(research => research.id === researchId);
+      if (index < 0) return null;
+      const beforeResearch = researches[index];
+      const available = Math.max(0, toInteger(this.system?.development?.points?.researches));
+      const requested = options.amount === undefined ? available : Math.max(0, Math.ceil(Number(options.amount) || 0));
+      const remaining = Math.max(0, beforeResearch.target - beforeResearch.progress);
+      // Development points are whole units. The final point may finish a
+      // fractional remainder; storage clamps progress to the target.
+      const investment = Math.min(available, requested, Math.ceil(remaining));
+      if (investment <= 0) return { research: beforeResearch, investment: 0 };
+      const afterResearch = prepareResearchForStorage({
+        ...beforeResearch,
+        progress: beforeResearch.progress + investment,
+        freeSpent: beforeResearch.freeSpent + investment
+      }, { generateId: false });
+      researches[index] = afterResearch;
+      const committed = await commitResearchEvent({
+        actor: this,
+        eventKey: RESEARCH_EVENT_KEYS.progressed,
+        beforeResearch,
+        afterResearch,
+        options: { ...options, gain: investment, reason: String(options.reason ?? "progressed") },
+        operation: documentOptions => this.update({
+          "system.development.points.researches": available - investment,
+          "system.researches": researches
+        }, documentOptions)
+      });
+      return committed ? { research: afterResearch, investment } : null;
     });
   }
 
@@ -609,6 +679,21 @@ export class FalloutMaWActor extends Actor {
     return this;
   }
 
+}
+
+function runResearchMutation(actor, options, operation) {
+  // Establish the root before acquiring the lock. A research-event reaction
+  // can then update the same actor reentrantly instead of waiting on itself.
+  return withSystemEventRoot({
+    kind: "research.mutation",
+    chainRef: resolveResearchChainRef(options),
+    sceneUuid: String(actor.token?.parent?.uuid ?? actor.token?.scene?.uuid ?? globalThis.canvas?.scene?.uuid ?? ""),
+    combatUuid: String(globalThis.game?.combat?.uuid ?? "")
+  }, scope => researchMutationLock.run(actor, scope.chainRef, () => operation({
+    ...options,
+    chainRef: scope.chainRef,
+    falloutMawSystemEventChainRef: scope.chainRef
+  })));
 }
 
 function applyCreatureRaceDefaults(actor) {

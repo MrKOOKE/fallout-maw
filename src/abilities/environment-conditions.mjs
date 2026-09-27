@@ -1,3 +1,4 @@
+import { format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { STEALTH_SETTINGS_SETTING } from "../settings/constants.mjs";
 import {
@@ -73,7 +74,7 @@ export function getIlluminationLevelChoices(selected = "") {
     const value = formatIlluminationThreshold(level?.threshold);
     return {
       value,
-      label: String(level?.label ?? "").trim() || `Степень ${value}`,
+      label: String(level?.label ?? "").trim() || auditFormat("FALLOUTMAW.AuditRuntime.R0057", { p0: (value) }, "Степень {p0}"),
       selected: value === selectedKey
     };
   });

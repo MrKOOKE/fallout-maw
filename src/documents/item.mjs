@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import {
   BUTCHERING_STORAGE_PARENT_ID,
   BUTCHERING_STORAGE_PLACEMENT_MODE,
@@ -46,11 +47,29 @@ import {
 import { getUnchangedItemSystemField } from "./item-model-initialization.mjs";
 import { getPreviewItemValidationOptions } from "./token-clone-initialization.mjs";
 import { completeInventoryContentsRender } from "../utils/inventory-render-batch.mjs";
+import { assertBatchPreflightIds } from "../utils/document-batch-integrity.mjs";
+import { assertInventoryConsumptionReservation } from "../inventory/consumption-reservation.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 const REUSABLE_ITEM_MODELS = new Set([AbilityDataModel, DiseaseDataModel, GearDataModel, TraumaDataModel]);
 
 export class FalloutMaWItem extends Item {
+  static async createDocuments(data = [], operation = {}) {
+    for (const source of data) assertInventoryConsumptionReservation(source, operation);
+    const documents = await super.createDocuments(data, operation);
+    assertBatchPreflightIds(operation, "create");
+    if (operation.dryRun) assertAtomicInventoryOperationIds(operation.data, operation, "create");
+    return documents;
+  }
+
+  static async updateDocuments(updates = [], operation = {}) {
+    await assertItemReservationOperations(updates.map(update => update._id), operation);
+    const documents = await super.updateDocuments(updates, operation);
+    assertBatchPreflightIds(operation, "update");
+    if (operation.dryRun) assertAtomicInventoryOperationIds(operation.updates, operation, "update");
+    return documents;
+  }
+
   static async _onCreateOperation(documents, operation, user) {
     try { return await super._onCreateOperation(documents, operation, user); }
     finally { completeInventoryContentsRender(operation); }
@@ -84,7 +103,13 @@ export class FalloutMaWItem extends Item {
 
   static async deleteDocuments(ids = [], operation = {}) {
     const actor = await getInventoryOperationActor(operation);
-    if (!actor) return super.deleteDocuments(ids, operation);
+    if (!actor) {
+      await assertItemReservationOperations(ids, operation);
+      const deleted = await super.deleteDocuments(ids, operation);
+      assertBatchPreflightIds(operation, "delete");
+      if (operation.dryRun) assertAtomicInventoryOperationIds(operation.ids, operation, "delete");
+      return deleted;
+    }
 
     const requestedIds = operation.deleteAll
       ? Array.from(actor.items ?? [], item => item.id)
@@ -99,7 +124,9 @@ export class FalloutMaWItem extends Item {
     operation[INVENTORY_ATOMIC_OPTION] = true;
     operation[INVENTORY_EXPECTED_IDS_OPTION] = deletionIds;
 
+    await assertItemReservationOperations(deletionIds, operation);
     const deleted = await super.deleteDocuments(operation.deleteAll ? [] : deletionIds, operation);
+    assertBatchPreflightIds(operation, "delete");
     assertAtomicInventoryOperationIds(deleted, operation, "delete");
     return deleted;
   }
@@ -149,17 +176,18 @@ export class FalloutMaWItem extends Item {
   }
 
   async _preCreate(data, options, user) {
+    assertInventoryConsumptionReservation(this, options);
     if ((await super._preCreate(data, options, user)) === false) {
       return cancelInventoryDocumentOperation(this, options, "create");
     }
     prepareItemDamageUpdate(this, data, options, { operation: "create" });
     this.updateSource(getCleanSlotRequirementSource(this));
     if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
-      ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0861", "Травмы создаются только системой при получении повреждения."));
       return cancelInventoryDocumentOperation(this, options, "create");
     }
     if (this.type === "disease" && options?.[DISEASE_CREATE_OPTION] !== true) {
-      ui.notifications?.warn?.("Болезни создаются только системой.");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0862", "Болезни создаются только системой."));
       return cancelInventoryDocumentOperation(this, options, "create");
     }
     if (this.type === "trauma") {
@@ -243,6 +271,7 @@ export class FalloutMaWItem extends Item {
   }
 
   async _preUpdate(changes, options, user) {
+    assertInventoryConsumptionReservation(this, options);
     if ((await super._preUpdate(changes, options, user)) === false) {
       return cancelInventoryDocumentOperation(this, options, "update");
     }
@@ -301,6 +330,7 @@ export class FalloutMaWItem extends Item {
   }
 
   async _preDelete(options, user) {
+    assertInventoryConsumptionReservation(this, options);
     if ((await super._preDelete(options, user)) === false) {
       return cancelInventoryDocumentOperation(this, options, "delete");
     }
@@ -694,6 +724,17 @@ function getSlotRequirementDeletionUpdates(itemOrData) {
 function hasSlotRequirementSource(source = {}) {
   return Object.keys(source.system?.occupiedSlots ?? {}).length > 0
     || Object.keys(source.system?.weaponSlotRequirement?.slots ?? {}).length > 0;
+}
+
+async function assertItemReservationOperations(ids, operation = {}) {
+  const actor = await getInventoryOperationActor(operation);
+  const collection = actor?.items
+    ?? (!operation.parent && !operation.parentUuid && !operation.pack ? game.items : null);
+  if (!collection) return; // Compendium and other contexts are checked in the instance pre-hooks.
+  const documents = operation.deleteAll
+    ? Array.from(collection.contents ?? collection.values?.() ?? collection)
+    : ids.map(id => collection.get?.(id)).filter(Boolean);
+  for (const document of documents) assertInventoryConsumptionReservation(document, operation);
 }
 
 function getSlotRequirementRecordDeletionUpdates(path, slots = {}, validKeys = new Set()) {

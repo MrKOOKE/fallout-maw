@@ -1,22 +1,22 @@
 <div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Способности/Особенности</h2>
+      <h2>{{localize 'FALLOUTMAW.AuditSystem.Text058'}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
-        <button type="button" data-action="addCategory"><i class="fa-solid fa-plus"></i> Добавить каталог</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
+        <button type="button" data-action="addCategory"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text46887f9b4b79'}}</button>
       </div>
     </header>
 
     <div class="fallout-maw-ability-category-list">
       {{#each catalog.categories}}
       <div class="fallout-maw-ability-category-shell" data-ability-category-row data-category-id="{{id}}">
-        <button type="button" class="fallout-maw-icon-button fallout-maw-drag-handle fallout-maw-ability-category-drag" data-drag-handle title="Сортировать">
+        <button type="button" class="fallout-maw-icon-button fallout-maw-drag-handle fallout-maw-ability-category-drag" data-drag-handle title="{{localize 'FALLOUTMAW.AuditTemplates.Texta8b7e473eb2b'}}">
           <i class="fa-solid fa-grip-vertical"></i>
         </button>
       <article class="fallout-maw-panel fallout-maw-ability-category {{collapse.cssClass}}">
         <header class="fallout-maw-ability-category-header">
-          <button type="button" class="fallout-maw-icon-button" data-action="toggleCategory" aria-expanded="{{collapse.ariaExpanded}}" title="Свернуть/развернуть каталог">
+          <button type="button" class="fallout-maw-icon-button" data-action="toggleCategory" aria-expanded="{{collapse.ariaExpanded}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Textb18a50a3d2f9'}}">
             <i class="fa-solid {{collapse.iconClass}}"></i>
           </button>
           <label class="fallout-maw-ability-category-name">
@@ -35,10 +35,10 @@
             <input type="hidden" data-field="abilityImg" value="{{img}}">
             <input type="hidden" data-field="abilityVisible" value="{{#if visible}}true{{else}}false{{/if}}">
             <label>
-              <span>Название</span>
+              <span>{{localize 'FALLOUTMAW.Common.Label'}}</span>
               <input type="text" data-field="abilityName" value="{{name}}">
             </label>
-            <button type="button" class="fallout-maw-icon-button" data-action="moveAbility" title="Переместить в другой каталог">
+            <button type="button" class="fallout-maw-icon-button" data-action="moveAbility" title="{{localize 'FALLOUTMAW.AuditTemplates.Textdc099d46cd48'}}">
               <i class="fa-solid fa-arrow-right-arrow-left"></i>
             </button>
             <button type="button" class="fallout-maw-icon-button fallout-maw-ability-visibility-button" data-action="toggleAbilityVisibility" title="{{visibilityTitle}}">
@@ -47,10 +47,10 @@
             <button type="button" class="fallout-maw-icon-button" data-action="copyAbility" title="{{copyTitle}}">
               <i class="fa-solid fa-copy"></i>
             </button>
-            <button type="button" class="fallout-maw-icon-button" data-action="editAbility" title="Редактировать способность">
+            <button type="button" class="fallout-maw-icon-button" data-action="editAbility" title="{{localize 'FALLOUTMAW.AuditTemplates.Textc8bde138ce67'}}">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button type="button" class="fallout-maw-icon-button" data-action="deleteAbility" title="Удалить способность">
+            <button type="button" class="fallout-maw-icon-button" data-action="deleteAbility" title="{{localize 'FALLOUTMAW.AuditTemplates.Textfea46e16e44c'}}">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>

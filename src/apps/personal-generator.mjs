@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { createSourcedInventoryItemData } from "../utils/craft-item-source.mjs";
 import { DEFAULT_PERSONAL_NAME_BLOCKS } from "../data/personal-name-library.mjs";
@@ -54,6 +55,7 @@ import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, norm
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { getDroppedWorldItems } from "../utils/document-drop.mjs";
 import { getPersonalGeneratorSupplies } from "../utils/personal-generator-supplies.mjs";
+import { parseValueBudget, selectBudgetQuantities } from "../utils/personal-generator-budget.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -115,7 +117,7 @@ let personalGeneratorWindow = null;
 
 export function registerPersonalGeneratorSettings() {
   game.settings.register(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, {
-    name: "Настройки персонального генератора",
+    name: "FALLOUTMAW.AuditApps.PersonalGeneratorSettings",
     scope: "world",
     preset: true,
     config: false,
@@ -124,7 +126,7 @@ export function registerPersonalGeneratorSettings() {
   });
 
   game.settings.register(SYSTEM_ID, PERSONAL_GENERATOR_PRESETS_SETTING, {
-    name: "Пресеты персонального генератора",
+    name: "FALLOUTMAW.AuditApps.PersonalGeneratorPresets",
     scope: "world",
     preset: true,
     config: false,
@@ -143,7 +145,7 @@ export function registerPersonalGeneratorHooks() {
         onClick: (_event, li) => openPersonalGenerator(getActorFromDirectoryEntry(app, li))
       },
       {
-        label: "Прототип токена",
+        label: auditLocalize("FALLOUTMAW.AuditApps.TokenPrototype", "Прототип токена"),
         icon: "fa-solid fa-circle-user",
         visible: li => canConfigurePrototypeToken(getActorFromDirectoryEntry(app, li)),
         onClick: (_event, li) => openPrototypeTokenConfig(getActorFromDirectoryEntry(app, li))
@@ -211,7 +213,7 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройки персонального генератора";
+    return auditLocalize("FALLOUTMAW.AuditApps.PersonalGeneratorSettings", "Настройки персонального генератора");
   }
 
   async _prepareContext(options) {
@@ -224,7 +226,7 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData() {
     this.blocks = this.#readBlocksFromForm();
     await game.settings.set(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, { blocks: this.blocks });
-    ui.notifications.info("Настройки персонального генератора сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.PersonalGeneratorSettingsSaved", "Настройки персонального генератора сохранены."));
     return this.forceRender();
   }
 
@@ -233,7 +235,7 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
     this.blocks = this.#readBlocksFromForm();
     this.blocks.push({
       id: getUniqueId("name-block", this.blocks.map(block => block.id)),
-      name: "Новый блок",
+      name: auditLocalize("FALLOUTMAW.AuditApps.NewBlock", "Новый блок"),
       namesText: ""
     });
     return this.forceRender();
@@ -310,7 +312,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   };
 
   get title() {
-    return `Персональный генератор: ${this.#actor?.name ?? ""}`;
+    return auditFormat("FALLOUTMAW.AuditApps.PersonalGenerator", { v0: (this.#actor?.name ?? "") }, "Персональный генератор: {v0}");
   }
 
   setActor(actor) {
@@ -524,7 +526,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     const locked = input.value !== "1";
     input.value = locked ? "1" : "0";
     target.classList.toggle("is-locked", locked);
-    target.title = locked ? "Скрыт из обыска" : "Участвует в обыске";
+    target.title = locked ? auditLocalize("FALLOUTMAW.AuditApps.HiddenFromSearches", "Скрыт из обыска") : auditLocalize("FALLOUTMAW.AuditApps.IncludedInSearches", "Участвует в обыске");
     await this.#saveCurrentConfig({ fromForm: true });
     return undefined;
   }
@@ -1083,7 +1085,7 @@ class PersonalGeneratorImageFilePicker extends BaseFilePicker {
   };
 
   get title() {
-    return "Добавить изображения";
+    return auditLocalize("FALLOUTMAW.AuditApps.AddImages", "Добавить изображения");
   }
 
   async _onRender(context, options) {
@@ -1125,7 +1127,7 @@ class PersonalGeneratorImageFilePicker extends BaseFilePicker {
 
     const paths = Array.from(this.#selectedPaths);
     if (!paths.length) {
-      ui.notifications.error("Выберите хотя бы одно изображение.");
+      ui.notifications.error(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneImage", "Выберите хотя бы одно изображение."));
       return undefined;
     }
 
@@ -1162,7 +1164,7 @@ class PersonalGeneratorImageFilePicker extends BaseFilePicker {
       const paths = Array.from(this.#selectedPaths);
       form.elements.file.value = paths.length === 1
         ? paths[0]
-        : (paths.length ? `Выбрано: ${paths.length}` : "");
+        : (paths.length ? auditFormat("FALLOUTMAW.AuditApps.Selected", { v0: (paths.length) }, "Выбрано: {v0}") : "");
     }
   }
 }
@@ -1286,7 +1288,7 @@ async function applyPersonalGeneratorTokenItems(document) {
 
   const plan = planPersonalGeneratorItems(actor, rolledItems);
   if (!plan?.creates?.length && !plan?.updates?.length) {
-    ui.notifications.warn(`Персональный генератор: для ${document.name} нет места под выбранные предметы.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.PersonalGeneratorHasNoSpaceForTheSelected", { v0: (document.name) }, "Персональный генератор: для {v0} нет места под выбранные предметы."));
     await document.setFlag?.(SYSTEM_ID, "personalGeneratorItemsApplied", true);
     return undefined;
   }
@@ -1360,7 +1362,7 @@ async function createPersonalGeneratorAbilityItems(actor, abilitiesData = []) {
 
     if (result.item) created.push(result.item);
     if (result.cancelled) {
-      ui.notifications.warn(`Выбор изменений способности «${sourceData.name}» не завершён. Способность не добавлена.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.ChangeSelectionForTheAbilityIsIncompleteThe", { v0: (sourceData.name) }, "Выбор изменений способности «{v0}» не завершён. Способность не добавлена."));
       return { items: created, cancelled: true };
     }
   }
@@ -1400,16 +1402,15 @@ async function rollPersonalItemBlocks(itemsConfig = {}) {
     if (!entries.length) continue;
 
     const pickMode = normalizePickMode(block.pickMode);
+    if (pickMode === "totalValue") {
+      output.push(...await rollTotalValueBlock(entries, block.pick, block.pickCurrency, block.name));
+      continue;
+    }
     const pickValue = parsePickValue(block.pick);
     if (!pickValue) continue;
 
     if (pickMode === "totalQuantity") {
       output.push(...await rollTotalQuantityBlock(entries, pickValue));
-      continue;
-    }
-
-    if (pickMode === "totalValue") {
-      output.push(...await rollTotalValueBlock(entries, pickValue, block.pickCurrency));
       continue;
     }
 
@@ -1435,9 +1436,14 @@ async function rollTotalQuantityBlock(entries, pickValue) {
   return buildRolledItemData(normalized, quantities);
 }
 
-async function rollTotalValueBlock(entries, pickValue, currencyKey) {
-  const targetValue = Math.max(0, pickValue) * getCurrencyValueRatio(currencyKey || getDefaultCurrencyKey());
-  if (!targetValue) return [];
+async function rollTotalValueBlock(entries, pickValue, currencyKey, blockName = auditLocalize("FALLOUTMAW.AuditApps.Items", "Предметы")) {
+  const budget = parseValueBudget(pickValue);
+  // Compare prices in currency-value units, without dividing by the primary currency.
+  // Division could turn an exact price into a recurring fraction before bundle matching.
+  const currencyValue = getCurrencyBudgetValue(currencyKey || getDefaultCurrencyKey());
+  budget.min *= currencyValue;
+  budget.max *= currencyValue;
+  if (!budget.max) return [];
   const docs = await Promise.all(entries.map(entry => resolveItem(entry.uuid)));
   const resolved = entries.map((entry, index) => {
     const doc = docs[index];
@@ -1445,32 +1451,21 @@ async function rollTotalValueBlock(entries, pickValue, currencyKey) {
     const price = getItemPriceValue(doc);
     const min = Math.min(entry.min, entry.max);
     const max = Math.max(entry.min, entry.max);
-    const effectiveMax = isDefaultQuantityRange(entry) ? (price > 0 ? Math.floor(targetValue / price) : 0) : max;
-    return { ...entry, doc, price, min: isDefaultQuantityRange(entry) ? 0 : min, max: Math.max(min, effectiveMax) };
+    const defaultRange = isDefaultQuantityRange(entry);
+    const effectiveMax = defaultRange ? (price > 0 ? Math.floor(budget.max / price + 1e-9) : 1) : max;
+    return { ...entry, doc, price, min: defaultRange ? 0 : min, max: effectiveMax };
   }).filter(Boolean);
-  const quantities = resolved.map(entry => entry.min);
-  let remaining = targetValue - resolved.reduce((sum, entry, index) => sum + (entry.price * quantities[index]), 0);
-
-  for (const [index, entry] of resolved.entries()) {
-    if (entry.price > 0 || entry.max <= entry.min) continue;
-    quantities[index] = randomIntInclusive(entry.min, entry.max);
+  let quantities;
+  try {
+    quantities = selectBudgetQuantities(resolved, budget);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.PersonalGenerator_748", { v0: (blockName), v1: (error.message) }, "Персональный генератор, «{v0}»: {v1}"));
+    return [];
   }
-
-  const candidates = new Set(resolved.map((entry, index) => (
-    entry.price > 0 && quantities[index] < entry.max ? index : null
-  )).filter(index => index !== null));
-  let guard = 0;
-  while (remaining > 0 && candidates.size && guard < 20000) {
-    guard += 1;
-    const index = pickWeightedIndex(Array.from(candidates), candidate => resolved[candidate].weight);
-    const price = resolved[index].price;
-    if (price <= 0 || price > remaining) {
-      candidates.delete(index);
-      continue;
-    }
-    quantities[index] += 1;
-    remaining -= price;
-    if (quantities[index] >= resolved[index].max) candidates.delete(index);
+  if (!quantities) {
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.PersonalGeneratorCannotAssembleASetWorthWith", { v0: (blockName), v1: (pickValue) }, "Персональный генератор, «{v0}»: невозможно собрать набор стоимостью {v1} с указанными ценами и ограничениями количества."));
+    return [];
   }
 
   return buildRolledItemData(resolved, quantities);
@@ -1823,7 +1818,7 @@ function normalizeAbilityEntries(entries = []) {
       categoryId: String(entry.categoryId ?? "").trim(),
       uuid,
       name: String(entry.name ?? "").trim(),
-      img: normalizeImagePath(entry.img || "icons/svg/aura.svg")
+      img: normalizeImagePath(entry.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp")
     });
   }
   return normalized;
@@ -1883,7 +1878,7 @@ function getItemBlockInsertionIndex(root, anchorY) {
 function createItemBlock() {
   return normalizeItemBlock({
     id: foundry.utils.randomID(),
-    name: "Новый блок",
+    name: auditLocalize("FALLOUTMAW.AuditApps.NewBlock", "Новый блок"),
     pick: "1",
     pickMode: "count",
     pickCurrency: getDefaultCurrencyKey(),
@@ -1928,8 +1923,8 @@ function createItemEntryFromAbilityEntry(entry = {}) {
     sourceId: String(entry.sourceId ?? "").trim(),
     categoryId: String(entry.categoryId ?? "").trim(),
     uuid: String(entry.uuid ?? "").trim(),
-    name: String(entry.name ?? "").trim() || "Способность",
-    img: normalizeImagePath(entry.img || "icons/svg/aura.svg"),
+    name: String(entry.name ?? "").trim() || auditLocalize("TYPES.Item.ability", "Способность"),
+    img: normalizeImagePath(entry.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp"),
     equip: false,
     hasCondition: false,
     hasDurability: false
@@ -2013,8 +2008,8 @@ function getPrototypeTokenLinkContext(actor) {
   const linked = actor?.prototypeToken?.actorLink === true;
   return {
     linked,
-    status: linked ? "привязанный" : "отвязанный",
-    toggleLabel: linked ? "Сделать отвязанным" : "Сделать привязанным",
+    status: linked ? auditLocalize("FALLOUTMAW.AuditApps.Linked", "привязанный") : auditLocalize("FALLOUTMAW.AuditApps.Unlinked", "отвязанный"),
+    toggleLabel: linked ? auditLocalize("FALLOUTMAW.AuditApps.Unlink", "Сделать отвязанным") : auditLocalize("FALLOUTMAW.AuditApps.Link", "Сделать привязанным"),
     canConfigure: canConfigurePrototypeToken(actor)
   };
 }
@@ -2053,8 +2048,8 @@ function prepareAbilityEntriesForDisplay(entries = []) {
     const ability = catalogEntry?.ability ?? item ?? entry;
     return {
       ...entry,
-      name: String(ability?.name ?? entry.name ?? "").trim() || "Способность",
-      img: normalizeImagePath(ability?.img ?? entry.img ?? "icons/svg/aura.svg")
+      name: String(ability?.name ?? entry.name ?? "").trim() || auditLocalize("TYPES.Item.ability", "Способность"),
+      img: normalizeImagePath(ability?.img ?? entry.img ?? "systems/fallout-maw/assets/System/Abilities/ability-default.webp")
     };
   });
 }
@@ -2117,9 +2112,9 @@ function getCurrencyChoices(config = {}) {
 
 function getPickModeChoices() {
   return [
-    { value: "count", label: "Случайные позиции" },
-    { value: "totalQuantity", label: "Общее количество" },
-    { value: "totalValue", label: "Общая стоимость" }
+    { value: "count", label: auditLocalize("FALLOUTMAW.AuditApps.RandomEntries", "Случайные позиции") },
+    { value: "totalQuantity", label: auditLocalize("FALLOUTMAW.AuditApps.TotalQuantity", "Общее количество") },
+    { value: "totalValue", label: auditLocalize("FALLOUTMAW.AuditApps.TotalCost", "Общая стоимость") }
   ];
 }
 
@@ -2373,7 +2368,8 @@ function createEntrySelectionGroups(entries) {
 function distributeWeightedQuantity(entries, quantities, remaining) {
   const candidates = new Set(entries.map((entry, index) => quantities[index] < entry.max ? index : null).filter(index => index !== null));
   while (remaining > 0 && candidates.size) {
-    const index = pickWeightedIndex(Array.from(candidates), candidate => entries[candidate].weight);
+    const pool = Array.from(candidates);
+    const index = pool[pickWeightedIndex(pool, candidate => entries[candidate].weight)];
     quantities[index] += 1;
     remaining -= 1;
     if (quantities[index] >= entries[index].max) candidates.delete(index);
@@ -2450,19 +2446,17 @@ function getDefaultCurrencyKey() {
   return getCurrencySettings().find(currency => currency.primaryTrade)?.key ?? getCurrencySettings()[0]?.key ?? "";
 }
 
-function getCurrencyValueRatio(currencyKey) {
+function getCurrencyBudgetValue(currencyKey) {
   const currencies = getCurrencySettings();
   const primary = currencies.find(currency => currency.primaryTrade) ?? currencies[0];
   const current = currencies.find(currency => currency.key === currencyKey) ?? primary;
-  const primaryValue = Number(primary?.value) || 1;
-  const currentValue = Number(current?.value) || 1;
-  return currentValue / primaryValue;
+  return Number(current?.value) || 1;
 }
 
 function getItemPriceValue(item) {
   const price = Number(item?.system?.price) || 0;
   const currencyKey = String(item?.system?.priceCurrency ?? getDefaultCurrencyKey());
-  return Math.max(0, price) * getCurrencyValueRatio(currencyKey);
+  return Math.max(0, price) * getCurrencyBudgetValue(currencyKey);
 }
 
 function normalizeCurrencyRanges(ranges = {}) {

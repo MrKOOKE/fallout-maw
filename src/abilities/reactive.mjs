@@ -1,13 +1,12 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
-  canActorSpendEnergy,
-  ENERGY_RESOURCE_KEY,
-  getActorEnergy,
-  restoreActorEnergy,
-  runActorEnergyMutation
+  getActorAvailableEnergy,
+  spendActorEnergyWithReceipt,
+  refundActorEnergyReceipt
 } from "../combat/energy-resource.mjs";
 import { MOVEMENT_RESOURCE_KEY } from "../combat/movement-resources.mjs";
-import { ONE_TIME_ACTION_POINTS_KEY } from "../combat/reaction-resources.mjs";
+import { addOneTimeResourcePoints } from "../combat/one-time-resources.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
 import { normalizeReactiveSettings } from "../settings/abilities.mjs";
 import { ATTACK_ACTION_POINT_MOVEMENT_LOSS_DISABLED_EFFECT_KEY } from "../utils/active-effect-keys.mjs";
@@ -43,8 +42,9 @@ export async function useReactiveAbility(actor, abilityItem, abilityFunction) {
 
   const settings = normalizeReactiveSettings(abilityFunction.fixedSettings);
   const energyCost = settings.energyCost + getAbilityOverloadEnergyCost(actor, abilityItem, abilityFunction);
-  if (!(await spendReactiveEnergy(actor, energyCost))) {
-    ui.notifications.warn(`${abilityItem.name || "Реактивный"}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) {
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0166", { p0: (abilityItem.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0100", "Реактивный")), p1: (getActorAvailableEnergy(actor)), p2: (energyCost) }, "{p0}: недостаточно энергии ({p1} / {p2})."));
     return false;
   }
 
@@ -75,10 +75,10 @@ export async function useReactiveAbility(actor, abilityItem, abilityFunction) {
       await actor.deleteEmbeddedDocuments("ActiveEffect", [createdEffect.id], { animate: false });
     }
     if (energyCost > 0) {
-      await restoreActorEnergy(actor, energyCost, { falloutMawAbilityResourceRefund: true });
+      await refundActorEnergyReceipt(actor, energyTransaction.receipt);
     }
     console.error(`${SYSTEM_ID} | Failed to activate Reactive`, error);
-    ui.notifications.error(`${abilityItem.name || "Реактивный"}: не удалось активировать способность.`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditRuntime.R0518", { p0: (abilityItem.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0100", "Реактивный")) }, "{p0}: не удалось активировать способность."));
     return false;
   }
 }
@@ -142,9 +142,8 @@ async function advanceReactiveEffect(effect, movementSpent) {
   }
 
   try {
-    await actor.createEmbeddedDocuments("ActiveEffect", [
-      buildOneTimeActionPointEffectData(actor, gainedActionPoints)
-    ], { animate: false });
+    const added = await addOneTimeResourcePoints(actor, "actionPoints", gainedActionPoints, { animate: false });
+    if (added !== gainedActionPoints) throw new Error("Reactive one-time points were not persisted.");
   } catch (error) {
     await currentEffect.update({
       [`flags.${SYSTEM_ID}.${REACTIVE_EFFECT_FLAG_KEY}.movementPointProgress`]: movementPointTotal
@@ -159,8 +158,8 @@ function buildReactiveEffectData(actor, abilityItem, abilityFunction, settings) 
   const startTime = getWorldTime();
   return {
     type: "base",
-    name: abilityItem.name || "Реактивный",
-    img: abilityItem.img || "icons/svg/upgrade.svg",
+    name: abilityItem.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0100", "Реактивный"),
+    img: abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     origin: abilityItem.uuid || actor.uuid,
     transfer: false,
     disabled: false,
@@ -221,33 +220,6 @@ function normalizeReactiveActionPointsPerThreshold(value = 1) {
   return Math.max(1, toInteger(value ?? 1));
 }
 
-function buildOneTimeActionPointEffectData(actor, value) {
-  return {
-    type: "base",
-    name: "Одноразовые ОД",
-    img: "icons/svg/upgrade.svg",
-    origin: actor.uuid,
-    transfer: false,
-    disabled: false,
-    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    system: {
-      changes: [{
-        key: ONE_TIME_ACTION_POINTS_KEY,
-        type: "add",
-        value: String(Math.max(0, toInteger(value))),
-        phase: "initial",
-        priority: null
-      }]
-    },
-    flags: {
-      [SYSTEM_ID]: {
-        kind: "active",
-        oneTimeActionPoints: { source: REACTIVE_EFFECT_FLAG_KEY }
-      }
-    }
-  };
-}
-
 function getMatchingReactiveEffects(actor, abilityItem, abilityFunction) {
   const sourceItemUuid = String(abilityItem?.uuid ?? "");
   const abilityFunctionId = String(abilityFunction?.id ?? "");
@@ -273,23 +245,6 @@ function isReactiveAuthority(actor) {
     : users.filter(user => actor.testUserPermission?.(user, "OWNER"));
   candidates.sort((left, right) => String(left.id).localeCompare(String(right.id)));
   return candidates[0]?.id === game.user?.id;
-}
-
-function spendReactiveEnergy(actor, requestedCost = 0) {
-  const cost = Math.max(0, toInteger(requestedCost));
-  return runActorEnergyMutation(actor, async () => {
-    if (!canActorSpendEnergy(actor, cost)) return false;
-    if (cost <= 0) return true;
-    const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
-    if (!resource) return false;
-    const value = Math.max(toInteger(resource.min), getActorEnergy(actor) - cost);
-    const changes = { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: value };
-    if (Object.hasOwn(resource, "spent")) {
-      changes[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - value);
-    }
-    await actor.update(changes);
-    return true;
-  });
 }
 
 function getWorldTime() {

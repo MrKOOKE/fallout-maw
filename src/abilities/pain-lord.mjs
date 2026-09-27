@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ENERGY_RESOURCE_KEY,
@@ -19,8 +20,8 @@ export const PAIN_LORD_OVERFLOW_EFFECT_FLAG_KEY = "painLordOverflow";
 const DAMAGE_PERCENT_EFFECT_KEY = "system.combat.damagePercent";
 const INCOMING_DAMAGE_PERCENT_EFFECT_KEY = getReverseEffectKey(DAMAGE_PERCENT_EFFECT_KEY);
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
-const PAIN_LORD_MARK_EFFECT_NAME = "Владыка боли";
-const PAIN_LORD_OVERFLOW_EFFECT_NAME = "Владыка боли: Избыток энергии";
+const PAIN_LORD_MARK_EFFECT_NAME = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0149", "Владыка боли");
+const PAIN_LORD_OVERFLOW_EFFECT_NAME = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0492", "Владыка боли: Избыток энергии");
 
 /**
  * Apply one completed damage-hub operation. Damage is first aggregated so
@@ -150,8 +151,8 @@ export function getPainLordAbilityProgressEntry(abilityItem, abilityFunction) {
   if (!state || !isPainLordOverflowEffectActive(effect)) {
     return {
       key: `${String(abilityFunction?.id ?? "")}:${ABILITY_FIXED_FUNCTION_KEYS.painLord}`,
-      label: "Избыток Энергии",
-      value: "нет"
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0493", "Избыток Энергии"),
+      value: auditLocalize("FALLOUTMAW.AuditRuntime.R0494", "нет")
     };
   }
   const settings = normalizePainLordSettings(state.settings ?? abilityFunction?.fixedSettings);
@@ -162,8 +163,8 @@ export function getPainLordAbilityProgressEntry(abilityItem, abilityFunction) {
   );
   return {
     key: `${String(abilityFunction?.id ?? "")}:${ABILITY_FIXED_FUNCTION_KEYS.painLord}`,
-    label: "Избыток Энергии",
-    value: `${formatNumber(accumulation.raw)} / ${formatNumber(accumulation.maximumRaw)} · урон +${formatNumber(accumulation.percent)}%`
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0493", "Избыток Энергии"),
+    value: auditFormat("FALLOUTMAW.AuditRuntime.R0495", { p0: (formatNumber(accumulation.raw)), p1: (formatNumber(accumulation.maximumRaw)), p2: (formatNumber(accumulation.percent)) }, "{p0} / {p1} · урон +{p2}%")
   };
 }
 
@@ -356,9 +357,9 @@ function buildPainLordOverflowEffectData(actor, context, metadata, accumulation,
   const percent = accumulation.percent;
   return {
     type: "base",
-    name: PAIN_LORD_OVERFLOW_EFFECT_NAME,
-    img: context.abilityItem.img || actor.img || "icons/svg/upgrade.svg",
-    description: `Накоплено избытка Энергии: ${formatNumber(accumulation.raw)} / ${formatNumber(accumulation.maximumRaw)}.`,
+    name: PAIN_LORD_OVERFLOW_EFFECT_NAME(),
+    img: context.abilityItem.img || actor.img || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
+    description: auditFormat("FALLOUTMAW.AuditRuntime.R0496", { p0: (formatNumber(accumulation.raw)), p1: (formatNumber(accumulation.maximumRaw)) }, "Накоплено избытка Энергии: {p0} / {p1}."),
     origin: context.abilityItem.uuid ?? actor.uuid,
     transfer: false,
     disabled: false,
@@ -386,8 +387,8 @@ function buildPainLordMarkEffectData(actor, contributors, presentation, context 
   const remainingOrigin = contributors.find(entry => String(entry?.abilityItemUuid ?? "").trim())?.abilityItemUuid;
   return {
     type: "base",
-    name: PAIN_LORD_MARK_EFFECT_NAME,
-    img: context?.abilityItem?.img || existingEffect?.img || actor.img || "icons/svg/blood.svg",
+    name: PAIN_LORD_MARK_EFFECT_NAME(),
+    img: context?.abilityItem?.img || existingEffect?.img || actor.img || "systems/fallout-maw/assets/System/Traumas/trauma-default.webp",
     description: "",
     origin: context?.abilityItem?.uuid || remainingOrigin || existingEffect?.origin || actor.uuid,
     transfer: false,

@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 const GRIDLESS = 0;
 
 export function isSupportedGrid(scene = canvas?.scene) {
@@ -14,7 +15,7 @@ export function isHexGrid(scene = canvas?.scene) {
 
 export function assertSupportedGrid(scene = canvas?.scene) {
   if (isSupportedGrid(scene)) return true;
-  ui.notifications?.warn?.("Глобальная карта не поддерживает сцены без сетки.");
+  ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0944", "Глобальная карта не поддерживает сцены без сетки."));
   return false;
 }
 

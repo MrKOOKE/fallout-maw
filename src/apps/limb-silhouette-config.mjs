@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   SILHOUETTE_AREA_TOLERANCE,
@@ -100,7 +101,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   };
 
   get title() {
-    return `Силуэт: ${this.#titleName}`;
+    return auditFormat("FALLOUTMAW.AuditApps.Silhouette", { v0: (this.#titleName) }, "Силуэт: {v0}");
   }
 
   _getHeaderControls() {
@@ -109,13 +110,13 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       {
         action: "exportSilhouette",
         icon: "fa-solid fa-file-export",
-        label: "Экспорт",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Export", "Экспорт"),
         visible: true
       },
       {
         action: "importSilhouette",
         icon: "fa-solid fa-file-import",
-        label: "Импорт",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Import", "Импорт"),
         visible: true
       }
     );
@@ -207,12 +208,12 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
 
   #prepareTools() {
     return [
-      { key: "polygon", label: "Полигон", icon: "fa-vector-polygon", active: this.#activeTool === "polygon" },
-      { key: "brush", label: "Кисть", icon: "fa-paintbrush", active: this.#activeTool === "brush" },
-      { key: "eraser", label: "Ластик", icon: "fa-eraser", active: this.#activeTool === "eraser" },
-      { key: "rectangle", label: "Прямоугольник", icon: "fa-vector-square", active: this.#activeTool === "rectangle" },
-      { key: "ellipse", label: "Эллипс", icon: "fa-circle", active: this.#activeTool === "ellipse" },
-      { key: "triangle", label: "Треугольник", icon: "fa-play", active: this.#activeTool === "triangle" }
+      { key: "polygon", label: auditLocalize("FALLOUTMAW.AuditApps.Polygon", "Полигон"), icon: "fa-vector-polygon", active: this.#activeTool === "polygon" },
+      { key: "brush", label: auditLocalize("FALLOUTMAW.AuditApps.Brush", "Кисть"), icon: "fa-paintbrush", active: this.#activeTool === "brush" },
+      { key: "eraser", label: auditLocalize("FALLOUTMAW.AuditApps.Eraser", "Ластик"), icon: "fa-eraser", active: this.#activeTool === "eraser" },
+      { key: "rectangle", label: auditLocalize("FALLOUTMAW.AuditApps.Rectangle", "Прямоугольник"), icon: "fa-vector-square", active: this.#activeTool === "rectangle" },
+      { key: "ellipse", label: auditLocalize("FALLOUTMAW.AuditApps.Ellipse", "Эллипс"), icon: "fa-circle", active: this.#activeTool === "ellipse" },
+      { key: "triangle", label: auditLocalize("FALLOUTMAW.AuditApps.Triangle", "Треугольник"), icon: "fa-play", active: this.#activeTool === "triangle" }
     ];
   }
 
@@ -538,7 +539,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   #importSilhouetteData(data) {
     const silhouette = normalizeLimbSilhouette(data?.silhouette ?? data, this.#race?.limbs ?? []);
     if (!silhouette) {
-      ui.notifications.error("Файл не содержит корректный силуэт.");
+      ui.notifications.error(auditLocalize("FALLOUTMAW.AuditApps.TheFileDoesNotContainAValidSilhouette", "Файл не содержит корректный силуэт."));
       return false;
     }
     this.#setSilhouette(silhouette);
@@ -567,7 +568,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       return undefined;
     }
     if (!cutPaths.length) {
-      if (notify) ui.notifications.warn("Полигон не пересек доступный остаток силуэта.");
+      if (notify) ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThePolygonDidNotIntersectTheRemainingAvailable", "Полигон не пересек доступный остаток силуэта."));
       return undefined;
     }
 
@@ -659,7 +660,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     try {
       image = await loadImageElement(path);
     } catch (error) {
-      ui.notifications.error(`Не удалось загрузить изображение: ${error.message}`);
+      ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToLoadTheImage", { v0: (error.message) }, "Не удалось загрузить изображение: {v0}"));
       return;
     }
 
@@ -668,7 +669,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     canvas.height = image.naturalHeight || image.height;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context || !canvas.width || !canvas.height) {
-      ui.notifications.error("Не удалось прочитать пиксели изображения.");
+      ui.notifications.error(auditLocalize("FALLOUTMAW.AuditApps.FailedToReadTheImagePixels", "Не удалось прочитать пиксели изображения."));
       return;
     }
 
@@ -676,7 +677,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const outline = extractAlphaOutlinePaths(imageData);
     if (!outline.length) {
-      ui.notifications.warn("На изображении не найден непрозрачный контур.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.NoOpaqueOutlineWasFoundInTheImage", "На изображении не найден непрозрачный контур."));
       return;
     }
 
@@ -725,7 +726,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   static #onExportSilhouette(event) {
     event.preventDefault();
     if (!this.#canExportSilhouette()) {
-      ui.notifications.warn("Экспорт доступен после завершения силуэта.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ExportIsAvailableAfterCompletingTheSilhouette", "Экспорт доступен после завершения силуэта."));
       return undefined;
     }
     const data = this.#toExportData();
@@ -750,7 +751,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       try {
         data = JSON.parse(await foundry.utils.readTextFromFile(file));
       } catch (_error) {
-        ui.notifications.error("Не удалось прочитать JSON силуэта.");
+        ui.notifications.error(auditLocalize("FALLOUTMAW.AuditApps.FailedToReadTheSilhouetteJSON", "Не удалось прочитать JSON силуэта."));
         return;
       }
       if (!this.#importSilhouetteData(data)) return;
@@ -816,7 +817,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       const totalArea = getPathsArea(this.#silhouette.outline);
       const remainingArea = getPathsArea(this.#remaining);
       if (totalArea > 0 && (remainingArea / totalArea) > SILHOUETTE_AREA_TOLERANCE) {
-        ui.notifications.warn("Сначала распределите весь контур силуэта по конечностям.");
+        ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AssignTheEntireSilhouetteOutlineToLimbsFirst", "Сначала распределите весь контур силуэта по конечностям."));
         return undefined;
       }
     }

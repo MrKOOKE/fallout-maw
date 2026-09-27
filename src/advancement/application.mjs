@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import {
   calculateSkillPointMultiplier,
   calculatePureSkillDevelopmentValue,
@@ -59,7 +60,8 @@ import { toInteger } from "../utils/numbers.mjs";
 import { applySkillBonusPercent } from "../utils/skill-value.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { prepareIndicatorEntry as prepareDisplayIndicatorEntry } from "../utils/actor-display-data.mjs";
-import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
+import { positionAbilityDescriptionTooltip } from "../utils/description-tooltip-position.mjs";
+import { DescriptionTooltipController } from "../utils/description-tooltip.mjs";
 import {
   clampGraphViewportToVisibleNode,
   createGraphSegmentViewport,
@@ -97,7 +99,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #abilityEvolutionViewports = new Map();
   #abilityRequirementContext = null;
   #abilityRequirementRowsById = new Map();
+  #abilitySearchQuery = "";
   #abilityTooltipHTMLCache = new Map();
+  #descriptionTooltips = new DescriptionTooltipController();
   #advancementPureValues = null;
   #actorUpdateHookId = null;
   #abilityTooltipAnchor = null;
@@ -228,7 +232,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       buttons.push({
         action: "toggleGMMode",
         icon: "fallout-maw-advancement-gm-toggle",
-        label: "ГМ режим"
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0543", "ГМ режим")
       });
     }
     return buttons;
@@ -322,7 +326,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         : 0,
       characteristicPointsDisplay: pointDisplays.characteristics,
       skillPointsDisplay: pointDisplays.skills,
-      signatureSkillPointsDisplay: signatureSkillsDisabled ? "Недоступно" : pointDisplays.signatureSkills,
+      signatureSkillPointsDisplay: signatureSkillsDisabled ? auditLocalize("FALLOUTMAW.AuditRuntime.R0544", "Недоступно") : pointDisplays.signatureSkills,
       signatureSkillsDisabled,
       traitPointsDisplay: pointDisplays.traits,
       researchPointsDisplay: pointDisplays.researches,
@@ -490,6 +494,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#descriptionTooltips.bind(this.element, { actor: this.actor });
     this.#syncPageClass();
     this.#syncGMModeFrame();
     this.#clearAbilityDescriptionTooltip();
@@ -516,6 +521,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   async _preClose(options) {
+    this.#descriptionTooltips.destroy();
     this.#isClosing = true;
     window.clearTimeout(this.#experienceSyncTimer);
     this.#clearAbilityDescriptionTooltip();
@@ -766,7 +772,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const input = this.element?.querySelector?.("[data-ability-search]");
     if (!(input instanceof HTMLInputElement)) return;
 
-    input.addEventListener("input", () => {
+    input.value = this.#abilitySearchQuery;
+    const applySearch = () => {
+      this.#abilitySearchQuery = input.value;
       const query = input.value.trim().toLocaleLowerCase();
       for (const category of this.element.querySelectorAll("[data-ability-category]")) {
         let visibleCount = 0;
@@ -779,7 +787,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         }
         category.hidden = query ? visibleCount === 0 : false;
       }
-    });
+    };
+    input.addEventListener("input", applySearch);
+    applySearch();
   }
 
   #activateAbilityDescriptionTooltips() {
@@ -1557,21 +1567,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const investment = Math.min(available, Math.max(0, targetValue - currentProgress));
     if (investment <= 0) return this.forceRender();
 
-    this.#draft.development.points.researches = available - investment;
-    await this.#applyDraftToActor();
-    this.#researchPointSessionSpent += investment;
-
-    const nextProgress = Math.min(targetValue, currentProgress + investment);
-    await this.actor.updateResearch(research.id, {
-      progress: nextProgress,
-      target: targetValue,
-      freeSpent: Math.max(0, Number(research.freeSpent) || 0) + investment
-    }, {
-      progressSource: "advancementResearchInvestment",
-      gain: investment
+    await this.#flushRepeatCommit();
+    const committed = await this.actor.investResearchPoints(research.id, {
+      amount: investment,
+      progressSource: "advancementResearchInvestment"
     });
+    this.#researchPointSessionSpent += committed?.investment ?? 0;
 
-    if (nextProgress >= targetValue) {
+    if (committed?.research.progress >= committed?.research.target) {
       await completeAbilityResearch(this.actor, research.id, {
         progressSource: "advancementResearchInvestment"
       });
@@ -1621,7 +1624,21 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#draft.development.points.traits = available - 1;
     await this.#applyDraftToActor();
 
-    const granted = await grantCatalogAbility(this.actor, sourceId);
+    let granted;
+    try {
+      granted = await grantCatalogAbility(this.actor, sourceId);
+    } catch (error) {
+      // A later notification/event failure may occur after the Item exists.
+      // Refund only a grant that actually failed to reach the actor.
+      if (!actorHasAbility(this.actor, sourceId)) {
+        if (hadTraitState) this.#draft.development.traits[sourceId] = previousTraitState;
+        else delete this.#draft.development.traits[sourceId];
+        this.#draft.development.points.traits = available;
+        await this.#applyDraftToActor();
+      }
+      this.#syncDraftFromActor();
+      throw error;
+    }
     if (!granted) {
       if (hadTraitState) this.#draft.development.traits[sourceId] = previousTraitState;
       else delete this.#draft.development.traits[sourceId];
@@ -2257,7 +2274,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       return {
         ...category,
         displayName: isFeatures
-          ? (this.#gmMode ? "Особенности" : `Особенности (Доступно ${traitRemaining}/${traitTotal})`)
+          ? (this.#gmMode ? auditLocalize("FALLOUTMAW.AuditRuntime.R0545", "Особенности") : auditFormat("FALLOUTMAW.AuditRuntime.R0546", { p0: (traitRemaining), p1: (traitTotal) }, "Особенности (Доступно {p0}/{p1})"))
           : category.name,
         traitAvailabilityClass: isFeatures ? (this.#gmMode || traitRemaining > 0 ? "trait-available" : "trait-empty") : "",
         expanded: this.#expandedAbilityCategories.has(String(category.id ?? "")),
@@ -2349,7 +2366,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const selectedAbilityView = selectedAbility
       && this.#abilityEvolutionCompletedIds.has(selectedAbility.sourceId)
       && !selectedAbility.currentOwned
-      ? { ...selectedAbility, statusLabel: "Пройдено" }
+      ? { ...selectedAbility, statusLabel: auditLocalize("FALLOUTMAW.AuditRuntime.R0547", "Пройдено") }
       : selectedAbility;
     return {
       selectedAbility: selectedAbilityView
@@ -2459,20 +2476,20 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       selected: resolvedFamilySourceId === this.#selectedAbilityFamilySourceId
         || sourceId === this.#selectedAbilitySourceId,
       statusLabel: currentOwned
-        ? (isEvolution || hasEvolution ? "Текущая версия" : "Изучено")
+        ? (isEvolution || hasEvolution ? auditLocalize("FALLOUTMAW.AuditRuntime.R0548", "Текущая версия") : auditLocalize("FALLOUTMAW.AuditRuntime.R0549", "Изучено"))
         : familyOwned
-          ? "Эволюция активна"
+          ? auditLocalize("FALLOUTMAW.AuditRuntime.R0550", "Эволюция активна")
           : evolutionAcquisitionBlocked
-            ? "Недоступно: изменения при приобретении"
+            ? auditLocalize("FALLOUTMAW.AuditRuntime.R0551", "Недоступно: изменения при приобретении")
             : !evolutionAvailable
-              ? "Нужна предыдущая эволюция"
+              ? auditLocalize("FALLOUTMAW.AuditRuntime.R0552", "Нужна предыдущая эволюция")
               : !acquisitionAvailable
-                ? "Недоступно"
+                ? auditLocalize("FALLOUTMAW.AuditRuntime.R0544", "Недоступно")
                 : research
-                  ? "Исследуется"
-                  : "Не изучено",
-      acquisitionLabel: onlyFree ? "Только свободные ОИ" : onlyManual ? "Только ручное исследование" : "Свободные ОИ или ручное исследование",
-      manualLabel: skillLabel ? `${skillLabel}, сложность ${toInteger(ability?.system?.acquisition?.difficulty ?? 60)}` : ""
+                  ? auditLocalize("FALLOUTMAW.AuditRuntime.R0553", "Исследуется")
+                  : auditLocalize("FALLOUTMAW.AuditRuntime.R0554", "Не изучено"),
+      acquisitionLabel: onlyFree ? auditLocalize("FALLOUTMAW.AuditRuntime.R0555", "Только свободные ОИ") : onlyManual ? auditLocalize("FALLOUTMAW.AuditRuntime.R0556", "Только ручное исследование") : auditLocalize("FALLOUTMAW.AuditRuntime.R0557", "Свободные ОИ или ручное исследование"),
+      manualLabel: skillLabel ? auditFormat("FALLOUTMAW.AuditRuntime.R0558", { p0: (skillLabel), p1: (toInteger(ability?.system?.acquisition?.difficulty ?? 60)) }, "{p0}, сложность {p1}") : ""
     };
     this.#abilityEntriesById.set(sourceId, entry);
     return entry;
@@ -3167,13 +3184,13 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
       const currentRace = races.find(entry => entry.id === currentRaceId);
       rows.push({
         type: requirement.type,
-        label: "Раса",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0559", "Раса"),
         targetLabel: race?.name || raceId,
-        currentLabel: currentRace?.name || currentRaceId || "Нет",
+        currentLabel: currentRace?.name || currentRaceId || auditLocalize("FALLOUTMAW.AuditRuntime.R0560", "Нет"),
         required: raceId,
         current: currentRaceId,
         met: currentRaceId === raceId,
-        summary: `${race?.name || raceId}: ${currentRace?.name || currentRaceId || "Нет"}`
+        summary: `${race?.name || raceId}: ${currentRace?.name || currentRaceId || auditLocalize("FALLOUTMAW.AuditRuntime.R0560", "Нет")}`
       });
       continue;
     }
@@ -3186,7 +3203,7 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
       const current = toInteger(requirementCharacteristics?.[key]);
       rows.push({
         type: requirement.type,
-        label: "Характеристика",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0561", "Характеристика"),
         targetLabel: characteristic?.label || key,
         current,
         required,
@@ -3206,7 +3223,7 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
         : toInteger(actor?.system?.skills?.[key]?.value);
       rows.push({
         type: requirement.type,
-        label: "Навык",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R0562", "Навык"),
         targetLabel: skill?.label || key,
         current,
         required,
@@ -3233,12 +3250,12 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
           ? context.ownedAbilityIds.has(abilityId)
           : actorHasAbility(actor, abilityId);
         const met = requiresPresence ? hasAbility : !hasAbility;
-        const currentLabel = hasAbility ? "Есть" : "Нет";
-        const requiredLabel = requiresPresence ? "Есть" : "Нет";
+        const currentLabel = hasAbility ? auditLocalize("FALLOUTMAW.AuditRuntime.R0563", "Есть") : auditLocalize("FALLOUTMAW.AuditRuntime.R0560", "Нет");
+        const requiredLabel = requiresPresence ? auditLocalize("FALLOUTMAW.AuditRuntime.R0563", "Есть") : auditLocalize("FALLOUTMAW.AuditRuntime.R0560", "Нет");
         rows.push({
           type: requirement.type,
           mode,
-          label: requiresPresence ? "Наличие способности" : "Отсутствие способности",
+          label: requiresPresence ? auditLocalize("FALLOUTMAW.AuditRuntime.R0564", "Наличие способности") : auditLocalize("FALLOUTMAW.AuditRuntime.R0565", "Отсутствие способности"),
           targetLabel: abilityName,
           currentLabel,
           requiredLabel,
@@ -3246,8 +3263,8 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
           required: requiredLabel,
           met,
           summary: requiresPresence
-            ? `Нужна: ${abilityName} (${currentLabel})`
-            : `Исключает: ${abilityName} (${currentLabel})`
+            ? auditFormat("FALLOUTMAW.AuditRuntime.R0566", { p0: (abilityName), p1: (currentLabel) }, "Нужна: {p0} ({p1})")
+            : auditFormat("FALLOUTMAW.AuditRuntime.R0567", { p0: (abilityName), p1: (currentLabel) }, "Исключает: {p0} ({p1})")
         });
       }
     }
@@ -3263,7 +3280,7 @@ function compareAbilityAvailability(left, right) {
   const leftRank = getAbilityAvailabilityRank(left);
   const rightRank = getAbilityAvailabilityRank(right);
   if (leftRank !== rightRank) return leftRank - rightRank;
-  return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "ru", {
+  return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), globalThis.game?.i18n?.lang || "en", {
     sensitivity: "base",
     numeric: true
   });
@@ -3304,37 +3321,15 @@ async function renderAbilityDescriptionTooltipHTML(ability = {}, {
     changesSource ? TextEditor.enrichHTML(changesSource, enrichOptions) : "",
     descriptionSource ? TextEditor.enrichHTML(descriptionSource, enrichOptions) : ""
   ]);
-  const titleSection = `
-    <section class="function-section single-value fallout-maw-ability-tooltip-title">
-      <h4>Название</h4>
-      <strong>${escapeHtml(ability?.name ?? "")}</strong>
-    </section>
-  `;
+  const titleSection = auditFormat("FALLOUTMAW.AuditRuntime.R0568", { p0: (escapeHtml(ability?.name ?? "")) }, "\n    <section class=\"function-section single-value fallout-maw-ability-tooltip-title\">\n      <h4>Название</h4>\n      <strong>{p0}</strong>\n    </section>\n  ");
   const requirementSection = requirementRows.length
-    ? `
-      <section class="function-section fallout-maw-advancement-tooltip-requirements">
-        <h4>Требования</h4>
-        <div class="function-grid">
-          ${requirementRows.map(renderAbilityRequirementTooltipRow).join("")}
-        </div>
-      </section>
-    `
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0569", { p0: (requirementRows.map(renderAbilityRequirementTooltipRow).join("")) }, "\n      <section class=\"function-section fallout-maw-advancement-tooltip-requirements\">\n        <h4>Требования</h4>\n        <div class=\"function-grid\">\n          {p0}\n        </div>\n      </section>\n    ")
     : "";
   const changesSection = changesHTML
-    ? `
-      <section class="function-section fallout-maw-ability-tooltip-changes">
-        <h4>Изменения</h4>
-        <div class="description">${changesHTML}</div>
-      </section>
-    `
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0570", { p0: (changesHTML) }, "\n      <section class=\"function-section fallout-maw-ability-tooltip-changes\">\n        <h4>Изменения</h4>\n        <div class=\"description\">{p0}</div>\n      </section>\n    ")
     : "";
   const descriptionSection = descriptionHTML
-    ? `
-      <section class="function-section fallout-maw-ability-tooltip-description">
-        <h4>Описание</h4>
-        <div class="description">${descriptionHTML}</div>
-      </section>
-    `
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0571", { p0: (descriptionHTML) }, "\n      <section class=\"function-section fallout-maw-ability-tooltip-description\">\n        <h4>Описание</h4>\n        <div class=\"description\">{p0}</div>\n      </section>\n    ")
     : "";
   return `${titleSection}${requirementSection}${changesSection}${descriptionSection}`;
 }
@@ -3353,64 +3348,13 @@ function renderSkillCostTooltipHTML({
   const canPay = toInteger(remainingSkillPoints) >= toInteger(cost);
   const paymentClass = canPay ? "met" : "unmet";
   const multiplierSection = multiplierLabel
-    ? `
-        <div class="function-row">
-          <span>Множитель</span>
-          <strong class="fallout-maw-skill-cost-tooltip-multiplier">${escapeHtml(multiplierLabel)}</strong>
-        </div>
-      `
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0572", { p0: (escapeHtml(multiplierLabel)) }, "\n        <div class=\"function-row\">\n          <span>Множитель</span>\n          <strong class=\"fallout-maw-skill-cost-tooltip-multiplier\">{p0}</strong>\n        </div>\n      ")
     : "";
   const nextThresholdSection = nextThreshold
-    ? `
-      <div class="function-row">
-        <span>Следующий порог</span>
-        <strong>от ${escapeHtml(nextThreshold.threshold)}: ${escapeHtml(nextThreshold.cost)} очк.</strong>
-      </div>
-      <div class="function-row">
-        <span>До порога</span>
-        <strong>${escapeHtml(nextThreshold.remaining)}</strong>
-      </div>
-    `
-    : `
-      <div class="function-row">
-        <span>Следующий порог</span>
-        <strong>нет</strong>
-      </div>
-    `;
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0573", { p0: (escapeHtml(nextThreshold.threshold)), p1: (escapeHtml(nextThreshold.cost)), p2: (escapeHtml(nextThreshold.remaining)) }, "\n      <div class=\"function-row\">\n        <span>Следующий порог</span>\n        <strong>от {p0}: {p1} очк.</strong>\n      </div>\n      <div class=\"function-row\">\n        <span>До порога</span>\n        <strong>{p2}</strong>\n      </div>\n    ")
+    : auditLocalize("FALLOUTMAW.AuditRuntime.R0574", "\n      <div class=\"function-row\">\n        <span>Следующий порог</span>\n        <strong>нет</strong>\n      </div>\n    ");
 
-  return `
-    <section class="function-section single-value fallout-maw-skill-cost-tooltip-title">
-      <h4>Навык</h4>
-      <strong>${escapeHtml(skill.label || skill.key || "")}</strong>
-    </section>
-    <section class="function-section fallout-maw-skill-cost-tooltip-values">
-      <h4>Развитие</h4>
-      <div class="function-grid">
-        <div class="function-row fallout-maw-advancement-tooltip-requirement ${paymentClass}">
-          <span>Стоимость</span>
-          <strong>${escapeHtml(cost)} очк.</strong>
-        </div>
-        <div class="function-row">
-          <span>Чистое значение</span>
-          <strong>${escapeHtml(pureValue)}</strong>
-        </div>
-        <div class="function-row">
-          <span>Общее значение</span>
-          <strong>${escapeHtml(totalValue)}</strong>
-        </div>
-        <div class="function-row">
-          <span>Вложено</span>
-          <strong>${escapeHtml(investedPoints)}</strong>
-        </div>
-        <div class="function-row">
-          <span>Прирост</span>
-          <strong>+${escapeHtml(formatFixedDecimal(gain, 1))}</strong>
-        </div>
-        ${multiplierSection}
-        ${nextThresholdSection}
-      </div>
-    </section>
-  `;
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0575", { p0: (escapeHtml(skill.label || skill.key || "")), p1: (paymentClass), p2: (escapeHtml(cost)), p3: (escapeHtml(pureValue)), p4: (escapeHtml(totalValue)), p5: (escapeHtml(investedPoints)), p6: (escapeHtml(formatFixedDecimal(gain, 1))), p7: (multiplierSection), p8: (nextThresholdSection) }, "\n    <section class=\"function-section single-value fallout-maw-skill-cost-tooltip-title\">\n      <h4>Навык</h4>\n      <strong>{p0}</strong>\n    </section>\n    <section class=\"function-section fallout-maw-skill-cost-tooltip-values\">\n      <h4>Развитие</h4>\n      <div class=\"function-grid\">\n        <div class=\"function-row fallout-maw-advancement-tooltip-requirement {p1}\">\n          <span>Стоимость</span>\n          <strong>{p2} очк.</strong>\n        </div>\n        <div class=\"function-row\">\n          <span>Чистое значение</span>\n          <strong>{p3}</strong>\n        </div>\n        <div class=\"function-row\">\n          <span>Общее значение</span>\n          <strong>{p4}</strong>\n        </div>\n        <div class=\"function-row\">\n          <span>Вложено</span>\n          <strong>{p5}</strong>\n        </div>\n        <div class=\"function-row\">\n          <span>Прирост</span>\n          <strong>+{p6}</strong>\n        </div>\n        {p7}\n        {p8}\n      </div>\n    </section>\n  ");
 }
 
 function getVersatileDevelopmentButtonState(versatileDevelopment = {}, skillKey = "") {
@@ -3452,7 +3396,7 @@ function formatSkillDevelopmentMultiplier({
     const signatureMultiplier = advancementSettings?.mode === "fixed"
       ? FIXED_SIGNATURE_SKILL_MULTIPLIER
       : Number(advancementSettings?.signatureMultiplier) || 0;
-    parts.push(`Коронный навык: ×${formatCompactDecimal(signatureMultiplier)}`);
+    parts.push(auditFormat("FALLOUTMAW.AuditRuntime.R0576", { p0: (formatCompactDecimal(signatureMultiplier)) }, "Коронный навык: ×{p0}"));
   }
   return parts.join("\n");
 }
@@ -3517,8 +3461,8 @@ function formatSkillMultiplierOperation(operation = "add", value = 0) {
   if (operation === "multiply") return `×${formatted}`;
   if (operation === "subtract") return `−${formatCompactDecimal(Math.abs(Number(value) || 0))}`;
   if (operation === "override") return `=${formatted}`;
-  if (operation === "upgrade") return `не менее ${formatted}`;
-  if (operation === "downgrade") return `не более ${formatted}`;
+  if (operation === "upgrade") return auditFormat("FALLOUTMAW.AuditRuntime.R0577", { p0: (formatted) }, "не менее {p0}");
+  if (operation === "downgrade") return auditFormat("FALLOUTMAW.AuditRuntime.R0578", { p0: (formatted) }, "не более {p0}");
   return `${Number(value) >= 0 ? "+" : "−"}${formatCompactDecimal(Math.abs(Number(value) || 0))}`;
 }
 
@@ -3538,7 +3482,7 @@ function renderAbilityRequirementTooltipRow(requirement) {
   const stateClass = requirement.met ? "met" : "unmet";
   let value;
   if (requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.race) {
-    value = `${requirement.targetLabel}: сейчас ${requirement.currentLabel}`;
+    value = auditFormat("FALLOUTMAW.AuditRuntime.R0579", { p0: (requirement.targetLabel), p1: (requirement.currentLabel) }, "{p0}: сейчас {p1}");
   } else if (requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.ability) {
     value = requirement.targetLabel;
   } else {
@@ -3550,55 +3494,4 @@ function renderAbilityRequirementTooltipRow(requirement) {
       <strong>${escapeHtml(value)}</strong>
     </div>
   `;
-}
-
-function positionAbilityDescriptionTooltip(element, anchor, { layerElement = null } = {}) {
-  if (!element || !anchor?.isConnected) return;
-  const ownerDocument = element.ownerDocument ?? anchor.ownerDocument ?? globalThis.document;
-  const view = ownerDocument?.defaultView ?? globalThis.window;
-  const margin = 8;
-  const gap = 12;
-  const viewportWidth = view.innerWidth || ownerDocument?.documentElement?.clientWidth || 0;
-  const viewportHeight = view.innerHeight || ownerDocument?.documentElement?.clientHeight || 0;
-  syncTooltipLayerWithApplication(element, layerElement);
-  const anchorRect = anchor.getBoundingClientRect();
-  let tooltipRect = element.getBoundingClientRect();
-
-  const leftCandidate = anchorRect.left - tooltipRect.width - gap;
-  const rightCandidate = anchorRect.right + gap;
-  const preferRight = element.classList.contains("fallout-maw-skill-cost-tooltip");
-  let left = preferRight ? rightCandidate : leftCandidate;
-  let direction = preferRight ? "right" : "left";
-  if (preferRight && (left + tooltipRect.width) > (viewportWidth - margin)) {
-    left = leftCandidate;
-    direction = "left";
-  } else if (!preferRight && left < margin) {
-    left = rightCandidate;
-    direction = "right";
-  }
-  if (left < margin || (left + tooltipRect.width) > (viewportWidth - margin)) {
-    left = Math.max(margin, viewportWidth - tooltipRect.width - margin);
-    direction = "clamped";
-  }
-
-  let top = anchorRect.top + ((anchorRect.height - tooltipRect.height) / 2);
-  if (top < margin) top = margin;
-  if ((top + tooltipRect.height) > (viewportHeight - margin)) {
-    top = Math.max(margin, viewportHeight - tooltipRect.height - margin);
-  }
-
-  element.dataset.tooltipDirection = direction;
-  element.style.left = `${Math.round(left)}px`;
-  element.style.top = `${Math.round(top)}px`;
-  element.style.setProperty("--fallout-maw-tooltip-max-height", `${Math.max(160, viewportHeight - (margin * 2))}px`);
-
-  tooltipRect = element.getBoundingClientRect();
-  if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
-    element.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
-  }
-}
-
-function syncTooltipLayerWithApplication(element, applicationElement) {
-  if (!element || !applicationElement?.isConnected) return;
-  element.style.zIndex = String(getOverlayBaseZIndex(applicationElement) + 2);
 }

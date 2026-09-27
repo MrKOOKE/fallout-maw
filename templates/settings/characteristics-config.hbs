@@ -3,7 +3,7 @@
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
         <button type="button" data-action="createCharacteristic"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.Characteristics.Create"}}</button>
       </div>
     </header>
@@ -15,6 +15,7 @@
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span></span>
+        <span></span>
       </div>
       {{#each characteristics}}
       <div class="fallout-maw-settings-row" data-characteristic-row>
@@ -22,6 +23,8 @@
         <input type="text" data-field="abbr" value="{{abbr}}">
         <input type="text" data-field="key" value="{{key}}">
         <input type="text" data-field="label" value="{{label}}">
+        <textarea data-field="description" hidden>{{description}}</textarea>
+        <button type="button" data-action="editDescription" data-tooltip-text="{{localize 'FALLOUTMAW.Common.Description'}}" aria-label="{{localize 'FALLOUTMAW.Common.Description'}}"><i class="fa-solid fa-question"></i></button>
         <button type="button" data-action="deleteCharacteristic" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}

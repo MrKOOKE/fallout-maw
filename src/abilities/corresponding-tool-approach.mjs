@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -50,7 +51,7 @@ export function collectCorrespondingToolApproachSources(actor) {
       ) continue;
       sources.push({
         id: [FIXED_KEY, item.id, abilityFunction.id].filter(Boolean).join(":"),
-        label: String(item.name ?? "").trim() || "Всему свой подход",
+        label: String(item.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0051", "Всему свой подход"),
         settings: normalizeCorrespondingToolApproachSettings(abilityFunction.fixedSettings)
       });
     }

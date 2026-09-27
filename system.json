@@ -3,7 +3,7 @@
   "type": "system",
   "title": "Fallout-MaW",
   "description": "A universal automation-focused tabletop system for Foundry Virtual Tabletop.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "compatibility": {
     "minimum": "14",
     "verified": "14.361"
@@ -98,35 +98,63 @@
   "packs": [
     {
       "name": "fallout-mav-items",
-      "label": "Предметы",
+      "label": "FALLOUTMAW.Compendiums.Items",
       "system": "fallout-maw",
       "path": "packs/fallout-mav-items",
       "type": "Item"
     },
     {
       "name": "fallout-mav-actors",
-      "label": "Персонажи",
+      "label": "FALLOUTMAW.Compendiums.Actors",
       "system": "fallout-maw",
       "path": "packs/fallout-mav-actors",
       "type": "Actor"
     },
     {
       "name": "fallout-mav-scenes",
-      "label": "Карты",
+      "label": "FALLOUTMAW.Compendiums.Scenes",
       "path": "packs/fallout-mav-scenes",
       "type": "Scene"
     },
     {
       "name": "fallout-mav-journals",
-      "label": "Журналы",
+      "label": "FALLOUTMAW.Compendiums.Journals",
       "system": "fallout-maw",
       "path": "packs/fallout-mav-journals",
+      "type": "JournalEntry"
+    },
+    {
+      "name": "fallout-maw-items-eng",
+      "label": "Items",
+      "system": "fallout-maw",
+      "path": "packs/fallout-maw-items-eng",
+      "type": "Item"
+    },
+    {
+      "name": "fallout-maw-actors-eng",
+      "label": "Actors",
+      "system": "fallout-maw",
+      "path": "packs/fallout-maw-actors-eng",
+      "type": "Actor"
+    },
+    {
+      "name": "fallout-maw-scenes-eng",
+      "label": "Scenes",
+      "system": "fallout-maw",
+      "path": "packs/fallout-maw-scenes-eng",
+      "type": "Scene"
+    },
+    {
+      "name": "fallout-maw-journals-eng",
+      "label": "Journals",
+      "system": "fallout-maw",
+      "path": "packs/fallout-maw-journals-eng",
       "type": "JournalEntry"
     }
   ],
   "packFolders": [
     {
-      "name": "Fallout_MaV",
+      "name": "Fallout-MaW (Русский)",
       "sorting": "m",
       "color": "#4f8f5b",
       "packs": [
@@ -134,6 +162,17 @@
         "fallout-mav-actors",
         "fallout-mav-scenes",
         "fallout-mav-journals"
+      ]
+    },
+    {
+      "name": "Fallout-MaW (English)",
+      "sorting": "m",
+      "color": "#518bbf",
+      "packs": [
+        "fallout-maw-items-eng",
+        "fallout-maw-actors-eng",
+        "fallout-maw-scenes-eng",
+        "fallout-maw-journals-eng"
       ]
     }
   ],
@@ -147,8 +186,7 @@
   "primaryTokenAttribute": "resources.health",
   "secondaryTokenAttribute": "resources.dodge",
   "media": [],
-  "readme": "README.md",
   "url": "https://github.com/MrKOOKE/fallout-maw",
-  "manifest": "https://drive.usercontent.google.com/download?id=1GB0gGVkLHMsba9FRRS7kCafhTXJml65E&export=download&confirm=t",
-  "download": "https://drive.usercontent.google.com/download?id=1OpJhiigJW0BUtnVELLSkrPl2fsBNwlR8&export=download&confirm=t"
+  "manifest": "https://drive.usercontent.google.com/download?id=1zBYh50MQzW9CHjoBADpJqz7lDNFIuNHh&export=download&confirm=t",
+  "download": "https://drive.usercontent.google.com/download?id=1miad7HzW_ZJFqEsJJKA6kAhT3BqRGYPN&export=download&confirm=t"
 }

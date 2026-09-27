@@ -24,7 +24,10 @@ Hooks.on("setup", () => {
     registerSettings();
     initConfig();
 
-    Socket.register("openToPage", ({ uuid }) => {
+    Socket.register("openToPage", ({ uuid }, sender) => {
+        if (typeof uuid !== "string" || !uuid) return;
+        const page = fromUuidSync(uuid);
+        if (!page || (!sender?.isGM && !page.testUserPermission?.(sender, "OBSERVER"))) return;
         ui.simpleQuest.openToPage(uuid);
     });
 });

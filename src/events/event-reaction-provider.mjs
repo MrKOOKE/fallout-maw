@@ -1,3 +1,4 @@
+import { format as auditFormat } from "../utils/i18n.mjs";
 import {
   collectEventReactionReactorActors,
   collectEventReactionCandidates,
@@ -557,7 +558,7 @@ export function buildEventReactionCostLines(baseQuote = {}, totalQuote = {}) {
       const totalAmount = Math.max(0, Math.trunc(Number(cost?.amount) || 0));
       const baseAmount = Math.max(0, Math.trunc(Number(baseByKey.get(resourceKey)?.amount) || 0));
       if (baseAmount !== totalAmount) {
-        return `${label}: ${baseAmount} базовая / ${totalAmount} итоговая`;
+        return auditFormat("FALLOUTMAW.AuditRuntime.R0864", { p0: (label), p1: (baseAmount), p2: (totalAmount) }, "{p0}: {p1} базовая / {p2} итоговая");
       }
       return `${label}: ${totalAmount}`;
     });

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "./i18n.mjs";
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 export const REPAIR_TOOL_AVAILABILITY = Object.freeze({
@@ -18,7 +19,7 @@ export function analyzeMassRepairToolAvailability({
   if (!normalizedRequirements.length) {
     return createUnavailableResult(
       REPAIR_TOOL_AVAILABILITY.noTargets,
-      "Нет предметов для массового ремонта."
+      auditLocalize("FALLOUTMAW.AuditRuntime.R1310", "Нет предметов для массового ремонта.")
     );
   }
 
@@ -36,7 +37,7 @@ export function analyzeMassRepairToolAvailability({
     )));
     return createUnavailableResult(
       REPAIR_TOOL_AVAILABILITY.missingToolType,
-      `Нет инструмента требуемого типа для массового ремонта${labels ? `: ${labels}` : "."}`
+      auditFormat("FALLOUTMAW.AuditRuntime.R1311", { p0: (labels ? `: ${labels}` : ".") }, "Нет инструмента требуемого типа для массового ремонта{p0}")
     );
   }
 
@@ -50,11 +51,11 @@ export function analyzeMassRepairToolAvailability({
     const toolLabel = String(
       closest?.requirement?.toolLabel
       ?? closest?.requirement?.toolKey
-      ?? "ремонта"
+      ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1312", "ремонта")
     ).trim();
     return createUnavailableResult(
       REPAIR_TOOL_AVAILABILITY.toolClass,
-      `Для массового ремонта нужен инструмент «${toolLabel}» класса ${requiredClass} или выше; доступен класс ${availableClass}.`
+      auditFormat("FALLOUTMAW.AuditRuntime.R1313", { p0: (toolLabel), p1: (requiredClass), p2: (availableClass) }, "Для массового ремонта нужен инструмент «{p0}» класса {p1} или выше; доступен класс {p2}.")
     );
   }
 
@@ -65,7 +66,7 @@ export function analyzeMassRepairToolAvailability({
     const labels = joinLabels(classMatches.map(({ instrument }) => instrument?.name));
     return createUnavailableResult(
       REPAIR_TOOL_AVAILABILITY.depleted,
-      `У подходящих инструментов ремонта нет запаса${labels ? `: ${labels}` : "."}`
+      auditFormat("FALLOUTMAW.AuditRuntime.R1314", { p0: (labels ? `: ${labels}` : ".") }, "У подходящих инструментов ремонта нет запаса{p0}")
     );
   }
 
@@ -75,10 +76,10 @@ export function analyzeMassRepairToolAvailability({
   if (!toolSkillMatches.length) {
     const closest = selectClosestToolSkillMatch(suppliedMatches);
     const instrument = closest?.instrument ?? {};
-    const skillLabel = String(instrument.skillLabel ?? "").trim() || "требуемого навыка";
+    const skillLabel = String(instrument.skillLabel ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1315", "требуемого навыка");
     return createUnavailableResult(
       REPAIR_TOOL_AVAILABILITY.toolSkill,
-      `Для использования «${String(instrument.name ?? "инструмента")}» нужно ${toInteger(instrument.skillValue)} ${skillLabel} (сейчас ${toInteger(instrument.actorSkillValue)}).`
+      auditFormat("FALLOUTMAW.AuditRuntime.R1316", { p0: (String(instrument.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1317", "инструмента"))), p1: (toInteger(instrument.skillValue)), p2: (skillLabel), p3: (toInteger(instrument.actorSkillValue)) }, "Для использования «{p0}» нужно {p1} {p2} (сейчас {p3}).")
     );
   }
 
@@ -89,11 +90,11 @@ export function analyzeMassRepairToolAvailability({
     const closest = selectClosestActionSkillMatch(toolSkillMatches);
     const requirement = closest?.requirement ?? {};
     const threshold = requirement.skillThreshold ?? {};
-    const itemLabel = String(requirement.itemName ?? "предмета").trim();
-    const skillLabel = String(threshold.skillLabel ?? "").trim() || "Ремонт";
+    const itemLabel = String(requirement.itemName ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1318", "предмета")).trim();
+    const skillLabel = String(threshold.skillLabel ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1182", "Ремонт");
     return createUnavailableResult(
       REPAIR_TOOL_AVAILABILITY.skillThreshold,
-      `Для ремонта «${itemLabel}» нужно ${toInteger(threshold.difficulty)} ${skillLabel} (сейчас ${toInteger(threshold.skillValue)}).`
+      auditFormat("FALLOUTMAW.AuditRuntime.R1319", { p0: (itemLabel), p1: (toInteger(threshold.difficulty)), p2: (skillLabel), p3: (toInteger(threshold.skillValue)) }, "Для ремонта «{p0}» нужно {p1} {p2} (сейчас {p3}).")
     );
   }
 

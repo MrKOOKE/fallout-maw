@@ -92,8 +92,8 @@
     <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
     <div class="fallout-maw-characteristic-grid">
       {{#each characteristics}}
-      <label>
-        <span title="{{abbr}} / {{key}}">{{label}}</span>
+      <label {{#if description}}data-system-description="{{description}}"{{/if}}>
+        <span {{#unless description}}title="{{abbr}} / {{key}}"{{/unless}}>{{label}}</span>
         {{#if ../freeEdit}}
         <input type="number" name="system.characteristics.{{key}}" value="{{sourceValue}}">
         {{else}}
@@ -108,9 +108,9 @@
     <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
     <div class="fallout-maw-resource-grid">
       {{#each skills}}
-      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card fallout-maw-skill-roll-card" data-action="rollSkill" data-skill-key="{{key}}" role="button" tabindex="0">
+      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card fallout-maw-skill-roll-card" data-action="rollSkill" data-skill-key="{{key}}" role="button" tabindex="0" {{#if description}}data-system-description="{{description}}"{{/if}}>
         <div class="fallout-maw-resource-card-header">
-          <span class="fallout-maw-resource-name" title="{{abbr}} / {{key}}">{{label}}</span>
+          <span class="fallout-maw-resource-name" {{#unless description}}title="{{abbr}} / {{key}}"{{/unless}}>{{label}}</span>
           <span class="fallout-maw-resource-value">
             <strong>{{value}}</strong>
             <span class="fallout-maw-resource-max">/ {{max}}</span>
@@ -125,7 +125,7 @@
   </section>
 
   <section class="fallout-maw-panel">
-    <h2>Способности</h2>
+    <h2>{{localize 'FALLOUTMAW.Events.Groups.ability.Label'}}</h2>
     <div class="fallout-maw-ability-card-grid">
       {{#each abilities}}
       <article class="fallout-maw-ability-card draggable" data-ability-id="{{id}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" draggable="true">
@@ -138,7 +138,7 @@
         {{/if}}
       </article>
       {{else}}
-      <p class="fallout-maw-empty-list">Способности не изучены.</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textf96c2665cdb0'}}</p>
       {{/each}}
     </div>
   </section>
@@ -167,7 +167,7 @@
 
   {{#if freeEdit}}
   <section class="fallout-maw-panel">
-    <h2>Показатели</h2>
+    <h2>{{localize 'FALLOUTMAW.Tabs.Indicators'}}</h2>
     <div class="fallout-maw-development-points-grid">
       {{#each developmentPointEntries}}
       <label>

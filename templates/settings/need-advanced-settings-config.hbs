@@ -8,11 +8,11 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Накопление потребности</h2>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textb6c9bd3a2db6'}}</h2>
     </header>
     <div class="fallout-maw-list-grid three-columns">
       <label>
-        <span>Изменение в час</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text2cec67be47a0'}}</span>
         <input type="number" name="settings.accumulation.perHour" value="{{settings.accumulation.perHour}}" step="0.1">
       </label>
     </div>
@@ -20,8 +20,8 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Пороги потребности</h2>
-      <button type="button" data-action="addThreshold"><i class="fa-solid fa-plus"></i> Добавить порог</button>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text2353cf3c945e'}}</h2>
+      <button type="button" data-action="addThreshold"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Item.TrapDetectionAddThreshold'}}</button>
     </header>
 
     {{#each settings.thresholds}}
@@ -29,23 +29,23 @@
       <input type="hidden" name="settings.thresholds.{{@index}}.id" value="{{id}}">
       <div class="fallout-maw-list-grid three-columns">
         <label>
-          <span>% потребности</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Textd2eac782bf53'}}</span>
           <input type="number" name="settings.thresholds.{{@index}}.percent" value="{{percent}}" min="0" max="100" step="1">
         </label>
         <label>
-          <span>Уровень болезни</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text080e582ee558'}}</span>
           <input type="number" name="settings.thresholds.{{@index}}.diseaseLevel" value="{{diseaseLevel}}" min="0" step="1">
         </label>
-        <button type="button" data-action="deleteThreshold"><i class="fa-solid fa-trash"></i> Удалить порог</button>
+        <button type="button" data-action="deleteThreshold"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd58be8872aee'}}</button>
       </div>
 
       <header class="fallout-maw-panel-header">
-        <h3>Штрафы порога</h3>
-        <button type="button" data-action="addThresholdEffect"><i class="fa-solid fa-plus"></i> Добавить штраф</button>
+        <h3>{{localize 'FALLOUTMAW.AuditTemplates.Text81f509e07286'}}</h3>
+        <button type="button" data-action="addThresholdEffect"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textffd6e7dc2d3b'}}</button>
       </header>
       <div class="fallout-maw-trauma-effect-table">
         <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
-          <span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span>
+          <span>{{localize 'FALLOUTMAW.Common.Key'}}</span><span>{{localize 'FALLOUTMAW.Common.Type'}}</span><span>{{localize 'FALLOUTMAW.Common.Value'}}</span><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb5b6ddbf62af'}}</span><span></span>
         </div>
         {{#each effects}}
         <div class="fallout-maw-trauma-effect-row" data-need-effect-row>
@@ -62,7 +62,7 @@
       </div>
     </article>
     {{else}}
-    <p class="fallout-maw-empty-list">Пороги не настроены.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textef056165a0fc'}}</p>
     {{/each}}
   </section>
 

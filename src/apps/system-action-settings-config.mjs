@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   getSystemActionSettings,
@@ -36,7 +37,7 @@ export class SystemActionSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройка действий";
+    return auditLocalize("FALLOUTMAW.AuditApps.ActionSettings", "Настройка действий");
   }
 
   async _prepareContext(options) {
@@ -49,7 +50,7 @@ export class SystemActionSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData(_event, _form, _formData) {
     await setSystemActionSettings(this.#readActionsFromForm());
     this.actions = getSystemActionSettings();
-    ui.notifications.info("Настройка действий сохранена.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ActionSettingsSaved", "Настройка действий сохранена."));
     return this.forceRender();
   }
 

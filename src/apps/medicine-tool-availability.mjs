@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { createToolGroupKey } from "../utils/tool-selection-policy.mjs";
 
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
@@ -30,7 +31,7 @@ export function analyzeMedicineToolAvailability({
   if (!normalizedTreatments.length) {
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.noTargets,
-      "Нет травм или повреждённых частей тела для массового лечения."
+      auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoTraumasOrDamagedBodyParts", "Нет травм или повреждённых частей тела для массового лечения.")
     );
   }
 
@@ -45,7 +46,7 @@ export function analyzeMedicineToolAvailability({
     const label = String(toolLabel ?? requiredToolKey ?? "").trim();
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.missingTool,
-      `Нет медицинского инструмента${label ? ` «${label}»` : ""}.`
+      auditFormat("FALLOUTMAW.AuditApps.NoMedicalTool", { v0: (label ? ` «${label}»` : "") }, "Нет медицинского инструмента{v0}.")
     );
   }
 
@@ -62,7 +63,7 @@ export function analyzeMedicineToolAvailability({
   if (!selectedInstruments.length) {
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.selectedGroups,
-      "Выбранные группы медицинских инструментов больше недоступны."
+      auditLocalize("FALLOUTMAW.AuditApps.TheSelectedGroupsOfMedicalToolsAreNo", "Выбранные группы медицинских инструментов больше недоступны.")
     );
   }
 
@@ -89,7 +90,7 @@ export function analyzeMedicineToolAvailability({
     const availableClass = normalizeToolClass(closest?.instrument?.toolClass);
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.toolClass,
-      `Для лечения нужен медицинский инструмент класса ${requiredClass} или выше; доступен класс ${availableClass}.`
+      auditFormat("FALLOUTMAW.AuditApps.TreatmentRequiresAMedicalToolOfClassOr", { v0: (requiredClass), v1: (availableClass) }, "Для лечения нужен медицинский инструмент класса {v0} или выше; доступен класс {v1}.")
     );
   }
 
@@ -100,7 +101,7 @@ export function analyzeMedicineToolAvailability({
     const labels = joinLabels(classMatches.map(({ instrument }) => instrument?.name));
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.depleted,
-      `У подходящих медицинских инструментов нет запаса${labels ? `: ${labels}` : "."}`
+      auditFormat("FALLOUTMAW.AuditApps.SuitableMedicalToolsHaveNoSupplies", { v0: (labels ? `: ${labels}` : ".") }, "У подходящих медицинских инструментов нет запаса{v0}")
     );
   }
 
@@ -110,10 +111,10 @@ export function analyzeMedicineToolAvailability({
   if (!toolSkillMatches.length) {
     const closest = selectClosestToolSkillMatch(suppliedMatches);
     const instrument = closest?.instrument ?? {};
-    const skillLabel = String(instrument.skillLabel ?? "").trim() || "требуемого навыка";
+    const skillLabel = String(instrument.skillLabel ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.RequiredSkill", "требуемого навыка");
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.toolSkill,
-      `Для использования «${String(instrument.name ?? "медицинского инструмента")}» нужно ${toInteger(instrument.skillValue)} ${skillLabel} (сейчас ${toInteger(instrument.actorSkillValue)}).`
+      auditFormat("FALLOUTMAW.AuditApps.UsingRequiresCurrently", { v0: (String(instrument.name ?? auditLocalize("FALLOUTMAW.AuditApps.MedicalTool", "медицинского инструмента"))), v1: (toInteger(instrument.skillValue)), v2: (skillLabel), v3: (toInteger(instrument.actorSkillValue)) }, "Для использования «{v0}» нужно {v1} {v2} (сейчас {v3}).")
     );
   }
 
@@ -124,11 +125,11 @@ export function analyzeMedicineToolAvailability({
     const closest = selectClosestTreatmentSkillMatch(toolSkillMatches);
     const treatment = closest?.treatment ?? {};
     const threshold = treatment.skillThreshold ?? {};
-    const treatmentName = String(treatment.name ?? "цели").trim();
-    const skillLabel = String(threshold.skillLabel ?? "").trim() || "требуемого навыка";
+    const treatmentName = String(treatment.name ?? auditLocalize("FALLOUTMAW.AuditApps.Target_719", "цели")).trim();
+    const skillLabel = String(threshold.skillLabel ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.RequiredSkill", "требуемого навыка");
     return unavailable(
       MEDICINE_TOOL_AVAILABILITY.treatmentSkill,
-      `Для лечения «${treatmentName}» нужно ${toInteger(threshold.difficulty)} ${skillLabel} (сейчас ${toInteger(threshold.skillValue)}).`
+      auditFormat("FALLOUTMAW.AuditApps.TreatingRequiresCurrently", { v0: (treatmentName), v1: (toInteger(threshold.difficulty)), v2: (skillLabel), v3: (toInteger(threshold.skillValue)) }, "Для лечения «{v0}» нужно {v1} {v2} (сейчас {v3}).")
     );
   }
 

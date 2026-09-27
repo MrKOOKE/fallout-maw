@@ -3,7 +3,7 @@
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.Currencies.Title"}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
         <button type="button" data-action="createCurrency"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.Currencies.Create"}}</button>
       </div>
     </header>
@@ -15,7 +15,7 @@
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
-        <span>Первичная в торговле</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text2eab59171b47'}}</span>
         <span></span>
       </div>
       {{#each currencies}}
@@ -34,7 +34,7 @@
         <input type="text" data-field="key" value="{{key}}">
         <input type="text" data-field="label" value="{{label}}">
         <input type="number" data-field="value" value="{{value}}" min="0" step="0.01">
-        <div class="fallout-maw-checkbox-cell" title="Первичная валюта по умолчанию для торговли">
+        <div class="fallout-maw-checkbox-cell" title="{{localize 'FALLOUTMAW.AuditTemplates.Text508d68450cc5'}}">
           <input type="checkbox" data-field="primaryTrade" {{#if primaryTrade}}checked{{/if}}>
         </div>
         <button type="button" data-action="deleteCurrency" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>

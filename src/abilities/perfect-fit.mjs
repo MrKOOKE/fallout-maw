@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { buildRequirementPercentModifierChanges } from "../items/requirement-modifiers.mjs";
 import {
   MAINTAINED_TARGET_EFFECT_SYNC_OPTION,
@@ -28,7 +29,7 @@ export function buildPerfectFitGrantEffectData({
   const weaponPercent = normalizeRequirementPercent(weaponRequirementPercent);
   return PERFECT_FIT_MAINTAINED_EFFECTS.buildGrantEffectData({
     ...context,
-    fallbackName: "Идеальная подгонка",
+    fallbackName: auditLocalize("FALLOUTMAW.AuditRuntime.R0135", "Идеальная подгонка"),
     changes: buildRequirementPercentModifierChanges({ equipmentPercent, weaponPercent }),
     metadata: {
       equipmentRequirementPercent: equipmentPercent,
@@ -46,7 +47,7 @@ export function buildPerfectFitHoldEffectData({
   const weaponPercent = normalizeRequirementPercent(weaponRequirementPercent);
   return PERFECT_FIT_MAINTAINED_EFFECTS.buildHoldEffectData({
     ...context,
-    fallbackName: "Идеальная подгонка",
+    fallbackName: auditLocalize("FALLOUTMAW.AuditRuntime.R0135", "Идеальная подгонка"),
     metadata: {
       equipmentRequirementPercent: equipmentPercent,
       weaponRequirementPercent: weaponPercent

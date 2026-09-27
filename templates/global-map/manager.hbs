@@ -1,21 +1,21 @@
 <div class="fallout-maw-global-map-form">
   {{#if hasMap}}
-    <p>Корневая сцена: <strong>{{rootName}}</strong></p>
+    <p>{{localize 'FALLOUTMAW.AuditTemplates.Text25204d2d5e25'}} <strong>{{rootName}}</strong></p>
     {{#if valid}}
-      <p><i class="fa-solid fa-circle-check"></i> Структура корректна.</p>
+      <p><i class="fa-solid fa-circle-check"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textfc3791a2befa'}}</p>
     {{else}}
       <ul>{{#each issues}}<li>{{this}}</li>{{/each}}</ul>
     {{/if}}
   {{else}}
-    <p>Глобальная карта ещё не создана.</p>
+    <p>{{localize 'FALLOUTMAW.AuditTemplates.Text269091650ed0'}}</p>
   {{/if}}
   <footer class="form-footer">
     <button type="button" data-action="open">
       <i class="fa-solid fa-map-location-dot"></i>
-      {{#if hasMap}}Открыть карту{{else}}Создать карту{{/if}}
+      {{#if hasMap}}{{localize 'FALLOUTMAW.AuditTemplates.Text4e7cb3c5783a'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text2e56337ac93a'}}{{/if}}
     </button>
     {{#if hasMap}}
-      <button type="button" data-action="validate"><i class="fa-solid fa-list-check"></i> Проверить структуру</button>
+      <button type="button" data-action="validate"><i class="fa-solid fa-list-check"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd3ba5f9797f3'}}</button>
     {{/if}}
   </footer>
 </div>

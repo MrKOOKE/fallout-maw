@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { getItemMagazineSourceUuids, isAmmoCompatibleItem } from "./item-ammo-compatibility.mjs";
 import { findFreeFunctionModuleSlot, getModuleSlotFunctionEntries } from "./weapon-modules.mjs";
 import { resolveWorldItemSync } from "./world-items.mjs";
@@ -5,10 +6,10 @@ import { resolveWorldItemSync } from "./world-items.mjs";
 export function getCraftCompatibilityActions(item) {
   const actions = [];
   if (getItemMagazineSourceUuids(item).length) {
-    actions.push({ action: "show-ammo", kind: "ammo", icon: "fa-crosshairs", label: "Подходящие боеприпасы" });
+    actions.push({ action: "show-ammo", kind: "ammo", icon: "fa-crosshairs", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1211", "Подходящие боеприпасы") });
   }
   if (getModuleSlotFunctionEntries(item).length) {
-    actions.push({ action: "show-modules", kind: "modules", icon: "fa-puzzle-piece", label: "Подходящие модули" });
+    actions.push({ action: "show-modules", kind: "modules", icon: "fa-puzzle-piece", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1212", "Подходящие модули") });
   }
   return actions;
 }

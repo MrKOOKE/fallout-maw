@@ -1,7 +1,9 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { evaluateFormula } from "../formulas/evaluation.mjs";
 import { getResourceSettings } from "../settings/accessors.mjs";
 import { buildActorFormulaData } from "../utils/actor-formulas.mjs";
 import { getActorAvailableEnergy } from "../combat/energy-resource.mjs";
+import { getOneTimeResourceValue } from "../combat/one-time-resources.mjs";
 import {
   COMBAT_ONLY_RESOURCE_KEYS,
   isCombatOnlyResourceKey,
@@ -92,7 +94,7 @@ export function buildReactionResourceDefinitions(resourceSettings = null) {
     definitions.push({ key: REACTION_POINTS_RESOURCE_KEY, label: localizeReactionPoints() });
   }
   if (!definitions.some(entry => entry.key === ACTION_OR_REACTION_POINTS_RESOURCE_KEY)) {
-    definitions.push({ key: ACTION_OR_REACTION_POINTS_RESOURCE_KEY, label: "ОД/ОР" });
+    definitions.push({ key: ACTION_OR_REACTION_POINTS_RESOURCE_KEY, label: auditLocalize("FALLOUTMAW.AuditRuntime.R0865", "ОД/ОР") });
   }
   return definitions;
 }
@@ -236,6 +238,7 @@ function createActorResourceAdapter() {
       return Math.max(
         0,
         Math.trunc(Number(resource.value) || 0)
+          + getOneTimeResourceValue(actor, definition.key)
           - Math.trunc(Number(resource.min) || 0)
           - getActorResourceLimitAmount(actor, definition.key)
       );

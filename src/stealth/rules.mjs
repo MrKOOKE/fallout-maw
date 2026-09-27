@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { evaluateFormula } from "../formulas/evaluation.mjs";
 import { STEALTH_SETTINGS_SETTING } from "../settings/constants.mjs";
@@ -113,11 +114,11 @@ export function calculateLightingModifiers(effectiveDarkness, settings = getRunt
   const entry = getStealthDifficultyLevel(effectiveDarkness, settings);
   return {
     difficultyBonus: Number(entry?.difficultyBonus) || 0,
-    levelLabel: String(entry?.label ?? "").trim() || "Степень освещения",
+    levelLabel: String(entry?.label ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1197", "Степень освещения"),
     perceptionMultiplier: 1,
     radius: 0,
     threshold: Number(entry?.threshold) || 0,
-    condition: `Темнота ${Number(entry?.threshold ?? 0).toFixed(2)}`
+    condition: auditFormat("FALLOUTMAW.AuditRuntime.R1198", { p0: (Number(entry?.threshold ?? 0).toFixed(2)) }, "Темнота {p0}")
   };
 }
 

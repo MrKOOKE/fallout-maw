@@ -37,6 +37,10 @@ const DEFAULT_REACTION_TIMEOUT_MS = 20000;
 const REACTION_SOCKET_COMPLETION_GRACE_MS = 30000;
 export const REACTION_LOCK_BYPASS_OPTION = "falloutMawReactionLockBypass";
 const pendingReactionSocketRequests = new Map();
+const inFlightReactionSocketRequests = new Map();
+const completedReactionSocketRequests = new Map();
+const REACTION_RESPONSE_CACHE_LIMIT = 512;
+const REACTION_RESPONSE_CACHE_TTL_MS = 10 * 60 * 1000;
 const reactionProviders = new Map();
 const activeReactionLocks = new Map();
 /** Requests deferred while a reaction execute cycle is already running. */
@@ -169,7 +173,7 @@ function requestReactionEventFromGM(gm, request, timeoutMs = getReactionTimeoutM
       pendingReactionSocketRequests.delete(requestId);
       resolve(createReactionHubResult({ reason: "timeout" }));
     }, timeoutMs + REACTION_SOCKET_COMPLETION_GRACE_MS);
-    pendingReactionSocketRequests.set(requestId, { resolve, timeoutId });
+    pendingReactionSocketRequests.set(requestId, { resolve, timeoutId, authorityUserId: gm.id });
     game.socket.emit(REACTION_SOCKET, {
       scope: REACTION_SOCKET_SCOPE,
       action: "requestReactionEvent",
@@ -180,15 +184,20 @@ function requestReactionEventFromGM(gm, request, timeoutMs = getReactionTimeoutM
   });
 }
 
-async function handleReactionSocketMessage(payload = {}) {
+async function handleReactionSocketMessage(payload = {}, senderUserId = "") {
   if (payload?.scope !== REACTION_SOCKET_SCOPE) return;
+  if (!senderUserId) return;
   if (payload.action === "setReactionLock") {
+    if (senderUserId !== game.users?.activeGM?.id) return;
     setLocalReactionLock(payload.lockId, Boolean(payload.active), payload.reason);
     return;
   }
   if (payload.action === "requestReactionEvent") {
     if (!isCurrentActiveGM() || payload.targetUserId !== game.user.id) return;
-    const result = await dispatchReactionEventRequest(payload.request ?? {});
+    if (payload.request?.requesterUserId !== senderUserId) return;
+    const requestId = String(payload.requestId ?? "").trim();
+    if (!requestId) return;
+    const result = await resolveReactionSocketRequest(`${senderUserId}:${requestId}`, payload.request ?? {});
     game.socket.emit(REACTION_SOCKET, {
       scope: REACTION_SOCKET_SCOPE,
       action: "reactionEventResult",
@@ -201,9 +210,35 @@ async function handleReactionSocketMessage(payload = {}) {
   if (payload.action !== "reactionEventResult" || payload.targetUserId !== game.user?.id) return;
   const pending = pendingReactionSocketRequests.get(payload.requestId);
   if (!pending) return;
+  if (senderUserId !== pending.authorityUserId) return;
   pendingReactionSocketRequests.delete(payload.requestId);
   globalThis.clearTimeout(pending.timeoutId);
   pending.resolve(payload.result ?? createReactionHubResult());
+}
+
+function resolveReactionSocketRequest(key, request) {
+  const now = Date.now();
+  for (const [id, entry] of completedReactionSocketRequests) {
+    if (now - entry.completedAt > REACTION_RESPONSE_CACHE_TTL_MS) completedReactionSocketRequests.delete(id);
+  }
+  const completed = completedReactionSocketRequests.get(key);
+  if (completed) return Promise.resolve(completed.result);
+  if (inFlightReactionSocketRequests.has(key)) return inFlightReactionSocketRequests.get(key);
+  // Install the promise before collecting offers: collection itself awaits
+  // documents and duplicate deliveries may arrive before execution starts.
+  const operation = Promise.resolve().then(() => dispatchReactionEventRequest(request)).catch(error => {
+    console.error(`${SYSTEM_ID} | Reaction request failed`, error);
+    return createReactionHubResult({ status: REACTION_RESULT.failed, reason: "requestError" });
+  }).then(result => {
+    inFlightReactionSocketRequests.delete(key);
+    completedReactionSocketRequests.set(key, { result, completedAt: Date.now() });
+    while (completedReactionSocketRequests.size > REACTION_RESPONSE_CACHE_LIMIT) {
+      completedReactionSocketRequests.delete(completedReactionSocketRequests.keys().next().value);
+    }
+    return result;
+  });
+  inFlightReactionSocketRequests.set(key, operation);
+  return operation;
 }
 
 async function processReactionEventRequest(request = {}) {
@@ -338,7 +373,7 @@ async function buildReactionOpportunityColumn(request = {}, eventKey = "", conte
     triggerActorUuid,
     triggerActorName: String(triggerActor?.name ?? context?.triggerActorName ?? "").trim()
       || localizeReactionText("FALLOUTMAW.Events.Reaction.UnknownSubject", "Unknown subject"),
-    triggerActorImg: normalizeImagePath(triggerActor?.img, "icons/svg/mystery-man.svg"),
+    triggerActorImg: normalizeImagePath(triggerActor?.img, "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
     rootId: String(envelope?.rootId ?? "")
   };
 }
@@ -351,7 +386,7 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
   const allOffers = usable.flatMap(entry => entry.offers.map(offer => ({
     ...offer,
     __opportunity: entry
-  })));
+  }))).map((offer, index) => ({ ...offer, selectionId: String(index) }));
   const allOffersByActor = new Map();
   for (const offer of allOffers) {
     if (!allOffersByActor.has(offer.actorUuid)) allOffersByActor.set(offer.actorUuid, []);
@@ -414,7 +449,8 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
     for (const actorUuid of actorOrder) {
       const response = responses.get(actorUuid) ?? null;
       if (!response?.offerId) continue;
-      const offer = standardOffers.find(entry => entry.actorUuid === actorUuid && entry.offerId === response.offerId);
+      const offer = standardOffers.find(entry => entry.actorUuid === actorUuid
+        && entry.offerId === response.offerId && entry.selectionId === response.selectionId);
       if (offer) {
         selected = { offer, response, opportunity: offer.__opportunity };
         break;
@@ -425,7 +461,7 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
       return finalResult;
     }
     await notifyDeclinedReactionOffers(
-      standardOffers.filter(offer => offer.offerId !== selected.offer.offerId),
+      standardOffers.filter(offer => offer !== selected.offer),
       { reason: "notSelected" }
     );
     finalResult = mergeReactionHubResults(finalResult, await executeReactionOffer(selected));
@@ -585,7 +621,7 @@ async function queryReactionOwners(actorOrder = [], offersByActor = new Map(), {
     for (const selection of result?.selections ?? []) {
       const actorUuid = String(selection?.actorUuid ?? "").trim();
       const offerId = String(selection?.offerId ?? "").trim();
-      if (actorUuid && offerId) responses.set(actorUuid, { offerId });
+      if (actorUuid && offerId) responses.set(actorUuid, { offerId, selectionId: selection.selectionId });
     }
   }
   return responses;
@@ -612,11 +648,12 @@ async function queryReactionOwnerGroup(owner, actors = [], {
         })
         .map(offer => ({
           offerId: offer.offerId,
+          selectionId: offer.selectionId,
           actorUuid: actor.uuid,
           actorName: actor.name,
           label: String(offer.label ?? localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction")),
           description: String(offer.description ?? ""),
-          img: normalizeImagePath(offer.img, "icons/svg/aura.svg"),
+          img: normalizeImagePath(offer.img, "systems/fallout-maw/assets/System/Abilities/ability-default.webp"),
           costLines: Array.isArray(offer.costLines) ? offer.costLines.map(line => String(line ?? "")) : []
         })));
       return {
@@ -645,19 +682,30 @@ async function queryReactionOwnerGroup(owner, actors = [], {
     actors: actors.map(({ actor, offers }) => ({
       actorUuid: actor.uuid,
       actorName: actor.name,
-      actorImg: normalizeImagePath(actor.img, "icons/svg/mystery-man.svg"),
+      actorImg: normalizeImagePath(actor.img, "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
       offers: offers.map(offer => ({
         offerId: offer.offerId,
+        selectionId: offer.selectionId,
         label: String(offer.label ?? localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction")),
         description: String(offer.description ?? ""),
-        img: normalizeImagePath(offer.img, "icons/svg/aura.svg"),
+        img: normalizeImagePath(offer.img, "systems/fallout-maw/assets/System/Abilities/ability-default.webp"),
         costLines: Array.isArray(offer.costLines) ? offer.costLines.map(line => String(line ?? "")) : []
       }))
     }))
   };
   try {
-    if (owner.isSelf) return handleReactionQuery(queryData);
-    return owner.query(REACTION_QUERY_NAME, queryData, { timeout: timeoutMs });
+    const result = owner.isSelf
+      ? await handleReactionQuery(queryData)
+      : await owner.query(REACTION_QUERY_NAME, queryData, { timeout: timeoutMs });
+    const selections = (Array.isArray(result?.selections) ? result.selections : []).flatMap(selection => {
+      const actorOffers = actors.find(({ actor }) => actor.uuid === selection?.actorUuid)?.offers ?? [];
+      const matches = actorOffers.filter(offer => offer.offerId === selection?.offerId
+        && (selection.selectionId == null || offer.selectionId === selection.selectionId));
+      // A legacy response without a selection id is safe only when unambiguous.
+      if (matches.length !== 1) return [];
+      return [{ actorUuid: selection.actorUuid, offerId: matches[0].offerId, selectionId: matches[0].selectionId }];
+    });
+    return { selections };
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Reaction query failed`, error);
     return { selections: [] };
@@ -681,7 +729,7 @@ async function handleReactionQuery(data = {}) {
     const columnSections = columns.map(column => {
       const options = column.offers.map(offer => `
         <label class="fallout-maw-reaction-option">
-          <input type="radio" name="selectedOfferId" value="${escapeHTML(offer.offerId)}">
+          <input type="radio" name="selectedOfferId" value="${escapeHTML(offer.selectionId)}">
           <img src="${escapeHTML(offer.img)}" alt="">
           <span>
             <strong>${escapeHTML(offer.label)}</strong>
@@ -788,14 +836,15 @@ async function handleReactionQuery(data = {}) {
     return { selections: [] };
   }
   if (useColumns) {
-    const offerId = String(formData?.selectedOfferId ?? "").trim();
-    if (!offerId) return { selections: [] };
-    const matched = columns.flatMap(column => column.offers).find(offer => offer.offerId === offerId);
+    const selectionId = String(formData?.selectedOfferId ?? "").trim();
+    if (!selectionId) return { selections: [] };
+    const matched = columns.flatMap(column => column.offers).find(offer => offer.selectionId === selectionId);
     if (!matched) return { selections: [] };
     return {
       selections: [{
         actorUuid: String(matched.actorUuid ?? ""),
-        offerId
+        offerId: matched.offerId,
+        selectionId
       }]
     };
   }

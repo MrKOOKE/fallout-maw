@@ -1,11 +1,12 @@
-﻿export const DEFAULT_CHARACTERISTICS = Object.freeze([
-  { key: "strength", abbr: "str", label: "Сила" },
-  { key: "dexterity", abbr: "dex", label: "Ловкость" },
-  { key: "endurance", abbr: "con", label: "Выносливость" },
-  { key: "perception", abbr: "wis", label: "Восприятие" },
-  { key: "intelligence", abbr: "int", label: "Интеллект" },
-  { key: "charisma", abbr: "cha", label: "Харизма" },
-  { key: "luck", abbr: "luc", label: "Удача" }
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+export const DEFAULT_CHARACTERISTICS = Object.freeze([
+  { key: "strength", abbr: "str", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text088", "Сила"); } },
+  { key: "dexterity", abbr: "dex", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text089", "Ловкость"); } },
+  { key: "endurance", abbr: "con", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text090", "Выносливость"); } },
+  { key: "perception", abbr: "wis", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text091", "Восприятие"); } },
+  { key: "intelligence", abbr: "int", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text092", "Интеллект"); } },
+  { key: "charisma", abbr: "cha", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text093", "Харизма"); } },
+  { key: "luck", abbr: "luc", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text094", "Удача"); } }
 ]);
 
 export const DEFAULT_BASE_PARAMETER_POOLS = Object.freeze({
@@ -23,31 +24,31 @@ export const DEFAULT_LOAD_FORMULA = "20 + 10*str";
 export const DEFAULT_LOAD_LIMIT_PERCENT = 150;
 
 export const DEFAULT_CURRENCIES = Object.freeze([
-  { key: "caps", label: "Крышки", img: "", value: 1, primaryTrade: true },
-  { key: "denarii", label: "Динарии", img: "", value: 2, primaryTrade: false },
-  { key: "ncrDollars", label: "Доллары НКР", img: "", value: 3, primaryTrade: false },
-  { key: "brotherhoodChecks", label: "Чеки братства", img: "", value: 6, primaryTrade: false }
+  { key: "caps", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text095", "Крышки"); }, img: "", value: 1, primaryTrade: true },
+  { key: "denarii", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text096", "Динарии"); }, img: "", value: 2, primaryTrade: false },
+  { key: "ncrDollars", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text097", "Доллары НКР"); }, img: "", value: 3, primaryTrade: false },
+  { key: "brotherhoodChecks", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text098", "Чеки братства"); }, img: "", value: 6, primaryTrade: false }
 ]);
 
 export const DEFAULT_SKILLS = Object.freeze([
-  { key: "rangedCombat", abbr: "ran", label: "Дальний бой", formula: "10 + dex + wis*3", img: "icons/weapons/guns/gun-pistol-flintlock.webp" },
-  { key: "meleeCombat", abbr: "mel", label: "Ближний бой", formula: "10 + 2 * (str + dex)", img: "icons/svg/combat.svg" },
-  { key: "athletics", abbr: "ath", label: "Атлетика", formula: "10 + (dex + str)*2", img: "icons/svg/jump.svg" },
-  { key: "energy", abbr: "ene", label: "Энергия", formula: "4 * int", img: "icons/svg/lightning.svg" },
-  { key: "resilience", abbr: "res", label: "Стойкость", formula: "10 + 4 * con", img: "icons/svg/holy-shield.svg" },
-  { key: "throwing", abbr: "thr", label: "Метание", formula: "(dex + str)*2", img: "icons/weapons/thrown/throwing-knife-flat-steel.webp" },
-  { key: "firstAid", abbr: "fir", label: "Первая помощь", formula: "(wis + int)*2", img: "icons/svg/heal.svg" },
-  { key: "doctor", abbr: "doc", label: "Доктор", formula: "wis + int*3", img: "icons/svg/pill.svg" },
-  { key: "naturalist", abbr: "nat", label: "Натуралист", formula: "4 * (wis)", img: "icons/svg/oak.svg" },
-  { key: "stealth", abbr: "ste", label: "Скрытность", formula: "(3 * dex)", img: "icons/svg/invisible.svg" },
-  { key: "lockpicking", abbr: "loc", label: "Взлом", formula: "wis + dex", img: "icons/svg/padlock.svg" },
-  { key: "theft", abbr: "the", label: "Кража", formula: "dex + wis*2", img: "icons/svg/chest.svg" },
-  { key: "traps", abbr: "tra", label: "Ловушки", formula: "(wis + dex)*2", img: "icons/svg/net.svg" },
-  { key: "science", abbr: "sci", label: "Наука", formula: "4 * int", img: "icons/svg/book.svg" },
-  { key: "repair", abbr: "rep", label: "Ремонт", formula: "int*3 + str", img: "icons/tools/smithing/tongs-steel-grey.webp" },
-  { key: "speech", abbr: "spe", label: "Красноречие", formula: "5 * cha", img: "icons/svg/mystery-man.svg" },
-  { key: "barter", abbr: "bar", label: "Бартер", formula: "cha*3 + int", img: "icons/svg/coins.svg" },
-  { key: "gambling", abbr: "gam", label: "Азарт", formula: "6 * luc", img: "icons/sundries/gaming/gaming-set-dice.webp" }
+  { key: "rangedCombat", abbr: "ran", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text099", "Дальний бой"); }, formula: "10 + dex + wis*3", img: "icons/weapons/guns/gun-pistol-flintlock.webp" },
+  { key: "meleeCombat", abbr: "mel", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text100", "Ближний бой"); }, formula: "10 + 2 * (str + dex)", img: "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp" },
+  { key: "athletics", abbr: "ath", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text101", "Атлетика"); }, formula: "10 + (dex + str)*2", img: "icons/svg/jump.svg" },
+  { key: "energy", abbr: "ene", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text102", "Энергия"); }, formula: "4 * int", img: "icons/svg/lightning.svg" },
+  { key: "resilience", abbr: "res", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text103", "Стойкость"); }, formula: "10 + 4 * con", img: "icons/svg/holy-shield.svg" },
+  { key: "throwing", abbr: "thr", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text104", "Метание"); }, formula: "(dex + str)*2", img: "icons/weapons/thrown/throwing-knife-flat-steel.webp" },
+  { key: "firstAid", abbr: "fir", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text105", "Первая помощь"); }, formula: "(wis + int)*2", img: "icons/svg/heal.svg" },
+  { key: "doctor", abbr: "doc", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text106", "Доктор"); }, formula: "wis + int*3", img: "icons/svg/pill.svg" },
+  { key: "naturalist", abbr: "nat", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text107", "Натуралист"); }, formula: "4 * (wis)", img: "icons/svg/oak.svg" },
+  { key: "stealth", abbr: "ste", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text084", "Скрытность"); }, formula: "(3 * dex)", img: "icons/svg/invisible.svg" },
+  { key: "lockpicking", abbr: "loc", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text108", "Взлом"); }, formula: "wis + dex", img: "icons/svg/padlock.svg" },
+  { key: "theft", abbr: "the", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text109", "Кража"); }, formula: "dex + wis*2", img: "icons/svg/chest.svg" },
+  { key: "traps", abbr: "tra", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text085", "Ловушки"); }, formula: "(wis + dex)*2", img: "icons/svg/net.svg" },
+  { key: "science", abbr: "sci", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text110", "Наука"); }, formula: "4 * int", img: "icons/svg/book.svg" },
+  { key: "repair", abbr: "rep", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text080", "Ремонт"); }, formula: "int*3 + str", img: "icons/tools/smithing/tongs-steel-grey.webp" },
+  { key: "speech", abbr: "spe", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text111", "Красноречие"); }, formula: "5 * cha", img: "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp" },
+  { key: "barter", abbr: "bar", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text112", "Бартер"); }, formula: "cha*3 + int", img: "icons/svg/coins.svg" },
+  { key: "gambling", abbr: "gam", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text113", "Азарт"); }, formula: "6 * luc", img: "icons/sundries/gaming/gaming-set-dice.webp" }
 ]);
 
 export const DEFAULT_SIGNATURE_SKILL_MULTIPLIER = 1.5;
@@ -77,15 +78,15 @@ export const DEFAULT_SKILL_ADVANCEMENT = Object.freeze({
 });
 
 export const DEFAULT_PROFICIENCIES = Object.freeze([
-  { key: "pistol", abbr: "pis", label: "Пистолет", max: 1000 },
-  { key: "automatic", abbr: "aut", label: "Автомат", max: 1000 },
-  { key: "rifle", abbr: "rif", label: "Винтовка", max: 1000 },
-  { key: "heavyRanged", abbr: "hvy", label: "Тяжелое стрелковое", max: 1000 },
-  { key: "shotgun", abbr: "sho", label: "Дробовик", max: 1000 },
-  { key: "grenade", abbr: "grn", label: "Граната", max: 1000 },
-  { key: "oneHandedMelee", abbr: "ohm", label: "Одноручное холодное", max: 1000 },
-  { key: "twoHandedMelee", abbr: "thm", label: "Двуручное холодное", max: 1000 },
-  { key: "natural", abbr: "nat", label: "Природное", max: 1000 }
+  { key: "pistol", abbr: "pis", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text114", "Пистолет"); }, max: 1000 },
+  { key: "automatic", abbr: "aut", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text115", "Автомат"); }, max: 1000 },
+  { key: "rifle", abbr: "rif", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text116", "Винтовка"); }, max: 1000 },
+  { key: "heavyRanged", abbr: "hvy", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text117", "Тяжелое стрелковое"); }, max: 1000 },
+  { key: "shotgun", abbr: "sho", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text118", "Дробовик"); }, max: 1000 },
+  { key: "grenade", abbr: "grn", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text119", "Граната"); }, max: 1000 },
+  { key: "oneHandedMelee", abbr: "ohm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text120", "Одноручное холодное"); }, max: 1000 },
+  { key: "twoHandedMelee", abbr: "thm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text121", "Двуручное холодное"); }, max: 1000 },
+  { key: "natural", abbr: "nat", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text122", "Природное"); }, max: 1000 }
 ]);
 
 export const DEFAULT_PROFICIENCY_INFLUENCE = Object.freeze({
@@ -106,34 +107,34 @@ const DEFAULT_MISSING_LEG_EFFECTS = Object.freeze([
 ]);
 
 export const DEFAULT_LIMBS = Object.freeze([
-  { key: "head", label: "Голова", stateMax: "100 + con * 5", damageMultiplier: 1.3, aimedDifficultyPercent: 30, implantLimit: 1, critical: true, lossEffects: [] },
-  { key: "eyes", label: "Глаза", stateMax: "100 + con * 5", damageMultiplier: 1.4, aimedDifficultyPercent: 50, implantLimit: 1, critical: false, lossEffects: Object.freeze([
+  { key: "head", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text123", "Голова"); }, stateMax: "100 + con * 5", damageMultiplier: 1.3, aimedDifficultyPercent: 30, implantLimit: 1, critical: true, lossEffects: [] },
+  { key: "eyes", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text124", "Глаза"); }, stateMax: "100 + con * 5", damageMultiplier: 1.4, aimedDifficultyPercent: 50, implantLimit: 1, critical: false, lossEffects: Object.freeze([
     Object.freeze({ key: "status.blind", type: "add", value: "1", phase: "initial", priority: null })
   ]) },
-  { key: "torso", label: "Туловище", stateMax: "100 + con * 5", damageMultiplier: 1, aimedDifficultyPercent: 0, implantLimit: 1, critical: true, lossEffects: [] },
-  { key: "groin", label: "Пах", stateMax: "100 + con * 5", damageMultiplier: 1.2, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: [] },
-  { key: "leftArm", label: "Левая рука", stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS },
-  { key: "rightArm", label: "Правая рука", stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS },
-  { key: "leftLeg", label: "Левая нога", stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LEG_EFFECTS },
-  { key: "rightLeg", label: "Правая нога", stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LEG_EFFECTS }
+  { key: "torso", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text125", "Туловище"); }, stateMax: "100 + con * 5", damageMultiplier: 1, aimedDifficultyPercent: 0, implantLimit: 1, critical: true, lossEffects: [] },
+  { key: "groin", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text126", "Пах"); }, stateMax: "100 + con * 5", damageMultiplier: 1.2, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: [] },
+  { key: "leftArm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text127", "Левая рука"); }, stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS },
+  { key: "rightArm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text128", "Правая рука"); }, stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS },
+  { key: "leftLeg", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text129", "Левая нога"); }, stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LEG_EFFECTS },
+  { key: "rightLeg", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text130", "Правая нога"); }, stateMax: "100 + con * 5", damageMultiplier: 0.8, aimedDifficultyPercent: 20, implantLimit: 1, critical: false, lossEffects: DEFAULT_MISSING_LEG_EFFECTS }
 ]);
 
 export const DEFAULT_EQUIPMENT_SLOTS = Object.freeze([
-  { key: "helmet", label: "Шлем" },
-  { key: "glasses", label: "Очки" },
-  { key: "mask", label: "Маска" },
-  { key: "clothing", label: "Одежда" },
-  { key: "armor", label: "Броня" },
-  { key: "cloak", label: "Накидка" },
-  { key: "rig", label: "Разгрузка" },
-  { key: "belt", label: "Пояс" },
-  { key: "backpack", label: "Рюкзак" }
+  { key: "helmet", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text131", "Шлем"); } },
+  { key: "glasses", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text132", "Очки"); } },
+  { key: "mask", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text133", "Маска"); } },
+  { key: "clothing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text134", "Одежда"); } },
+  { key: "armor", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text135", "Броня"); } },
+  { key: "cloak", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text136", "Накидка"); } },
+  { key: "rig", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text137", "Разгрузка"); } },
+  { key: "belt", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text138", "Пояс"); } },
+  { key: "backpack", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text139", "Рюкзак"); } }
 ]);
 
 export const DEFAULT_WEAPON_SETS = Object.freeze([
   {
     key: "weaponSet1",
-    label: "Набор 1",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text140", "Набор 1"); },
     slots: [
       { key: "rightHand", limbKey: "rightArm" },
       { key: "leftHand", limbKey: "leftArm" }
@@ -141,7 +142,7 @@ export const DEFAULT_WEAPON_SETS = Object.freeze([
   },
   {
     key: "weaponSet2",
-    label: "Набор 2",
+    get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text141", "Набор 2"); },
     slots: [
       { key: "rightHand", limbKey: "rightArm" },
       { key: "leftHand", limbKey: "leftArm" }
@@ -165,30 +166,30 @@ export const FIXED_RESOURCE_KEYS = Object.freeze([
 export const DEFAULT_HEALTH_PER_LEVEL_FORMULA = "1 + con / 3";
 
 export const DEFAULT_RESOURCES = Object.freeze([
-  { key: "health", abbr: "hea", label: "Здоровье", formula: "limbs" },
-  { key: "consciousness", abbr: "con", label: "Сознание", formula: "criticalLimbs" },
-  { key: "dodge", abbr: "dod", label: "Уклонение", formula: "60 + ath/3" },
-  { key: "actionPoints", abbr: "act", label: "Очки действия", formula: "5 + (dex/3 + str/5)" },
-  { key: "movementPoints", abbr: "mov", label: "Очки передвижения", formula: "2 + ath/50" }
+  { key: "health", abbr: "hea", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text142", "Здоровье"); }, formula: "limbs" },
+  { key: "consciousness", abbr: "con", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text143", "Сознание"); }, formula: "criticalLimbs" },
+  { key: "dodge", abbr: "dod", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text144", "Уклонение"); }, formula: "60 + ath/3" },
+  { key: "actionPoints", abbr: "act", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text145", "Очки действия"); }, formula: "5 + (dex/3 + str/5)" },
+  { key: "movementPoints", abbr: "mov", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text146", "Очки передвижения"); }, formula: "2 + ath/50" }
 ]);
 
 export const DEFAULT_NEEDS = Object.freeze([
-  { key: "hunger", abbr: "hun", label: "Голод", formula: "1000" },
-  { key: "thirst", abbr: "thi", label: "Жажда", formula: "1000" },
-  { key: "sleepiness", abbr: "sle", label: "Сонливость", formula: "1000" },
-  { key: "radcont", abbr: "rad", label: "Рад. Заражение", formula: "1000" }
+  { key: "hunger", abbr: "hun", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text147", "Голод"); }, formula: "1000" },
+  { key: "thirst", abbr: "thi", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text148", "Жажда"); }, formula: "1000" },
+  { key: "sleepiness", abbr: "sle", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text149", "Сонливость"); }, formula: "1000" },
+  { key: "radcont", abbr: "rad", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text150", "Рад. Заражение"); }, formula: "1000" }
 ]);
 
 export const DEFAULT_DAMAGE_TYPES = Object.freeze([
-  { key: "piercing", label: "Колющий", color: "#d9d0bd", img: "icons/weapons/daggers/dagger-straight-thin-black.webp" },
-  { key: "slashing", label: "Режущий", color: "#d95c5c", img: "icons/skills/melee/strike-slashes-red.webp" },
-  { key: "bludgeoning", label: "Дробящий", color: "#c49a6c", img: "icons/skills/melee/strike-hammer-destructive-orange.webp" },
-  { key: "firearm", label: "Огнестрельный", color: "#f0d48a", img: "icons/skills/ranged/bullets-triple-ball-orange.webp" },
-  { key: "energy", label: "Энергетический", color: "#78f0ff", img: "icons/skills/ranged/energy-weapon-fire-blue.webp" },
-  { key: "fire", label: "Огненный", color: "#ff6a2a", img: "icons/magic/fire/flame-burning-embers-orange.webp" },
-  { key: "cryo", label: "Криогенный", color: "#6da8ff", img: "icons/magic/water/snowflake-ice-blue.webp" },
-  { key: "electric", label: "Электрический", color: "#f6f05a", img: "icons/magic/lightning/bolt-strike-sparks-yellow.webp" },
-  { key: "acid", label: "Кислотный", color: "#7be36d", img: "icons/svg/acid.svg" },
-  { key: "poison", label: "Ядовитый", color: "#b56dff", img: "icons/svg/poison.svg" },
-  { key: "radiation", label: "Радиационный", color: "#c6ff4d", img: "icons/svg/radiation.svg" }
+  { key: "piercing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text151", "Колющий"); }, color: "#d9d0bd", img: "icons/weapons/daggers/dagger-straight-thin-black.webp" },
+  { key: "slashing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text152", "Режущий"); }, color: "#d95c5c", img: "icons/skills/melee/strike-slashes-red.webp" },
+  { key: "bludgeoning", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text153", "Дробящий"); }, color: "#c49a6c", img: "icons/skills/melee/strike-hammer-destructive-orange.webp" },
+  { key: "firearm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text154", "Огнестрельный"); }, color: "#f0d48a", img: "icons/skills/ranged/bullets-triple-ball-orange.webp" },
+  { key: "energy", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text155", "Энергетический"); }, color: "#78f0ff", img: "icons/skills/ranged/energy-weapon-fire-blue.webp" },
+  { key: "fire", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text156", "Огненный"); }, color: "#ff6a2a", img: "icons/magic/fire/flame-burning-embers-orange.webp" },
+  { key: "cryo", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text157", "Криогенный"); }, color: "#6da8ff", img: "icons/magic/water/snowflake-ice-blue.webp" },
+  { key: "electric", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text158", "Электрический"); }, color: "#f6f05a", img: "icons/magic/lightning/bolt-strike-sparks-yellow.webp" },
+  { key: "acid", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text159", "Кислотный"); }, color: "#7be36d", img: "systems/fallout-maw/assets/System/DamageTypes/damage-acid.webp" },
+  { key: "poison", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text160", "Ядовитый"); }, color: "#b56dff", img: "systems/fallout-maw/assets/System/DamageTypes/damage-poison.webp" },
+  { key: "radiation", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text161", "Радиационный"); }, color: "#c6ff4d", img: "systems/fallout-maw/assets/System/DamageTypes/damage-radiation.webp" }
 ]);

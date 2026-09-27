@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import {
   getTokenPrototypeDefaultForActorType,
   setTokenPrototypeDefault
@@ -5,9 +6,9 @@ import {
 import { openPresetMigrationForApplication } from "./settings-preset-migration.mjs";
 
 const ACTOR_TYPE_LABELS = Object.freeze({
-  character: "Персонаж",
-  construct: "Конструкт",
-  group: "Группа"
+  get character() { return auditLocalize("FALLOUTMAW.Actor.Character", "Персонаж"); },
+  get construct() { return auditLocalize("TYPES.Actor.construct", "Конструкт"); },
+  get group() { return auditLocalize("FALLOUTMAW.AuditApps.Group", "Группа"); }
 });
 
 class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.PrototypeTokenConfig {
@@ -31,7 +32,7 @@ class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.Prototype
   };
 
   get title() {
-    return `Базовый прототип токена: ${ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType}`;
+    return auditFormat("FALLOUTMAW.AuditApps.DefaultTokenPrototype", { v0: (ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType) }, "Базовый прототип токена: {v0}");
   }
 
   _prepareButtons() {
@@ -39,7 +40,7 @@ class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.Prototype
     buttons.unshift({
       type: "button",
       icon: "fa-solid fa-code-compare",
-      label: "Мигрировать из других пресетов",
+      label: auditLocalize("FALLOUTMAW.AuditApps.MigrateFromOtherPresets", "Мигрировать из других пресетов"),
       action: "migratePresetSettings"
     });
     return buttons;
@@ -61,14 +62,14 @@ class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.Prototype
     token.randomImg = this.form.elements.randomImg.checked;
     if (token.randomImg) delete token.texture.src;
     await saveDefaults(this, token);
-    ui.notifications.info(`Базовый прототип токена сохранен: ${ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType}`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.DefaultTokenPrototypeSaved", { v0: (ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType) }, "Базовый прототип токена сохранен: {v0}"));
     await this.render({ force: true });
   }
 
   static async onSubmit(event, form, formData) {
     const submitData = this._processFormData(event, form, formData);
     await saveDefaults(this, submitData);
-    ui.notifications.info(`Базовый прототип токена сохранен: ${ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType}`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.DefaultTokenPrototypeSaved", { v0: (ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType) }, "Базовый прототип токена сохранен: {v0}"));
   }
 }
 
@@ -95,11 +96,11 @@ function createSyntheticActor(actorType, documentActorType = actorType) {
   const label = ACTOR_TYPE_LABELS[actorType] ?? actorType;
   return new Actor.implementation({
     _id: foundry.utils.randomID(),
-    name: `Базовый прототип токена: ${label}`,
+    name: auditFormat("FALLOUTMAW.AuditApps.DefaultTokenPrototype", { v0: (label) }, "Базовый прототип токена: {v0}"),
     type: documentActorType,
     prototypeToken: {
       ...getTokenPrototypeDefaultForActorType(actorType),
-      name: `Базовый прототип токена: ${label}`
+      name: auditFormat("FALLOUTMAW.AuditApps.DefaultTokenPrototype", { v0: (label) }, "Базовый прототип токена: {v0}")
     }
   });
 }

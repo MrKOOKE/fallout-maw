@@ -401,40 +401,39 @@ async function interceptSkillCheckTriggerCost({ event = null, control = null, sc
   const requesterUser = game.users?.get?.(requesterUserId)
     ?? Array.from(game.users ?? []).find(user => String(user?.id ?? "") === requesterUserId)
     ?? null;
-  if (!requesterUser || actor.testUserPermission?.(requesterUser, "OWNER") !== true) {
-    return cancelSkillCheckForTriggerCost("invalidTriggerSource");
-  }
-
   const request = event?.data?.request ?? {};
   let payment;
   try {
-    payment = await paySkillCheckTriggerCosts({
-      actor,
+    const context = {
+      actorToken: actorToken?.object ?? actorToken ?? null,
+      targetToken: targetToken?.object ?? targetToken ?? null,
+      targetActor: targetActor ?? targetToken?.actor ?? null,
+      weaponData: request?.weaponData && typeof request.weaponData === "object"
+        ? request.weaponData
+        : null,
+      attackDistanceMeters: request?.attackDistanceMeters ?? null,
+      effectiveRange: request?.effectiveRange && typeof request.effectiveRange === "object"
+        ? request.effectiveRange
+        : null,
       skillKey,
-      context: {
-        actorToken: actorToken?.object ?? actorToken ?? null,
-        targetToken: targetToken?.object ?? targetToken ?? null,
-        targetActor: targetActor ?? targetToken?.actor ?? null,
-        weaponData: request?.weaponData && typeof request.weaponData === "object"
-          ? request.weaponData
-          : null,
-        attackDistanceMeters: request?.attackDistanceMeters ?? null,
-        effectiveRange: request?.effectiveRange && typeof request.effectiveRange === "object"
-          ? request.effectiveRange
-          : null,
-        skillKey,
-        requester: String(request?.requester ?? "").trim(),
-        weaponActionKey: String(request?.weaponActionKey ?? "").trim(),
-        chanceOperationId: String(request?.chanceOperationId ?? "").trim(),
-        rootId: event?.rootId ?? scope?.rootId ?? "",
-        eventId: event?.eventId ?? scope?.eventId ?? "",
-        occurrenceId: event?.occurrenceKey ?? "",
-        chainRef: scope?.chainRef ?? null,
-        inDamageHubOperation: Boolean(request?.damageHubOperationRef),
-        damageHubOperation: request?.damageHubOperationRef ? "current" : null,
-        logicalWorldTime: Number(event?.occurredAt?.worldTime) || null
-      }
-    });
+      requester: String(request?.requester ?? "").trim(),
+      weaponActionKey: String(request?.weaponActionKey ?? "").trim(),
+      chanceOperationId: String(request?.chanceOperationId ?? "").trim(),
+      rootId: event?.rootId ?? scope?.rootId ?? "",
+      eventId: event?.eventId ?? scope?.eventId ?? "",
+      occurrenceId: event?.occurrenceKey ?? "",
+      chainRef: scope?.chainRef ?? null,
+      inDamageHubOperation: Boolean(request?.damageHubOperationRef),
+      damageHubOperation: request?.damageHubOperationRef ? "current" : null,
+      logicalWorldTime: Number(event?.occurredAt?.worldTime) || null
+    };
+    if (!requesterUser || actor.testUserPermission?.(requesterUser, "OWNER") !== true) {
+      const entries = collectSkillCheckTriggerCostEntries({ actor, skillKey, context });
+      return entries.some(entry => entry.baseRows.length)
+        ? cancelSkillCheckForTriggerCost("invalidTriggerSource")
+        : undefined;
+    }
+    payment = await paySkillCheckTriggerCosts({ actor, skillKey, context });
   } catch (error) {
     console.error("fallout-maw | Skill trigger-cost interceptor failed.", error);
     return cancelSkillCheckForTriggerCost("spendFailed");

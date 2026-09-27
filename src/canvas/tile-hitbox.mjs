@@ -251,6 +251,11 @@ function changedFlagScope(changes, scope) {
 }
 
 function getTileFlag(tile, scope, key) {
+  // Imported hitboxes remain useful after the optional importer is disabled.
+  // Foundry getFlag rejects inactive module scopes, even for a missing flag.
+  if (scope === RIMWORLD_BRIDGE_ID) {
+    return tile?.flags?.[scope]?.[key] ?? tile?._source?.flags?.[scope]?.[key];
+  }
   return tile?.getFlag?.(scope, key)
     ?? tile?.flags?.[scope]?.[key]
     ?? tile?._source?.flags?.[scope]?.[key];

@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import {
@@ -79,7 +80,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     this.proficiencies.push({
       key: this.#getUniqueKey("newProficiency"),
       abbr: this.#getUniqueAbbr("new"),
-      label: "Новое владение",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewProficiency", "Новое владение"),
       max: 1000,
       influence: createIndividualInfluenceSettings(this.influence)
     });

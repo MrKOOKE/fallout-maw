@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 
 const DEFAULT_SLEEPINESS_NEED_KEY = "sleepiness";
@@ -5,11 +6,11 @@ const DEFAULT_SLEEPINESS_NEED_KEY = "sleepiness";
 export function createDefaultCampSettings() {
   return {
     restPlaces: [
-      createCampRestPlace("ground", "На земле", -15),
-      createCampRestPlace("cot", "Лежак", -25),
-      createCampRestPlace("sleepingBag", "Спальник", -40),
-      createCampRestPlace("bed", "Кровать", -55),
-      createCampRestPlace("luxuryBed", "Роскошная кровать", -80)
+      createCampRestPlace("ground", auditLocalize("FALLOUTMAW.AuditSystem.Text036", "На земле"), -15),
+      createCampRestPlace("cot", auditLocalize("FALLOUTMAW.AuditSystem.Text037", "Лежак"), -25),
+      createCampRestPlace("sleepingBag", auditLocalize("FALLOUTMAW.AuditSystem.Text038", "Спальник"), -40),
+      createCampRestPlace("bed", auditLocalize("FALLOUTMAW.AuditSystem.Text039", "Кровать"), -55),
+      createCampRestPlace("luxuryBed", auditLocalize("FALLOUTMAW.AuditSystem.Text040", "Роскошная кровать"), -80)
     ]
   };
 }
@@ -102,7 +103,7 @@ function normalizeCampRestPlaces(value, defaults = []) {
       used.add(id);
       return {
         id,
-        label: String(entry?.label ?? entry?.name ?? fallback.label ?? "").trim() || `Место отдыха ${index + 1}`,
+        label: String(entry?.label ?? entry?.name ?? fallback.label ?? "").trim() || auditFormat("FALLOUTMAW.AuditSystem.Text041", { v0: index + 1 }, "Место отдыха {v0}"),
         effects: normalizeCampRestPlaceEffects(entry?.effects ?? fallback.effects)
       };
     })

@@ -20,6 +20,8 @@ import {
   notifyCombatResourcesSpent
 } from "./resource-spending.mjs";
 
+import { getOneTimeResourceValue, prepareActorResourceSpend, runOneTimeResourceMutation } from "./one-time-resources.mjs";
+
 const DISABLED_EFFECT_THRESHOLD = 0;
 
 export function calculateAttackActionPointMovementLoss({
@@ -91,7 +93,7 @@ export async function applyAttackActionPointMovementLoss(actor, spentActionPoint
   try {
     return await runMovementResourceSpendingSerially(actor, async () => {
       const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
-      const current = Math.max(0, toInteger(movement?.value));
+      const current = Math.max(0, toInteger(movement?.value)) + getOneTimeResourceValue(actor, MOVEMENT_RESOURCE_KEY);
       if (!movement || current <= 0) return createEmptyResult(mode);
 
       const operationId = getActiveUseOperationId(
@@ -130,7 +132,7 @@ export async function applyAttackActionPointMovementLoss(actor, spentActionPoint
         reverseOnly: false
       });
       const values = getSourceContextualAbilityChangeValues(actor, specs, conditionContext);
-      const result = calculateAttackActionPointMovementLoss({
+      let result = calculateAttackActionPointMovementLoss({
         mode,
         spentActionPoints: actionPoints,
         percent: mode === ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.percent
@@ -142,22 +144,23 @@ export async function applyAttackActionPointMovementLoss(actor, spentActionPoint
 
       let appliedAmount = 0;
       if (result.amount > 0) {
-        const next = current - result.amount;
-        await actor.update({
-          [`system.resources.${MOVEMENT_RESOURCE_KEY}.value`]: next,
-          [`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`]: Math.max(
-            0,
-            toInteger(movement.max) - next
-          )
-        }, {
-          falloutMawAttackActionPointMovementLoss: true,
-          ...(context?.chainRef ? {
-            chainRef: context.chainRef,
-            falloutMawSystemEventChainRef: context.chainRef
-          } : {})
+        appliedAmount = await runOneTimeResourceMutation(actor, async () => {
+          const normalBefore = Math.max(0, toInteger(actor.system?.resources?.[MOVEMENT_RESOURCE_KEY]?.value));
+          const onceBefore = getOneTimeResourceValue(actor, MOVEMENT_RESOURCE_KEY);
+          const fresh = normalBefore + onceBefore;
+          result = calculateAttackActionPointMovementLoss({
+            mode, spentActionPoints: actionPoints, percent: result.percent,
+            currentMovementPoints: fresh, disabledValue: values.disabled
+          });
+          const plan = prepareActorResourceSpend(actor, MOVEMENT_RESOURCE_KEY, result.amount, { available: fresh });
+          if (!plan || !result.amount) return 0;
+          await actor.update({ ...plan.updates }, {
+            falloutMawAttackActionPointMovementLoss: true,
+            ...(context?.chainRef ? { chainRef: context.chainRef, falloutMawSystemEventChainRef: context.chainRef } : {})
+          });
+          return Math.min(plan.normalSpent, Math.max(0, normalBefore - toInteger(actor.system?.resources?.[MOVEMENT_RESOURCE_KEY]?.value)))
+            + Math.min(plan.onceSpent, Math.max(0, onceBefore - getOneTimeResourceValue(actor, MOVEMENT_RESOURCE_KEY)));
         });
-        const applied = Math.max(0, toInteger(actor.system?.resources?.[MOVEMENT_RESOURCE_KEY]?.value));
-        appliedAmount = Math.min(result.amount, Math.max(0, current - applied));
       }
 
       const mechanicUsed = result.disabled || result.percent <= 0 || appliedAmount > 0;

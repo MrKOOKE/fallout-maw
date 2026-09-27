@@ -3,7 +3,7 @@
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.Resources.Title"}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
         <button type="button" data-action="createResource"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.Resources.Create"}}</button>
       </div>
     </header>
@@ -17,7 +17,7 @@
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Color"}}</span>
-        <span>Источник максимума</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text95e9262349ed'}}</span>
         <span>{{localize "FALLOUTMAW.Common.Formula"}}</span>
         <span></span>
       </div>
@@ -30,11 +30,11 @@
         <input type="color" data-field="color" value="{{color}}">
         {{#if health}}
         <select data-field="formulaSource">
-          <option value="formula" {{#unless raceFormulaSelected}}selected{{/unless}}>Формула ресурса</option>
-          {{#if raceFormulaAvailable}}<option value="race" {{#if raceFormulaSelected}}selected{{/if}}>Формула выбранной расы</option>{{/if}}
+          <option value="formula" {{#unless raceFormulaSelected}}selected{{/unless}}>{{localize 'FALLOUTMAW.AuditTemplates.Text9b23d509e4eb'}}</option>
+          {{#if raceFormulaAvailable}}<option value="race" {{#if raceFormulaSelected}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text2c86fb1bc3f6'}}</option>{{/if}}
         </select>
         {{else}}
-        <span>Формула ресурса</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text9b23d509e4eb'}}</span>
         {{/if}}
         <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all" {{#if formulaLocked}}disabled{{/if}}>
         {{#if locked}}

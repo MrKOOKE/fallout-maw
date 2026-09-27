@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { testObserverVisibilityBatch } from "./physical-los.mjs";
 import { createRightClickPanGuard } from "./right-click-pan-guard.mjs";
 import {
@@ -28,13 +29,13 @@ export function requestCustomTokenSelection({
   rows = [],
   limit = 1,
   allowRepeated = false,
-  title = "Выбор целей",
-  noneWarning = "Нет подходящих целей.",
+  title = auditLocalize("FALLOUTMAW.AuditRuntime.R0623", "Выбор целей"),
+  noneWarning = auditLocalize("FALLOUTMAW.AuditRuntime.R0624", "Нет подходящих целей."),
   instructions = "",
   sourceToken = null,
   refreshRows = null,
   getRowId = row => String(row?.actorUuid ?? row?.token?.actor?.uuid ?? ""),
-  getRowLabel = row => String(row?.token?.name ?? row?.token?.actor?.name ?? "Цель")
+  getRowLabel = row => String(row?.token?.name ?? row?.token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель"))
 } = {}) {
   // An invocation is itself an ownership change, even when it cannot offer a
   // target. Otherwise the previous selector remains painted and interactive.
@@ -52,7 +53,7 @@ export function requestCustomTokenSelection({
   return new Promise(resolve => {
     const layer = getCustomTokenSelectionLayer();
     if (!layer?.addChild) {
-      ui.notifications.warn(`${title}: слой выбора целей недоступен.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0625", { p0: (title) }, "{p0}: слой выбора целей недоступен."));
       resolve([]);
       return;
     }
@@ -401,7 +402,7 @@ export function requestCustomTokenSelection({
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
     rightClickGuard.activate();
 
-    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`;
+    const prompt = instructions || auditFormat("FALLOUTMAW.AuditRuntime.R0206", { p0: (title), p1: (selectionLimit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.");
     ui.notifications.info(prompt);
   });
 }
@@ -410,8 +411,8 @@ export async function requestCustomActorTokenSelection({
   sourceActor = null,
   sourceToken = null,
   includeSelf = true,
-  title = "Выбор цели",
-  noneWarning = "Нет подходящих целей.",
+  title = auditLocalize("FALLOUTMAW.AuditRuntime.R0626", "Выбор цели"),
+  noneWarning = auditLocalize("FALLOUTMAW.AuditRuntime.R0624", "Нет подходящих целей."),
   instructions = "",
   getReason = null
 } = {}) {
@@ -457,7 +458,7 @@ export async function requestCustomActorTokenSelection({
     sourceToken,
     refreshRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.id ?? row?.actorUuid ?? ""),
-    getRowLabel: row => String(row?.token?.name ?? row?.actor?.name ?? "Цель")
+    getRowLabel: row => String(row?.token?.name ?? row?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель"))
   });
   return selected.at(0) ?? null;
 }
@@ -499,9 +500,9 @@ function buildActorSelectionRows(tokens = [], {
     const isSelf = Boolean(sourceActorUuid && actorUuid === sourceActorUuid);
     const displayed = Boolean(visibility.get(getTokenDocumentUuid(token)));
     const reason = !actor
-      ? "У токена нет актера."
+      ? auditLocalize("FALLOUTMAW.AuditRuntime.R0627", "У токена нет актера.")
       : (!includeSelf && isSelf
-        ? "Нужна другая цель."
+        ? auditLocalize("FALLOUTMAW.AuditRuntime.R0628", "Нужна другая цель.")
         : String(getReason?.({ token, actor, isSelf }) ?? ""));
     return {
       token,

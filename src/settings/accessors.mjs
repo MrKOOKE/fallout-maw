@@ -86,15 +86,15 @@ export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
 });
 
 export const DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS = Object.freeze({
-  damageReductionIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png`,
-  damageBlockedIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png`,
-  dodgeConversionIcon: "icons/svg/shield.svg",
-  levelUpIcon: "icons/svg/upgrade.svg"
+  damageReductionIcon: `systems/${FALLOUT_MAW.id}/assets/System/TokenActionHud/hud-damage-reduction-and-piercing.webp`,
+  damageBlockedIcon: `systems/${FALLOUT_MAW.id}/assets/System/TokenActionHud/hud-damage-blocked.webp`,
+  dodgeConversionIcon: "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
+  levelUpIcon: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp"
 });
 
 export const DEFAULT_TOKEN_ACTION_HUD_EXPERIENCE_AWARD = Object.freeze({
-  experienceSoundPath: `systems/${FALLOUT_MAW.id}/audio/Experience/fallout-4-experience-up-made-with-Voicemod.mp3`,
-  levelUpSoundPath: `systems/${FALLOUT_MAW.id}/audio/Experience/fallout-level-up-made-with-Voicemod.mp3`,
+  experienceSoundPath: `systems/${FALLOUT_MAW.id}/audio/System/fallout-4-experience-up-made-with-Voicemod.mp3`,
+  levelUpSoundPath: `systems/${FALLOUT_MAW.id}/audio/System/fallout-level-up-made-with-Voicemod.mp3`,
   levelUpAnimationKey: "fallout-maw.generic.energy.energy_field_bot_02_regular_yellow"
 });
 
@@ -102,49 +102,49 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
   ...DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS,
   experienceAward: DEFAULT_TOKEN_ACTION_HUD_EXPERIENCE_AWARD,
   mainActions: Object.freeze({
-    weapon: "icons/svg/combat.svg",
+    weapon: "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp",
     items: "icons/svg/item-bag.svg",
-    abilities: "icons/svg/aura.svg",
-    skills: "icons/svg/dice-target.svg",
-    passengers: "icons/svg/group.svg",
-    actions: "icons/svg/aura.svg",
+    abilities: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
+    skills: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-burst.webp",
+    passengers: "systems/fallout-maw/assets/System/GlobalMap/global-map-travel-group.webp",
+    actions: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     settings: "icons/svg/lever.svg"
   }),
   activeActions: Object.freeze({
-    grapple: "icons/svg/sword.svg",
-    dragGrappled: "icons/svg/wingfoot.svg",
+    grapple: "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp",
+    dragGrappled: "systems/fallout-maw/assets/System/TokenActionHud/action-drag-grappled.webp",
     push: "icons/svg/impact.svg",
-    boardTransport: "icons/svg/mystery-man.svg",
+    boardTransport: "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     camp: "icons/environment/settlement/tent.webp"
   }),
   weaponActions: Object.freeze({
-    aimedShot: "icons/svg/target.svg",
-    snapshot: "icons/svg/thrust.svg",
-    burst: "icons/svg/dice-target.svg",
-    volley: "icons/svg/explosion.svg",
-    meleeAttack: "icons/svg/sword.svg",
-    aimedMeleeAttack: "icons/svg/target.svg",
+    aimedShot: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp",
+    snapshot: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-snapshot.webp",
+    burst: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-burst.webp",
+    volley: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-volley.webp",
+    meleeAttack: "systems/fallout-maw/assets/System/TokenActionHud/action-grapple-and-melee.webp",
+    aimedMeleeAttack: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp",
     push: "icons/svg/impact.svg",
-    reload: "icons/svg/upgrade.svg",
-    replaceWeapon: "icons/svg/direction.svg",
-    lightOn: "icons/svg/light.svg",
-    lightOff: "icons/svg/light.svg",
-    lightRecharge: "icons/svg/upgrade.svg"
+    reload: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
+    replaceWeapon: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-replace-weapon.webp",
+    lightOn: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-light.webp",
+    lightOff: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-light.webp",
+    lightRecharge: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp"
   }),
   postures: Object.freeze({
-    walk: "icons/svg/walk.svg",
+    walk: "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp",
     crawl: "icons/svg/leg.svg",
     burrow: "icons/svg/down.svg",
-    knocked: "icons/svg/falling.svg"
+    knocked: "systems/fallout-maw/assets/System/TokenActionHud/posture-knocked.webp"
   }),
   combatEnd: Object.freeze({
-    search: `systems/${FALLOUT_MAW.id}/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp`,
-    finish: "icons/svg/skull.svg"
+    search: `systems/${FALLOUT_MAW.id}/assets/System/SystemActions/action-search.webp`,
+    finish: "systems/fallout-maw/assets/System/TokenActionHud/combat-end-finish.webp"
   }),
   skillIcons: Object.freeze(Object.fromEntries(
-    createDefaultSkillSettings().map(skill => [skill.key, normalizeImageSettingPath(skill.img, "icons/svg/d20-grey.svg")])
+    createDefaultSkillSettings().map(skill => [skill.key, normalizeImageSettingPath(skill.img, "systems/fallout-maw/assets/System/Skills/skill-default.webp")])
   )),
-  emptyWeaponSlotIcon: "icons/svg/combat.svg"
+  emptyWeaponSlotIcon: "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp"
 });
 
 const SKILL_CHECK_RESULT_MODES = new Set(["standard", "criticalSuccess", "success", "failure", "criticalFailure"]);

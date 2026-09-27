@@ -1,14 +1,12 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   registerLethalDamagePreventionHandler,
   registerUnconsciousnessPreventionHandler
 } from "../combat/damage-hub.mjs";
 import {
-  canActorSpendEnergy,
-  ENERGY_RESOURCE_KEY,
-  getActorEnergy,
-  restoreActorEnergy,
-  runActorEnergyMutation
+  spendActorEnergyWithReceipt,
+  refundActorEnergyReceipt
 } from "../combat/energy-resource.mjs";
 import { getCharacteristicSettings } from "../settings/accessors.mjs";
 import {
@@ -62,8 +60,8 @@ export function getLastDropAbilityProgressEntry(abilityItem, abilityFunction) {
   const disabled = isLastDropUnconsciousnessTriggerDisabled(abilityItem, abilityFunction);
   return {
     key: getLastDropStateKey(abilityFunction),
-    label: "Потеря сознания",
-    value: disabled ? "не активирует" : "активирует"
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0476", "Потеря сознания"),
+    value: disabled ? auditLocalize("FALLOUTMAW.AuditRuntime.R0477", "не активирует") : auditLocalize("FALLOUTMAW.AuditRuntime.R0478", "активирует")
   };
 }
 
@@ -270,7 +268,8 @@ async function activateLastDropNow(entry) {
   const { actor, abilityItem, abilityFunction, settings } = entry;
   if (findLastDropEffect(actor)) return true;
   const energyCost = settings.energyCost + getAbilityOverloadEnergyCost(actor, abilityItem, abilityFunction);
-  if (!(await spendLastDropEnergy(actor, energyCost))) return false;
+  const energyTransaction = await spendActorEnergyWithReceipt(actor, energyCost);
+  if (energyTransaction.spent !== energyCost) return false;
 
   let createdEffect = null;
   try {
@@ -292,36 +291,19 @@ async function activateLastDropNow(entry) {
       await actor.deleteEmbeddedDocuments("ActiveEffect", [createdEffect.id], { animate: false });
     }
     if (energyCost > 0) {
-      await restoreActorEnergy(actor, energyCost, { falloutMawAbilityResourceRefund: true });
+      await refundActorEnergyReceipt(actor, energyTransaction.receipt);
     }
     console.error("Fallout MaW | Failed to activate Last Drop", error);
     return false;
   }
 }
 
-function spendLastDropEnergy(actor, requestedCost = 0) {
-  const cost = Math.max(0, toInteger(requestedCost));
-  return runActorEnergyMutation(actor, async () => {
-    if (!canActorSpendEnergy(actor, cost)) return false;
-    if (cost <= 0) return true;
-    const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
-    if (!resource) return false;
-    const value = Math.max(toInteger(resource.min), getActorEnergy(actor) - cost);
-    const changes = { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: value };
-    if (Object.hasOwn(resource, "spent")) {
-      changes[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - value);
-    }
-    await actor.update(changes);
-    return true;
-  });
-}
-
 function buildLastDropEffectData(entry) {
   const startTime = Math.max(0, Number(globalThis.game?.time?.worldTime) || 0);
   return {
     type: "base",
-    name: entry.abilityItem.name || "До последней капли",
-    img: entry.abilityItem.img || "icons/svg/shield.svg",
+    name: entry.abilityItem.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0147", "До последней капли"),
+    img: entry.abilityItem.img || "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     origin: entry.abilityItem.uuid || entry.actor.uuid,
     transfer: false,
     disabled: false,

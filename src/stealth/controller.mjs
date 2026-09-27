@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { createStealthCheckBatch } from "./check-batch.mjs";
@@ -160,11 +161,11 @@ export function registerStealthHooks() {
 export function openStealthWindow(token) {
   const resolvedToken = token ?? globalThis.canvas?.tokens?.controlled?.at(0) ?? null;
   if (!resolvedToken?.actor || isPhantomEntity(resolvedToken)) {
-    ui.notifications.warn("Для скрытности выберите токен с актёром.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1191", "Для скрытности выберите токен с актёром."));
     return undefined;
   }
   if (!canControlStealth(resolvedToken.actor)) {
-    ui.notifications.warn(`Нет прав на управление скрытностью актёра ${resolvedToken.actor.name}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1192", { p0: (resolvedToken.actor.name) }, "Нет прав на управление скрытностью актёра {p0}."));
     return undefined;
   }
 
@@ -184,7 +185,7 @@ export async function toggleActorStealth(actor, active = !isActorStealthed(actor
 } = {}) {
   if (!actor || isPhantomEntity(actor)) return false;
   if (!canControlStealth(actor)) {
-    ui.notifications.warn(`Нет прав на управление скрытностью актёра ${actor.name}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1192", { p0: (actor.name) }, "Нет прав на управление скрытностью актёра {p0}."));
     return false;
   }
   if (isActorStealthed(actor) === Boolean(active)) return true;
@@ -216,7 +217,7 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
     id: "fallout-maw-stealth-window",
     classes: ["fallout-maw", "fallout-maw-stealth-window"],
     position: { width: 360, height: "auto" },
-    window: { title: "Скрытность", resizable: true },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1193", "Скрытность"); }, resizable: true },
     actions: {
       toggleStealth: this.#onToggleStealth,
       startTargeting: this.#onStartTargeting
@@ -505,7 +506,7 @@ function startTargetingMode(sourceToken, app) {
   view.addEventListener("contextmenu", mode.contextMenu, { capture: true });
   document.addEventListener("keydown", mode.keyDown);
   view.classList.add("fallout-maw-stealth-targeting");
-  ui.notifications.info("Выберите цель проверки скрытности.");
+  ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R1194", "Выберите цель проверки скрытности."));
 }
 
 function stopTargetingMode({
@@ -567,11 +568,7 @@ function updateTargetPointer(pointer) {
       return;
     }
     targetMode.hoverKey = hoverKey;
-    targetMode.hoverHtml = `
-      <strong>${escapeHtml(hovered.name)}</strong>
-      <span>СЛ ${difficulty.difficulty}</span>
-      <small>${escapeHtml(difficulty.lighting.modifiers.condition)} · ${Math.round(difficulty.distance)}</small>
-    `;
+    targetMode.hoverHtml = auditFormat("FALLOUTMAW.AuditRuntime.R1195", { p0: (escapeHtml(hovered.name)), p1: (difficulty.difficulty), p2: (escapeHtml(difficulty.lighting.modifiers.condition)), p3: (Math.round(difficulty.distance)) }, "\n      <strong>{p0}</strong>\n      <span>СЛ {p1}</span>\n      <small>{p2} · {p3}</small>\n    ");
   }
   targetMode.tooltip.hidden = false;
   if (targetMode.tooltip.innerHTML !== targetMode.hoverHtml) targetMode.tooltip.innerHTML = targetMode.hoverHtml;

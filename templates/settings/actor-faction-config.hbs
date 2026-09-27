@@ -22,7 +22,7 @@
       </div>
       {{#each rows}}
       <div class="fallout-maw-settings-row {{#if isPrimary}}is-primary{{/if}}" data-faction-relation-row data-faction-name="{{name}}">
-        <strong>{{name}}</strong>
+        <strong>{{label}}</strong>
         <div class="fallout-maw-faction-belongs-field">
           <input type="checkbox" data-field="belongs" aria-label="{{localize 'FALLOUTMAW.Factions.Belongs'}}" {{#if belongs}}checked{{/if}}>
           <span>{{localize "FALLOUTMAW.Factions.Belongs"}}</span>

@@ -1,3 +1,6 @@
+import { BATCH_EXPECTED_IDS_OPTION } from "../utils/document-batch-integrity.mjs";
+import { prepareActorContainerPassengerRebindings } from "../utils/actor-container-passengers.mjs";
+
 /**
  * Atomically transfer Token documents between Scenes using Foundry V14's batch
  * document API. Destination IDs are allocated before the request so delete
@@ -52,15 +55,24 @@ export async function transferTokensBetweenScenes({
     documentName: "Token",
     parent: targetScene,
     data: plans.map(plan => plan.createData),
+    [BATCH_EXPECTED_IDS_OPTION]: plans.map(plan => plan.destinationId),
     keepId: true
   })) - 1;
 
-  const normalizedActorUpdates = normalizeActorUpdates(actorUpdates);
+  const passengerUpdates = [];
+  for (const plan of plans) {
+    if (!plan.sourceToken.actor || plan.sourceToken.actorLink) continue;
+    passengerUpdates.push(...await prepareActorContainerPassengerRebindings(plan.sourceToken.actor,
+      plan.createData.actorLink ? `Actor.${plan.createData.actorId}` : `${plan.destinationUuid}.Actor.${plan.createData.actorId}`));
+  }
+  const normalizedActorUpdates = normalizeActorUpdates([...actorUpdates, ...passengerUpdates]);
   if (normalizedActorUpdates.length) {
     operations.push(withOperationOptions(sharedOptions, {
       action: "update",
       documentName: "Actor",
-      updates: normalizedActorUpdates
+      updates: normalizedActorUpdates,
+      diff: false,
+      [BATCH_EXPECTED_IDS_OPTION]: normalizedActorUpdates.map(update => update._id)
     }));
   }
 
@@ -69,6 +81,7 @@ export async function transferTokensBetweenScenes({
     documentName: "Token",
     parent: originScene,
     ids: plans.map(plan => plan.sourceToken.id),
+    [BATCH_EXPECTED_IDS_OPTION]: plans.map(plan => plan.sourceToken.id),
     replacements: Object.fromEntries(plans.map(plan => [plan.sourceToken.id, plan.destinationUuid]))
   }));
 

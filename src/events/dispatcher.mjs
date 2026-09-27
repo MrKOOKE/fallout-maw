@@ -237,7 +237,7 @@ export function createSystemEventDispatcher({
         reject(createDispatcherError("authorityTimeout", `System-event authority request '${action}' timed out.`));
       }, resolvedLimits.requestTimeoutMs);
       unrefTimer(timeoutId);
-      pendingSocketRequests.set(requestId, { resolve, reject, timeoutId });
+      pendingSocketRequests.set(requestId, { resolve, reject, timeoutId, authorityUserId: activeGMId });
       try {
         resolvedRuntime.emitSocket(SYSTEM_EVENT_SOCKET, request);
       } catch (error) {
@@ -252,8 +252,8 @@ export function createSystemEventDispatcher({
     if (socketRegistered) return true;
     if (!resolvedRuntime.onSocket) return false;
     try {
-      resolvedRuntime.onSocket(SYSTEM_EVENT_SOCKET, message => {
-        void handleSocketMessage(message);
+      resolvedRuntime.onSocket(SYSTEM_EVENT_SOCKET, (message, senderUserId) => {
+        void handleSocketMessage(message, senderUserId);
       });
       socketRegistered = true;
       return true;
@@ -263,13 +263,16 @@ export function createSystemEventDispatcher({
     }
   }
 
-  async function handleSocketMessage(message = {}) {
+  async function handleSocketMessage(message = {}, senderUserId = "") {
     if (message?.scope !== SYSTEM_EVENT_SOCKET_SCOPE) return;
+    const authenticatedSender = String(senderUserId ?? "").trim();
+    if (!authenticatedSender) return;
     const currentUserId = resolvedRuntime.getCurrentUserId();
     if (message.action === "response") {
       if (message.targetUserId !== currentUserId) return;
       const pending = pendingSocketRequests.get(String(message.requestId ?? ""));
       if (!pending) return;
+      if (authenticatedSender !== pending.authorityUserId) return;
       pendingSocketRequests.delete(message.requestId);
       resolvedRuntime.clearTimeout(pending.timeoutId);
       if (message.ok) pending.resolve(message.result);
@@ -281,7 +284,8 @@ export function createSystemEventDispatcher({
     if (!isCurrentAuthority() || message.targetUserId !== currentUserId) return;
     const requestId = String(message.requestId ?? "").trim();
     if (!requestId) return;
-    const requesterUserId = String(message.requesterUserId ?? "").trim();
+    if (message.requesterUserId && message.requesterUserId !== authenticatedSender) return;
+    const requesterUserId = authenticatedSender;
     const operation = String(message.operation ?? "").trim();
     const cacheKey = `${requesterUserId}:${requestId}`;
     pruneTimedCache(authorityRpcCompleted, resolvedLimits.completedCacheTtlMs, resolvedLimits.completedCacheSize);

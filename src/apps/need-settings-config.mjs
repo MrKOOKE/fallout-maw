@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
@@ -87,7 +88,7 @@ export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
     this.needs.push({
       key: this.#getUniqueKey("newNeed"),
       abbr: this.#getUniqueAbbr("new"),
-      label: "Новая потребность",
+      label: auditLocalize("FALLOUTMAW.AuditApps.NewNeed", "Новая потребность"),
       formula: "0",
       color: "#8f8456",
       settings: { accumulation: { perHour: 10 }, thresholds: [], diseases: [] }
@@ -242,7 +243,7 @@ export class NeedAdvancedSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Доп. настройки потребности: ${this.need.label || this.need.key}`;
+    return auditFormat("FALLOUTMAW.AuditApps.AdvancedNeedSettings", { v0: (this.need.label || this.need.key) }, "Доп. настройки потребности: {v0}");
   }
 
   async _prepareContext(options) {
@@ -301,9 +302,9 @@ export class NeedAdvancedSettingsConfig extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     this.need.settings.diseases.push({
       id: foundry.utils.randomID(),
-      name: "Новая болезнь",
+      name: auditLocalize("FALLOUTMAW.AuditApps.NewDisease", "Новая болезнь"),
       img: "",
-      stages: [{ id: foundry.utils.randomID(), level: 1, name: "1 стадия", img: "", healingDifficulty: 60, healingToolClass: "D", healingProgress: 100, healingSkillKey: "doctor", effects: [] }]
+      stages: [{ id: foundry.utils.randomID(), level: 1, name: auditLocalize("FALLOUTMAW.AuditApps.Stage1", "1 стадия"), img: "", healingDifficulty: 60, healingToolClass: "D", healingProgress: 100, healingSkillKey: "doctor", effects: [] }]
     });
     return this.forceRender();
   }
@@ -393,7 +394,7 @@ function normalizeNeedAdvancedSettings(settings = {}) {
     })).sort((left, right) => left.percent - right.percent),
     diseases: normalizeIndexedCollection(settings.diseases).map((entry, index) => ({
       id: String(entry?.id ?? `disease-${index + 1}`),
-      name: String(entry?.name ?? "").trim() || `Болезнь ${index + 1}`,
+      name: String(entry?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditApps.Disease", { v0: (index + 1) }, "Болезнь {v0}"),
       img: String(entry?.img ?? "").trim(),
       stages: normalizeIndexedCollection(entry?.stages).map((stage, stageIndex) => ({
         id: String(stage?.id ?? `stage-${stageIndex + 1}`),
@@ -503,14 +504,14 @@ function buildEffectKeyTokens() {
       key: entry.key,
       label: entry.label,
       path: `system.characteristics.${entry.key}`,
-      group: "Характеристики"
+      group: auditLocalize("FALLOUTMAW.Common.Characteristics", "Характеристики")
     })),
     ...getSkillSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
       label: entry.label,
       path: `system.skills.${entry.key}.bonus`,
-      group: "Навыки"
+      group: auditLocalize("FALLOUTMAW.Common.Skills", "Навыки")
     })),
     ...buildSkillBonusPercentEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
@@ -519,21 +520,21 @@ function buildEffectKeyTokens() {
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
-    ...buildResourceBonusEffectKeyTokens("Ресурсы"),
+    ...buildResourceBonusEffectKeyTokens(auditLocalize("FALLOUTMAW.Common.Resources", "Ресурсы")),
     ...getNeedSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
       label: entry.label,
       path: `system.needs.${entry.key}.bonus`,
-      group: "Потребности"
+      group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности")
     })),
-    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: auditLocalize("FALLOUTMAW.Item.FirstAidNeeds", "Потребности") }),
     ...getProficiencySettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
       label: entry.label,
       path: `system.proficiencies.${entry.key}.bonus`,
-      group: "Владения"
+      group: auditLocalize("FALLOUTMAW.Common.Proficiencies", "Владения")
     })),
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildDamageBarrierEffectKeyTokens(),

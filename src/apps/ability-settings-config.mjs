@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getAbilityCatalog, getSkillSettings, setAbilityCatalog } from "../settings/accessors.mjs";
 import { ABILITY_CATALOG_DRAG_TYPE, LOCKED_FEATURES_CATEGORY_ID, normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
@@ -55,7 +56,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Способности/Особенности";
+    return auditLocalize("FALLOUTMAW.AuditApps.AbilitiesTraits", "Способности/Особенности");
   }
 
   async _prepareContext(options) {
@@ -66,8 +67,8 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
           ...category,
           isFeatures: category.id === LOCKED_FEATURES_CATEGORY_ID,
           deletable: !category.locked,
-          createLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "Создать особенность" : "Создать способность",
-          emptyLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "В каталоге нет особенностей." : "В каталоге нет способностей.",
+          createLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? auditLocalize("FALLOUTMAW.AuditApps.CreateTrait", "Создать особенность") : auditLocalize("FALLOUTMAW.AuditApps.CreateAbility", "Создать способность"),
+          emptyLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoTraitsInTheCatalog", "В каталоге нет особенностей.") : auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoAbilitiesInTheCatalog", "В каталоге нет способностей."),
           collapse: buildCategoryCollapseState(this.#expandedCategoryIds.has(String(category.id ?? ""))),
           abilities: [...(category.abilities ?? [])]
             .sort(compareAbilityNames)
@@ -78,11 +79,11 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
             visible: ability.visible !== false,
             visibilityIconClass: ability.visible === false ? "fa-eye-slash" : "fa-eye",
             copyTitle: category.id === LOCKED_FEATURES_CATEGORY_ID
-              ? "Создать копию особенности"
-              : "Создать копию способности",
+              ? auditLocalize("FALLOUTMAW.AuditApps.CreateACopyOfThisTrait", "Создать копию особенности")
+              : auditLocalize("FALLOUTMAW.AuditApps.CreateACopyOfThisAbility", "Создать копию способности"),
             visibilityTitle: ability.visible === false
-              ? "Показать в повышении уровня"
-              : "Скрыть из повышения уровня"
+              ? auditLocalize("FALLOUTMAW.AuditApps.ShowDuringLevelAdvancement", "Показать в повышении уровня")
+              : auditLocalize("FALLOUTMAW.AuditApps.HideFromLevelAdvancement", "Скрыть из повышения уровня")
           }))
         }))
       }
@@ -147,7 +148,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, _formData) {
     this.catalog = await setAbilityCatalog(this.readCatalogFromForm());
-    ui.notifications.info("Настройки способностей сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.AbilitySettingsSaved", "Настройки способностей сохранены."));
     return this.forceRender();
   }
 
@@ -196,7 +197,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
       const existingCategory = this.catalog.categories.find(entry => entry.id === categoryId);
       return {
         id: categoryId,
-        name: categoryRow.querySelector("[data-field='categoryName']")?.value?.trim() || existingCategory?.name || `Категория ${categoryIndex + 1}`,
+        name: categoryRow.querySelector("[data-field='categoryName']")?.value?.trim() || existingCategory?.name || auditFormat("FALLOUTMAW.AuditApps.Category", { v0: (categoryIndex + 1) }, "Категория {v0}"),
         locked: Boolean(existingCategory?.locked),
         abilities: Array.from(categoryRow.querySelectorAll("[data-ability-row]") ?? []).map((abilityRow, abilityIndex) => {
           const abilityId = abilityRow.dataset.abilityId || foundry.utils.randomID();
@@ -226,7 +227,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     this.catalog = this.readCatalogFromForm();
     this.catalog.categories.push({
       id: foundry.utils.randomID(),
-      name: "Новая категория",
+      name: auditLocalize("FALLOUTMAW.AuditApps.NewCategory", "Новая категория"),
       locked: false,
       abilities: []
     });
@@ -262,8 +263,8 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     const isFeatures = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const ability = normalizeAbilityEntry({
       id: foundry.utils.randomID(),
-      name: isFeatures ? "Новая особенность" : "Новая способность",
-      img: isFeatures ? "icons/svg/upgrade.svg" : "icons/svg/aura.svg",
+      name: isFeatures ? auditLocalize("FALLOUTMAW.AuditApps.NewTrait", "Новая особенность") : auditLocalize("FALLOUTMAW.AuditApps.NewAbility", "Новая способность"),
+      img: isFeatures ? "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp" : "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
       system: {
         category: category.name,
         cost: 0,
@@ -359,15 +360,15 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     if (!ability) return undefined;
 
     const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
-    const kind = isFeature ? "особенность" : "способность";
+    const kind = isFeature ? auditLocalize("FALLOUTMAW.AuditApps.Trait_209", "особенность") : auditLocalize("FALLOUTMAW.AuditApps.Ability", "способность");
     const confirmed = await DialogV2.confirm({
       window: {
-        title: isFeature ? "Удаление особенности" : "Удаление способности",
+        title: isFeature ? auditLocalize("FALLOUTMAW.AuditApps.DeleteTrait", "Удаление особенности") : auditLocalize("FALLOUTMAW.AuditApps.DeleteAbility", "Удаление способности"),
         icon: "fa-solid fa-trash"
       },
-      content: `<p>Удалить ${kind} «${escapeHTML(ability.name)}»?</p>`,
-      yes: { label: "Удалить" },
-      no: { label: "Отмена" },
+      content: auditFormat("FALLOUTMAW.AuditApps.Delete", { v0: (kind), v1: (escapeHTML(ability.name)) }, "<p>Удалить {v0} «{v1}»?</p>"),
+      yes: { label: auditLocalize("FALLOUTMAW.Settings.Presets.Actions.Delete", "Удалить") },
+      no: { label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена") },
       rejectClose: false,
       modal: true
     });
@@ -394,26 +395,21 @@ async function requestAbilityTargetCategory(catalog, sourceCategoryId = "") {
     .map(category => `<option value="${escapeAttribute(category.id)}">${escapeHTML(category.name)}</option>`)
     .join("");
   if (!options) {
-    ui.notifications.warn("Нет другого каталога для переноса.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoOtherCatalogToMoveThis", "Нет другого каталога для переноса."));
     return "";
   }
 
   const result = await DialogV2.input({
-    window: { title: "Переместить способность" },
-    content: `
-      <label class="fallout-maw-stacked-field">
-        <span>Новый каталог</span>
-        <select name="categoryId">${options}</select>
-      </label>
-    `,
+    window: { title: auditLocalize("FALLOUTMAW.AuditApps.MoveAbility", "Переместить способность") },
+    content: auditFormat("FALLOUTMAW.AuditApps.NewCatalog", { v0: (options) }, "\n      <label class=\"fallout-maw-stacked-field\">\n        <span>Новый каталог</span>\n        <select name=\"categoryId\">{v0}</select>\n      </label>\n    "),
     ok: {
-      label: "Переместить",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Move", "Переместить"),
       icon: "fa-solid fa-arrow-right-arrow-left",
       callback: (_event, button) => new FormDataExtended(button.form).object
     },
     buttons: [{
       action: "cancel",
-      label: "Отмена"
+      label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена")
     }],
     rejectClose: false,
     position: { width: 420 }
@@ -429,7 +425,7 @@ function getRowIndex(form, target, selector) {
 }
 
 function compareAbilityNames(left, right) {
-  return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "ru", {
+  return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), globalThis.game?.i18n?.lang, {
     sensitivity: "base",
     numeric: true
   });

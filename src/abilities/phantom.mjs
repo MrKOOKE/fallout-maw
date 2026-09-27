@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerDamageAppliedHandler } from "../combat/damage-hub.mjs";
 import { registerWeaponAttackTerminalHandler } from "../combat/weapon-attack-controller.mjs";
@@ -135,8 +136,8 @@ export async function createPhantomForActor({
     }, { [PHANTOM_CLEANUP_OPTION]: true });
     await phantomActor.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
-      name: "Фантом: время существования",
-      img: abilityItem?.img || sourceActor.img || "icons/svg/mystery-man.svg",
+      name: auditLocalize("FALLOUTMAW.AuditRuntime.R0497", "Фантом: время существования"),
+      img: abilityItem?.img || sourceActor.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
       origin: abilityItem?.uuid ?? "",
       transfer: false,
       disabled: false,
@@ -175,9 +176,9 @@ export function buildPhantomActorData(sourceActor, phantomData = {}) {
   const factionBelongs = cloneData(sourceActor?.getFlag?.(SYSTEM_ID, "factionBelongs") ?? []);
   const factionRelations = cloneData(sourceActor?.getFlag?.(SYSTEM_ID, "factionRelations") ?? {});
   return {
-    name: `${sourceActor?.name ?? "Актёр"} — Фантом`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0498", { p0: (sourceActor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")) }, "{p0} — Фантом"),
     type: String(sourceActor?.type ?? "character"),
-    img: sourceActor?.img || "icons/svg/mystery-man.svg",
+    img: sourceActor?.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     items: [],
     effects: [],
     ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE },
@@ -205,7 +206,7 @@ export function buildPhantomTokenData(sourceToken, phantomActor, phantomData = {
       ?? []
   );
   return {
-    name: String(sourceToken?.name ?? sourceToken?.actor?.name ?? "Фантом"),
+    name: String(sourceToken?.name ?? sourceToken?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0145", "Фантом")),
     actorId: phantomActor.id,
     actorLink: false,
     x: Number(sourceToken?.x) || 0,

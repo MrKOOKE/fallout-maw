@@ -1,5 +1,5 @@
 import { requestDamageApplication, requestDamageApplications, requestFirstAidEffect, requestNeedChanges } from "../combat/damage-hub.mjs";
-import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
+import { recoverInventoryConsumption, runInventoryConsumption } from "../inventory/consumption-receipt.mjs";
 import { addOrganismDevelopment } from "../races/organism-development.mjs";
 import { getNeedChangeChargesData, getNeedChangeFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
@@ -12,6 +12,10 @@ export async function useNeedChangeItem({
   chainRef = null,
   options = {}
 } = {}) {
+  if (item) {
+    const recovery = await recoverInventoryConsumption(item);
+    if (recovery.handled) return recovery.result;
+  }
   if (!targetActor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.needChange)) return false;
 
   const inheritedChainRef = chainRef
@@ -43,53 +47,65 @@ export async function useNeedChangeItem({
   const hasTimedEffect = durationSeconds > 0 && changes.length;
   if (!needs.length && !damages.length && !organismDevelopment.length && healthRecovery <= 0 && !hasTimedEffect) return false;
 
-  if (needs.length) {
-    const results = await requestNeedChanges({
-      actor: targetActor,
-      needs,
-      context: {
-        kind: "needChangeItem",
-        itemUuid: item.uuid
-      }
-    });
-    if (!results.length) return false;
-  }
+  return runInventoryConsumption({ item, kind: "needChange", amount: 1, targetActor,
+    documentOptions: createNeedChangeDocumentOptions(inheritedChainRef)
+  }, async ({ markEffectsStarted }) => {
+    if (needs.length) {
+      markEffectsStarted();
+      const results = await requestNeedChanges({
+        actor: targetActor,
+        needs,
+        source: eventSource,
+        context: {
+          kind: "needChangeItem",
+          itemUuid: item.uuid
+        }
+      });
+      if (!results.length) return false;
+    }
 
-  if (damages.length) {
-    await applyNeedChangeDamages(targetActor, damages, eventSource);
-  }
+    if (damages.length) {
+      markEffectsStarted();
+      const results = await applyNeedChangeDamages(targetActor, damages, eventSource);
+      if (!results?.length || results.some(result => !result || result.cancelled || result.failed || result.status === "cancelled" || result.status === "error")) return false;
+    }
 
-  if (organismDevelopment.length) {
-    const values = Object.fromEntries(organismDevelopment.map(entry => [entry.characteristicKey, entry.value]));
-    await addOrganismDevelopment(targetActor, values);
-  }
+    if (organismDevelopment.length) {
+      markEffectsStarted();
+      const values = Object.fromEntries(organismDevelopment.map(entry => [entry.characteristicKey, entry.value]));
+      await addOrganismDevelopment(targetActor, values);
+    }
 
-  if (healthRecovery > 0) {
-    await requestDamageApplication({
-      actor: targetActor,
-      amount: healthRecovery,
-      mode: "healing",
-      scope: "health",
-      applyMitigation: false,
-      processDamageTypeSettings: false,
-      source: eventSource
-    });
-  }
+    if (healthRecovery > 0) {
+      markEffectsStarted();
+      const result = await requestDamageApplication({
+        actor: targetActor,
+        amount: healthRecovery,
+        mode: "healing",
+        scope: "health",
+        applyMitigation: false,
+        processDamageTypeSettings: false,
+        source: eventSource
+      });
+      if (!result || result.cancelled || result.failed || result.status === "cancelled" || result.status === "error") return false;
+    }
 
-  if (hasTimedEffect) {
-    await requestFirstAidEffect({
-      actor: targetActor,
-      itemName: item.name,
-      itemImg: item.img,
-      durationSeconds,
-      intervalSeconds,
-      changes,
-      source: eventSource
-    });
-  }
+    if (hasTimedEffect) {
+      markEffectsStarted();
+      const effects = await requestFirstAidEffect({
+        actor: targetActor,
+        itemName: item.name,
+        itemImg: item.img,
+        durationSeconds,
+        intervalSeconds,
+        changes,
+        source: eventSource
+      });
+      if (!effects?.length) return false;
+    }
 
-  await spendNeedChangeItem(item, 1, createNeedChangeDocumentOptions(inheritedChainRef));
-  return true;
+    return true;
+  });
 }
 
 function normalizeNeedChangeNeeds(needs = []) {
@@ -136,17 +152,6 @@ async function applyNeedChangeDamages(actor, damages = [], source = {}) {
   }));
   if (!requests.length) return [];
   return requestDamageApplications(requests);
-}
-
-async function spendNeedChangeItem(item, amount = 1, updateOptions = {}) {
-  return commitInventoryItemConsumption({
-    item,
-    amount,
-    charges: getNeedChangeChargesData(item),
-    chargePath: "system.functions.needChange.charges.value",
-    documentOptions: updateOptions,
-    reason: "need-change-consume"
-  });
 }
 
 function createNeedChangeDocumentOptions(chainRef = null) {

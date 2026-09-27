@@ -1,3 +1,5 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { getReleaseCombatBonus, getWatcherAttackBonus } from "../abilities/release-abilities.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevelId } from "../canvas/creation-levels.mjs";
 import { finalizeAttackActionPointCost } from "../utils/action-point-cost-limits.mjs";
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -12,7 +14,7 @@ import {
   playWeaponExplosionAnimation
 } from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, isLimbUsable, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation, serializeDamageCycleSocketResults } from "./damage-hub.mjs";
-import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
+import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier, getActorDodgeTotal } from "./dodge-resource.mjs";
 import {
   createPelletImpactProjectiles,
   distributePelletImpactDamage,
@@ -210,6 +212,7 @@ import {
 import { isCombatResourceCostActive } from "./resource-cost-policy.mjs";
 import { getAdjustedWeaponRequirement } from "../items/requirement-modifiers.mjs";
 import { getActorResourceLimitAmount } from "./resource-limits.mjs";
+import { getOneTimeResourceValue } from "./one-time-resources.mjs";
 import {
   getAbilityAttackActionKey,
   getAbilityAttackFunction,
@@ -291,9 +294,9 @@ const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const UNAIMED_ATTACK_MODE = "unaimed";
 const UNAIMED_ATTACK_DISADVANTAGE_COUNT = 3;
 const MELEE_DIRECTIONS = Object.freeze([
-  { key: "thrust", label: "Укол", mode: "thrust" },
-  { key: "rightToLeft", label: "Справа налево", mode: "swing" },
-  { key: "leftToRight", label: "Слева направо", mode: "swing" }
+  { key: "thrust", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0789", "Укол"); }, mode: "thrust" },
+  { key: "rightToLeft", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0790", "Справа налево"); }, mode: "swing" },
+  { key: "leftToRight", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0791", "Слева направо"); }, mode: "swing" }
 ]);
 const SWING_ARC_EPSILON = 0.0001;
 const GEOMETRY_EPSILON = 0.0001;
@@ -599,7 +602,7 @@ class WeaponActionModifierState {
     if (energyCost > 0 && !canActorSpendEnergy(actor, energyCost)) {
       if (!resolvedContext.silent) {
         ui.notifications.warn(
-          `Недостаточно энергии для модификаторов атаки (${getActorAvailableEnergy(actor)} / ${energyCost}).`
+          auditFormat("FALLOUTMAW.AuditRuntime.R0792", { p0: (getActorAvailableEnergy(actor)), p1: (energyCost) }, "Недостаточно энергии для модификаторов атаки ({p0} / {p1}).")
         );
       }
       return false;
@@ -924,6 +927,7 @@ export function startWeaponAttack({
   attackModifier = null,
   originOverride = null,
   onBeforeExecute = null,
+  actionPointCostTransaction = null,
   onProcessingStarted = null,
   onDestroy = null,
   chainRef = null,
@@ -944,7 +948,7 @@ export function startWeaponAttack({
     && game.user?.hasPermission?.("QUERY_USER") === false
   ) {
     ui.notifications.warn(
-      "В правах роли отключён «Запрос к пользователям»: атака будет обработана старым локальным путём."
+      auditLocalize("FALLOUTMAW.AuditRuntime.R0793", "В правах роли отключён «Запрос к пользователям»: атака будет обработана старым локальным путём.")
     );
   }
   if (isActorUnableToAct(token.actor)) return undefined;
@@ -956,6 +960,7 @@ export function startWeaponAttack({
   const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
     originOverride,
     onBeforeExecute,
+    actionPointCostTransaction,
     onProcessingStarted,
     onDestroy,
     chainRef,
@@ -1019,6 +1024,8 @@ export const WEAPON_CONDITION_WEAR_TESTING = Object.freeze({
 });
 
 export const WEAPON_ATTACK_LIFECYCLE_TESTING = Object.freeze({
+  processCommandedSelections: processCommandedWeaponAttackSelections,
+  processDelayedExplosions: processDelayedVolleyExplosions,
   collectModifierState: collectWeaponActionModifierState,
   collectResourceSpendTotals: collectWeaponResourceSpendTotals,
   createModifierState: context => new WeaponActionModifierState(context),
@@ -1195,7 +1202,7 @@ export async function startAbilityAttackActionAndWait({
     return false;
   };
 
-  const label = String(settings.name ?? "").trim() || String(item.name ?? "Атакующее действие");
+  const label = String(settings.name ?? "").trim() || String(item.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"));
   if (settings.targeting.mode === "selectedTargets") {
     return executeAbilityAttackTargetSequence({
       token: sourceToken,
@@ -1238,7 +1245,7 @@ async function executeAbilityAttackTargetSequence({
   abilityFunction = null,
   settings = {},
   actionKey = "",
-  label = "Атакующее действие",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"),
   chainRef = null,
   abilityTrialSession = null,
   payCosts = null,
@@ -1280,19 +1287,19 @@ async function executeAbilityAttackTargetSequence({
     selectionOperationId
   });
   const selectionRangeHint = aimedTargeting
-    ? `внутри эффективной дистанции и в пределах ${formatAbilityAttackRange(maxRangeMeters)}`
-    : `в пределах ${formatAbilityAttackRange(maxRangeMeters)}`;
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0795", { p0: (formatAbilityAttackRange(maxRangeMeters)) }, "внутри эффективной дистанции и в пределах {p0}")
+    : auditFormat("FALLOUTMAW.AuditRuntime.R0796", { p0: (formatAbilityAttackRange(maxRangeMeters)) }, "в пределах {p0}");
   const selectedRows = await requestCustomTokenSelection({
     rows: collectTargetRows(),
     limit,
     allowRepeated: allowRepeatedTargets,
     title: label,
-    noneWarning: `${label}: нет доступных целей ${selectionRangeHint}.`,
-    instructions: `${label}: выберите до ${limit} целей ${selectionRangeHint}. Enter подтверждает неполный выбор, ПКМ снимает последнюю цель, Esc отменяет.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0797", { p0: (label), p1: (selectionRangeHint) }, "{p0}: нет доступных целей {p1}."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0798", { p0: (label), p1: (limit), p2: (selectionRangeHint) }, "{p0}: выберите до {p1} целей {p2}. Enter подтверждает неполный выбор, ПКМ снимает последнюю цель, Esc отменяет."),
     sourceToken: token,
     refreshRows: collectTargetRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? ""),
-    getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? "Цель")
+    getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель"))
   });
   if (!selectedRows.length) {
     onInteractionCancelled?.();
@@ -1337,7 +1344,7 @@ async function executeAbilityAttackTargetSequence({
   });
   if (invalidSelection) {
     const row = refreshedRows.get(String(invalidSelection.targetUuid ?? ""));
-    const targetName = invalidSelection.token?.name ?? invalidSelection.token?.actor?.name ?? "Цель";
+    const targetName = invalidSelection.token?.name ?? invalidSelection.token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель");
     ui.notifications.warn(`${label}: ${targetName} — ${row?.reason || game.i18n.localize("FALLOUTMAW.Messages.AimedTargetChanged")}`);
     onInteractionCancelled?.();
     return false;
@@ -1446,10 +1453,10 @@ function collectAbilityAttackTargetSelectionRows({
       reason: selectable
         ? ""
         : (!inRange
-          ? `вне дистанции ${formatAbilityAttackRange(maxRangeMeters)}`
+          ? auditFormat("FALLOUTMAW.AuditRuntime.R0799", { p0: (formatAbilityAttackRange(maxRangeMeters)) }, "вне дистанции {p0}")
           : (!insideAimedRange
             ? formatAimedRangeBlockReason(aimedRangeState)
-            : "цель недоступна для атаки"))
+            : auditLocalize("FALLOUTMAW.AuditRuntime.R0800", "цель недоступна для атаки")))
     };
   });
 }
@@ -1460,7 +1467,7 @@ function getAbilityAttackTargetRowId(row = null) {
 }
 
 async function requestAbilityAttackSelectedLimb(targetToken = null, {
-  label = "Атакующее действие",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие"),
   index = 0,
   count = 1
 } = {}) {
@@ -1471,21 +1478,14 @@ async function requestAbilityAttackSelectedLimb(targetToken = null, {
       label: String(limb.label ?? key)
     }));
   if (!limbs.length) {
-    ui.notifications.warn(`${label}: у цели ${targetToken?.name ?? targetToken?.actor?.name ?? ""} нет доступных частей тела.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0801", { p0: (label), p1: (targetToken?.name ?? targetToken?.actor?.name ?? "") }, "{p0}: у цели {p1} нет доступных частей тела."));
     return "";
   }
   const result = await DialogV2.input({
-    window: { title: `${label}: цель ${index + 1} / ${count}` },
-    content: `
-      <label class="form-group">
-        <span>Часть тела цели ${escapeAttackDialogText(targetToken?.name ?? targetToken?.actor?.name ?? "")}</span>
-        <select name="limbKey">
-          ${limbs.map(limb => `<option value="${escapeAttackDialogText(limb.key)}">${escapeAttackDialogText(limb.label)}</option>`).join("")}
-        </select>
-      </label>
-    `,
+    window: { title: auditFormat("FALLOUTMAW.AuditRuntime.R0802", { p0: (label), p1: (index + 1), p2: (count) }, "{p0}: цель {p1} / {p2}") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R0803", { p0: (escapeAttackDialogText(targetToken?.name ?? targetToken?.actor?.name ?? "")), p1: (limbs.map(limb => `<option value="${escapeAttackDialogText(limb.key)}">${escapeAttackDialogText(limb.label)}</option>`).join("")) }, "\n      <label class=\"form-group\">\n        <span>Часть тела цели {p0}</span>\n        <select name=\"limbKey\">\n          {p1}\n        </select>\n      </label>\n    "),
     ok: {
-      label: "Выбрать",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0204", "Выбрать"),
       icon: "fa-solid fa-crosshairs",
       callback: (_event, button) => String(button.form?.elements?.limbKey?.value ?? "")
     },
@@ -1503,7 +1503,7 @@ async function requestAbilityAttackSelectedLimb(targetToken = null, {
 
 function formatAbilityAttackRange(value = 0) {
   const number = Math.max(0, Number(value) || 0);
-  return `${Number.isInteger(number) ? number : number.toFixed(2)} м`;
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0804", { p0: (Number.isInteger(number) ? number : number.toFixed(2)) }, "{p0} м");
 }
 
 function formatAimedRangeBlockReason(state = {}) {
@@ -1531,17 +1531,17 @@ function formatAimedRangeMeters(value = 0) {
   return Number.isInteger(number) ? String(number) : number.toFixed(2);
 }
 
-async function requestAbilityAttackDirectionModifier(settings = {}, label = "Атакующее действие") {
+async function requestAbilityAttackDirectionModifier(settings = {}, label = auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие")) {
   const directions = [
-    { key: "thrust", label: "Колющий", data: settings.targeting?.directions?.thrust },
-    { key: "swing", label: "Рубящий", data: settings.targeting?.directions?.swing }
+    { key: "thrust", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0805", "Колющий"), data: settings.targeting?.directions?.thrust },
+    { key: "swing", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0806", "Рубящий"), data: settings.targeting?.directions?.swing }
   ].filter(entry => entry.data?.enabled);
   if (!directions.length) return null;
   let selected = directions[0];
   if (directions.length > 1) {
     const choice = await DialogV2.wait({
       window: { title: label },
-      content: "<p>Выберите вариант атаки.</p>",
+      content: auditLocalize("FALLOUTMAW.AuditRuntime.R0807", "<p>Выберите вариант атаки.</p>"),
       buttons: directions.map((entry, index) => ({
         action: entry.key,
         label: entry.label,
@@ -1631,7 +1631,7 @@ function escapeAttackDialogText(value = "") {
 export function startDualWeaponAttack({
   token = null,
   attacks = [],
-  label = "С двух рук",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0121", "С двух рук"),
   canSpendEnergy = null,
   spendEnergy = null
 } = {}) {
@@ -1671,7 +1671,7 @@ export function startDualWeaponAttack({
         })
       }));
       const actionPointCost = Math.max(0, ...actionCosts.map(entry => entry.value));
-      if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
+      if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0808", "действия") })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
       const actionPointCostApplied = isCombatActionPointSpendingActive(actor);
       const sharedActionEntries = actionCosts.filter(entry => entry.value === actionPointCost);
@@ -1786,7 +1786,7 @@ export function startDualWeaponAttack({
       activeDualWeaponAttack = new DualWeaponAttackPreview(token, entries);
     }
     activeAttack = controller;
-    ui.notifications.info(`${label}: выберите траекторию ${index + 1} / ${entries.length}.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0809", { p0: (label), p1: (index + 1), p2: (entries.length) }, "{p0}: выберите траекторию {p1} / {p2}."));
     controller.activate();
     return controller;
   };
@@ -1796,7 +1796,7 @@ export function startDualWeaponAttack({
 
 export function startCommandedWeaponAttacks({
   attacks = [],
-  label = "Команда",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда"),
   onCancel = null,
   onBeforeExecute = null,
   onComplete = null,
@@ -1843,7 +1843,7 @@ export function startCommandedWeaponAttacks({
 
 export async function startCommandedWeaponAttacksAndWait({
   attacks = [],
-  label = "Команда",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда"),
   onCancel = null,
   onBeforeExecute = null,
   chainRef = null,
@@ -1858,7 +1858,7 @@ export async function startCommandedWeaponAttacksAndWait({
   }
   const sceneAuthority = await getCommandedAttackSceneGM({ entries, authorityContext });
   if (!sceneAuthority) {
-    ui.notifications.warn(`${label}: нет активного GM на сцене и уровне исполнителей.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0810", { p0: (label) }, "{p0}: нет активного GM на сцене и уровне исполнителей."));
     return createCommandedAttackResult({ reason: getCommandedAttackAuthorityFailureReason() });
   }
 
@@ -1888,7 +1888,7 @@ function canUseCommandedMultiRayCapture(entry = {}) {
 }
 
 function startCommandedMultiRayAttacksAndWait(entries = [], {
-  label = "Команда",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда"),
   onCancel = null,
   onBeforeExecute = null,
   chainRef = null,
@@ -1917,7 +1917,7 @@ function startCommandedMultiRayAttacksAndWait(entries = [], {
           authorityContext
         });
         if (!preflight.ok) {
-          if (preflight.reason) ui.notifications.warn(`${label}: атаки больше недоступны (${preflight.reason}).`);
+          if (preflight.reason) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0811", { p0: (label), p1: (preflight.reason) }, "{p0}: атаки больше недоступны ({p1})."));
           failureResult = {
             started: true,
             attemptedCount: selections.length,
@@ -1950,7 +1950,7 @@ function startCommandedMultiRayAttacksAndWait(entries = [], {
 }
 
 async function captureCommandedWeaponAttacksSequentially(entries = [], {
-  label = "Команда",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда"),
   onCancel = null,
   onBeforeExecute = null,
   chainRef = null,
@@ -1984,7 +1984,7 @@ async function captureCommandedWeaponAttacksSequentially(entries = [], {
     authorityContext
   });
   if (!preflight.ok) {
-    if (preflight.reason) ui.notifications.warn(`${label}: атаки больше недоступны (${preflight.reason}).`);
+    if (preflight.reason) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0811", { p0: (label), p1: (preflight.reason) }, "{p0}: атаки больше недоступны ({p1})."));
     return createCommandedAttackResult({
       started: true,
       attemptedCount: selections.length,
@@ -2037,7 +2037,7 @@ function validateCommandedWeaponAttackEntries(entries = []) {
 }
 
 function captureCommandedWeaponAttackSelection(entry = {}, {
-  label = "Команда",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда"),
   index = 0,
   count = 1,
   attackModifier = null,
@@ -2085,7 +2085,7 @@ function captureCommandedWeaponAttackSelection(entry = {}, {
     }
     activeAttack = controller;
     controller.activate();
-    ui.notifications.info(`${label}: наведение ${index + 1} / ${count} — ${entry.token?.name ?? entry.token?.actor?.name ?? "исполнитель"}.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0812", { p0: (label), p1: (index + 1), p2: (count), p3: (entry.token?.name ?? entry.token?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0813", "исполнитель")) }, "{p0}: наведение {p1} / {p2} — {p3}."));
   });
 }
 
@@ -2111,7 +2111,7 @@ function createCommandedAttackResult({
 
 class CommandedWeaponAttackController {
   constructor(entries = [], {
-    label = "Команда",
+    label = auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда"),
     onCancel = null,
     onBeforeExecute = null,
     onComplete = null,
@@ -2119,7 +2119,7 @@ class CommandedWeaponAttackController {
     authorityContext = null
   } = {}) {
     this.id = foundry.utils.randomID();
-    this.label = String(label ?? "") || "Команда";
+    this.label = String(label ?? "") || auditLocalize("FALLOUTMAW.AuditRuntime.R0229", "Команда");
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
     this.entries = entries.map((entry, index) => this.createEntry(entry, index));
@@ -2215,7 +2215,7 @@ class CommandedWeaponAttackController {
     const canvasView = canvas.app?.view ?? null;
     this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     if (canvasView) canvasView.oncontextmenu = this.events.cancel;
-    ui.notifications.info(`${this.label}: ЛКМ фиксирует лучи; после последнего атака начнётся автоматически. ПКМ размораживает последний, Esc отменяет.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0814", { p0: (this.label) }, "{p0}: ЛКМ фиксирует лучи; после последнего атака начнётся автоматически. ПКМ размораживает последний, Esc отменяет."));
   }
 
   cancelFromTargetSelectionLifecycle(outcome = {}) {
@@ -2416,7 +2416,7 @@ class CommandedWeaponAttackController {
     this.drawEntry(entry, performance.now());
     this.broadcastPreviews(true);
     const remaining = this.entries.filter(entry => !entry.locked).length;
-    if (remaining > 0) ui.notifications.info(`${this.label}: осталось лучей ${remaining}.`);
+    if (remaining > 0) ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0815", { p0: (this.label), p1: (remaining) }, "{p0}: осталось лучей {p1}."));
     return true;
   }
 
@@ -2442,7 +2442,7 @@ class CommandedWeaponAttackController {
     }
     this.drawEntry(entry, performance.now());
     this.broadcastPreviews(true);
-    ui.notifications.info(`${this.label}: последний луч разморожен.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0816", { p0: (this.label) }, "{p0}: последний луч разморожен."));
     return true;
   }
 
@@ -2529,7 +2529,7 @@ class CommandedWeaponAttackController {
       const directions = getEnabledMeleeDirections(entry.weapon, entry.actionKey, entry.weaponFunctionId);
       if (!target?.actor) {
         if (entry.actionKey !== "meleeAttack" || !directions.length) {
-          ui.notifications.warn(`${entry.token?.name ?? entry.token?.actor?.name ?? this.label}: нет цели для удара.`);
+          ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0817", { p0: (entry.token?.name ?? entry.token?.actor?.name ?? this.label) }, "{p0}: нет цели для удара."));
           return null;
         }
         return {
@@ -2685,7 +2685,7 @@ class CommandedWeaponAttackController {
     this.finishTargetSelection({ cancelled: true });
     this.destroy();
     this.onCancelled?.();
-    ui.notifications.info(`${this.label}: отменено.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0818", { p0: (this.label) }, "{p0}: отменено."));
     return true;
   }
 
@@ -2727,7 +2727,7 @@ class CommandedWeaponAttackController {
       return executed;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Commanded weapon attacks failed`, error);
-      ui.notifications.error(`${this.label}: атака не выполнена.`);
+      ui.notifications.error(auditFormat("FALLOUTMAW.AuditRuntime.R0819", { p0: (this.label) }, "{p0}: атака не выполнена."));
       this.destroy();
       this.onComplete?.(createCommandedAttackResult({ started: true, reason: "executionError" }));
       return false;
@@ -3348,23 +3348,23 @@ function getAuthoritativeAttackPerceptionUuids(attackerToken = null) {
 
 function getOrdinaryAttackFailureMessage(reason = "") {
   const messages = {
-    authorityUnavailable: "Активный GM не принял запрос атаки.",
-    authorityStateUnknown: "GM принял атаку, но итоговый ответ потерян. Не повторяйте её до проверки ресурсов и цели.",
-    operationCollision: "Локальный идентификатор атаки уже занят другой операцией.",
-    authoritySocketUnavailable: "Выбранная вкладка GM больше недоступна.",
-    queryPermission: "В правах роли отключён запрос к пользователю. Повторите атаку — будет использован локальный путь.",
-    missingGM: "Нет активного GM для обработки атаки.",
-    gmSceneUnavailable: "GM должен находиться на сцене и уровне атаки.",
-    senderSceneUnavailable: "Сцена или уровень игрока изменились до подтверждения атаки.",
-    notOwner: "Нет прав на атакующего актёра.",
-    weaponResources: "Недостаточно боеприпасов или ресурса оружия.",
-    unableToAct: "Актёр больше не может действовать.",
-    reactionLocked: "Сейчас завершается другое боевое взаимодействие.",
-    blockedAction: "Действие оружия заблокировано.",
-    invalidGeometry: "Положение или траектория атаки успели измениться.",
-    invalidTarget: "Выбранная цель больше недоступна."
+    authorityUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0820", "Активный GM не принял запрос атаки."),
+    authorityStateUnknown: auditLocalize("FALLOUTMAW.AuditRuntime.R0821", "GM принял атаку, но итоговый ответ потерян. Не повторяйте её до проверки ресурсов и цели."),
+    operationCollision: auditLocalize("FALLOUTMAW.AuditRuntime.R0822", "Локальный идентификатор атаки уже занят другой операцией."),
+    authoritySocketUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0823", "Выбранная вкладка GM больше недоступна."),
+    queryPermission: auditLocalize("FALLOUTMAW.AuditRuntime.R0824", "В правах роли отключён запрос к пользователю. Повторите атаку — будет использован локальный путь."),
+    missingGM: auditLocalize("FALLOUTMAW.AuditRuntime.R0825", "Нет активного GM для обработки атаки."),
+    gmSceneUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0826", "GM должен находиться на сцене и уровне атаки."),
+    senderSceneUnavailable: auditLocalize("FALLOUTMAW.AuditRuntime.R0827", "Сцена или уровень игрока изменились до подтверждения атаки."),
+    notOwner: auditLocalize("FALLOUTMAW.AuditRuntime.R0828", "Нет прав на атакующего актёра."),
+    weaponResources: auditLocalize("FALLOUTMAW.AuditRuntime.R0829", "Недостаточно боеприпасов или ресурса оружия."),
+    unableToAct: auditLocalize("FALLOUTMAW.AuditRuntime.R0830", "Актёр больше не может действовать."),
+    reactionLocked: auditLocalize("FALLOUTMAW.AuditRuntime.R0831", "Сейчас завершается другое боевое взаимодействие."),
+    blockedAction: auditLocalize("FALLOUTMAW.AuditRuntime.R0832", "Действие оружия заблокировано."),
+    invalidGeometry: auditLocalize("FALLOUTMAW.AuditRuntime.R0833", "Положение или траектория атаки успели измениться."),
+    invalidTarget: auditLocalize("FALLOUTMAW.AuditRuntime.R0834", "Выбранная цель больше недоступна.")
   };
-  return messages[String(reason ?? "")] ?? "GM отклонил выполнение атаки.";
+  return messages[String(reason ?? "")] ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0835", "GM отклонил выполнение атаки.");
 }
 
 function serializeCommandedAttackSelection(selection = {}) {
@@ -3393,7 +3393,7 @@ async function executeCommandedWeaponAttackSelections(selections = [], {
   if (!serialized.length) return createCommandedAttackResult({ reason: "emptySelections" });
   const gm = await getCommandedAttackSceneGM({ selections: serialized, authorityContext });
   if (!gm) {
-    ui.notifications.warn("Нет активного GM на сцене и уровне командной атаки.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0836", "Нет активного GM на сцене и уровне командной атаки."));
     return createCommandedAttackResult({ reason: getCommandedAttackAuthorityFailureReason() });
   }
   return requestCommandedWeaponAttackOperation("execute", {
@@ -3543,16 +3543,15 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     actionPointCosts.set(selection.token.actor.uuid, current);
   }
   for (const { actor, amount } of actionPointCosts.values()) {
-    if (!canSpendStrictActionPoints(actor, amount, { label: "командная атака" })) return { ok: false, reason: "actionPoints" };
+    if (!canSpendStrictActionPoints(actor, amount, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0016", "командная атака") })) return { ok: false, reason: "actionPoints" };
   }
   if (validateOnly) return { ok: true, reason: "" };
 
-  const actionPointReceipts = await spendCommandedActionPointCosts(actionPointCosts, chainRef);
-  if (!actionPointReceipts.ok) return { ok: false, reason: "actionPointSpendFailed" };
-
+  const committedActionPointCosts = new Map();
   const reactionCoordinator = createWeaponReactionCoordinator();
   const results = await Promise.allSettled(resolved.map(selection => executeCapturedWeaponAttack(selection, {
     skipActionPointCost: true,
+    actionPointCostTransaction: createCommandedActionPointTransaction(selection, chainRef, committedActionPointCosts),
     reportedActionPointCost: authorityContext ? selection.actionPointCost : null,
     reactionCoordinator,
     chainRef,
@@ -3564,6 +3563,12 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     if (result.status === "rejected") console.error("Fallout MaW | Commanded weapon attack execution failed", result.reason);
   }
   await reactionCoordinator.drain();
+  for (const { actor, amount } of committedActionPointCosts.values()) {
+    await applyAttackActionPointMovementLoss(actor, amount, {
+      actionKey: "commandedAttack", weaponActionKey: "commandedAttack", chainRef,
+      attackId: `commanded-attack:${foundry.utils.randomID()}`, requester: "weaponAttack", source: "commandedAttack"
+    });
+  }
   const outcomes = results.map((result, index) => ({
     tokenUuid: String(selections[index]?.tokenUuid ?? ""),
     actorUuid: String(resolved[index]?.token?.actor?.uuid ?? ""),
@@ -3571,11 +3576,6 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     error: result.status === "rejected" ? String(result.reason?.message ?? result.reason ?? "") : ""
   }));
   const executedCount = outcomes.filter(outcome => outcome.executed).length;
-  if (!executedCount) {
-    await rollbackCommandedActionPointCosts(actionPointReceipts.receipts, chainRef);
-  } else {
-    await applyCommandedActionPointMovementLoss(actionPointReceipts.receipts, chainRef);
-  }
   return createCommandedAttackResult({
     started: true,
     committed: true,
@@ -3586,71 +3586,36 @@ async function processCommandedWeaponAttackSelections(selections = [], {
   });
 }
 
-async function spendCommandedActionPointCosts(actionPointCosts = new Map(), chainRef = null) {
-  const receipts = [];
-  try {
-    for (const { actor, amount } of actionPointCosts.values()) {
-      const cost = Math.max(0, toInteger(amount));
-      if (cost <= 0 || !isActorInActiveCombat(actor)) continue;
+function createCommandedActionPointTransaction(selection, chainRef = null, committedCosts = new Map()) {
+  const actor = selection.token.actor;
+  const cost = Math.max(0, toInteger(selection.actionPointCost));
+  return {
+    deferActionPointMovementLoss: true,
+    async commit() {
+      if (!cost || !isActorInActiveCombat(actor)) return { spent: 0, receipt: null, events: [] };
       const transaction = await spendStrictActionPointsWithReceipt(actor, cost, {
-        source: "abilityAction",
-        actionKey: "commandedAttack",
-        chainRef
+        source: "abilityAction", actionKey: "commandedAttack", chainRef, suppressResourceNotification: true
       });
-      if (transaction.spent !== cost || !transaction.receipt) {
-        throw new Error("Action point spend was not applied exactly.");
+      return transaction.spent === cost && transaction.receipt ? transaction : false;
+    },
+    async rollback(transaction) {
+      if (!transaction?.receipt) return;
+      const restored = await refundStrictActionPointReceipt(actor, transaction.receipt, { chainRef });
+      if (restored < transaction.receipt.amount) {
+        throw new Error(`Only ${restored} of ${transaction.receipt.amount} commanded attack action points were rolled back.`);
       }
-      receipts.push({ actor, receipt: transaction.receipt });
-    }
-    return { ok: true, receipts };
-  } catch (error) {
-    console.error("Fallout MaW | Commanded attack action point spend failed", error);
-    await rollbackCommandedActionPointCosts(receipts, chainRef);
-    return { ok: false, receipts: [] };
-  }
-}
-
-async function rollbackCommandedActionPointCosts(receipts = [], chainRef = null) {
-  for (const entry of [...receipts].reverse()) {
-    const actor = entry?.actor;
-    const receipt = entry?.receipt;
-    if (!actor || !receipt) continue;
-    try {
-      const restored = await refundStrictActionPointReceipt(actor, receipt, { chainRef });
-      if (restored < Math.max(0, toInteger(receipt.amount))) {
-        throw new Error(`Only ${restored} of ${receipt.amount} commanded attack action points were rolled back.`);
+    },
+    async finalize(transaction) {
+      if (transaction?.receipt) {
+        const current = committedCosts.get(actor.uuid) ?? { actor, amount: 0 };
+        current.amount += transaction.receipt.amount;
+        committedCosts.set(actor.uuid, current);
       }
-    } catch (error) {
-      console.error("Fallout MaW | Failed to roll back commanded attack action points", error);
+      if (transaction?.receipt) await notifyCombatActionPointReceipt(actor, transaction.receipt, {
+        source: "abilityAction", actionKey: "commandedAttack", chainRef
+      });
     }
-  }
-}
-
-async function applyCommandedActionPointMovementLoss(receipts = [], chainRef = null) {
-  const commandOperationId = String(
-    chainRef?.rootId
-    ?? chainRef?.operationId
-    ?? foundry.utils.randomID()
-  );
-  for (const entry of receipts) {
-    const actor = entry?.actor;
-    const receipt = entry?.receipt;
-    if (!actor || receipt?.resourceKey !== "actionPoints") continue;
-    const operationId = [
-      "commanded-attack-movement-loss",
-      String(actor.uuid ?? actor.id ?? ""),
-      commandOperationId
-    ].join(":");
-    await applyAttackActionPointMovementLoss(actor, receipt.amount, {
-      actionKey: "commandedAttack",
-      weaponActionKey: "commandedAttack",
-      attackId: operationId,
-      chanceOperationId: operationId,
-      chainRef,
-      requester: "weaponAttack",
-      source: "commandedAttack"
-    });
-  }
+  };
 }
 
 async function validateCommandedAbilityAuthority({
@@ -3947,7 +3912,7 @@ function isFiniteCommandedPoint(point = null) {
     && (point.elevation === undefined || Number.isFinite(Number(point.elevation)));
 }
 
-function validateDualWeaponAttackResources(actor, selections = [], label = "С двух рук") {
+function validateDualWeaponAttackResources(actor, selections = [], label = auditLocalize("FALLOUTMAW.AuditRuntime.R0121", "С двух рук")) {
   if (!actor || selections.length !== 2) return false;
   for (const selection of selections) {
     const weapon = selection?.weapon ?? null;
@@ -3957,7 +3922,7 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
     if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return false;
     if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
     if (isWeaponActionBlocked(actor, actionKey)) {
-      ui.notifications.warn(`${label}: действие ${actionKey} заблокировано.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0837", { p0: (label), p1: (actionKey) }, "{p0}: действие {p1} заблокировано."));
       return false;
     }
     if (isWeaponPlacementDisabled(actor, weapon)) return false;
@@ -3969,6 +3934,7 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
 
 async function executeCapturedWeaponAttack(selection = {}, {
   skipActionPointCost = true,
+  actionPointCostTransaction = null,
   skipBaseWeaponResourceCosts = false,
   attackModifier = null,
   abilityTrialSession = null,
@@ -3994,6 +3960,7 @@ async function executeCapturedWeaponAttack(selection = {}, {
 
   const controller = suppliedController ?? new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
     skipActionPointCost,
+    actionPointCostTransaction,
     skipBaseWeaponResourceCosts,
     reportedActionPointCost,
     reactionCoordinator,
@@ -4126,6 +4093,7 @@ export async function executeWeaponAttackAgainstToken({
   chainRef = null,
   damageHubOperationRef = "",
   onBeforeExecute = null,
+  actionPointCostTransaction = null,
   abilityTrialSession = null,
   chanceOperationId = "",
   selectedLimbKey = "",
@@ -4157,6 +4125,7 @@ export async function executeWeaponAttackAgainstToken({
     chainRef,
     damageHubOperationRef,
     onBeforeExecute,
+    actionPointCostTransaction,
     abilityTrialSession,
     chanceOperationId,
     skipActionPointCost,
@@ -4292,6 +4261,7 @@ export async function startConstrainedAimedAttackSelection({
   chainRef = null,
   damageHubOperationRef = "",
   onBeforeExecute = null,
+  actionPointCostTransaction = null,
   onProcessingStarted = null,
   additionalActorResourceCosts = [],
   requireResourceCommit = false,
@@ -4324,6 +4294,7 @@ export async function startConstrainedAimedAttackSelection({
       chainRef,
       damageHubOperationRef,
       onBeforeExecute,
+      actionPointCostTransaction,
       onProcessingStarted: payload => {
         if (timeoutId) window.clearTimeout(timeoutId);
         timeoutId = null;
@@ -4380,7 +4351,7 @@ export async function startConstrainedAimedAttackSelection({
 }
 
 export function startForcedAimedAttackSelection({
-  label = "Контр-снайпер",
+  label = auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер"),
   resultPolicy = null,
   suppressGuardianAngelReaction = true,
   ...options
@@ -4637,6 +4608,7 @@ export class WeaponAttackController {
     this.attackModifier = normalizeWeaponAttackModifier(attackModifier);
     this.originOverride = normalizeAttackOriginOverride(options.originOverride);
     this.onBeforeExecute = typeof options.onBeforeExecute === "function" ? options.onBeforeExecute : null;
+    this.actionPointCostTransaction = options.actionPointCostTransaction ?? null;
     this.onProcessingStarted = typeof options.onProcessingStarted === "function" ? options.onProcessingStarted : null;
     this.onDestroy = typeof options.onDestroy === "function" ? options.onDestroy : null;
     this.chainRef = options.chainRef ?? null;
@@ -5102,11 +5074,12 @@ export class WeaponAttackController {
     await Promise.allSettled(collectors.map(collector => collector.abort()));
   }
 
-  createAllOrNothingAttackContext({ mode = "", index = 0, count = 1 } = {}) {
+  createAllOrNothingAttackContext({ mode = "", index = 0, count = 1, projectilesPerAttack = 1 } = {}) {
     return {
       weaponAttackId: this.attackId,
       weaponActionKey: this.actionKey,
       allOrNothingAttackMode: String(mode ?? ""),
+      allOrNothingProjectilesPerAttack: Math.max(1, toInteger(projectilesPerAttack)),
       allOrNothingAttackIndex: Math.max(0, toInteger(index)),
       allOrNothingAttackCount: Math.max(1, toInteger(count))
     };
@@ -5410,8 +5383,8 @@ export class WeaponAttackController {
       weaponFunctionId: this.weaponFunctionId,
       originalHitChance,
       ...attackDistanceContext,
-      title: "Берегись!",
-      message: `${this.token?.actor?.name ?? ""} атакует ${target.actor.name}: ${this.weapon?.name ?? ""}. Исходный шанс попадания: ${originalHitChance}%.`
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0109", "Берегись!"),
+      message: auditFormat("FALLOUTMAW.AuditRuntime.R0838", { p0: (this.token?.actor?.name ?? ""), p1: (target.actor.name), p2: (this.weapon?.name ?? ""), p3: (originalHitChance) }, "{p0} атакует {p1}: {p2}. Исходный шанс попадания: {p3}%.")
     });
     if (result?.difficultyBonus) this.getWeaponActionModifierState().addCombatValue("watchOutDifficulty", result.difficultyBonus);
   }
@@ -5511,7 +5484,7 @@ export class WeaponAttackController {
         laneKey
       }],
       state: shared.state,
-      title: String(settings.name ?? "").trim() || String(this.weapon?.name ?? "Атакующее действие"),
+      title: String(settings.name ?? "").trim() || String(this.weapon?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие")),
       operationId: shared.operationId || this.attackId,
       chainRef: this.chainRef,
       source: {
@@ -5580,7 +5553,7 @@ export class WeaponAttackController {
         sourceToken: this.token,
         targets,
         sourceItemUuid: this.weapon?.uuid ?? "",
-        title: String(settings.name ?? "").trim() || String(this.weapon?.name ?? "Атакующее действие"),
+        title: String(settings.name ?? "").trim() || String(this.weapon?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0794", "Атакующее действие")),
         deduplicationSet: shared.appliedOutcomeKeys,
         getBaseDamage: recipient => {
           const recipientToken = recipient?.token?.object ?? recipient?.token ?? null;
@@ -5705,8 +5678,8 @@ export class WeaponAttackController {
       weaponFunctionId: this.weaponFunctionId,
       suppressGuardianAngelReaction: Boolean(this.attackModifier?.suppressGuardianAngelReaction),
       ...attackDistanceContext,
-      title: "Реакция на атаку",
-      message: `${this.token.actor.name} атакует ${target.actor.name}: ${this.weapon.name}.`
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0839", "Реакция на атаку"),
+      message: auditFormat("FALLOUTMAW.AuditRuntime.R0840", { p0: (this.token.actor.name), p1: (target.actor.name), p2: (this.weapon.name) }, "{p0} атакует {p1}: {p2}.")
     });
     if (result?.disadvantageCount) {
       const modifierState = this.getWeaponActionModifierState();
@@ -5975,9 +5948,19 @@ export class WeaponAttackController {
     const resolvedActionContext = actionContext && typeof actionContext === "object"
       ? actionContext
       : this.createWeaponAttackSkillCheckContext(this.selectedTarget);
-    const actionPointCostApplied = !this.skipActionPointCost
+    const externalCost = this.actionPointCostTransaction;
+    const externalCostContext = {
+      ...resolvedActionContext,
+      actor: this.token.actor,
+      actorToken: this.token,
+      weapon: this.weapon,
+      controller: this,
+      attackId: this.attackId,
+      chanceOperationId: this.chanceOperationId
+    };
+    const actionPointCostApplied = (Boolean(externalCost) || !this.skipActionPointCost)
       && isCombatActionPointSpendingActive(this.token.actor);
-    const actionPointCost = actionPointCostApplied
+    const actionPointCost = actionPointCostApplied && !externalCost
       ? getWeaponActionPointCost(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
         ...resolvedActionContext,
         chanceOperationId: this.chanceOperationId
@@ -5995,7 +5978,7 @@ export class WeaponAttackController {
         this.token.actor,
         actionPointCost,
         actorResourceActionPointCost,
-        { notify: true, label: "действия" }
+        { notify: true, label: auditLocalize("FALLOUTMAW.AuditRuntime.R0808", "действия") }
       )
     ) {
       this.attackCanceledByReaction = true;
@@ -6003,12 +5986,34 @@ export class WeaponAttackController {
     }
     this.reportedActionPointCostApplied ??= actionPointCostApplied;
     let committedActionPointSpend = null;
+    let externalActionPointLifecycle = null;
     let actionPointSpendStarted = false;
     const commitActionPointSpend = async () => {
       if (actionPointSpendStarted) {
         throw new Error("Weapon action-point transaction was invoked more than once.");
       }
       actionPointSpendStarted = true;
+      if (externalCost) {
+        externalActionPointLifecycle = await commitWeaponActionPointSpend(
+          this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+            emitActionResolved: !this.attackCanceledByReaction,
+            spendActionPoints: false,
+            actionPointCostApplied: this.reportedActionPointCostApplied,
+            attackId: this.attackId,
+            actorToken: this.token,
+            context: resolvedActionContext,
+            chainRef: this.chainRef,
+            damageHubOperationRef: this.damageHubOperationRef
+          }
+        );
+        committedActionPointSpend = await externalCost.commit(externalCostContext);
+        if (!committedActionPointSpend) {
+          const error = new Error("External weapon action-point spend was not committed.");
+          error.reason = "spendFailed";
+          throw error;
+        }
+        return committedActionPointSpend;
+      }
       committedActionPointSpend = await commitWeaponActionPointSpend(
         this.token.actor,
         this.weapon,
@@ -6029,7 +6034,8 @@ export class WeaponAttackController {
       return committedActionPointSpend;
     };
     const rollbackActionPointSpend = async committed => {
-      await rollbackCommittedWeaponActionPointSpend(this.token.actor, committed);
+      if (externalCost) await externalCost.rollback(committed, externalCostContext);
+      else await rollbackCommittedWeaponActionPointSpend(this.token.actor, committed);
       committedActionPointSpend = null;
     };
     const weaponAttempted = this.shouldSpendWeaponResourcesForAttempt();
@@ -6100,7 +6106,8 @@ export class WeaponAttackController {
       await commitActionPointSpend();
     }
     const spentAttackActionPoints = (
-      committedActionPointSpend?.receipt?.resourceKey === "actionPoints"
+      !externalCost?.deferActionPointMovementLoss
+        && committedActionPointSpend?.receipt?.resourceKey === "actionPoints"
         ? Math.max(0, toInteger(committedActionPointSpend.receipt.amount))
         : 0
     ) + getPaidActorResourceAmount(committedActorResourceCosts, "actionPoints");
@@ -6119,13 +6126,22 @@ export class WeaponAttackController {
         source: "weaponAttack"
       });
     }
-    const spentActionPointCost = await finalizeCommittedWeaponActionPointSpend(
-      this.token.actor,
-      this.weapon,
-      this.actionKey,
-      this.weaponFunctionId,
-      committedActionPointSpend
-    );
+    let spentActionPointCost;
+    if (externalCost) {
+      await externalCost.finalize?.(committedActionPointSpend, externalCostContext);
+      await finalizeCommittedWeaponActionPointSpend(
+        this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, externalActionPointLifecycle
+      );
+      spentActionPointCost = Math.max(0, toInteger(committedActionPointSpend?.spent));
+    } else {
+      spentActionPointCost = await finalizeCommittedWeaponActionPointSpend(
+        this.token.actor,
+        this.weapon,
+        this.actionKey,
+        this.weaponFunctionId,
+        committedActionPointSpend
+      );
+    }
     this.actionPointSpendReceipt = committedActionPointSpend?.receipt ?? null;
     this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
     this.attackCostsCommitted = weaponAttempted;
@@ -6635,6 +6651,7 @@ export class WeaponAttackController {
       && !this.captureOnly
       && !this.attackModifier
       && !this.onBeforeExecute
+      && !this.actionPointCostTransaction
       && !this.chainRef
       && !this.abilityTrialSession
       && !this.volleyAction
@@ -6670,7 +6687,7 @@ export class WeaponAttackController {
     if (!this.shouldUseOrdinaryGmAuthority() || this.processing) return false;
     const gm = getOrdinaryAttackSceneGM(this.token);
     if (!gm) {
-      ui.notifications.warn("Нет активного GM на сцене и уровне атаки.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0841", "Нет активного GM на сцене и уровне атаки."));
       return false;
     }
 
@@ -6832,7 +6849,7 @@ export class WeaponAttackController {
     const targets = Array.from(new Set(this.getAttackResolutionTargets()))
       .filter(target => target && target !== this.token);
     if (!targets.length) {
-      ui.notifications.warn(`${this.attackModifier?.label || this.weapon.name}: нет целей в радиусе атаки.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0842", { p0: (this.attackModifier?.label || this.weapon.name) }, "{p0}: нет целей в радиусе атаки."));
       return;
     }
 
@@ -6878,7 +6895,8 @@ export class WeaponAttackController {
       requester: "weaponAttack",
       title: this.attackModifier?.label || this.weapon.name
     });
-    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", this.getWeaponDamage(), this.weaponFunctionId, {
+    const whirlwindMode = this.attackModifier?.attackMode ?? "swing";
+    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, whirlwindMode, this.getWeaponDamage(), this.weaponFunctionId, {
       percentBaseAmount: this.getWeaponDamagePercentBase()
     });
     let attempted = false;
@@ -6897,7 +6915,7 @@ export class WeaponAttackController {
           const trajectory = buildSwingAnimationTrajectory(this.token, [target], "rightToLeft", this.geometry);
           if (trajectory) trajectories.push({ ...trajectory, delayGroup: cycleIndex });
           const request = await this.resolveDirectedAttackAgainstTarget(target, {
-            mode: "swing",
+            mode: whirlwindMode,
             damageAmount: baseDamage,
             difficultyBonus: 0,
             penetrationStep: 0,
@@ -7001,6 +7019,7 @@ export class WeaponAttackController {
               penetrationStep: 0,
               checkBatch,
               allOrNothingContext: this.createAllOrNothingAttackContext({
+                projectilesPerAttack: projectiles.length,
                 mode: projectiles.length > 1
                   ? "pellet"
                   : (
@@ -7300,6 +7319,7 @@ export class WeaponAttackController {
           burstAttackIndex: attackIndex,
           allOrNothingContext: this.createAllOrNothingAttackContext({
             mode: "burst",
+            projectilesPerAttack: projectiles.length,
             index: projectileIndex,
             count: projectileCount
           })
@@ -7383,7 +7403,7 @@ export class WeaponAttackController {
     if (!geometry) return false;
     const enabledDirections = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!enabledDirections.length) {
-      ui.notifications.warn(`${this.weapon.name}: нет разрешённого направления удара.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0843", { p0: (this.weapon.name) }, "{p0}: нет разрешённого направления удара."));
       return false;
     }
 
@@ -7668,8 +7688,8 @@ export class WeaponAttackController {
       actionKey: this.actionKey,
       limbKey: String(limbKey ?? ""),
       ...attackDistanceContext,
-      title: "Контр-снайпер",
-      message: `${this.token?.actor?.name ?? ""} выбрал часть тела для прицельного выстрела по ${target?.actor?.name ?? ""}.`
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер"),
+      message: auditFormat("FALLOUTMAW.AuditRuntime.R0844", { p0: (this.token?.actor?.name ?? ""), p1: (target?.actor?.name ?? "") }, "{p0} выбрал часть тела для прицельного выстрела по {p1}.")
     });
   }
 
@@ -8219,6 +8239,7 @@ export class WeaponAttackController {
         burstAttackIndex,
         allOrNothingContext: this.createAllOrNothingAttackContext({
           mode: trajectories.length > 1 ? "pellet" : "",
+          projectilesPerAttack: trajectories.length,
           index: (Math.max(0, toInteger(attackIndex)) * trajectories.length) + index,
           count: totalProjectileCount
         })
@@ -8644,7 +8665,7 @@ export class WeaponAttackController {
       if (existingDelayedThrownItemId) {
         const region = await requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest);
         if (!region) {
-          ui.notifications.warn("GM не подтвердил перемещение области отложенного взрыва.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0845", "GM не подтвердил перемещение области отложенного взрыва."));
         }
       }
       await this.notifyAttackResolved({
@@ -10070,7 +10091,7 @@ export function hasWeaponAction(weapon, actionKey, weaponFunctionId = "") {
 function isWeaponActionBlocked(actor, actionKey = "") {
   const state = getWeaponActionBlockState(actor, actionKey);
   if (!state.blocked) return false;
-  ui.notifications.warn(`${actor?.name ?? ""}: действие заблокировано (${state.effect?.name ?? actionKey}).`);
+  ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0846", { p0: (actor?.name ?? ""), p1: (state.effect?.name ?? actionKey) }, "{p0}: действие заблокировано ({p1})."));
   return true;
 }
 
@@ -10316,7 +10337,7 @@ async function requestCreateVolleyDamageRegions(regions = []) {
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для создания области урона.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0847", "Нет активного GM для создания области урона."));
     return [];
   }
 
@@ -10342,7 +10363,7 @@ async function requestCreateVolleyDamageRegions(regions = []) {
     return await promise;
   } catch (error) {
     console.error("Fallout MaW | Volley region socket request failed", error);
-    ui.notifications.warn("Нет ответа GM на создание областей урона.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0848", "Нет ответа GM на создание областей урона."));
     return [];
   }
 }
@@ -10353,7 +10374,7 @@ async function requestCreateDelayedVolleyExplosionRegion(regionData = null) {
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для создания области отложенного взрыва.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0849", "Нет активного GM для создания области отложенного взрыва."));
     return null;
   }
 
@@ -10380,7 +10401,7 @@ async function requestCreateDelayedVolleyExplosionRegion(regionData = null) {
     return results?.[0] ?? null;
   } catch (error) {
     console.error("Fallout MaW | Delayed volley region socket request failed", error);
-    ui.notifications.warn("Нет ответа GM на создание области отложенного взрыва.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0850", "Нет ответа GM на создание области отложенного взрыва."));
     return null;
   }
 }
@@ -10399,7 +10420,7 @@ async function requestApplyPreparedWeaponDamageBatch(damageRequests = [], region
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для обработки урона оружия.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0851", "Нет активного GM для обработки урона оружия."));
     return { damage: [], regions: [] };
   }
 
@@ -10429,7 +10450,7 @@ async function requestApplyPreparedWeaponDamageBatch(damageRequests = [], region
       : { damage: results?.damage ?? [], regions: results?.regions ?? [] };
   } catch (error) {
     console.error("Fallout MaW | Prepared weapon damage batch socket request failed", error);
-    ui.notifications.warn("Нет ответа GM на обработку урона оружия.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0852", "Нет ответа GM на обработку урона оружия."));
     return { damage: [], regions: [] };
   }
 }
@@ -10591,7 +10612,7 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
   }
 
   const created = await scene.createEmbeddedDocuments("Region", [{
-    name: String(regionData.name ?? "").trim() || "Отложенный взрыв",
+    name: String(regionData.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0853", "Отложенный взрыв"),
     color: String(regionData.color ?? "#dd8431"),
     shapes,
     elevation: { bottom: null, top: null },
@@ -10904,8 +10925,8 @@ async function requestDelayedVolleyTargetReaction({ source = {}, target = null, 
       ...normalizeAttackDistanceContext(explosion),
       chainRef: source.chainRef ?? null,
       damageHubOperationRef: String(source.damageHubOperationRef ?? ""),
-      title: "Реакция на атаку",
-      message: `${target.actor.name}: попадание в область отложенного взрыва.`
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0839", "Реакция на атаку"),
+      message: auditFormat("FALLOUTMAW.AuditRuntime.R0854", { p0: (target.actor.name) }, "{p0}: попадание в область отложенного взрыва.")
     });
   } catch (error) {
     console.error(`${SYSTEM_ID} | Delayed volley target reaction failed`, error);
@@ -10933,6 +10954,16 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
   try {
     const scene = region.parent;
     if (!scene || canvas.scene?.id !== scene.id) return;
+    if (pending.resolutionState === "resolved") {
+      await deleteDelayedThrownItemDocuments(String(pending.id));
+      return;
+    }
+    // A previous interrupted resolution may already have applied damage or paid
+    // for reactions. Keep it claimed instead of automatically replaying it.
+    if (pending.resolutionState === "resolving") return;
+    const resolutionStatePath = `flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_REGION_FLAG}.resolutionState`;
+    await region.update({ [resolutionStatePath]: "resolving" });
+    if (region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG)?.resolutionState !== "resolving") return;
     const source = pending.source ?? {};
     const attackerToken = scene.tokens?.get(String(region.attachment?.token ?? ""))?.object
       ?? scene.tokens?.get(String(source.attackerTokenId ?? ""))?.object
@@ -11164,7 +11195,8 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
     }
     dispatchWeaponAttackTerminalHandlers(resolvedContext);
 
-    await scene.deleteEmbeddedDocuments("Region", [region.id]);
+    await region.update({ [resolutionStatePath]: "resolved" });
+    if (region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG)?.resolutionState !== "resolved") return;
     await deleteDelayedThrownItemDocuments(String(pending.id));
   } catch (error) {
     console.error(`${SYSTEM_ID} | Delayed volley explosion failed.`, error);
@@ -11630,7 +11662,7 @@ export function hasRequiredWeaponResources(
     skipBaseCosts
   });
   if (!missing) return true;
-  ui.notifications.warn(`${weapon?.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
+  ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0855", { p0: (weapon?.name ?? ""), p1: (missing.label), p2: (missing.current), p3: (missing.required) }, "{p0}: не хватает {p1} ({p2} / {p3})."));
   return false;
 }
 
@@ -11807,6 +11839,7 @@ function getActorAttackResourceAvailable(actor = null, resourceKey = "") {
   return Math.max(
     0,
     toInteger(resource.value)
+      + getOneTimeResourceValue(actor, key)
       - toInteger(resource.min)
       - getActorResourceLimitAmount(actor, key)
   );
@@ -11865,7 +11898,7 @@ function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   });
   return canSpendCombinedWeaponActionPointCosts(actor, actionCost, strictActorCost, {
     notify: true,
-    label: "действия"
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R0808", "действия")
   });
 }
 
@@ -12083,7 +12116,7 @@ async function spendWeaponResources(
       weaponFunctionId
     );
     if (missing) {
-      ui.notifications.warn(`${currentWeapon.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0855", { p0: (currentWeapon.name ?? ""), p1: (missing.label), p2: (missing.current), p3: (missing.required) }, "{p0}: не хватает {p1} ({p2} / {p3})."));
       return false;
     }
 
@@ -14259,7 +14292,7 @@ function buildDelayedVolleyExplosionRegionRequest({
     delayedThrownItemId,
     explodeAtWorldTime,
     attachmentTokenId: String(attachmentTokenId ?? ""),
-    name: weapon?.name ? `${weapon.name}: отложенный взрыв` : "Отложенный взрыв",
+    name: weapon?.name ? auditFormat("FALLOUTMAW.AuditRuntime.R0856", { p0: (weapon.name) }, "{p0}: отложенный взрыв") : auditLocalize("FALLOUTMAW.AuditRuntime.R0853", "Отложенный взрыв"),
     color: dominantDamageType?.color ?? "#dd8431",
     explosions,
     source: {
@@ -16869,7 +16902,8 @@ function getContextualCombatValues(actor, keys = [], context = {}) {
     const modifierBonus = typeof modifierState?.getCombatValueBonus === "function"
       ? modifierState.getCombatValueBonus(key, context)
       : 0;
-    return [key, (Number(values[key]) || 0) + modifierBonus];
+    return [key, (Number(values[key]) || 0) + modifierBonus + getReleaseCombatBonus(actor, key, context)
+      + (key === "accuracy" ? getWatcherAttackBonus(actor, context.targetActor ?? context.targetToken?.actor, context).accuracy : 0)];
   }));
 }
 
@@ -17385,7 +17419,7 @@ function getAimedTargetBlockerBonus(blockerCount) {
 }
 
 function getDodgeDifficulty(actor, { ignoreCover = false } = {}) {
-  const value = toInteger(actor.system?.resources?.dodge?.value);
+  const value = getActorDodgeTotal(actor);
   if (!ignoreCover) return value;
   return Math.max(0, value - getActorCoverDodgeAdjustment(actor));
 }
@@ -17542,6 +17576,35 @@ function getFoundryDragResistance() {
 
 export async function spendWeaponReloadActionPoints(actor, weapon, weaponFunctionId = "") {
   await spendWeaponActionPoints(actor, weapon, "reload", weaponFunctionId);
+}
+
+/** Serialize reload planning with weapon spending and compensate AP if its Item mutation fails. */
+export async function runWeaponReloadTransaction({ actor, weaponId, weaponFunctionId = "", spendActionPoints = true }, operation) {
+  const { result, weapon, committed } = await weaponResourceActorLock.run(actor, null, async () => {
+    const weapon = actor.items?.get(weaponId);
+    if (!weapon) throw new Error("Weapon not found.");
+    let committed = null;
+    let result;
+    try {
+      if (spendActionPoints) {
+        committed = await commitWeaponActionPointSpend(actor, weapon, "reload", weaponFunctionId);
+      }
+      result = await operation(weapon);
+      if (!result) throw new Error("Weapon reload did not commit an inventory mutation.");
+    } catch (error) {
+      if (committed) {
+        try {
+          await rollbackCommittedWeaponActionPointSpend(actor, committed);
+        } catch (rollbackError) {
+          error.rollbackError ??= rollbackError;
+        }
+      }
+      throw error;
+    }
+    return { result, weapon, committed };
+  });
+  if (committed) await finalizeCommittedWeaponActionPointSpend(actor, weapon, "reload", weaponFunctionId, committed);
+  return result;
 }
 
 export function hasRequiredWeaponReloadActionPoints(actor, weapon, weaponFunctionId = "") {

@@ -1,6 +1,7 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { getItemFootprint, isInventoryPlacementWithinBounds } from "../utils/inventory-containers.mjs";
 
-const noSpace = () => new Error("Недостаточно места для выбранного порядка. Предметы остались на месте.");
+const noSpace = () => new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1098", "Недостаточно места для выбранного порядка. Предметы остались на месте."));
 
 function prepareEntries(entries, grid, allItems) {
   const turnedShapes = new Map();

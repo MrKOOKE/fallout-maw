@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "../apps/base-form-application-v2.mjs";
 import {
   DEFAULT_LOCATION,
@@ -143,7 +144,7 @@ export class LocationEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-location-editor",
-    window: { title: "Локация", resizable: true },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0905", "Локация"); }, resizable: true },
     actions: {
       ...super.DEFAULT_OPTIONS.actions,
       configureExitZones: LocationEditor.#configureExitZones,
@@ -176,12 +177,12 @@ export class LocationEditor extends GlobalMapEditorBase {
       entryModeChoices: [
         {
           value: LOCATION_ENTRY_MODES.CARRIER,
-          label: "Подкарта путешествия",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0906", "Подкарта путешествия"),
           selected: entryMode === LOCATION_ENTRY_MODES.CARRIER
         },
         {
           value: LOCATION_ENTRY_MODES.DEPLOY,
-          label: "Конечная локация",
+          label: auditLocalize("FALLOUTMAW.AuditRuntime.R0907", "Конечная локация"),
           selected: entryMode === LOCATION_ENTRY_MODES.DEPLOY
         }
       ],
@@ -238,11 +239,11 @@ export class LocationEditor extends GlobalMapEditorBase {
     if (!dropzone) return;
     const scene = await getSceneFromDropEvent(event);
     if (!scene) {
-      ui.notifications.warn("Перетащите сюда сцену из списка сцен.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0908", "Перетащите сюда сцену из списка сцен."));
       return;
     }
     if (getGlobalMapFlag(scene)) {
-      ui.notifications.warn("Эта сцена уже встроена в глобальную карту.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0909", "Эта сцена уже встроена в глобальную карту."));
       return;
     }
     const input = this.form?.querySelector("[name='location.existingSceneId']");
@@ -255,14 +256,14 @@ export class LocationEditor extends GlobalMapEditorBase {
   static async #configureExitZones() {
     const target = this.data.linkedSceneId ? game.scenes?.get(this.data.linkedSceneId) : null;
     if (!target) {
-      ui.notifications.warn("Сначала подключите сцену к локации.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0910", "Сначала подключите сцену к локации."));
       return;
     }
     await this.close();
     await target.view();
     const layer = await waitForGlobalMapLayer(target.id);
     if (!layer) {
-      ui.notifications.warn("Слой глобальной карты на целевой сцене ещё не готов.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0911", "Слой глобальной карты на целевой сцене ещё не готов."));
       return;
     }
     layer.activate();
@@ -276,19 +277,19 @@ export class LocationEditor extends GlobalMapEditorBase {
   static async #deleteLinkedScene() {
     const linkedSceneId = String(this.data.linkedSceneId ?? "").trim();
     if (this.isNew || !linkedSceneId) {
-      ui.notifications.warn("К локации ещё не подключена сцена.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0912", "К локации ещё не подключена сцена."));
       return;
     }
     const target = game.scenes?.get(linkedSceneId);
-    const sceneName = target?.name ?? "сцена";
+    const sceneName = target?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0913", "сцена");
     const confirmed = await foundry.applications.api.DialogV2.confirm({
-      window: { title: "Извлечь сцену из локации?" },
-      content: `<p>Сцена <strong>${foundry.utils.escapeHTML(sceneName)}</strong> будет извлечена из локации и сохранена. После этого можно подключить другую сцену.</p>`
+      window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0914", "Извлечь сцену из локации?") },
+      content: auditFormat("FALLOUTMAW.AuditRuntime.R0915", { p0: (foundry.utils.escapeHTML(sceneName)) }, "<p>Сцена <strong>{p0}</strong> будет извлечена из локации и сохранена. После этого можно подключить другую сцену.</p>")
     });
     if (!confirmed) return;
     const result = await detachLocationScenes(this.scene, this.data.id);
     if (!result.scenes.length && !result.locationIds.length) {
-      ui.notifications.warn("Подключённая сцена не найдена.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0916", "Подключённая сцена не найдена."));
       return;
     }
     const stored = getSceneState(this.scene).locations.find(entry => entry.id === this.data.id);
@@ -299,7 +300,7 @@ export class LocationEditor extends GlobalMapEditorBase {
     };
     canvas.falloutMaWGlobalMap?.refresh?.();
     this.render();
-    ui.notifications.info("Сцена извлечена из локации. Можно подключить другую.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0917", "Сцена извлечена из локации. Можно подключить другую."));
   }
 
   _applyLiveValues(values) {
@@ -322,8 +323,8 @@ export class LocationEditor extends GlobalMapEditorBase {
   async _deleteEntry() {
     if (this.isNew) return this.close();
     const confirmed = await foundry.applications.api.DialogV2.confirm({
-      window: { title: "Удалить локацию?" },
-      content: `<p>Удалить локацию <strong>${foundry.utils.escapeHTML(this.data.name)}</strong> и её системные сцены?</p>`
+      window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0918", "Удалить локацию?") },
+      content: auditFormat("FALLOUTMAW.AuditRuntime.R0919", { p0: (foundry.utils.escapeHTML(this.data.name)) }, "<p>Удалить локацию <strong>{p0}</strong> и её системные сцены?</p>")
     });
     if (!confirmed) return;
     await deleteLocationTree(this.scene, this.data.id);
@@ -368,7 +369,7 @@ export class TerrainEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-terrain-editor",
-    window: { title: "Местность", resizable: true }
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0920", "Местность"); }, resizable: true }
   };
 
   static PARTS = {
@@ -392,7 +393,7 @@ export class TerrainEditor extends GlobalMapEditorBase {
       cells: Array.from(new Set(this.data.cells ?? []))
     };
     if (!terrain.cells.length) {
-      ui.notifications.warn("Нарисуйте хотя бы одну клетку местности.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0921", "Нарисуйте хотя бы одну клетку местности."));
       return;
     }
     await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("terrains", terrain.id);
@@ -432,7 +433,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-location-exit-editor",
-    window: { title: "Зона выхода", resizable: true }
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0922", "Зона выхода"); }, resizable: true }
   };
 
   static PARTS = {
@@ -457,7 +458,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
       cells: Array.from(new Set(this.data.cells ?? []))
     };
     if (!exit.cells.length) {
-      ui.notifications.warn("Нарисуйте хотя бы одну клетку зоны выхода.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0923", "Нарисуйте хотя бы одну клетку зоны выхода."));
       return;
     }
     await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("locationExitZones", this.replaceIds);
@@ -465,7 +466,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
     this.data = savedEntries[0] ?? exit;
     this.replaceIds = savedEntries.map(entry => entry.id);
     if (savedEntries.length > 1) {
-      ui.notifications.info(`Несвязанные участки сохранены как отдельные зоны: ${savedEntries.length}.`);
+      ui.notifications.info(auditFormat("FALLOUTMAW.AuditRuntime.R0924", { p0: (savedEntries.length) }, "Несвязанные участки сохранены как отдельные зоны: {p0}."));
     }
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
@@ -580,7 +581,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-transition-editor",
-    window: { title: "Зона перехода", resizable: true },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0925", "Зона перехода"); }, resizable: true },
     actions: {
       ...super.DEFAULT_OPTIONS.actions,
       configureEntryZone: TransitionEditor.#configureEntryZone
@@ -636,11 +637,11 @@ export class TransitionEditor extends GlobalMapEditorBase {
       mapImage: ""
     };
     if (!transition.cells.length) {
-      ui.notifications.warn("Нарисуйте хотя бы одну клетку перехода.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0926", "Нарисуйте хотя бы одну клетку перехода."));
       return;
     }
     if (!transition.targetSceneId) {
-      ui.notifications.warn("Перетащите целевую сцену в поле перехода.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0927", "Перетащите целевую сцену в поле перехода."));
       return;
     }
     await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("transitions", transition.id);
@@ -672,11 +673,11 @@ export class TransitionEditor extends GlobalMapEditorBase {
     if (!dropzone) return;
     const scene = await getSceneFromDropEvent(event);
     if (!scene) {
-      ui.notifications.warn("Перетащите сюда сцену из списка сцен.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0908", "Перетащите сюда сцену из списка сцен."));
       return;
     }
     if (scene.id === this.scene.id) {
-      ui.notifications.warn("Переход не может вести в ту же сцену.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0928", "Переход не может вести в ту же сцену."));
       return;
     }
     const input = this.form?.querySelector("[name='transition.targetSceneId']");
@@ -692,12 +693,12 @@ export class TransitionEditor extends GlobalMapEditorBase {
   static async #configureEntryZone() {
     const target = this.data.targetSceneId ? game.scenes?.get(this.data.targetSceneId) : null;
     if (this.isNew || !target) {
-      ui.notifications.warn("Сначала сохраните переход и назначьте целевую сцену.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0929", "Сначала сохраните переход и назначьте целевую сцену."));
       return;
     }
     const stored = getSceneState(this.scene).transitions.find(entry => entry.id === this.data.id);
     if (!stored) {
-      ui.notifications.warn("Сначала сохраните переход.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0930", "Сначала сохраните переход."));
       return;
     }
     const sourceSceneId = this.scene.id;
@@ -706,7 +707,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
     await target.view();
     const layer = await waitForGlobalMapLayer(target.id);
     if (!layer) {
-      ui.notifications.warn("Слой глобальной карты на целевой сцене ещё не готов.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0911", "Слой глобальной карты на целевой сцене ещё не готов."));
       return;
     }
     layer.activate();
@@ -731,7 +732,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-transition-entry-editor",
-    window: { title: "Связанная зона перехода", resizable: true },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0931", "Связанная зона перехода"); }, resizable: true },
     actions: {
       ...super.DEFAULT_OPTIONS.actions,
       clear: TransitionEntryEditor.#clear
@@ -749,7 +750,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
   async _processFormData(_event, _form, formData) {
     const values = getExpandedFormData(formData).entry ?? {};
     const stored = getSceneState(this.scene).transitions.find(entry => entry.id === this.data.id);
-    if (!stored) return ui.notifications.warn("Исходный переход не найден.");
+    if (!stored) return ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0932", "Исходный переход не найден."));
     const transition = {
       ...stored,
       entryLevelId: String(values.levelId ?? this.data.entryLevelId),
@@ -758,7 +759,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
       entryCells: Array.from(new Set(this.data.entryCells ?? []))
     };
     if (!transition.entryCells.length) {
-      ui.notifications.warn("Нарисуйте хотя бы одну клетку связанной зоны.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0933", "Нарисуйте хотя бы одну клетку связанной зоны."));
       return;
     }
     await saveCollectionEntry(this.scene, "transitions", transition);
@@ -793,7 +794,7 @@ export class GlobalMapSceneSettings extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-global-map-scene-settings",
-    window: { title: "Настройки глобальной карты", resizable: false },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0934", "Настройки глобальной карты"); }, resizable: false },
     actions: {
       resetCellFog: GlobalMapSceneSettings.#resetCellFog
     }
@@ -843,10 +844,10 @@ export class GlobalMapSceneSettings extends GlobalMapEditorBase {
 
   static async #resetCellFog() {
     const confirmed = await foundry.applications.api.DialogV2.confirm({
-      window: { title: "Сбросить клеточный туман?" },
-      content: "<p>Удалить всю общую разведку клеток, а также обнаруженные локации и переходы этой сцены?</p>",
-      yes: { label: "Сбросить" },
-      no: { label: "Отмена" }
+      window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0935", "Сбросить клеточный туман?") },
+      content: auditLocalize("FALLOUTMAW.AuditRuntime.R0936", "<p>Удалить всю общую разведку клеток, а также обнаруженные локации и переходы этой сцены?</p>"),
+      yes: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0937", "Сбросить") },
+      no: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена") }
     });
     if (!confirmed) return;
     await resetCellFog(this.scene);
@@ -863,7 +864,7 @@ export class GlobalMapManager extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-global-map-manager",
     classes: [...super.DEFAULT_OPTIONS.classes, "standard-form", "fallout-maw-global-map-editor"],
     position: { width: 460, height: "auto" },
-    window: { title: "Глобальная карта", resizable: false },
+    window: { get title() { return auditLocalize("FALLOUTMAW.AuditRuntime.R0938", "Глобальная карта"); }, resizable: false },
     actions: {
       open: GlobalMapManager.#open,
       validate: GlobalMapManager.#validate
@@ -902,7 +903,7 @@ export class GlobalMapManager extends FalloutMaWFormApplicationV2 {
 
   static #validate() {
     const result = validateGlobalMapStructure();
-    if (result.valid) ui.notifications.info("Структура глобальной карты корректна.");
+    if (result.valid) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0939", "Структура глобальной карты корректна."));
     else ui.notifications.warn(result.issues.join(" "));
     this.render();
   }

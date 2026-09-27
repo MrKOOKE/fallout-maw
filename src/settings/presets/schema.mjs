@@ -1,6 +1,7 @@
 export const PRESET_FORMAT = "fallout-maw-settings-preset";
 export const PRESET_SCHEMA_VERSION = 1;
 export const MAIN_PRESET_ID = "fallout-maw";
+export const ENGLISH_PRESET_ID = "fallout-maw-eng";
 
 const SYSTEM_ID = "fallout-maw";
 const REVISION_PATTERN = /^[a-f0-9]{64}$/;
@@ -142,8 +143,8 @@ export function normalizePresetDocument(raw, { allowLegacy = false, name } = {})
   const normalizedName = normalizePresetName(raw.name ?? name);
   const deleted = normalizeOptionalBoolean(raw.deleted, "deleted", false);
 
-  if (deleted && id === MAIN_PRESET_ID) {
-    throw new TypeError("The main Fallout-MaW preset cannot be a tombstone.");
+  if (deleted && [MAIN_PRESET_ID, ENGLISH_PRESET_ID].includes(id)) {
+    throw new TypeError("A base Fallout-MaW preset cannot be a tombstone.");
   }
 
   const settings = normalizeSettings(raw.settings, { deleted });
@@ -199,8 +200,8 @@ export function createPresetDocument({
 /** Create a deletion marker which retains a preset's stable identity. */
 export function createPresetTombstone(preset) {
   const source = normalizePresetDocument(preset);
-  if (source.id === MAIN_PRESET_ID) {
-    throw new TypeError("The main Fallout-MaW preset cannot be deleted.");
+  if ([MAIN_PRESET_ID, ENGLISH_PRESET_ID].includes(source.id)) {
+    throw new TypeError("A base Fallout-MaW preset cannot be deleted.");
   }
 
   return normalizePresetDocument({
@@ -222,8 +223,18 @@ export function clonePresetFromMain(main, { id, name }) {
   if (source.id !== MAIN_PRESET_ID || source.deleted) {
     throw new TypeError("Only the live main Fallout-MaW preset can be cloned.");
   }
+  return clonePresetFromBase(source, { id, name });
+}
+
+/** Clone a language base into an independent world preset, without its save history. */
+export function clonePresetFromBase(base, { id, name }) {
+  const source = normalizePresetDocument(base);
+  const baseIds = [MAIN_PRESET_ID, ENGLISH_PRESET_ID];
+  if (!baseIds.includes(source.id) || source.deleted) {
+    throw new TypeError("Only a live Fallout-MaW base preset can be cloned.");
+  }
   const cloneId = normalizePresetId(id);
-  if (cloneId === MAIN_PRESET_ID) {
+  if (baseIds.includes(cloneId)) {
     throw new TypeError("A cloned preset must use a new id.");
   }
 

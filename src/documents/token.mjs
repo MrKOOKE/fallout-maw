@@ -2,6 +2,7 @@ import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
 import { COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION } from "../constants.mjs";
 import { cloneTokenPreview } from "./token-clone-initialization.mjs";
 import { createTokenSourceSerializer } from "./token-source-serialization.mjs";
+import { assertBatchPreflightIds } from "../utils/document-batch-integrity.mjs";
 
 const serializeTokenSource = createTokenSourceSerializer(TokenDocument);
 
@@ -15,6 +16,18 @@ const serializeTokenSource = createTokenSourceSerializer(TokenDocument);
  * ordinary actor mechanics against a synthetic actor during its teardown.
  */
 export class FalloutMaWTokenDocument extends TokenDocument {
+  static async createDocuments(data = [], operation = {}) {
+    const documents = await super.createDocuments(data, operation);
+    assertBatchPreflightIds(operation, "create");
+    return documents;
+  }
+
+  static async deleteDocuments(ids = [], operation = {}) {
+    const documents = await super.deleteDocuments(ids, operation);
+    assertBatchPreflightIds(operation, "delete");
+    return documents;
+  }
+
   _onRelatedUpdate(update = {}, operation = {}) {
     if (!operation?.[COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]) {
       return super._onRelatedUpdate(update, operation);

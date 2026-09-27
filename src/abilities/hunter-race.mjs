@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { getActorFactionRelation } from "../settings/factions.mjs";
@@ -8,7 +9,7 @@ export const HUNTER_RACE_FIXED_KEY = "hunterRace";
 export const HUNTER_RACE_EFFECT_FLAG_KEY = "hunterRace";
 
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
-const DEFAULT_ICON = "icons/svg/target.svg";
+const DEFAULT_ICON = "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp";
 
 export function normalizeHunterRaceSettings(value = {}) {
   return {
@@ -29,7 +30,7 @@ export function normalizeHunterRaceSettings(value = {}) {
 export async function selectHunterRaceTarget({
   actor = null,
   sourceToken = null,
-  abilityName = "Охотник"
+  abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0087", "Охотник")
 } = {}) {
   if (!actor) return null;
   const selection = await requestCustomActorTokenSelection({
@@ -37,8 +38,8 @@ export async function selectHunterRaceTarget({
     sourceToken,
     includeSelf: false,
     title: abilityName,
-    noneWarning: `${abilityName}: нет видимых врагов или нейтральных целей с указанной расой.`,
-    instructions: `${abilityName}: выберите врага или нейтральную цель.`,
+    noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0466", { p0: (abilityName) }, "{p0}: нет видимых врагов или нейтральных целей с указанной расой."),
+    instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0467", { p0: (abilityName) }, "{p0}: выберите врага или нейтральную цель."),
     getReason: ({ actor: targetActor }) => getHunterRaceTargetRejectionReason(actor, targetActor)
   });
   const targetToken = selection?.token ?? null;
@@ -49,9 +50,9 @@ export async function selectHunterRaceTarget({
 }
 
 export function getHunterRaceTargetRejectionReason(sourceActor = null, targetActor = null) {
-  if (!sourceActor || !targetActor) return "Цель недоступна.";
-  if (getActorFactionRelation(sourceActor, targetActor) === "ally") return "Союзники не могут быть целью.";
-  if (!getActorRaceId(targetActor)) return "У цели не указана раса.";
+  if (!sourceActor || !targetActor) return auditLocalize("FALLOUTMAW.AuditRuntime.R0468", "Цель недоступна.");
+  if (getActorFactionRelation(sourceActor, targetActor) === "ally") return auditLocalize("FALLOUTMAW.AuditRuntime.R0254", "Союзники не могут быть целью.");
+  if (!getActorRaceId(targetActor)) return auditLocalize("FALLOUTMAW.AuditRuntime.R0469", "У цели не указана раса.");
   return "";
 }
 
@@ -66,7 +67,7 @@ export async function activateHunterRaceEffect({
 } = {}) {
   const rejection = getHunterRaceTargetRejectionReason(actor, targetActor);
   if (rejection || !abilityItem || !abilityFunction) {
-    return { ok: false, reason: rejection || "Некорректная функция способности.", effect: null };
+    return { ok: false, reason: rejection || auditLocalize("FALLOUTMAW.AuditRuntime.R0470", "Некорректная функция способности."), effect: null };
   }
 
   const normalized = normalizeHunterRaceSettings(settings);
@@ -95,10 +96,10 @@ export async function activateHunterRaceEffect({
       animate: false,
       falloutMawHunterRaceRuntime: true
     });
-    return { ok: Boolean(created), reason: created ? "" : "Эффект не создан.", effect: created ?? null, raceId, settings: normalized };
+    return { ok: Boolean(created), reason: created ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R0471", "Эффект не создан."), effect: created ?? null, raceId, settings: normalized };
   } catch (error) {
     console.error(`${SYSTEM_ID} | Hunter activation failed`, error);
-    return { ok: false, reason: "Не удалось начать охоту.", effect: null };
+    return { ok: false, reason: auditLocalize("FALLOUTMAW.AuditRuntime.R0472", "Не удалось начать охоту."), effect: null };
   }
 }
 
@@ -119,7 +120,7 @@ export function buildHunterRaceEffectData({
     type: "base",
     name: `${abilityName}: ${raceName}`,
     img: abilityItem?.img || DEFAULT_ICON,
-    description: `Охота на расу «${escapeHtml(raceName)}»: Точность +${normalized.accuracyBonus}, урон +${normalized.damagePercentBonus}%, шанс критического успеха +${normalized.criticalChanceBonus}%.`,
+    description: auditFormat("FALLOUTMAW.AuditRuntime.R0473", { p0: (escapeHtml(raceName)), p1: (normalized.accuracyBonus), p2: (normalized.damagePercentBonus), p3: (normalized.criticalChanceBonus) }, "Охота на расу «{p0}»: Точность +{p1}, урон +{p2}%, шанс критического успеха +{p3}%."),
     origin: String(abilityItem?.uuid ?? ""),
     transfer: false,
     disabled: false,
@@ -195,7 +196,7 @@ export function getHunterRaceWeaponModifiers(actor = null, targetActor = null) {
     .filter(entry => entry.data?.raceId === raceId)
     .map(entry => ({
       key: `hunter-race:${entry.effect?.id ?? entry.data.abilityItemId}:${entry.data.functionId}`,
-      name: String(entry.effect?.name ?? "Охотник"),
+      name: String(entry.effect?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0087", "Охотник")),
       img: String(entry.effect?.img ?? ""),
       accuracy: entry.data.settings.accuracyBonus,
       damagePercent: entry.data.settings.damagePercentBonus,
@@ -261,7 +262,7 @@ function getConfiguredRaceName(raceId = "") {
 }
 
 function getAbilityName(item = null) {
-  return String(item?.name ?? "").trim() || "Охотник";
+  return String(item?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0087", "Охотник");
 }
 
 function getAbilitySourceId(item = null) {

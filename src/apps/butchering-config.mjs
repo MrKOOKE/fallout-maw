@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { TOOL_CLASS_CHOICES } from "../settings/tools.mjs";
@@ -5,10 +6,10 @@ import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
 const BUTCHERING_OUTCOMES = Object.freeze([
-  Object.freeze({ key: "criticalSuccess", label: "Крит. успех" }),
-  Object.freeze({ key: "success", label: "Успех" }),
-  Object.freeze({ key: "failure", label: "Провал" }),
-  Object.freeze({ key: "criticalFailure", label: "Крит. провал" })
+  Object.freeze({ key: "criticalSuccess", get label() { return auditLocalize("FALLOUTMAW.AuditApps.CritSuccess", "Крит. успех"); } }),
+  Object.freeze({ key: "success", get label() { return auditLocalize("FALLOUTMAW.SkillCheck.Success", "Успех"); } }),
+  Object.freeze({ key: "failure", get label() { return auditLocalize("FALLOUTMAW.SkillCheck.Failure", "Провал"); } }),
+  Object.freeze({ key: "criticalFailure", get label() { return auditLocalize("FALLOUTMAW.AuditApps.CritFailure", "Крит. провал"); } })
 ]);
 
 let butcheringConfigWindow = null;
@@ -16,7 +17,7 @@ let butcheringConfigWindow = null;
 export function registerButcheringConfigHooks() {
   Hooks.on("getActorContextOptions", (app, entryOptions) => {
     entryOptions.unshift({
-      label: "Разделка",
+      label: auditLocalize("FALLOUTMAW.Events.Groups.butchering.Label", "Разделка"),
       icon: "fa-solid fa-drumstick-bite",
       visible: () => game.user?.isGM === true,
       onClick: (_event, li) => openButcheringConfig(getActorFromDirectoryEntry(app, li))
@@ -95,7 +96,7 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Разделка: ${this.#actor?.name ?? ""}`;
+    return auditFormat("FALLOUTMAW.AuditApps.Butchering", { v0: (this.#actor?.name ?? "") }, "Разделка: {v0}");
   }
 
   setActor(actor) {
@@ -184,7 +185,7 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
     if (!this.#actor || !game.user?.isGM) return undefined;
     this.#config = this.#readConfigFromForm();
     await this.#actor.setFlag(SYSTEM_ID, "butchering", this.#config);
-    ui.notifications.info(`Настройки разделки для ${this.#actor.name} сохранены.`);
+    ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.ButcheringSettingsForSaved", { v0: (this.#actor.name) }, "Настройки разделки для {v0} сохранены."));
     return this.close();
   }
 
@@ -323,7 +324,7 @@ function createButcheringStage(index = 0) {
     ?? "";
   return normalizeButcheringStage({
     id: foundry.utils.randomID(),
-    name: `Этап ${index + 1}`,
+    name: auditFormat("FALLOUTMAW.AuditApps.Stage", { v0: (index + 1) }, "Этап {v0}"),
     difficulty: 60,
     tool: {
       enabled: false,
@@ -344,7 +345,7 @@ function normalizeButcheringStage(stage = {}, index = 0) {
   }
   return {
     id: String(stage?.id ?? "").trim() || foundry.utils.randomID(),
-    name: String(stage?.name ?? "").trim() || `Этап ${index + 1}`,
+    name: String(stage?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditApps.Stage", { v0: (index + 1) }, "Этап {v0}"),
     difficulty: Math.max(0, toInteger(stage?.difficulty ?? 60)),
     tool: normalizeButcheringToolRequirement(stage?.tool),
     outcomes
@@ -378,7 +379,7 @@ function normalizeButcheringReward(reward = {}) {
   return {
     id: String(reward?.id ?? "").trim() || foundry.utils.randomID(),
     uuid,
-    name: String(reward?.name ?? "").trim() || "Предмет",
+    name: String(reward?.name ?? "").trim() || auditLocalize("FALLOUTMAW.Craft.Item", "Предмет"),
     img: String(reward?.img ?? "").trim() || "icons/svg/item-bag.svg",
     min: Math.min(minimum, maximum),
     max: Math.max(minimum, maximum)

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { getWeaponModuleActionTooltipRows } from "../utils/weapon-module-actions.mjs";
 import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction, getProtectionModuleTooltipEntry, getProtectionModuleTooltipItem } from "../utils/function-module-tooltip.mjs";
 import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
@@ -6,6 +7,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { InventoryBlockLayout } from "../utils/inventory-block-layout.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
 import { CurrencyInputController } from "../utils/currency-input.mjs";
+import { DescriptionTooltipController } from "../utils/description-tooltip.mjs";
 import { canTransferOwnedContents } from "../inventory/contents-transfer.mjs";
 import { prepareWeaponSetDisplay } from "../utils/weapon-slot-display.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
@@ -102,6 +104,8 @@ import {
 } from "../combat/damage-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import { decorateActionPointHudEntry } from "../combat/reaction-resources.mjs";
+import { setOneTimeResourceValue } from "../combat/one-time-resources.mjs";
+import { decorateOneTimeResourceDisplay, supportsOneTimeResourceDisplay } from "../utils/one-time-resource-display.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   getActorInventoryGridDimensions,
@@ -413,6 +417,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #hoverPreviewKey = "";
   #dragDrop = null;
   #tooltipTimer = null;
+  #descriptionTooltips = new DescriptionTooltipController();
   #tooltipCloseTimer = null;
   #tooltipElement = null;
   #tooltipAnchorElement = null;
@@ -537,20 +542,20 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       controls.unshift({
         action: "openHackingSettings",
         icon: "fa-solid fa-lock",
-        label: "Настройки взлома",
+        label: auditLocalize("FALLOUTMAW.AuditApps.HackingSettings_1082", "Настройки взлома"),
         ownership: "OWNER"
       });
       controls.unshift({
         action: "openButcheringConfig",
         icon: "fa-solid fa-drumstick-bite",
-        label: "Разделка",
+        label: auditLocalize("FALLOUTMAW.Events.Groups.butchering.Label", "Разделка"),
         ownership: "OWNER"
       });
     }
     controls.unshift({
       action: "openTradeSettings",
       icon: "fa-solid fa-cash-register",
-      label: "Торговля",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Trade_836", "Торговля"),
       ownership: "OWNER"
     });
     controls.unshift({
@@ -562,14 +567,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     controls.unshift({
       action: "openActorLimbSilhouette",
       icon: "fa-solid fa-person",
-      label: "Индивидуальный силуэт",
+      label: auditLocalize("FALLOUTMAW.AuditApps.IndividualSilhouette", "Индивидуальный силуэт"),
       ownership: "OWNER"
     });
     controls.unshift(this.actor.type === "construct"
       ? {
         action: "openConstructStructure",
         icon: "fa-solid fa-sitemap",
-        label: "Строение конструкта",
+        label: auditLocalize("FALLOUTMAW.AuditApps.ConstructStructure", "Строение конструкта"),
         ownership: "OWNER"
       }
       : {
@@ -706,7 +711,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           data: actor.system.resources?.[resource.key],
           inputName: `system.resources.${resource.key}.value`
         }))
-        .map(entry => decorateActionPointHudEntry(actor, entry)),
+        .map(entry => decorateOneTimeResourceDisplay(actor, decorateActionPointHudEntry(actor, entry))),
       needs: needSettings.map(need => prepareDisplayIndicatorEntry({
         ...need,
         data: actor.system.needs?.[need.key],
@@ -785,8 +790,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return super.render(...args);
   }
 
+  changeTab(tab, group, options = {}) {
+    const result = super.changeTab(tab, group, options);
+    this.#restoreActiveTabScroll();
+    return result;
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#descriptionTooltips.bind(this.element, { actor: this.actor });
     this.element?.classList.toggle("fallout-maw-travel-carrier-sheet", isTravelGroupCarrierActor(this.actor));
     this.#hoverPreviewKey = "";
     this.setPosition();
@@ -798,7 +810,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#currencyInputs.bind(this.element, {
       actor: this.actor,
       canEdit: () => Boolean(this.isEditable && this.actor?.isOwner),
-      onError: error => ui.notifications.error(error.message || "Не удалось изменить сумму валюты.")
+      onError: error => ui.notifications.error(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToChangeTheCurrencyAmount", "Не удалось изменить сумму валюты."))
     });
     this.#activateWeaponSlotAspectSizing();
     this.#inventoryBlockLayout.bind(this.element?.querySelector(".fallout-maw-inventory-tab"));
@@ -828,6 +840,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   _onClose(options) {
+    this.#descriptionTooltips.destroy();
     this.#currencyInputs.destroy();
     this.#moduleDropPreview.destroy();
     super._onClose(options);
@@ -983,17 +996,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #onDropCatalogAbility(data = {}) {
     const sourceId = String(data.sourceId ?? "").trim();
     if (!sourceId || !this.actor?.isOwner) return null;
-    const abilityName = String(data.name ?? "").trim() || "Способность";
+    const abilityName = String(data.name ?? "").trim() || auditLocalize("TYPES.Item.ability", "Способность");
     if (actorHasAbility(this.actor, sourceId)) {
-      ui.notifications.warn(`${this.actor.name} уже имеет способность: ${abilityName}.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.AlreadyHasTheAbility", { v0: (this.actor.name), v1: (abilityName) }, "{v0} уже имеет способность: {v1}."));
       return null;
     }
     const item = await grantCatalogAbility(this.actor, sourceId);
     if (item) {
-      ui.notifications.info(`${this.actor.name}: добавлена способность ${item.name}.`);
+      ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.AbilityAdded", { v0: (this.actor.name), v1: (item.name) }, "{v0}: добавлена способность {v1}."));
       return item;
     }
-    ui.notifications.warn(`Не удалось добавить способность: ${abilityName}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.FailedToAddTheAbility", { v0: (abilityName) }, "Не удалось добавить способность: {v0}."));
     return null;
   }
 
@@ -1001,16 +1014,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.actor?.isOwner) return null;
     const itemData = foundry.utils.deepClone(dropped.itemData ?? {});
     const sourceId = getAbilitySourceId(dropped.item ?? itemData);
-    const abilityName = String(itemData.name ?? dropped.item?.name ?? "").trim() || "Способность";
+    const abilityName = String(itemData.name ?? dropped.item?.name ?? "").trim() || auditLocalize("TYPES.Item.ability", "Способность");
 
     if (sourceId) {
       if (actorHasAbility(this.actor, sourceId)) {
-        ui.notifications.warn(`${this.actor.name} уже имеет способность: ${abilityName}.`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.AlreadyHasTheAbility", { v0: (this.actor.name), v1: (abilityName) }, "{v0} уже имеет способность: {v1}."));
         return null;
       }
       const item = await grantCatalogAbility(this.actor, sourceId);
       if (item) {
-        ui.notifications.info(`${this.actor.name}: добавлена способность ${item.name}.`);
+        ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.AbilityAdded", { v0: (this.actor.name), v1: (item.name) }, "{v0}: добавлена способность {v1}."));
         return item;
       }
       return null;
@@ -1018,10 +1031,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const { item: created, cancelled } = await grantAbilityItemData(this.actor, itemData);
     if (cancelled) {
-      ui.notifications.warn("Выбор изменений способности не завершён. Способность не добавлена.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AbilityChangeSelectionIsIncompleteTheAbilityWas", "Выбор изменений способности не завершён. Способность не добавлена."));
       return null;
     }
-    if (created) ui.notifications.info(`${this.actor.name}: добавлена способность ${created.name}.`);
+    if (created) ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.AbilityAdded", { v0: (this.actor.name), v1: (created.name) }, "{v0}: добавлена способность {v1}."));
     return created ?? null;
   }
 
@@ -1141,7 +1154,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       x: cell.dataset.x,
       y: cell.dataset.y
     });
-    if (!moved) ui.notifications.warn("Пассажир не помещается в выбранную область.");
+    if (!moved) ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThePassengerDoesNotFitInTheSelected", "Пассажир не помещается в выбранную область."));
     else this.render({ parts: ["inventory"] });
     return moved;
   }
@@ -1151,16 +1164,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!dropped?.item || !isActorContainerUsableItem(dropped.item)) return null;
     const vehicleActor = await resolveActorByUuid(String(passengerElement.dataset.vehicleActorUuid ?? this.actor.uuid ?? ""));
     if (!vehicleActor) {
-      ui.notifications.warn("Не удалось найти транспорт пассажира.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.FailedToFindThePassengerSTransport", "Не удалось найти транспорт пассажира."));
       return false;
     }
     const targetActor = await resolveActorContainerPassengerActor(vehicleActor, String(passengerElement.dataset.passengerId ?? ""));
     if (!targetActor) {
-      ui.notifications.warn("Не удалось найти актера пассажира.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.FailedToFindThePassengerActor", "Не удалось найти актера пассажира."));
       return false;
     }
     if (!targetActor.testUserPermission?.(game.user, "OBSERVER")) {
-      ui.notifications.warn("Нет прав наблюдателя на этого пассажира.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHaveObserverPermissionForThis", "Нет прав наблюдателя на этого пассажира."));
       return false;
     }
     this.#clearDragPreviewCache();
@@ -1293,7 +1306,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         return this.actor.update(updateData).catch(error => {
           target.src = previous;
           console.error(error);
-          ui.notifications?.error(error?.message ?? "Не удалось изменить портрет актера.");
+          ui.notifications?.error(error?.message ?? auditLocalize("FALLOUTMAW.AuditApps.FailedToChangeTheActorSPortrait", "Не удалось изменить портрет актера."));
         });
       },
       position: {
@@ -1345,7 +1358,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const actor = this.actor;
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
     if (!limbEntries.length) {
-      ui.notifications.warn("У актера нет частей тела для настройки силуэта.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheActorHasNoBodyPartsToConfigure", "У актера нет частей тела для настройки силуэта."));
       return undefined;
     }
 
@@ -1368,7 +1381,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           "system.limbSilhouetteOverride": true,
           "system.limbSilhouette": savedSilhouette
         });
-        ui.notifications.info("Индивидуальный силуэт сохранен.");
+        ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.IndividualSilhouetteSaved", "Индивидуальный силуэт сохранен."));
       }
     }).render({ force: true });
   }
@@ -1457,7 +1470,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }, { capture: true });
 
     root.addEventListener("keydown", event => {
-      const input = event.target?.closest?.("[data-actor-name-input]");
+      const input = event.target?.closest?.("[data-actor-name-input], [data-one-time-resource-input]");
       if (!input || !this.element?.contains(input)) return;
       if (event.key !== "Enter") return;
       event.preventDefault();
@@ -1489,7 +1502,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#actorNameDraft = null;
       input.value = this.actor.name;
       console.error(error);
-      ui.notifications?.error(error?.message ?? "Не удалось изменить имя актера.");
+      ui.notifications?.error(error?.message ?? auditLocalize("FALLOUTMAW.AuditApps.FailedToChangeTheActorSName", "Не удалось изменить имя актера."));
     }
     return undefined;
   }
@@ -1568,8 +1581,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
 
     const label = this.#worldSidebarPeek
-      ? "Закрыть обзор боковой панели"
-      : "Открыть обзор боковой панели";
+      ? auditLocalize("FALLOUTMAW.AuditApps.CloseSidebarOverview", "Закрыть обзор боковой панели")
+      : auditLocalize("FALLOUTMAW.AuditApps.OpenSidebarOverview", "Открыть обзор боковой панели");
     button.classList.toggle("active", this.#worldSidebarPeek);
     button.setAttribute("aria-pressed", this.#worldSidebarPeek ? "true" : "false");
     button.setAttribute("aria-label", label);
@@ -1667,7 +1680,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const [effect] = await this.actor.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
       name: game.i18n.localize("FALLOUTMAW.Effects.NewEffect"),
-      img: "icons/svg/aura.svg",
+      img: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
       disabled: false,
       flags: {
         "fallout-maw": {
@@ -1766,7 +1779,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         const visible = !option.value || (raceId && optionRaceId === raceId);
         option.hidden = !visible;
         option.disabled = !visible;
-        if (visible && option.selected && option.value) selectedAvailable = true;
+        if (visible && option.selected) selectedAvailable = true;
       }
       if (!selectedAvailable) selectFirstVisible(subtypeSelect);
     };
@@ -1780,7 +1793,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         const visible = !option.value || (typeId && optionTypeId === typeId);
         option.hidden = !visible;
         option.disabled = !visible;
-        if (visible && option.selected && option.value) selectedAvailable = true;
+        if (visible && option.selected) selectedAvailable = true;
       }
 
       if (selectDefault || !selectedAvailable) selectFirstVisible(raceSelect);
@@ -1824,7 +1837,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #onTabScroll(event) {
     const tab = event.target?.closest?.(".tab[data-tab]");
-    if (!tab) return;
+    if (!tab?.classList.contains("active")) return;
     const scrollContainer = event.target?.matches?.("[data-scroll-key]") ? event.target : null;
     if (!scrollContainer && event.target !== tab) return;
     const key = scrollContainer
@@ -2282,7 +2295,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (zone.dataset.constructPartSlot) {
       const slot = getConstructPartSlot(this.actor, zone.dataset.constructPartSlot);
       if (!slot || !isConstructPartCompatibleWithSlot(itemData, slot)) {
-        ui.notifications?.warn?.("Тип детали не совпадает с типом этого слота конструкта.");
+        ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.ThePartTypeDoesNotMatchThisConstruct", "Тип детали не совпадает с типом этого слота конструкта."));
         return null;
       }
       const footprint = getItemFootprint(itemData);
@@ -2622,8 +2635,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(this.actor)) return null;
     const storedPlacement = createStoredPlacement(resolvedPlacement, item);
     const lockedState = getItemLockedStateForPlacementTransition(item, storedPlacement.mode);
-    const wasEquipment = item.system?.placement?.mode === "equipment";
-    const isEquipment = resolvedPlacement.mode === "equipment";
+    const wasEquipment = ["equipment", ITEM_FUNCTIONS.constructPart].includes(item.system?.placement?.mode);
+    const isEquipment = ["equipment", ITEM_FUNCTIONS.constructPart].includes(resolvedPlacement.mode);
     const updateData = {
       _id: item.id,
       "system.equipped": isEquipment ? true : (wasEquipment ? false : Boolean(item.system?.equipped)),
@@ -2658,14 +2671,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const slot = getConstructPartSlot(this.actor, placement?.limbKey);
     const candidate = dropped?.item ?? dropped?.itemData;
     if (!slot || !isConstructPartCompatibleWithSlot(candidate, slot)) {
-      ui.notifications?.warn?.("Тип детали не совпадает с типом этого слота конструкта.");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.ThePartTypeDoesNotMatchThisConstruct", "Тип детали не совпадает с типом этого слота конструкта."));
       return null;
     }
 
     const current = getInstalledConstructPartForSlot(this.actor, slot.id);
     if (current) {
       if (sourceOwned && current.id === dropped?.item?.id) return current;
-      ui.notifications?.warn?.("Сначала снимите установленную деталь из этого слота.");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.RemoveTheInstalledPartFromThisSlotFirst", "Сначала снимите установленную деталь из этого слота."));
       return null;
     }
 
@@ -2714,7 +2727,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && String(item.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${slotId}:`)
     ));
     if (!occupied) return true;
-    ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+    ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.FirstRemoveTheWeaponsInstalledInThisConstruct", "Сначала снимите оружие, установленное в слоты этой детали конструкта."));
     return false;
   }
 
@@ -2820,7 +2833,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     delete createData.id;
     foundry.utils.mergeObject(createData, {
       system: {
-        equipped: resolvedPlacement.mode === "equipment",
+        equipped: ["equipment", ITEM_FUNCTIONS.constructPart].includes(resolvedPlacement.mode),
         container: {
           parentId: ROOT_CONTAINER_ID
         },
@@ -3359,6 +3372,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   _onChangeForm(formConfig, event) {
     if (event?.target?.closest?.("[data-actor-name-input], [data-currency-editor]")) return undefined;
+    const onceInput = event?.target?.closest?.("[data-one-time-resource-input]");
+    if (onceInput) {
+      if (!this.#freeEdit || !this.actor?.isOwner || !this.isEditable) return undefined;
+      const key = String(onceInput.dataset.key ?? "");
+      if (!supportsOneTimeResourceDisplay(key)) return undefined;
+      return setOneTimeResourceValue(this.actor, key, onceInput.value).then(value => {
+        onceInput.value = String(value);
+      });
+    }
     return super._onChangeForm(formConfig, event);
   }
 
@@ -3522,7 +3544,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
     }
     const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
-    if ((await getQuickDisassemblyItems(this.actor)).some(entry => entry.id === item.id)) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+    if ((await getQuickDisassemblyItems(this.actor)).some(entry => entry.id === item.id)) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", auditLocalize("FALLOUTMAW.AuditApps.Dismantle", "Разобрать")]);
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
@@ -3531,10 +3553,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     const interactionState = getItemInteractionState(this.actor, item, { token: resolveActorInteractionToken(this.actor) });
     if (interactionState.hasInteraction) {
-      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+      menuOptions.push(["interact", "fa-hand-pointer", auditLocalize("FALLOUTMAW.AuditApps.Interaction", "Взаимодействие")]);
     }
     if (canUseActiveItem(item)) {
-      menuOptions.push(["use", "fa-play", "Применить"]);
+      menuOptions.push(["use", "fa-play", auditLocalize("FALLOUTMAW.Common.Apply", "Применить")]);
     }
     if (canRotate) {
       menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : rotateUnavailableLabel]);
@@ -3545,9 +3567,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
     if (getItemQuantity(item) > 1) {
-      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+      menuOptions.push(["split", "fa-code-branch", auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить")]);
     }
-    menuOptions.push(["drop", "fa-arrow-down", "Выбросить"]);
+    menuOptions.push(["drop", "fa-arrow-down", auditLocalize("FALLOUTMAW.AuditApps.Drop", "Выбросить")]);
     if (game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
     }
@@ -3700,8 +3722,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (quantity <= 1) return null;
     const amount = await promptItemStackQuantity({
       item,
-      title: "Разделить предмет",
-      actionLabel: "Разделить",
+      title: auditLocalize("FALLOUTMAW.AuditApps.SplitItem", "Разделить предмет"),
+      actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить"),
       max: quantity - 1,
       value: Math.max(1, Math.floor(quantity / 2))
     });
@@ -3767,7 +3789,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.render({ force: true });
     } catch (error) {
       console.error("fallout-maw | Actor sheet item drop failed", error);
-      ui.notifications.warn(error.message || "Не удалось выбросить предмет.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToDropTheItem", "Не удалось выбросить предмет."));
     }
     return null;
   }
@@ -3822,7 +3844,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const lockedState = getItemLockedStateForPlacementTransition(item, storedPlacement.mode);
     const updateData = {
       _id: item.id,
-      "system.equipped": placementResolution.placement.mode === "equipment",
+      "system.equipped": ["equipment", ITEM_FUNCTIONS.constructPart].includes(placementResolution.placement.mode),
       ...(lockedState === undefined ? {} : { "system.locked": lockedState }),
       "system.container.parentId": ROOT_CONTAINER_ID,
       "system.placement.mode": storedPlacement.mode,
@@ -3870,6 +3892,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const placementContext = currentInventoryPlacement
       ?? this.#getFirstAvailableInventoryPlacementContext(item, [item.id]);
     if (!placementContext) {
+      if (detachedSlotId) {
+        try {
+          await dropActorInventoryItem(this.actor, item);
+          ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughInventorySpaceTheConstruct", "В инвентаре не хватило места: деталь конструкта выброшена на землю."));
+          return null;
+        } catch (error) {
+          ui.notifications?.warn?.(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToDropTheConstructPart", "Не удалось выбросить деталь конструкта."));
+          return null;
+        }
+      }
       this.#warnInventoryNoSpace();
       return null;
     }
@@ -4678,8 +4710,8 @@ async function prepareTravelGroupSheetContext(actor = null) {
     const entry = {
       id: unit.id,
       actorUuid: unit.actorUuid || unitActor?.uuid || "",
-      name: unit.actorName || unitActor?.name || unit.tokenData?.name || "Участник путешествия",
-      img: unit.actorImg || unitActor?.img || unit.tokenData?.texture?.src || "icons/svg/mystery-man.svg",
+      name: unit.actorName || unitActor?.name || unit.tokenData?.name || auditLocalize("FALLOUTMAW.AuditApps.TravelParticipant", "Участник путешествия"),
+      img: unit.actorImg || unitActor?.img || unit.tokenData?.texture?.src || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
       missing: !unitActor && !actorContainers.visible
     };
     if (actorContainers.visible) {
@@ -5169,7 +5201,7 @@ function renderAbilityItemTooltipContentHTML(item, actor, { descriptionHTML = ""
   return `
     <section class="content fallout-maw-ability-tooltip-content">
       ${functionSections}
-      <section class="description">${descriptionHTML || "Описание не задано."}</section>
+      <section class="description">${descriptionHTML || auditLocalize("FALLOUTMAW.AuditApps.NoDescriptionProvided", "Описание не задано.")}</section>
     </section>
   `;
 }
@@ -5189,11 +5221,11 @@ function buildAbilityTooltipFunctionSections(item, actor = null) {
     renderTooltipFunctionSection(
       hasActiveApplication
         ? game.i18n.localize("FALLOUTMAW.Ability.ActiveApplication.ActivationCosts")
-        : "Энергия",
+        : auditLocalize("FALLOUTMAW.Common.Energy", "Энергия"),
       resourceCostRows
     ),
-    renderTooltipFunctionSection("Состояние", runtimeStateRows),
-    renderTooltipFunctionSection("Прогресс условий", progressRows)
+    renderTooltipFunctionSection(auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"), runtimeStateRows),
+    renderTooltipFunctionSection(auditLocalize("FALLOUTMAW.AuditApps.ConditionProgress", "Прогресс условий"), progressRows)
   ].filter(Boolean);
   if (!sections.length) return "";
   return `<section class="functions">${sections.join("")}</section>`;
@@ -5205,10 +5237,10 @@ function getInconspicuousTooltipStateRows(item, actor = null) {
     .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.inconspicuous);
   if (!abilityFunction) return [];
   const combat = getActorActiveCombat(actor);
-  if (!combat) return [["Атакован в текущем раунде", "Вне боя"]];
+  if (!combat) return [[auditLocalize("FALLOUTMAW.AuditApps.AttackedInTheCurrentRound", "Атакован в текущем раунде"), auditLocalize("FALLOUTMAW.AuditApps.OutsideCombat", "Вне боя")]];
   const state = getInconspicuousRoundState(item, abilityFunction);
   const attacked = isInconspicuousRoundStateCurrent(state, combat) && state.attacked;
-  return [["Атакован в текущем раунде", attacked ? "Да" : "Нет"]];
+  return [[auditLocalize("FALLOUTMAW.AuditApps.AttackedInTheCurrentRound", "Атакован в текущем раунде"), attacked ? auditLocalize("FALLOUTMAW.Common.Yes", "Да") : auditLocalize("FALLOUTMAW.SkillCheck.None", "Нет")]];
 }
 
 function buildAbilityResourceCostRows(item, actor = null) {
@@ -5249,93 +5281,93 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const activeBase = Math.max(0, toInteger(settings.activeEnergyCost));
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
-      ["Активация: базовый расход", String(activeBase)],
-      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activeBase)],
-      ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), String(activeBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), renderAbilityEnergyCostTotal(item, actor, entry, activeBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionBaseCost", "Реакция: базовый расход"), String(reactionBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionTotal", "Реакция: итог"), renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     const settings = normalizeCounterAttackSettings(entry.fixedSettings);
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
-      ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionBaseCost", "Реакция: базовый расход"), String(reactionBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionTotal", "Реакция: итог"), renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
     const settings = normalizeCounterSniperSettings(entry.fixedSettings);
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
-      ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionBaseCost", "Реакция: базовый расход"), String(reactionBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionTotal", "Реакция: итог"), renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
     const settings = normalizeWhereAreYouGoingSettings(entry.fixedSettings);
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
-      ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionBaseCost", "Реакция: базовый расход"), String(reactionBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ReactionTotal", "Реакция: итог"), renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.anatomyStudy) {
     const settings = normalizeAnatomyStudySettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.energyCost));
     return [
-      ["Активация: базовый расход", `${activationBase} энергии`],
-      ["Активация: итог", `${renderAbilityEnergyCostTotal(item, actor, entry, activationBase)} энергии`],
-      ["Стоимость действия", `${Math.max(0, toInteger(settings.actionPointCost))} ОД`],
-      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} энергии на ${formatDurationShort(settings.overloadDurationSeconds)}`],
-      ["Объём памяти", formatActorFormulaForDisplay(settings.memoryFormula, actor, { includeValues: true })]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), auditFormat("FALLOUTMAW.AuditApps.Energy_1110", { v0: (activationBase) }, "{v0} энергии")],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), auditFormat("FALLOUTMAW.AuditApps.Energy_1110", { v0: (renderAbilityEnergyCostTotal(item, actor, entry, activationBase)) }, "{v0} энергии")],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActionCost_1111", "Стоимость действия"), auditFormat("FALLOUTMAW.AuditApps.AP", { v0: (Math.max(0, toInteger(settings.actionPointCost))) }, "{v0} ОД")],
+      [auditLocalize("FALLOUTMAW.Events.Reaction.OverloadAmount", "Перегрузка"), auditFormat("FALLOUTMAW.AuditApps.EnergyPer", { v0: (Math.max(0, toInteger(settings.overloadEnergyCost))), v1: (formatDurationShort(settings.overloadDurationSeconds)) }, "{v0} энергии на {v1}")],
+      [auditLocalize("FALLOUTMAW.AuditApps.MemoryCapacity", "Объём памяти"), formatActorFormulaForDisplay(settings.memoryFormula, actor, { includeValues: true })]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.shadow) {
     const settings = normalizeShadowSettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
-      ["Активация: базовый расход", `${activationBase} энергии`],
-      ["Активация: итог", `${renderAbilityEnergyCostTotal(item, actor, entry, activationBase)} энергии`],
-      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} энергии на ${formatDurationShort(settings.overloadDurationSeconds)}`],
-      ["Эффект", `+${Math.max(0, toInteger(settings.stealthBonus))} к Скрытности на ${formatDurationShort(settings.durationSeconds)}`]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), auditFormat("FALLOUTMAW.AuditApps.Energy_1110", { v0: (activationBase) }, "{v0} энергии")],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), auditFormat("FALLOUTMAW.AuditApps.Energy_1110", { v0: (renderAbilityEnergyCostTotal(item, actor, entry, activationBase)) }, "{v0} энергии")],
+      [auditLocalize("FALLOUTMAW.Events.Reaction.OverloadAmount", "Перегрузка"), auditFormat("FALLOUTMAW.AuditApps.EnergyPer", { v0: (Math.max(0, toInteger(settings.overloadEnergyCost))), v1: (formatDurationShort(settings.overloadDurationSeconds)) }, "{v0} энергии на {v1}")],
+      [auditLocalize("FALLOUTMAW.Item.FirstAidChatEffect", "Эффект"), auditFormat("FALLOUTMAW.AuditApps.ToStealthFor", { v0: (Math.max(0, toInteger(settings.stealthBonus))), v1: (formatDurationShort(settings.durationSeconds)) }, "+{v0} к Скрытности на {v1}")]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.sandman) {
     const settings = normalizeSandmanSettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
-      ["Активация: базовый расход", `${activationBase} энергии`],
-      ["Активация: итог", `${renderAbilityEnergyCostTotal(item, actor, entry, activationBase)} энергии`],
-      ["Эффект", `+${Math.max(0, toInteger(settings.damagePercentBonus))}% к урону, без обнаружения`]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), auditFormat("FALLOUTMAW.AuditApps.Energy_1110", { v0: (activationBase) }, "{v0} энергии")],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), auditFormat("FALLOUTMAW.AuditApps.Energy_1110", { v0: (renderAbilityEnergyCostTotal(item, actor, entry, activationBase)) }, "{v0} энергии")],
+      [auditLocalize("FALLOUTMAW.Item.FirstAidChatEffect", "Эффект"), auditFormat("FALLOUTMAW.AuditApps.DamageUndetected", { v0: (Math.max(0, toInteger(settings.damagePercentBonus))) }, "+{v0}% к урону, без обнаружения")]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     const settings = normalizeKeepAwaySettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
-      ["Активация: базовый расход", String(activationBase)],
-      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
-      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), String(activationBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
+      [auditLocalize("FALLOUTMAW.Events.Reaction.OverloadAmount", "Перегрузка"), auditFormat("FALLOUTMAW.AuditApps.ForSec", { v0: (Math.max(0, toInteger(settings.overloadEnergyCost))), v1: (Math.max(0, toInteger(settings.overloadDurationSeconds))) }, "{v0} на {v1} сек.")]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
     const settings = normalizeRicochetSettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
-      ["Активация: базовый расход", String(activationBase)],
-      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
-      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), String(activationBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
+      [auditLocalize("FALLOUTMAW.Events.Reaction.OverloadAmount", "Перегрузка"), auditFormat("FALLOUTMAW.AuditApps.ForSec", { v0: (Math.max(0, toInteger(settings.overloadEnergyCost))), v1: (Math.max(0, toInteger(settings.overloadDurationSeconds))) }, "{v0} на {v1} сек.")]
     ];
   }
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(entry.fixedKey)) {
     const settings = normalizeLethalAttackSettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
-      ["Активация: базовый расход", String(activationBase)],
-      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
-      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`],
-      ["Бонус урона", `+${Math.max(0, toInteger(settings.damagePercentBonus))}%`],
-      ["Ожидание атаки", `${Math.max(0, toInteger(settings.attackWaitDurationSeconds))} сек.`]
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationBaseCost", "Активация: базовый расход"), String(activationBase)],
+      [auditLocalize("FALLOUTMAW.AuditApps.ActivationTotal", "Активация: итог"), renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
+      [auditLocalize("FALLOUTMAW.Events.Reaction.OverloadAmount", "Перегрузка"), auditFormat("FALLOUTMAW.AuditApps.ForSec", { v0: (Math.max(0, toInteger(settings.overloadEnergyCost))), v1: (Math.max(0, toInteger(settings.overloadDurationSeconds))) }, "{v0} на {v1} сек.")],
+      [auditLocalize("FALLOUTMAW.AuditApps.DamageBonus", "Бонус урона"), `+${Math.max(0, toInteger(settings.damagePercentBonus))}%`],
+      [auditLocalize("FALLOUTMAW.AuditApps.WaitingForAnAttack", "Ожидание атаки"), auditFormat("FALLOUTMAW.AuditApps.Sec", { v0: (Math.max(0, toInteger(settings.attackWaitDurationSeconds))) }, "{v0} сек.")]
     ];
   }
   const settings = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
@@ -5360,8 +5392,8 @@ function buildAbilityResourceCostRows(item, actor = null) {
     : 1;
   const base = Math.max(0, toInteger(settings.energyCost)) * multiplier;
   return [
-    ["Базовый расход", String(base)],
-    ["Итог", renderAbilityEnergyCostTotal(item, actor, entry, Math.max(0, toInteger(settings.energyCost)), { multiplier })]
+    [auditLocalize("FALLOUTMAW.AuditApps.BaseCost", "Базовый расход"), String(base)],
+    [auditLocalize("FALLOUTMAW.SkillCheck.Total", "Итог"), renderAbilityEnergyCostTotal(item, actor, entry, Math.max(0, toInteger(settings.energyCost)), { multiplier })]
   ];
 }
 
@@ -5499,8 +5531,8 @@ function buildActiveApplicationConfiguredOverloadRows(costs = [], resourceLabels
     const resourceKey = String(cost?.resourceKey ?? "").trim();
     const resourceLabel = resourceLabels.get(resourceKey) ?? resourceKey;
     return [[
-      `Перегрузка — ${payerLabel}`,
-      `${resourceLabel}: ${amount} на ${formatDurationShort(durationSeconds)}`
+      auditFormat("FALLOUTMAW.AuditApps.Overload", { v0: (payerLabel) }, "Перегрузка — {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.For", { v0: (resourceLabel), v1: (amount), v2: (formatDurationShort(durationSeconds)) }, "{v0}: {v1} на {v2}")
     ]];
   });
 }
@@ -5695,8 +5727,8 @@ function buildContainerTooltipSection(item, actor) {
   const system = item.system ?? {};
   const preview = buildContainerTooltipGrid(item, actor);
   const rows = [
-    ["Ячейки", preview.cellCount],
-    ["Нагруженность", `${formatWeight(getContainerContentsWeight(item, actor?.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`]
+    [auditLocalize("FALLOUTMAW.AuditApps.Cells", "Ячейки"), preview.cellCount],
+    [auditLocalize("FALLOUTMAW.AuditApps.Load", "Нагруженность"), `${formatWeight(getContainerContentsWeight(item, actor?.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`]
   ];
   const extraWeaponSlots = toInteger(system.functions?.container?.extraWeaponSlots);
   const loadReduction = Math.max(0, Math.min(100, Number(system.functions?.container?.loadReduction) || 0));
@@ -5916,7 +5948,7 @@ function buildNeedChangeTooltipSection(item, actor = null) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDuration"), formatDurationShort(durationSeconds)]);
   }
   rows.push(...changeRows);
-  return renderTooltipFunctionSection("Изменение потребностей", rows);
+  return renderTooltipFunctionSection(auditLocalize("FALLOUTMAW.AuditApps.NeedChanges", "Изменение потребностей"), rows);
 }
 
 function getNeedChangeOrganismDevelopmentTooltipRows(entries = []) {
@@ -6215,7 +6247,7 @@ function renderDamageMitigationTooltipTables(tables = []) {
 }
 
 function buildDamageMitigationCellBreakdown(item, actor, cell = {}, prepared = {}, {
-  modeLabel = "Защита",
+  modeLabel = auditLocalize("FALLOUTMAW.Item.MitigationModeDefense", "Защита"),
   protectionEffectSources = []
 } = {}) {
   const baseValue = toInteger(prepared.baseValue);
@@ -6224,7 +6256,7 @@ function buildDamageMitigationCellBreakdown(item, actor, cell = {}, prepared = {
   const protectionPercent = Number(prepared.protectionPercent) || 0;
   const sources = [];
   if (weakenedValue !== baseValue) sources.push({
-    name: "Состояние предмета",
+    name: auditLocalize("FALLOUTMAW.Item.TooltipBreakdownCondition", "Состояние предмета"),
     img: item?.img,
     operation: "override",
     value: weakenedValue,
@@ -6236,7 +6268,7 @@ function buildDamageMitigationCellBreakdown(item, actor, cell = {}, prepared = {
     actorName: actor?.name,
     img: item?.img,
     base: {
-      name: "Значение предмета",
+      name: auditLocalize("FALLOUTMAW.AuditApps.ItemValue", "Значение предмета"),
       img: item?.img,
       value: baseValue
     },
@@ -6250,7 +6282,7 @@ function buildDamageMitigationCellBreakdown(item, actor, cell = {}, prepared = {
     {
       round: Math.floor,
       total: value,
-      contributionUnit: "защиты"
+      contributionUnit: auditLocalize("FALLOUTMAW.AuditApps.Defense", "защиты")
     }
   );
   else breakdown.total = value;
@@ -6258,7 +6290,7 @@ function buildDamageMitigationCellBreakdown(item, actor, cell = {}, prepared = {
 }
 
 function renderDamageTypeIcon(damageType = {}) {
-  const img = String(damageType.damageTypeImg ?? "").trim() || "icons/svg/d20-grey.svg";
+  const img = String(damageType.damageTypeImg ?? "").trim() || "systems/fallout-maw/assets/System/Skills/skill-default.webp";
   const label = String(damageType.damageTypeLabel ?? "");
   const iconClass = String(damageType.damageTypeIconClass ?? "").trim() || buildDamageTypeIconClass(damageType);
   const style = String(damageType.damageTypeIconStyle ?? "").trim() || buildDamageTypeIconStyle(damageType);
@@ -6297,10 +6329,10 @@ function buildDamageSourceTooltipSection(item, actor = null) {
     breakdown: buildDamageSourceFormulaAttribution(item, actor, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), source?.criticalDamagePercent, criticalDamagePercent, { suffix: "%" })
   })]);
   const maxRangeMeters = evaluateTooltipFormula(source?.maxRangeMeters, actor);
-  if (maxRangeMeters) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(maxRangeMeters)} м`]);
+  if (maxRangeMeters) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(maxRangeMeters)) }, "{v0} м")]);
   const effectiveValue = evaluateTooltipFormula(source?.effectiveRange?.value, actor);
   const effectiveMax = evaluateTooltipFormula(source?.effectiveRange?.max, actor);
-  if (effectiveValue || effectiveMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(effectiveValue)} / ${formatNumber(effectiveMax)} м`]);
+  if (effectiveValue || effectiveMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), auditFormat("FALLOUTMAW.AuditApps.M_1132", { v0: (formatNumber(effectiveValue)), v1: (formatNumber(effectiveMax)) }, "{v0} / {v1} м")]);
   const penetration = evaluateTooltipFormula(source?.penetration, actor);
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
   const noiseLevel = toInteger(source?.noiseLevel);
@@ -6375,8 +6407,8 @@ function buildLightSourceTooltipSection(item) {
   const name = String(light?.name ?? "").trim() || item.name;
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.LightSourceName"), name],
-    [game.i18n.localize("FALLOUTMAW.Item.LightSourceDim"), `${formatNumber(Math.max(0, Number(light?.dim) || 0))} м`],
-    [game.i18n.localize("FALLOUTMAW.Item.LightSourceBright"), `${formatNumber(Math.max(0, Number(light?.bright) || 0))} м`],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceDim"), auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(Math.max(0, Number(light?.dim) || 0))) }, "{v0} м")],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceBright"), auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(Math.max(0, Number(light?.bright) || 0))) }, "{v0} м")],
     [game.i18n.localize("FALLOUTMAW.Item.LightSourceAngle"), Math.max(0, Math.min(360, Number(light?.angle) || 360))],
     [game.i18n.localize("FALLOUTMAW.Item.LightSourceRotation"), formatNumber(Number(light?.rotation) || 0)],
     [game.i18n.localize("FALLOUTMAW.Item.LightSourceColor"), String(light?.color ?? "").trim() || game.i18n.localize("FALLOUTMAW.Common.None")],
@@ -6402,7 +6434,7 @@ function getLightSourceCostTooltipLabel(costs = []) {
         : type === "energyConsumer"
           ? game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer")
           : type;
-      return `${label}: ${formatNumber(amount)}/ч`;
+      return auditFormat("FALLOUTMAW.AuditApps.H", { v0: (label), v1: (formatNumber(amount)) }, "{v0}: {v1}/ч");
     })
     .filter(Boolean);
   if (!entries.length) return game.i18n.localize("FALLOUTMAW.Item.LightSourceNoResourceCosts");
@@ -6420,13 +6452,13 @@ function buildConstructPartTooltipSection(item) {
   const partType = String(constructPart.partType ?? "").trim() || item.name;
   const blockedLabels = getProsthesisBlockedEffectLabels(getConstructPartBlockedEffects(item));
   const rows = [
-    ["Тип детали", partType],
-    ["Критическая деталь", game.i18n.localize(constructPart.critical ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")],
+    [auditLocalize("FALLOUTMAW.AuditApps.PartType", "Тип детали"), partType],
+    [auditLocalize("FALLOUTMAW.AuditApps.CriticalPart", "Критическая деталь"), game.i18n.localize(constructPart.critical ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.length
       ? { html: renderTooltipValueTokens(blockedLabels) }
       : ""]
   ];
-  return renderTooltipFunctionSection("Деталь конструкта", rows);
+  return renderTooltipFunctionSection(auditLocalize("FALLOUTMAW.AuditApps.ConstructPart", "Деталь конструкта"), rows);
 }
 
 function getConstructPartBlockedEffects(itemOrData = null) {
@@ -6518,7 +6550,7 @@ function getModuleTooltipRows(item, evaluatingActor = null) {
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), weapon.accuracyBonus);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), weapon.criticalChanceModifier, { suffix: "%" });
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), weapon.criticalDamagePercent, { suffix: "%" });
-  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), weapon.maxRangeMeters, { suffix: " м" });
+  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), weapon.maxRangeMeters, { suffix: auditLocalize("FALLOUTMAW.AuditApps.M_1137", " м") });
   pushModuleEffectiveRangeRow(rows, weapon.effectiveRange);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), weapon.penetration);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"), weapon.noiseLevel, {
@@ -6549,7 +6581,7 @@ function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}, evaluati
         baseMode: false,
         sourceActor: item?.actor ?? evaluatingActor
       }));
-      return ["Добавляет функцию", {
+      return [auditLocalize("FALLOUTMAW.AuditApps.AddsFunction", "Добавляет функцию"), {
         html: `
           <span class="weapon-tab-list tooltip-added-weapon-function-list">
             <span class="tooltip-added-weapon-function-chip"
@@ -6612,7 +6644,7 @@ function summarizeMitigationCoverage(entries = {}) {
       .map(([key]) => key)
   ))).size;
   if (!limbCount && !damageTypeCount) return "";
-  return `${limbCount} частей / ${damageTypeCount} типов`;
+  return auditFormat("FALLOUTMAW.AuditApps.PartsTypes", { v0: (limbCount), v1: (damageTypeCount) }, "{v0} частей / {v1} типов");
 }
 
 function buildWeaponTooltipSections(item, activeWeaponIndex = 0, {
@@ -6776,7 +6808,7 @@ function renderWeaponTooltipModulePickerPanel(item, sourceActor, evaluatingActor
   const candidates = getTooltipWeaponModuleCandidates(sourceActor, item, slot, targetFunction);
   const content = candidates.length
     ? `<div class="tooltip-module-choice-list">${candidates.map(candidate => renderWeaponTooltipModuleChoice(candidate, weaponIndex, slotIndex, sourceActor, evaluatingActor, targetFunction)).join("")}</div>`
-    : `<p class="fallout-maw-empty-list">Нет подходящих модулей.</p>`;
+    : auditLocalize("FALLOUTMAW.AuditApps.NoCompatibleModules", "<p class=\"fallout-maw-empty-list\">Нет подходящих модулей.</p>");
   return `
     <div class="tooltip-module-picker-panel" data-tooltip-module-picker-panel="${escapeAttribute(panelKey)}">
       <h5>${escapeHTML(slot.moduleKey || game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots"))}</h5>
@@ -6978,7 +7010,7 @@ function renderChangedPercentValue(value = 0, baseValue = 0, options = {}) {
 }
 
 function renderChangedDistanceValue(value = 0, baseValue = 0, options = {}) {
-  const text = `${formatNumber(value)} м`;
+  const text = auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(value)) }, "{v0} м");
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
   return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false), options.breakdown);
 }
@@ -6988,14 +7020,14 @@ function renderChangedEffectiveRangeValue(range = {}, baseRange = {}, { actor = 
   const max = evaluateTooltipFormula(range?.max, actor);
   const baseValue = evaluateTooltipFormula(baseRange?.value, actor);
   const baseMax = evaluateTooltipFormula(baseRange?.max, actor);
-  if (baseMode || (value === baseValue && max === baseMax)) return `${formatNumber(value)} / ${formatNumber(max)} м`;
+  if (baseMode || (value === baseValue && max === baseMax)) return auditFormat("FALLOUTMAW.AuditApps.M_1132", { v0: (formatNumber(value)), v1: (formatNumber(max)) }, "{v0} / {v1} м");
   const valueHtml = value === baseValue
     ? escapeHTML(formatNumber(value))
     : renderChangedTooltipSpan(formatNumber(value), value < baseValue, breakdowns?.value);
   const maxHtml = max === baseMax
     ? escapeHTML(formatNumber(max))
     : renderChangedTooltipSpan(formatNumber(max), max > baseMax, breakdowns?.max);
-  return { html: `${valueHtml} / ${maxHtml} м` };
+  return { html: auditFormat("FALLOUTMAW.AuditApps.M_1132", { v0: (valueHtml), v1: (maxHtml) }, "{v0} / {v1} м") };
 }
 
 function pushModuleChangeRow(rows, label, value = 0, { suffix = "", higherIsBetter = true } = {}) {
@@ -7008,8 +7040,8 @@ function pushModuleEffectiveRangeRow(rows, range = {}) {
   const value = Number(range?.value) || 0;
   const max = Number(range?.max) || 0;
   if (!value && !max) return;
-  const valueHtml = value ? renderChangedTooltipSpan(`${formatSignedNumber(value)} м`, value < 0) : escapeHTML("0 м");
-  const maxHtml = max ? renderChangedTooltipSpan(`${formatSignedNumber(max)} м`, max > 0) : escapeHTML("0 м");
+  const valueHtml = value ? renderChangedTooltipSpan(auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatSignedNumber(value)) }, "{v0} м"), value < 0) : escapeHTML(auditLocalize("FALLOUTMAW.AuditApps.0M", "0 м"));
+  const maxHtml = max ? renderChangedTooltipSpan(auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatSignedNumber(max)) }, "{v0} м"), max > 0) : escapeHTML(auditLocalize("FALLOUTMAW.AuditApps.0M", "0 м"));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), { html: `${valueHtml} / ${maxHtml}` }]);
 }
 
@@ -7027,7 +7059,7 @@ function getModuleActionPointRows(actionPointCosts = {}) {
   return WEAPON_MODULE_ACTION_KEYS
     .map(key => [labels.get(key) ?? key, Number(actionPointCosts?.[key]) || 0])
     .filter(([_label, value]) => value)
-    .map(([label, value]) => [label, renderModuleChangeValue(value, { suffix: " ОД", higherIsBetter: false })]);
+    .map(([label, value]) => [label, renderModuleChangeValue(value, { suffix: auditLocalize("FALLOUTMAW.AuditApps.AP_1142", " ОД"), higherIsBetter: false })]);
 }
 
 function renderModuleChangeValue(value = 0, { suffix = "", higherIsBetter = true } = {}) {
@@ -7089,7 +7121,7 @@ function renderItemValueBreakdownTooltipHTML(breakdown = {}) {
 
 function renderItemValueBreakdownSource(source = {}, formatter = formatNumber) {
   const fallbackKey = source.isBase ? "FALLOUTMAW.Item.TooltipBreakdownBase" : "FALLOUTMAW.Item.TooltipBreakdownOther";
-  const fallbackName = source.isBase ? "Базовое значение" : "Другой источник";
+  const fallbackName = source.isBase ? auditLocalize("FALLOUTMAW.AuditApps.BaseValue", "Базовое значение") : auditLocalize("FALLOUTMAW.Item.TooltipBreakdownOther", "Другой источник");
   const name = localizeTooltipSourceName(source.name || localizeOrFallback(fallbackKey, fallbackName));
   const img = String(source.img ?? "").trim() || "icons/svg/item-bag.svg";
   const operation = source.valueLabel || formatItemValueBreakdownOperation(source, formatter);
@@ -7480,9 +7512,9 @@ function buildWeaponTooltipValueBreakdowns({
     title: game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"),
     total: evaluateTooltipFormula(data?.maxRangeMeters, actor),
     minimum: 0,
-    formatValue: value => `${formatNumber(value)} м`
+    formatValue: value => auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(value)) }, "{v0} м")
   });
-  appendAttributionDeltaSources(maxRangeMeters, attackRangeAttribution?.sources, { suffix: " м", minimum: 0 });
+  appendAttributionDeltaSources(maxRangeMeters, attackRangeAttribution?.sources, { suffix: auditLocalize("FALLOUTMAW.AuditApps.M_1137", " м"), minimum: 0 });
   reconcileBreakdownTotal(maxRangeMeters, result.maxRangeMeters, item);
   const baseResolvedEffectiveRange = resolveBaseWeaponEffectiveRange(
     data?.effectiveRange,
@@ -7495,7 +7527,7 @@ function buildWeaponTooltipValueBreakdowns({
       title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange")} — min`,
       total: Math.max(0, Number(baseResolvedEffectiveRange?.min) || 0),
       minimum: 0,
-      formatValue: value => `${formatNumber(value)} м`
+      formatValue: value => auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(value)) }, "{v0} м")
     }),
     max: buildWeaponDataFieldAttribution({
       ...common,
@@ -7503,11 +7535,11 @@ function buildWeaponTooltipValueBreakdowns({
       title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange")} — max`,
       total: Math.max(0, Number(baseResolvedEffectiveRange?.max) || 0),
       minimum: 0,
-      formatValue: value => `${formatNumber(value)} м`
+      formatValue: value => auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(value)) }, "{v0} м")
     })
   };
-  appendAttributionDeltaSources(effectiveRange.value, effectiveRangeNearAttribution?.sources, { suffix: " м", minimum: 0 });
-  appendAttributionDeltaSources(effectiveRange.max, effectiveRangeFarAttribution?.sources, { suffix: " м", minimum: 0 });
+  appendAttributionDeltaSources(effectiveRange.value, effectiveRangeNearAttribution?.sources, { suffix: auditLocalize("FALLOUTMAW.AuditApps.M_1137", " м"), minimum: 0 });
+  appendAttributionDeltaSources(effectiveRange.max, effectiveRangeFarAttribution?.sources, { suffix: auditLocalize("FALLOUTMAW.AuditApps.M_1137", " м"), minimum: 0 });
   reconcileBreakdownTotal(effectiveRange.value, result.effectiveRange?.value, item);
   reconcileBreakdownTotal(effectiveRange.max, result.effectiveRange?.max, item);
   const recoil = buildWeaponRecoilAttribution(item, actor, baseData, data);
@@ -7582,8 +7614,8 @@ function buildWeaponResourceCostAttributions(item, actor, baseData = {}, data = 
 }
 
 function prepareActorDamageMitigationDisplay(actor, limbKey = "", damageTypeSettings = [], {
-  defenseLabel = "Защита",
-  resistanceLabel = "Сопротивление"
+  defenseLabel = auditLocalize("FALLOUTMAW.Item.MitigationModeDefense", "Защита"),
+  resistanceLabel = auditLocalize("FALLOUTMAW.Item.MitigationModeResistance", "Сопротивление")
 } = {}) {
   const limbs = actor?.system?.limbs ?? {};
   const itemMitigation = buildEquippedItemDamageMitigation(
@@ -7616,7 +7648,7 @@ function prepareActorDamageMitigationDisplay(actor, limbKey = "", damageTypeSett
 
 function prepareActorDamageMitigationEntries(actor, limbKey = "", damageTypeSettings = [], {
   mode = "defenses",
-  label = "Защита",
+  label = auditLocalize("FALLOUTMAW.Item.MitigationModeDefense", "Защита"),
   preparedValues = {},
   itemSources = {},
   effectSources = {},
@@ -7642,7 +7674,7 @@ function prepareActorDamageMitigationEntries(actor, limbKey = "", damageTypeSett
       actorName: actor?.name,
       img: actor?.img,
       base: {
-        name: mode === "resistances" ? "Базовое сопротивление" : "Базовая защита",
+        name: mode === "resistances" ? auditLocalize("FALLOUTMAW.AuditApps.BaseResistance", "Базовое сопротивление") : auditLocalize("FALLOUTMAW.AuditApps.BaseDefense", "Базовая защита"),
         img: actor?.img,
         value: baseValue
       },
@@ -7717,7 +7749,7 @@ function buildProtectionEffectAttributionSources(effectSources = [], baseValue =
   appendParallelPercentSources(breakdown, effectSources, {
     round: Math.floor,
     total,
-    contributionUnit: "защиты"
+    contributionUnit: auditLocalize("FALLOUTMAW.AuditApps.Defense", "защиты")
   });
   return breakdown.sources;
 }
@@ -7726,7 +7758,7 @@ function buildDamageMitigationItemSourceDetails(source = {}) {
   const details = [];
   const baseValue = toInteger(source.baseValue);
   const weakenedValue = toInteger(source.weakenedValue);
-  if (weakenedValue !== baseValue) details.push(`Состояние предмета: ${formatNumber(baseValue)} → ${formatNumber(weakenedValue)}`);
+  if (weakenedValue !== baseValue) details.push(auditFormat("FALLOUTMAW.AuditApps.ItemCondition", { v0: (formatNumber(baseValue)), v1: (formatNumber(weakenedValue)) }, "Состояние предмета: {v0} → {v1}"));
   return details;
 }
 
@@ -8100,7 +8132,7 @@ function collectActorCombatValueAttribution(actor, key = "", context = null) {
   const suffix = ["damagePercent", "criticalChance", "criticalDamagePercent", "burstStability"].includes(key)
     ? "%"
     : metreValue
-    ? " м"
+    ? auditLocalize("FALLOUTMAW.AuditApps.M_1137", " м")
     : "";
   const prepared = collectActorPreparedPathAttribution(actor, path, {
     preparedValue: actor?.system?.combat?.[key],
@@ -8474,20 +8506,20 @@ function getWeaponVolleyRows(data = {}, { actor = null } = {}) {
   const volley = data.volley ?? {};
   const rows = [];
   const damageRadius = evaluateTooltipFormula(volley.damageRadius, actor);
-  if (damageRadius > 0) rows.push(["Радиус взрыва", `${formatNumber(damageRadius)} м`]);
+  if (damageRadius > 0) rows.push([auditLocalize("FALLOUTMAW.AuditApps.ExplosionRadius", "Радиус взрыва"), auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(damageRadius)) }, "{v0} м")]);
 
   const regionDamage = getWeaponDamageEntryLabels(volley.regionDamageEntries, actor);
   const regionRadius = evaluateTooltipFormula(volley.regionRadius, actor);
   const regionDuration = evaluateTooltipFormula(volley.regionDurationSeconds, actor);
   const explosionDelay = evaluateTooltipFormula(volley.regionDelaySeconds, actor);
   const regionDelta = evaluateTooltipFormula(volley.regionRadiusDeltaMeters, actor);
-  if (regionRadius > 0) rows.push(["Радиус области", `${formatNumber(regionRadius)} м`]);
+  if (regionRadius > 0) rows.push([auditLocalize("FALLOUTMAW.Item.WeaponVolleyRegionRadius", "Радиус области"), auditFormat("FALLOUTMAW.AuditApps.M", { v0: (formatNumber(regionRadius)) }, "{v0} м")]);
   if (regionDamage.length) {
-    rows.push(["Урон области", { html: renderTooltipValueTokens(regionDamage) }]);
+    rows.push([auditLocalize("FALLOUTMAW.AuditApps.AreaDamage", "Урон области"), { html: renderTooltipValueTokens(regionDamage) }]);
   }
-  if (regionDuration > 0) rows.push(["Длительность области", `${formatNumber(regionDuration)} с`]);
-  if (explosionDelay > 0) rows.push(["Задержка до взрыва", `${formatNumber(explosionDelay)} с`]);
-  if (regionDelta !== 0) rows.push(["Изменение радиуса", `${regionDelta > 0 ? "+" : ""}${formatNumber(regionDelta)} м`]);
+  if (regionDuration > 0) rows.push([auditLocalize("FALLOUTMAW.AuditApps.AreaDuration", "Длительность области"), auditFormat("FALLOUTMAW.AuditApps.S", { v0: (formatNumber(regionDuration)) }, "{v0} с")]);
+  if (explosionDelay > 0) rows.push([auditLocalize("FALLOUTMAW.AuditApps.DelayBeforeExplosion", "Задержка до взрыва"), auditFormat("FALLOUTMAW.AuditApps.S", { v0: (formatNumber(explosionDelay)) }, "{v0} с")]);
+  if (regionDelta !== 0) rows.push([auditLocalize("FALLOUTMAW.AuditApps.RadiusChange", "Изменение радиуса"), auditFormat("FALLOUTMAW.AuditApps.M_1155", { v0: (regionDelta > 0 ? "+" : ""), v1: (formatNumber(regionDelta)) }, "{v0}{v1} м")]);
   return rows;
 }
 
@@ -8865,7 +8897,7 @@ function getConditionRecoveryMethodRows(condition = {}) {
         : game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryMethodTools");
       const toolClass = String(method.toolClass ?? "D");
       const difficulty = Math.max(0, toInteger(method.difficulty));
-      return [tool, `${game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryClass")}: ${toolClass}, СЛ: ${difficulty}`];
+      return [tool, auditFormat("FALLOUTMAW.AuditApps.DC", { v0: (game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryClass")), v1: (toolClass), v2: (difficulty) }, "{v0}: {v1}, СЛ: {v2}")];
     });
 }
 
@@ -8955,7 +8987,7 @@ function getWeaponRequirementLabel(requirement = {}, actor = null, item = null) 
   const label = type === "skill" ? getSkillLabel(key) : getCharacteristicLabel(key);
   if (!actor) return `${label} ${required}`;
   const current = getActorWeaponRequirementValue(actor, { type, key });
-  const baseLabel = adjusted.baseRequired !== required ? ` (база ${adjusted.baseRequired})` : "";
+  const baseLabel = adjusted.baseRequired !== required ? auditFormat("FALLOUTMAW.AuditApps.Base", { v0: (adjusted.baseRequired) }, " (база {v0})") : "";
   const text = `${label} ${current}/${required}${baseLabel}`;
   return {
     html: renderChangedTooltipSpan(text, current >= required, buildWeaponRequirementAttribution(item, actor, {
@@ -9097,7 +9129,7 @@ function getWeaponActionLabels(data = {}, baseData = {}, {
       const attribution = getWeaponActionPointCostAttribution(actor, data, key, baseData, { moduleSlots });
       const cost = baseMode ? attribution.configuredCost : attribution.cost;
       const baseCost = attribution.baseCost;
-      const costText = `${cost} ОД`;
+      const costText = auditFormat("FALLOUTMAW.AuditApps.AP", { v0: (cost) }, "{v0} ОД");
       const costHtml = baseMode || cost === baseCost
         ? escapeHTML(costText)
         : renderChangedTooltipSpan(costText, cost < baseCost, buildWeaponActionCostBreakdown(item, actor, name, attribution));
@@ -9113,7 +9145,7 @@ function buildWeaponActionCostBreakdown(item, actor, actionName = "", attributio
     base: { name: item?.name, img: item?.img, value: attribution.baseCost },
     sources: [],
     total: attribution.baseCost,
-    formatValue: value => `${formatNumber(value)} ОД`
+    formatValue: value => auditFormat("FALLOUTMAW.AuditApps.AP", { v0: (formatNumber(value)) }, "{v0} ОД")
   };
   for (const source of attribution.sources ?? []) {
     const steps = source.steps?.length ? source.steps : [source];
@@ -9134,7 +9166,7 @@ function buildWeaponActionCostBreakdown(item, actor, actionName = "", attributio
           step.operation ?? source.operation,
           step.value,
           after - before,
-          " ОД"
+          auditLocalize("FALLOUTMAW.AuditApps.AP_1142", " ОД")
         ),
         before,
         after,
@@ -9172,9 +9204,9 @@ function buildToolTooltipSections(item) {
       const data = getToolFunction(item, tool.key);
       const resource = getToolResourceState(item, { ...data, toolKey: tool.key });
       const rows = [
-        ["Класс", String(data.toolClass ?? "D")],
-        [resource.mode === "condition" ? "Состояние" : "Запас", `${resource.value} / ${resource.max}`],
-        ["Навык", `${getSkillLabel(data.skillKey)} ${toInteger(data.skillValue)}`]
+        [auditLocalize("FALLOUTMAW.Item.EnergySourceClass", "Класс"), String(data.toolClass ?? "D")],
+        [resource.mode === "condition" ? auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние") : auditLocalize("FALLOUTMAW.Item.EnergySourceReserve", "Запас"), `${resource.value} / ${resource.max}`],
+        [auditLocalize("FALLOUTMAW.Item.WeaponRequirementSkill", "Навык"), `${getSkillLabel(data.skillKey)} ${toInteger(data.skillValue)}`]
       ];
       return renderTooltipFunctionSection(tool.label ?? tool.key, rows);
     });
@@ -9389,7 +9421,7 @@ function getItemFootprint(itemOrSystem, items = null) {
   return getItemFootprintHelper(itemOrSystem, items);
 }
 
-async function promptItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
+async function promptItemStackQuantity({ item, title = auditLocalize("FALLOUTMAW.SkillCheck.Count", "Количество"), actionLabel = auditLocalize("FALLOUTMAW.AuditApps.OK", "Ок"), max = 1, value = 1 } = {}) {
   const numericMax = Number(max);
   const hasLimit = Number.isFinite(numericMax) && numericMax > 0;
   const limit = hasLimit ? Math.max(1, toInteger(numericMax)) : null;
@@ -9509,7 +9541,7 @@ function isInventoryBulkDeleteItem(item, { includeEquipped = false, equippedOnly
 function getActorLoadLimitExceededMessage() {
   const key = "FALLOUTMAW.Messages.ActorLoadLimitExceeded";
   const localized = game.i18n.localize(key);
-  return localized === key ? "Актер не может нести такой вес." : localized;
+  return localized === key ? auditLocalize("FALLOUTMAW.AuditApps.TheActorCannotCarryThisMuchWeight", "Актер не может нести такой вес.") : localized;
 }
 
 function prepareInventoryContext(actor, race) {
@@ -9664,7 +9696,7 @@ function prepareAbilityEffectSummaries(functions = [], characteristicLabels = ne
     const value = toInteger(entry?.value);
     const sign = value >= 0 ? "+" : "";
     const condition = entry?.condition?.enabled
-      ? ` при ОЗ ${entry.condition.operator === "gte" ? ">=" : "<="} ${toInteger(entry.condition.percent)}%`
+      ? auditFormat("FALLOUTMAW.AuditApps.AtHP", { v0: (entry.condition.operator === "gte" ? ">=" : "<="), v1: (toInteger(entry.condition.percent)) }, " при ОЗ {v0} {v1}%")
       : "";
     return `${targetLabel}: ${sign}${value}${condition}`;
   }).filter(Boolean);
@@ -9680,7 +9712,7 @@ function prepareTraumaEntries(actor, settings = {}) {
     name: item.name,
     img: item.img,
     suppressed: suppressedIds.has(item.id),
-    suppressedLabel: "Временно подавлена",
+    suppressedLabel: auditLocalize("FALLOUTMAW.AuditApps.TemporarilySuppressed", "Временно подавлена"),
     limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
     damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
     sources: prepareTraumaSourceEntries(item),
@@ -9704,14 +9736,14 @@ function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
     const stageProfile = diseaseProfile?.stages?.find(stage => stage.id === item.system?.stageId);
     const level = toInteger(item.system?.level);
     const worseningMultiplier = calculateDiseaseWorseningMultiplier(actor, item.system?.needKey);
-    const stageName = stageProfile?.name || item.name || (level ? `Стадия ${level}` : "");
+    const stageName = stageProfile?.name || item.name || (level ? auditFormat("FALLOUTMAW.AuditApps.Stage_1161", { v0: (level) }, "Стадия {v0}") : "");
     return {
       id: item.id,
       uuid: item.uuid,
       name: diseaseProfile?.name || item.name,
       img: diseaseProfile?.img || item.img,
       suppressed: suppressedIds.has(item.id),
-      suppressedLabel: "Временно подавлена",
+      suppressedLabel: auditLocalize("FALLOUTMAW.AuditApps.TemporarilySuppressed", "Временно подавлена"),
       stageLabel: level ? `${stageName} (${level})` : stageName,
       worseningProgressLabel: formatProgress(item.system?.worseningProgress),
       worseningProgressMax: Math.max(1, toInteger(item.system?.worseningProgressMax) || 100),
@@ -9788,16 +9820,16 @@ function buildEffectPathLabelMap({
 
   map.set("system.load.max", game.i18n.localize("FALLOUTMAW.Common.Load"));
   map.set("system.load.bonus", game.i18n.localize("FALLOUTMAW.Common.Load"));
-  map.set("system.inventory.columnsBonus", "Инвентарь: ширина");
-  map.set("system.inventory.rowsBonus", "Инвентарь: высота");
+  map.set("system.inventory.columnsBonus", auditLocalize("FALLOUTMAW.AuditApps.InventoryWidth", "Инвентарь: ширина"));
+  map.set("system.inventory.rowsBonus", auditLocalize("FALLOUTMAW.AuditApps.InventoryHeight", "Инвентарь: высота"));
 
   addEffectPathLabels(map, "system.skills", skillSettings, {
     value: valueLabel,
     max: maximumLabel,
     bonus: bonusLabel,
     bonusPercent: game.i18n.localize("FALLOUTMAW.Effects.SkillBonusPercent"),
-    advantage: "Преимущество",
-    disadvantage: "Помеха",
+    advantage: auditLocalize("FALLOUTMAW.SkillCheck.Advantage", "Преимущество"),
+    disadvantage: auditLocalize("FALLOUTMAW.SkillCheck.Disadvantage", "Помеха"),
     base: baseLabel,
     developmentBonus: developmentBonusLabel
   });
@@ -9810,30 +9842,30 @@ function buildEffectPathLabelMap({
     map.set(`system.skills.${skillKey}.criticalSuccessChance`, `${criticalSuccessChanceLabel}: ${skillLabel}`);
     map.set(`system.skills.${skillKey}.criticalFailureChance`, `${criticalFailureChanceLabel}: ${skillLabel}`);
   }
-  map.set(ALL_SKILLS_BONUS_EFFECT_KEY, "Все навыки");
+  map.set(ALL_SKILLS_BONUS_EFFECT_KEY, auditLocalize("FALLOUTMAW.Effects.AllSkills", "Все навыки"));
   map.set(ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsBonusPercent"));
-  map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, "Преимущество: все навыки");
-  map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, "Помеха: все навыки");
+  map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, auditLocalize("FALLOUTMAW.Effects.AllSkillsAdvantage", "Преимущество: все навыки"));
+  map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, auditLocalize("FALLOUTMAW.Effects.AllSkillsDisadvantage", "Помеха: все навыки"));
   map.set(ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalSuccessChance"));
   map.set(ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalFailureChance"));
   map.set(ALL_COMBAT_ADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllAdvantage"));
   map.set(ALL_COMBAT_DISADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllDisadvantage"));
-  map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, "Расход энергии на способность");
+  map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, auditLocalize("FALLOUTMAW.AuditApps.AbilityEnergyCost", "Расход энергии на способность"));
   for (const entry of resourceSettings) {
     const resourceKey = String(entry?.key ?? "").trim();
     if (!resourceKey || resourceKey === "power") continue;
     const resourceLabel = String(entry?.label ?? resourceKey).trim() || resourceKey;
     map.set(
       getAbilityOverloadCostEffectKey(resourceKey),
-      `Расход ${resourceLabel.toLocaleLowerCase()} на способность`
+      auditFormat("FALLOUTMAW.AuditApps.AbilityCost", { v0: (resourceLabel.toLocaleLowerCase()) }, "Расход {v0} на способность")
     );
   }
-  map.set(getAbilityOverloadCostEffectKey("reactionPoints"), "Расход очков реакции на способность");
-  map.set(ONE_TIME_SKILL_MODIFIER_EFFECT_KEY, "Следующая проверка выбранного навыка");
-  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess, "Подтасовка: критический успех");
-  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.success, "Подтасовка: успех");
-  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.failure, "Подтасовка: провал");
-  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalFailure, "Подтасовка: критический провал");
+  map.set(getAbilityOverloadCostEffectKey("reactionPoints"), auditLocalize("FALLOUTMAW.AuditApps.AbilityReactionPointCost", "Расход очков реакции на способность"));
+  map.set(ONE_TIME_SKILL_MODIFIER_EFFECT_KEY, auditLocalize("FALLOUTMAW.AuditApps.NextCheckWithTheSelectedSkill", "Следующая проверка выбранного навыка"));
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess, auditLocalize("FALLOUTMAW.AuditApps.RiggedRollCriticalSuccess", "Подтасовка: критический успех"));
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.success, auditLocalize("FALLOUTMAW.AuditApps.RiggedRollSuccess", "Подтасовка: успех"));
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.failure, auditLocalize("FALLOUTMAW.AuditApps.RiggedRollFailure", "Подтасовка: провал"));
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalFailure, auditLocalize("FALLOUTMAW.AuditApps.RiggedRollCriticalFailure", "Подтасовка: критический провал"));
   addEffectPathLabels(map, "system.resources", resourceSettings, {
     value: valueLabel,
     max: maximumLabel
@@ -9843,9 +9875,9 @@ function buildEffectPathLabelMap({
   )), {
     bonus: bonusLabel
   });
-  map.set("system.resources.reactionPoints.value", `Очки реакции: ${valueLabel}`);
-  map.set("system.resources.reactionPoints.max", `Очки реакции: ${maximumLabel}`);
-  map.set("system.resources.reactionPoints.bonus", `Очки реакции: ${bonusLabel}`);
+  map.set("system.resources.reactionPoints.value", auditFormat("FALLOUTMAW.AuditApps.ReactionPoints", { v0: (valueLabel) }, "Очки реакции: {v0}"));
+  map.set("system.resources.reactionPoints.max", auditFormat("FALLOUTMAW.AuditApps.ReactionPoints", { v0: (maximumLabel) }, "Очки реакции: {v0}"));
+  map.set("system.resources.reactionPoints.bonus", auditFormat("FALLOUTMAW.AuditApps.ReactionPoints", { v0: (bonusLabel) }, "Очки реакции: {v0}"));
   addEffectPathLabels(map, "system.needs", needSettings, {
     value: valueLabel,
     max: maximumLabel,
@@ -9861,11 +9893,11 @@ function buildEffectPathLabelMap({
     max: maximumLabel,
     maxBonus: bonusLabel
   });
-  const limbMaxBonusLabel = "Максимальное ОЗ частей тела";
-  map.set(ALL_LIMB_MAX_BONUS_EFFECT_KEY, `${limbMaxBonusLabel}: Все части тела`);
-  const implantLimitLabel = "Изменение доступных имплантов";
-  map.set(ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY, `${implantLimitLabel}: Все части тела`);
-  map.set("system.limbs.all.implantLimit", `${implantLimitLabel}: Все части тела`);
+  const limbMaxBonusLabel = auditLocalize("FALLOUTMAW.AuditApps.MaximumBodyPartHP", "Максимальное ОЗ частей тела");
+  map.set(ALL_LIMB_MAX_BONUS_EFFECT_KEY, auditFormat("FALLOUTMAW.AuditApps.AllBodyParts_1179", { v0: (limbMaxBonusLabel) }, "{v0}: Все части тела"));
+  const implantLimitLabel = auditLocalize("FALLOUTMAW.AuditApps.ChangeAvailableImplants", "Изменение доступных имплантов");
+  map.set(ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY, auditFormat("FALLOUTMAW.AuditApps.AllBodyParts_1179", { v0: (implantLimitLabel) }, "{v0}: Все части тела"));
+  map.set("system.limbs.all.implantLimit", auditFormat("FALLOUTMAW.AuditApps.AllBodyParts_1179", { v0: (implantLimitLabel) }, "{v0}: Все части тела"));
   for (const limb of limbs) {
     const limbKey = String(limb?.key ?? "").trim();
     if (!limbKey) continue;
@@ -9899,18 +9931,18 @@ function buildEffectPathLabelMap({
   for (const token of buildSkillCheckActionEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }
-  map.set("system.healing.incomingPercent", "Входящее лечение, %");
-  map.set("system.healing.outgoingPercent", "Исходящее лечение, %");
-  map.set("system.costs.actions.aimedShot", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")}: стоимость`);
-  map.set("system.costs.actions.snapshot", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot")}: стоимость`);
-  map.set("system.costs.actions.burst", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst")}: стоимость`);
-  map.set("system.costs.actions.volley", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")}: стоимость`);
-  map.set("system.costs.actions.meleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")}: стоимость`);
-  map.set("system.costs.actions.aimedMeleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")}: стоимость`);
-  map.set("system.costs.actions.push", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")}: стоимость`);
-  map.set("system.costs.actions.reload", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")}: стоимость`);
+  map.set("system.healing.incomingPercent", auditLocalize("FALLOUTMAW.AuditApps.IncomingHealing", "Входящее лечение, %"));
+  map.set("system.healing.outgoingPercent", auditLocalize("FALLOUTMAW.AuditApps.OutgoingHealing", "Исходящее лечение, %"));
+  map.set("system.costs.actions.aimedShot", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.snapshot", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.burst", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.volley", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.meleeAttack", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.aimedMeleeAttack", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.push", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")) }, "{v0}: стоимость"));
+  map.set("system.costs.actions.reload", auditFormat("FALLOUTMAW.AuditApps.Cost", { v0: (game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")) }, "{v0}: стоимость"));
   map.set(FIRST_AID_ACTION_POINT_COST_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.FirstAidActionPointCost"));
-  map.set(WEAPON_SWITCH_COST_KEY, "Смена оружия: стоимость");
+  map.set(WEAPON_SWITCH_COST_KEY, auditLocalize("FALLOUTMAW.AuditApps.WeaponSwitchCost", "Смена оружия: стоимость"));
   const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
   map.set("fallout-maw.healing", firstAidHealingLabel);
   map.set("healing", firstAidHealingLabel);
@@ -9961,9 +9993,9 @@ function getEffectPathLabel(path, pathLabels = new Map()) {
   if (!normalized) return localizeOrFallback("FALLOUTMAW.Common.Untitled", "Untitled");
   if (pathLabels.has(normalized)) return pathLabels.get(normalized);
   const overloadResourceKey = getResourceKeyFromOverloadEffectKey(normalized);
-  if (overloadResourceKey === "power") return "Расход энергии на способность";
+  if (overloadResourceKey === "power") return auditLocalize("FALLOUTMAW.AuditApps.AbilityEnergyCost", "Расход энергии на способность");
   if (overloadResourceKey) {
-    return `Расход ${overloadResourceKey} на способность`;
+    return auditFormat("FALLOUTMAW.AuditApps.AbilityCost", { v0: (overloadResourceKey) }, "Расход {v0} на способность");
   }
   return humanizeEffectPath(normalized);
 }
@@ -10098,12 +10130,12 @@ function prepareEffectCategories(effects = [], actor = null) {
 function prepareDevelopmentPointEntries(development = {}) {
   const points = development?.points ?? {};
   return [
-    { key: "characteristics", label: "Очки характеристик" },
-    { key: "signatureSkills", label: "Очки коронных" },
-    { key: "skills", label: "Очки навыков" },
-    { key: "researches", label: "Свободные ОИ" },
-    { key: "traits", label: "Очки особенностей" },
-    { key: "proficiencies", label: "Очки владений" }
+    { key: "characteristics", label: auditLocalize("FALLOUTMAW.Advancement.CharacteristicPoints", "Очки характеристик") },
+    { key: "signatureSkills", label: auditLocalize("FALLOUTMAW.AuditApps.SignaturePoints", "Очки коронных") },
+    { key: "skills", label: auditLocalize("FALLOUTMAW.Advancement.SkillPoints", "Очки навыков") },
+    { key: "researches", label: auditLocalize("FALLOUTMAW.AuditApps.UnspentResearchPoints", "Свободные ОИ") },
+    { key: "traits", label: auditLocalize("FALLOUTMAW.Advancement.TraitPoints", "Очки особенностей") },
+    { key: "proficiencies", label: auditLocalize("FALLOUTMAW.Advancement.ProficiencyPoints", "Очки владений") }
   ].filter(entry => entry.key !== "proficiencies" || getProficiencySettings().length)
     .map(entry => ({
     ...entry,
@@ -10133,9 +10165,9 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
       stateLabel: constructPart.name,
       fill: mixHexColor("#5a6f7a", "#d9eef5", ratio),
       popoverRows: [
-        ["Деталь конструкта", partType],
-        ["Предмет", constructPart.name],
-        ["Состояние", hasCondition ? `${conditionValue} / ${conditionMax}` : "∞"]
+        [auditLocalize("FALLOUTMAW.AuditApps.ConstructPart", "Деталь конструкта"), partType],
+        [auditLocalize("FALLOUTMAW.Craft.Item", "Предмет"), constructPart.name],
+        [auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"), hasCondition ? `${conditionValue} / ${conditionMax}` : "∞"]
       ]
     };
   }
@@ -10157,9 +10189,9 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
       stateLabel: prosthesis.name,
       fill: mixHexColor("#16517a", "#8fd8ff", ratio),
       popoverRows: [
-        ["Протез", prosthesis.name],
-        ["Состояние", hasCondition ? `${conditionValue} / ${conditionMax}` : "∞"],
-        ["Интеграция", `${Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)))}%`]
+        [auditLocalize("FALLOUTMAW.Item.FunctionProsthesis", "Протез"), prosthesis.name],
+        [auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"), hasCondition ? `${conditionValue} / ${conditionMax}` : "∞"],
+        [auditLocalize("FALLOUTMAW.Item.ProsthesisIntegration", "Интеграция"), `${Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)))}%`]
       ]
     };
   }

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevels } from "./creation-levels.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { withSystemEventRoot } from "../events/foundry-world-events.mjs";
@@ -15,13 +16,13 @@ const LIGHT_NETWORK_INTERACTION_FLAG = "lightNetworkInteraction";
 const LIGHT_NETWORK_VISUAL_FLAG = "lightNetworkVisual";
 const LIGHT_NETWORK_SOCKET = `system.${SYSTEM_ID}`;
 const LIGHT_NETWORK_SOCKET_SCOPE = "fallout-maw.lightNetworks";
-const DEFAULT_INTERACTION_IMAGE = "icons/svg/light.svg";
+const DEFAULT_INTERACTION_IMAGE = "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-light.webp";
 const DEFAULT_INTERACTION_SCALE = 0.5;
 const PLACEMENT_PREVIEW_BORDER_COLOR = 0xf0cf55;
 const PLACEMENT_PREVIEW_FILL_COLOR = 0xf0cf55;
 const NETWORK_BASIC_TEMPLATE = `systems/${SYSTEM_ID}/templates/scene/parts/light-network-basic.hbs`;
 const LIGHT_BASIC_TEMPLATE = `systems/${SYSTEM_ID}/templates/scene/parts/light-basic-network.hbs`;
-const TRIMMED_EMPTY_NETWORK_LABEL = "Индивидуальная сеть";
+const TRIMMED_EMPTY_NETWORK_LABEL = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0629", "Индивидуальная сеть");
 const BLOCKED_PLACEMENT_EVENTS = Object.freeze([
   "pointermove",
   "pointerdown",
@@ -60,7 +61,7 @@ export class AmbientLightConfig extends CoreAmbientLightConfig {
   static #onOpenLightNetworkConfig(event) {
     event.preventDefault();
     if (!this.document?.collection?.has(this.document.id)) {
-      ui.notifications.warn("Сначала сохраните источник света, затем настройте сеть.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0630", "Сначала сохраните источник света, затем настройте сеть."));
       return undefined;
     }
     this.renderChild(new FalloutMaWLightNetworkConfig({
@@ -100,7 +101,7 @@ class FalloutMaWLightNetworkConfig extends AmbientLightConfig {
   }, { inplace: false });
 
   get title() {
-    return `Сеть света: ${this.document?.name || "Источник света"}`;
+    return auditFormat("FALLOUTMAW.AuditRuntime.R0631", { p0: (this.document?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0632", "Источник света")) }, "Сеть света: {p0}");
   }
 
   async _initializePreview() {
@@ -147,7 +148,7 @@ class FalloutMaWLightNetworkConfig extends AmbientLightConfig {
   static async #onPlaceNetworkInteraction(event) {
     event.preventDefault();
     if (!canvas?.ready || !canvas.scene) {
-      ui.notifications.warn("Сцена не готова для размещения источника взаимодействия.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0633", "Сцена не готова для размещения источника взаимодействия."));
       return false;
     }
     const formData = new FormDataExtended(this.form);
@@ -203,7 +204,7 @@ class LightNetworkInteractionDialog extends HandlebarsApplicationMixin(Applicati
 
   get title() {
     const interaction = getLightNetworkInteractionFlag(this.#tile);
-    return `Сеть: ${getNetworkDisplayName(interaction?.networkName)}`;
+    return auditFormat("FALLOUTMAW.AuditRuntime.R0634", { p0: (getNetworkDisplayName(interaction?.networkName)) }, "Сеть: {p0}");
   }
 
   async _prepareContext(options) {
@@ -358,11 +359,11 @@ function shouldOpenLightNetworkInteractionDialog(tile) {
 async function startLightNetworkInteractionPlacement({ sourceLight, networkName = "", onImage = "", offImage = "", scale = DEFAULT_INTERACTION_SCALE, parentConfig = null, networkConfig = null } = {}) {
   cancelActiveCanvasTargetSelection({ reason: "superseded" });
   if (!game.user?.isGM) {
-    ui.notifications.warn("Размещать источник взаимодействия сети может только GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0635", "Размещать источник взаимодействия сети может только GM."));
     return false;
   }
   if (!sourceLight?.uuid || !canvas?.ready || !canvas.scene) {
-    ui.notifications.warn("Сцена не готова для размещения источника взаимодействия.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0633", "Сцена не готова для размещения источника взаимодействия."));
     return false;
   }
   cancelLightNetworkInteractionPlacement();
@@ -399,7 +400,7 @@ async function startLightNetworkInteractionPlacement({ sourceLight, networkName 
   if (!targetSelectionSession.active || activePlacement !== placement || placement.cleaned) return false;
   bindPlacementInput(placement);
   window.addEventListener("keydown", onPlacementKeyDown, { capture: true });
-  ui.notifications.info("Выберите место для источника взаимодействия сети. Esc/ПКМ отменяет.");
+  ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0636", "Выберите место для источника взаимодействия сети. Esc/ПКМ отменяет."));
   return true;
 }
 
@@ -424,7 +425,7 @@ function cancelLightNetworkInteractionPlacement({
       cancelled: Boolean(cancelled)
     });
   }
-  if (notify) ui.notifications.info("Размещение источника взаимодействия сети отменено.");
+  if (notify) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R0637", "Размещение источника взаимодействия сети отменено."));
   if (reopen) void reopenLightNetworkConfigWindows(placement);
   return true;
 }
@@ -504,7 +505,7 @@ async function finishLightNetworkInteractionPlacement(event) {
   const image = enabled ? placement.onImage : placement.offImage;
   cancelLightNetworkInteractionPlacement({ placement, cancelled: false });
   await canvas.scene.createEmbeddedDocuments("Tile", [{
-    name: `Сеть: ${getNetworkDisplayName(placement.networkName)}`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0634", { p0: (getNetworkDisplayName(placement.networkName)) }, "Сеть: {p0}"),
     x: Math.round(center.x),
     y: Math.round(center.y),
     width: size,
@@ -621,7 +622,7 @@ async function requestLightNetworkState({ sceneId = "", networkName = "", source
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для переключения сети света.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0638", "Нет активного GM для переключения сети света."));
     return false;
   }
   game.socket.emit(LIGHT_NETWORK_SOCKET, {
@@ -633,15 +634,24 @@ async function requestLightNetworkState({ sceneId = "", networkName = "", source
   return true;
 }
 
-async function handleLightNetworkSocketMessage(message = {}) {
+async function handleLightNetworkSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== LIGHT_NETWORK_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
   if (message.action === "syncLightNetworkState") {
+    if (!sender.isGM || sender.id !== getResponsibleGM()?.id) return;
     syncLightNetworkState(message.state);
     return;
   }
-  if (message.gmUserId && message.gmUserId !== game.user?.id) return;
+  if (message.gmUserId !== game.user?.id) return;
   if (!game.user?.isActiveGM) return;
-  if (message.action === "requestLightNetworkState") enqueueLightNetworkStateRequest(message.request);
+  if (message.action === "requestLightNetworkState") {
+    const request = normalizeLightNetworkStateRequest(message.request);
+    const scene = game.scenes?.get(request.sceneId);
+    if (!sender.isGM && (!scene || !scene.tiles?.contents?.some(tile => !tile.hidden
+      && isMatchingLightNetworkState(getLightNetworkInteractionFlag(tile), request, scene)))) return;
+    enqueueLightNetworkStateRequest(request);
+  }
 }
 
 function enqueueLightNetworkStateRequest(request = {}) {
@@ -703,7 +713,7 @@ async function applyLightNetworkState({ sceneId = "", networkName = "", sourceLi
     sourceLightUuid
   });
   if (!lights.length) {
-    ui.notifications.warn("Не найдены источники света для этой сети.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0639", "Не найдены источники света для этой сети."));
     return false;
   }
 
@@ -1132,7 +1142,7 @@ function normalizeInteractionScale(value = DEFAULT_INTERACTION_SCALE) {
 }
 
 function getNetworkDisplayName(name = "") {
-  return normalizeNetworkName(name) || TRIMMED_EMPTY_NETWORK_LABEL;
+  return normalizeNetworkName(name) || TRIMMED_EMPTY_NETWORK_LABEL();
 }
 
 function extractAmbientLightState(source) {

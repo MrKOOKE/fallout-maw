@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const BULLSEYE_DEFAULT_SETTINGS = Object.freeze({
@@ -32,7 +33,7 @@ export function getBullseyePenetrationFormula(stacks = 0, settings = {}) {
 
 /** Build the shooter-facing indicator without turning its contextual bonus into a generic effect key. */
 export function buildBullseyeStatePresentation({
-  abilityName = "В яблочко",
+  abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0040", "В яблочко"),
   targetName = "",
   limbName = "",
   penetrationBonus = 0,
@@ -41,14 +42,14 @@ export function buildBullseyeStatePresentation({
 } = {}) {
   const normalized = normalizeBullseyeSettings(settings);
   const current = normalizeBullseyeState(state, normalized);
-  const name = String(abilityName ?? "").trim() || "В яблочко";
+  const name = String(abilityName ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0040", "В яблочко");
   if (current.stacks <= 0) {
     return {
-      name: `${name}: серия 0/${normalized.maxStacks}`,
+      name: auditFormat("FALLOUTMAW.AuditRuntime.R0041", { p0: (name), p1: (normalized.maxStacks) }, "{p0}: серия 0/{p1}"),
       description: [
-        "<strong>Серия:</strong> не начата.",
-        "<strong>Попадание Прицельным выстрелом:</strong> начнёт накапливать пробивание.",
-        "<strong>Промах:</strong> сбросит серию."
+        auditLocalize("FALLOUTMAW.AuditRuntime.R0042", "<strong>Серия:</strong> не начата."),
+        auditLocalize("FALLOUTMAW.AuditRuntime.R0043", "<strong>Попадание Прицельным выстрелом:</strong> начнёт накапливать пробивание."),
+        auditLocalize("FALLOUTMAW.AuditRuntime.R0044", "<strong>Промах:</strong> сбросит серию.")
       ].join("<br>")
     };
   }
@@ -57,13 +58,13 @@ export function buildBullseyeStatePresentation({
   const limb = String(limbName ?? "").trim() || current.limbKey;
   const bonus = Math.max(0, toInteger(penetrationBonus));
   return {
-    name: `${name}: серия ${current.stacks}/${normalized.maxStacks} · пробивание +${bonus}`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0045", { p0: (name), p1: (current.stacks), p2: (normalized.maxStacks), p3: (bonus) }, "{p0}: серия {p1}/{p2} · пробивание +{p3}"),
     description: [
-      `<strong>Цель:</strong> ${target}.`,
-      `<strong>Часть тела:</strong> ${limb}.`,
+      auditFormat("FALLOUTMAW.AuditRuntime.R0046", { p0: (target) }, "<strong>Цель:</strong> {p0}."),
+      auditFormat("FALLOUTMAW.AuditRuntime.R0047", { p0: (limb) }, "<strong>Часть тела:</strong> {p0}."),
       "",
-      `<strong>Следующий Прицельный выстрел:</strong> пробивание +${bonus} при атаке этой же части тела.`,
-      "<strong>Промах:</strong> сбросит серию."
+      auditFormat("FALLOUTMAW.AuditRuntime.R0048", { p0: (bonus) }, "<strong>Следующий Прицельный выстрел:</strong> пробивание +{p0} при атаке этой же части тела."),
+      auditLocalize("FALLOUTMAW.AuditRuntime.R0044", "<strong>Промах:</strong> сбросит серию.")
     ].join("<br>")
   };
 }

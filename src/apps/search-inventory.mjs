@@ -1,3 +1,5 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { persistCompletedTradeSession, readCompletedTradeSessions } from "../inventory/trade-session-storage.mjs";
 import { canShowSuitableAmmo as canHighlightTradeAmmoCompatibility, isAmmoCompatibleItem as isTradeAmmoCompatibleItem } from "../utils/item-ammo-compatibility.mjs";
 import { createRectanglePacker, packInventoryRectangles } from "../inventory/packing.mjs";
 import { transferInventoryContentsBatch } from "../inventory/contents-batch.mjs";
@@ -194,10 +196,11 @@ function buildTradeOfferGridStyle(columns = TRADE_OFFER_DEFAULT_COLUMNS, rows = 
   ].join(" ");
 }
 const TRADE_COMPATIBILITY_HIGHLIGHT_MS = 10000;
-const TRADE_UNCATEGORIZED_LABEL = "Без категории";
+const TRADE_UNCATEGORIZED_LABEL = () => auditLocalize("FALLOUTMAW.Craft.CategoryNone", "Без категории");
 const BUTCHERING_CONTAINER_FLAG = "butcheringContainer";
 
 let searchInventoryWindow = null;
+let searchInventoryWindowQueue = Promise.resolve();
 const pendingSearchInventorySocketRequests = new Map();
 const pendingSearchInventoryTradeInvites = new Map();
 const pendingSearchInventoryPersonalTradeApprovals = new Map();
@@ -206,6 +209,7 @@ const activeSearchInventoryTradeSessions = new Map();
 const activeSearchInventoryAudits = new Map();
 
 export function registerSearchInventorySocket() {
+  restoreCompletedTradeSessions();
   registerDroppedItemsSearchOpener(openSearchInventoryWindow);
   game.socket.on(SEARCH_INVENTORY_SOCKET, handleSearchInventorySocketMessage);
   if (game.user?.isGM) {
@@ -227,8 +231,10 @@ export async function openSearchInventoryWindow({ searcherActor, searchedActor }
   return openSearchInventoryWindowNow({ searcherActor, searchedActor });
 }
 
-function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {}) {
+async function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {}) {
+  return queueSearchInventoryWindow(async () => {
   const searchAuditSessionId = foundry.utils.randomID();
+  if (searchInventoryWindow) await searchInventoryWindow.close({ force: true });
   searchInventoryWindow ??= new SearchInventoryApplication();
   searchInventoryWindow.setActors(searcherActor, searchedActor, {
     mode: SEARCH_INVENTORY_MODE_SEARCH,
@@ -247,6 +253,13 @@ function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {}) {
     searchedActorImg: searchedActor.img ?? ""
   }).catch(error => console.error(`${SYSTEM_ID} | Search audit start failed`, error));
   return result;
+  });
+}
+
+function queueSearchInventoryWindow(operation) {
+  const next = searchInventoryWindowQueue.catch(() => undefined).then(operation);
+  searchInventoryWindowQueue = next;
+  return next;
 }
 
 export async function requestTradeInventoryWindow({ traderActor, tradeActor } = {}) {
@@ -284,7 +297,7 @@ export async function requestTradeInventoryWindow({ traderActor, tradeActor } = 
 
   const recipientUser = getPrimaryActorOwnerUser(tradeActor);
   if (!recipientUser) {
-    ui.notifications.warn("Нет активного владельца актера для торговли.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveActorOwnerForTrade", "Нет активного владельца актера для торговли."));
     return undefined;
   }
 
@@ -307,7 +320,7 @@ export async function requestTradeInventoryWindow({ traderActor, tradeActor } = 
     try {
       response = await requestTradeInviteSocket(payload, recipientUser);
     } catch (error) {
-      ui.notifications.warn(error.message || "Запрос торговли не принят.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.TradeRequestNotAccepted", "Запрос торговли не принят."));
       return undefined;
     }
     if (!response?.accepted) return undefined;
@@ -348,6 +361,12 @@ async function openTradeInventoryWindow({
   if (!searcherActor || !searchedActor) return undefined;
   if (searcherActor.uuid === searchedActor.uuid) return undefined;
 
+  return queueSearchInventoryWindow(async () => {
+  if (sessionId && searchInventoryWindow?.matchesTradeSession(sessionId)) {
+    if (tradeSnapshot) searchInventoryWindow.setTradeSessionSnapshot(tradeSnapshot);
+    return searchInventoryWindow.render({ force: true });
+  }
+  if (searchInventoryWindow) await searchInventoryWindow.close({ force: true });
   searchInventoryWindow ??= new SearchInventoryApplication();
   searchInventoryWindow.setActors(searcherActor, searchedActor, {
     mode: SEARCH_INVENTORY_MODE_TRADE,
@@ -359,20 +378,21 @@ async function openTradeInventoryWindow({
     tradeKind
   });
   return searchInventoryWindow.render({ force: true });
+  });
 }
 
 async function promptTradeKind() {
   const choice = await DialogV2.input({
-    window: { title: "Торговля" },
-    content: "<p>Выберите режим торговли.</p>",
+    window: { title: auditLocalize("FALLOUTMAW.AuditApps.Trade_836", "Торговля") },
+    content: auditLocalize("FALLOUTMAW.AuditApps.SelectATradeMode", "<p>Выберите режим торговли.</p>"),
     ok: {
-      label: "Обычная",
+      label: auditLocalize("FALLOUTMAW.Settings.Combat.TurnOrderNormal", "Обычная"),
       icon: "fa-solid fa-handshake",
       callback: () => SEARCH_INVENTORY_TRADE_KIND_REGULAR
     },
     buttons: [{
       action: "personal",
-      label: "Личная",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Personal", "Личная"),
       icon: "fa-solid fa-user-check",
       callback: () => SEARCH_INVENTORY_TRADE_KIND_PERSONAL
     }, {
@@ -387,6 +407,9 @@ async function promptTradeKind() {
 }
 
 class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV2) {
+  #contextActive = false;
+  #contextRevision = 0;
+  #containerSheets = new Set();
   #searcherActorUuid = "";
   #searchedActorUuid = "";
   #searcherActor = null;
@@ -466,8 +489,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   get title() {
     const searchedName = this.#searchedActor?.name ?? "";
-    if (this.#isTradeMode()) return searchedName ? `Торговля: ${searchedName}` : "Торговля";
-    return searchedName ? `Обыск: ${searchedName}` : "Обыск";
+    if (this.#isTradeMode()) return searchedName ? auditFormat("FALLOUTMAW.AuditApps.Trade", { v0: (searchedName) }, "Торговля: {v0}") : auditLocalize("FALLOUTMAW.AuditApps.Trade_836", "Торговля");
+    return searchedName ? auditFormat("FALLOUTMAW.AuditApps.Search_840", { v0: (searchedName) }, "Обыск: {v0}") : auditLocalize("FALLOUTMAW.AuditApps.Search_841", "Обыск");
   }
 
   _getFrameButtons(options) {
@@ -523,6 +546,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR,
     searchAuditSessionId = ""
   } = {}) {
+    this.#contextActive = true;
+    this.#contextRevision += 1;
+    void this.#closeContainerSheets();
     this.#searcherActorUuid = searcherActor?.uuid ?? "";
     this.#searchedActorUuid = searchedActor?.uuid ?? "";
     this.#searcherActor = searcherActor ?? null;
@@ -554,7 +580,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   matchesTradeSession(sessionId) {
-    return this.#isTradeMode() && this.#tradeSessionId === String(sessionId ?? "");
+    return this.#contextActive && this.#isTradeMode() && this.#tradeSessionId === String(sessionId ?? "");
   }
 
   async closeTradeSessionFromSocket(sessionId) {
@@ -627,6 +653,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#tradeSide = "";
     }
     const selected = getTradeSnapshotSelectedActorUuids(this.#tradeSessionSnapshot, userId);
+    if ((selected.searcher && selected.searcher !== this.#searcherActorUuid)
+      || (selected.searched && selected.searched !== this.#searchedActorUuid)) {
+      this.#contextRevision += 1;
+      void this.#closeContainerSheets();
+    }
     this.#searcherActorUuid = selected.searcher || this.#searcherActorUuid;
     this.#searchedActorUuid = selected.searched || this.#searchedActorUuid;
     this.#pruneTradeCatalogCategoryState();
@@ -669,7 +700,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       actors: [
         prepareSearchActorContext(this.#searcherActor, {
           side: "searcher",
-          roleLabel: "Обыскивающий",
+          roleLabel: auditLocalize("FALLOUTMAW.AuditApps.Searcher", "Обыскивающий"),
           canInteract: isTrade ? canManageSearcher : canInteract,
           mode: this.#mode,
           tradeCurrencyKey: this.#tradeCurrencyKey,
@@ -687,7 +718,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         }),
         prepareSearchActorContext(this.#searchedActor, {
           side: "searched",
-          roleLabel: "Обыскиваемый",
+          roleLabel: auditLocalize("FALLOUTMAW.AuditApps.SearchedActor", "Обыскиваемый"),
           canInteract: isTrade ? canManageSearched : canInteract,
           mode: this.#mode,
           tradeCurrencyKey: this.#tradeCurrencyKey,
@@ -730,6 +761,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   render(...args) {
+    if (!this.#contextActive) return Promise.resolve(this);
     if (this.#contentsTransfer.renderBatch.defer(args)) return Promise.resolve(this);
     return super.render(...args);
   }
@@ -770,6 +802,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async _onClose(options) {
+    this.#contextActive = false;
+    this.#contextRevision += 1;
+    await this.#closeContainerSheets();
     this.#moduleDropPreview.destroy();
     this.#contentsTransfer.destroy();
     const searchAuditPayload = !this.#isTradeMode() && this.#searchAuditSessionId
@@ -1131,7 +1166,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!targetActor) return null;
       const completedTradeOfferDrop = Boolean(this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer);
       if (this.#isTradeMode() && sourceActor.uuid !== targetActor.uuid && !completedTradeOfferDrop) {
-        ui.notifications.warn("В торговле предметы сначала кладутся в предложение.");
+        ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.WhenTradingItemsMustFirstBePlacedIn", "В торговле предметы сначала кладутся в предложение."));
         return null;
       }
 
@@ -1322,7 +1357,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return result;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Completed trade claim failed`, error);
-      ui.notifications.warn(error.message || "Не удалось перенести купленное.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToTransferPurchasedItems", "Не удалось перенести купленное."));
       return null;
     } finally {
       this.#endInventoryMutation();
@@ -1335,7 +1370,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!targetActor || !available) return null;
     const currency = getCurrencySettings().find(option => option.key === key);
     const formData = available > 1 ? await DialogV2.input({
-      window: { title: "Перенести валюту" },
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.TransferCurrency", "Перенести валюту") },
       content: `
         <p><strong>${escapeHTML(currency?.label ?? key)}</strong>: 1 / ${available}</p>
         <label class="fallout-maw-stacked-field">
@@ -1344,7 +1379,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         </label>
       `,
       ok: {
-        label: "Перенести",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Transfer", "Перенести"),
         icon: "fa-solid fa-coins",
         callback: (_event, okButton) => new FormDataExtended(okButton.form).object
       },
@@ -1379,7 +1414,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return result;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Completed trade currency claim failed`, error);
-      ui.notifications.warn(error.message || "Не удалось перенести валюту.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToTransferCurrency", "Не удалось перенести валюту."));
       return null;
     }
   }
@@ -1434,7 +1469,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   } = {}) {
     if (!this.#isTradeMode() || !sourceActor || !item) return null;
     if (sourceActor.uuid !== offerActorUuid) {
-      ui.notifications.warn("Предмет кладется в предложение своего владельца.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AnItemMustBePlacedInItsOwner", "Предмет кладется в предложение своего владельца."));
       return null;
     }
     const side = this.#getTradeSideForActor(sourceActor.uuid);
@@ -1459,15 +1494,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       : Math.max(1, getItemQuantity(item));
     const remaining = Math.max(0, sourceQuantity - alreadyOffered);
     if (remaining <= 0) {
-      ui.notifications.info("Вся штучность предмета уже в предложении.");
+      ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.TheItemSEntireQuantityIsAlreadyIn", "Вся штучность предмета уже в предложении."));
       return null;
     }
     const quantity = !promptQuantity || event?.type === "drop" || remaining <= 1 || isContainerItem(item)
       ? remaining
       : await promptSearchItemStackQuantity({
         item,
-        title: "Добавить в предложение",
-        actionLabel: "Добавить",
+        title: auditLocalize("FALLOUTMAW.AuditApps.AddToOffer", "Добавить в предложение"),
+        actionLabel: auditLocalize("FALLOUTMAW.Item.ConditionAddRecoveryMethod", "Добавить"),
         max: remaining,
         value: remaining,
         trade: this.#getTradeQuantityPromptDataForSides(sourceActor, side, getOppositeTradeSide(side))
@@ -1515,8 +1550,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ? sourceQuantity
       : await promptSearchItemStackQuantity({
         item,
-        title: "Положить в купленное",
-        actionLabel: "Положить",
+        title: auditLocalize("FALLOUTMAW.AuditApps.PlaceInPurchases", "Положить в купленное"),
+        actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Place", "Положить"),
         max: sourceQuantity,
         value: sourceQuantity
       });
@@ -1609,7 +1644,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return true;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory stack failed`, error);
-      if (notify) ui.notifications.warn(error.message || "Не удалось сложить предметы.");
+      if (notify) ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToStackTheItems", "Не удалось сложить предметы."));
     }
     return false;
   }
@@ -1633,7 +1668,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory transfer failed`, error);
       if (!notify) return false;
-      ui.notifications.warn(error.message || "Не удалось перенести предмет.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToTransferTheItem", "Не удалось перенести предмет."));
     }
     return false;
   }
@@ -1647,6 +1682,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #canInteract() {
+    if (!this.#contextActive) return false;
     if (this.#isTradeMode()) {
       if (this.#tradeRole === TRADE_ROLE_OBSERVER) return false;
       if (this.#tradeSessionSnapshot) return Boolean(game.user?.isGM || this.#canControlTradeSide(this.#tradeSide));
@@ -1921,14 +1957,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
       this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? createEmptyTradeOffers());
       this.#broadcastTradeOffers();
-      ui.notifications.info("Обмен совершен.");
+      ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ExchangeCompleted", "Обмен совершен."));
       this.#captureScrollPositions();
       await this.#renderPreservingWindowStack();
     } catch (error) {
       console.error(`${SYSTEM_ID} | Trade completion failed`, error);
       this.#resetTradeReady();
       this.#broadcastTradeOffers();
-      ui.notifications.warn(error.message || "Не удалось завершить обмен.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToCompleteTheExchange", "Не удалось завершить обмен."));
       await this.#renderPreservingWindowStack();
     } finally {
       this.endTradeCompletionLock({ render: false });
@@ -1970,12 +2006,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
       this.#tradeOffers = createEmptyTradeOffers();
       ui.notifications.info(result?.droppedCount
-        ? `Обмен совершен. Предметов выброшено: ${result.droppedCount}.`
-        : "Обмен совершен.");
+        ? auditFormat("FALLOUTMAW.AuditApps.ExchangeCompletedItemsDropped", { v0: (result.droppedCount) }, "Обмен совершен. Предметов выброшено: {v0}.")
+        : auditLocalize("FALLOUTMAW.AuditApps.ExchangeCompleted", "Обмен совершен."));
       await this.close({ force: true });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Personal trade completion failed`, error);
-      ui.notifications.warn(error.message || "Не удалось завершить личную торговлю.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToCompleteThePersonalTrade", "Не удалось завершить личную торговлю."));
       await this.#renderPreservingWindowStack();
     } finally {
       this.endTradeCompletionLock({ render: false });
@@ -2000,7 +2036,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (approved) return true;
 
     approvalButton?.classList.add("personal-trade-approval-rejected");
-    ui.notifications.warn("Сделка не состоялась.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheDealDidNotGoThrough", "Сделка не состоялась."));
     await new Promise(resolve => window.setTimeout(resolve, PERSONAL_TRADE_REJECTION_FEEDBACK_MS));
     approvalButton?.classList.remove("personal-trade-approval-rejected");
     return false;
@@ -2621,20 +2657,20 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const canOffer = Boolean(this.#isTradeMode() && !this.#tradeOffers.completed && this.#tradeRole !== TRADE_ROLE_OBSERVER);
     const menuOptions = [
-      ["offer", "fa-cart-plus", "В предложение", !canOffer]
+      ["offer", "fa-cart-plus", auditLocalize("FALLOUTMAW.AuditApps.ToOffer", "В предложение"), !canOffer]
     ];
     const { getQuickDisassemblyItems } = await import("./craft-window.mjs");
     if (this.#canQuickDisassembleTradeItem(actor, item) && (await getQuickDisassemblyItems(actor)).some(entry => entry.id === item.id)) {
-      menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+      menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", auditLocalize("FALLOUTMAW.AuditApps.Dismantle", "Разобрать")]);
     }
     if (canHighlightTradeAmmoCompatibility(item)) {
-      menuOptions.push(["highlightAmmo", "fa-crosshairs", "Подходящие боеприпасы"]);
+      menuOptions.push(["highlightAmmo", "fa-crosshairs", auditLocalize("FALLOUTMAW.AuditApps.CompatibleAmmunition", "Подходящие боеприпасы")]);
     }
     if (canShowSuitableWeaponModules(item)) {
       menuOptions.push(["highlightModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
     }
     if (canHighlightTradeEnergyCompatibility(item)) {
-      menuOptions.push(["highlightEnergy", "fa-bolt", "Подходящие источники энергии"]);
+      menuOptions.push(["highlightEnergy", "fa-bolt", auditLocalize("FALLOUTMAW.AuditApps.CompatiblePowerSources", "Подходящие источники энергии")]);
     }
 
     const menu = document.createElement("nav");
@@ -2692,10 +2728,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const menuOptions = [];
     const { getQuickDisassemblyItems } = await import("./craft-window.mjs");
     if (!isButcheringItem && (await getQuickDisassemblyItems(actor, this.#searcherActor)).some(entry => entry.id === item.id)
-      && isSearchTransferableItem(item)) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+      && isSearchTransferableItem(item)) menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", auditLocalize("FALLOUTMAW.AuditApps.Dismantle", "Разобрать")]);
 
     if (isButcheringItem) {
-      menuOptions.push(["takeButchering", "fa-hand", "Забрать"]);
+      menuOptions.push(["takeButchering", "fa-hand", auditLocalize("FALLOUTMAW.AuditApps.Take", "Забрать")]);
     } else if (game.user?.isGM) {
       menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
     }
@@ -2706,10 +2742,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
     }
     if (!isButcheringItem && getItemInteractionState(actor, item).hasInteraction) {
-      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+      menuOptions.push(["interact", "fa-hand-pointer", auditLocalize("FALLOUTMAW.AuditApps.Interaction", "Взаимодействие")]);
     }
     if (!isButcheringItem && canUseActiveItem(item)) {
-      menuOptions.push(["use", "fa-play", "Применить"]);
+      menuOptions.push(["use", "fa-play", auditLocalize("FALLOUTMAW.Common.Apply", "Применить")]);
     }
     if (!isButcheringItem && canRotate) {
       menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
@@ -2720,10 +2756,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
     if (!isButcheringItem && selectedQuantity > 1) {
-      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+      menuOptions.push(["split", "fa-code-branch", auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить")]);
     }
     if (!isButcheringItem) {
-      menuOptions.push(["drop", "fa-arrow-down", "Выбросить"]);
+      menuOptions.push(["drop", "fa-arrow-down", auditLocalize("FALLOUTMAW.AuditApps.Drop", "Выбросить")]);
     }
     if (!isButcheringItem && game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
@@ -2781,7 +2817,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     menu.dataset.pointerX = String(event.clientX);
     menu.dataset.pointerY = String(event.clientY);
     this.#applyOverlayUiScale(menu);
-    menu.innerHTML = `<button type="button" data-action="tradePrimary"><i class="fa-solid fa-coins"></i>Сделать основной</button>`;
+    menu.innerHTML = auditLocalize("FALLOUTMAW.AuditApps.MakePrimary", "<button type=\"button\" data-action=\"tradePrimary\"><i class=\"fa-solid fa-coins\"></i>Сделать основной</button>");
     document.body.append(menu);
     this.#syncInventoryTooltipLayer({ bringToFront: true });
     this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
@@ -2811,7 +2847,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         actorUuid: this.#getActorForTradeSide(side)?.uuid ?? ""
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
-      if (result?.completed) ui.notifications.info("Обмен совершен.");
+      if (result?.completed) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ExchangeCompleted", "Обмен совершен."));
       return;
     }
     this.#tradeOffers[side].ready = !this.#tradeOffers[side].ready;
@@ -2828,8 +2864,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     event.stopPropagation();
     if (!this.#isTradeMode() || !this.#tradeOffers.completed || !this.#canInteract()) return;
     if (this.#tradeSessionSnapshot) {
-      const result = await requestTradeSessionAction("restartTrade", this.#prepareTradeSessionActionPayload({}));
-      if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
+      try {
+        const result = await requestTradeSessionAction("restartTrade", this.#prepareTradeSessionActionPayload({}));
+        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
+      } catch (error) {
+        ui.notifications.warn(error.message || "Не удалось доставить оставшиеся предметы торговли.");
+      }
       return;
     }
     this.#tradeOffers = createEmptyTradeOffers();
@@ -2852,8 +2892,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const quantity = available > 1 && !isContainerItem(itemData)
       ? await promptSearchItemStackQuantity({
         item: itemData,
-        title: "Забрать купленное",
-        actionLabel: "Забрать",
+        title: auditLocalize("FALLOUTMAW.AuditApps.CollectPurchases", "Забрать купленное"),
+        actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Take", "Забрать"),
         max: available,
         value: available
       })
@@ -2996,7 +3036,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
     } catch (error) {
       console.error(`${SYSTEM_ID} | Completed trade claim all failed`, error);
-      ui.notifications.warn(error.message || "Не удалось забрать все купленное.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToCollectAllPurchasedItems", "Не удалось забрать все купленное."));
     } finally {
       this.#endInventoryMutation();
       this.#captureScrollPositions();
@@ -3014,29 +3054,23 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#tradeOffers.completed) return;
     const available = getTradeAvailableCurrencyAmount(this.#tradeOffers[side], actor, currencyKey);
     if (available <= 0) {
-      ui.notifications.warn("Свободной валюты нет.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoUncommittedCurrency", "Свободной валюты нет."));
       return;
     }
     const equalizeAmount = this.#getTradeEqualizeCurrencyAmount(side, currencyKey);
     const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
     const formData = await DialogV2.input({
-      window: { title: "Добавить валюту" },
-      content: `
-        <p><strong>${escapeHTML(currency?.label ?? currencyKey)}</strong>: 0 / ${available}</p>
-        <label class="fallout-maw-stacked-field">
-          <span>Количество</span>
-          <input type="number" name="amount" value="${Math.min(available, Math.max(1, equalizeAmount || available))}" min="1" max="${available}" step="1" autofocus>
-        </label>
-      `,
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.AddCurrency", "Добавить валюту") },
+      content: auditFormat("FALLOUTMAW.AuditApps.0Quantity", { v0: (escapeHTML(currency?.label ?? currencyKey)), v1: (available), v2: (Math.min(available, Math.max(1, equalizeAmount || available))), v3: (available) }, "\n        <p><strong>{v0}</strong>: 0 / {v1}</p>\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Количество</span>\n          <input type=\"number\" name=\"amount\" value=\"{v2}\" min=\"1\" max=\"{v3}\" step=\"1\" autofocus>\n        </label>\n      "),
       ok: {
-        label: "Добавить",
+        label: auditLocalize("FALLOUTMAW.Item.ConditionAddRecoveryMethod", "Добавить"),
         icon: "fa-solid fa-coins",
         callback: (_event, okButton) => new FormDataExtended(okButton.form).object
       },
       buttons: [
         ...(equalizeAmount > 0 ? [{
           action: "equalize",
-          label: "Уравнять",
+          label: auditLocalize("FALLOUTMAW.AuditApps.Balance", "Уравнять"),
           icon: "fa-solid fa-scale-balanced",
           callback: () => ({ amount: Math.min(available, equalizeAmount) })
         }] : []),
@@ -3078,8 +3112,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (quantity <= 1 || isContainerItem(itemData)) return quantity;
     return promptSearchItemStackQuantity({
       item: itemData,
-      title: "Убрать из предложения",
-      actionLabel: "Убрать",
+      title: auditLocalize("FALLOUTMAW.AuditApps.RemoveFromOffer", "Убрать из предложения"),
+      actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Remove", "Убрать"),
       max: quantity,
       value: quantity
     });
@@ -3089,12 +3123,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const actorUuid = this.#getActorForTradeSide(side)?.uuid ?? "";
     const available = getTradeOfferCurrencyContributionAmount(this.#tradeOffers?.[side], currencyKey, actorUuid);
     if (available <= 0) {
-      ui.notifications.warn("Нет вашего вклада этой валюты.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.YouHaveNotContributedAnyOfThisCurrency", "Нет вашего вклада этой валюты."));
       return 0;
     }
     const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
     const formData = await DialogV2.input({
-      window: { title: "Убрать валюту" },
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.RemoveCurrency", "Убрать валюту") },
       content: `
         <p><strong>${escapeHTML(currency?.label ?? currencyKey)}</strong>: 0 / ${available}</p>
         <label class="fallout-maw-stacked-field">
@@ -3103,7 +3137,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         </label>
       `,
       ok: {
-        label: "Убрать",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Remove", "Убрать"),
         icon: "fa-solid fa-xmark",
         callback: (_event, okButton) => new FormDataExtended(okButton.form).object
       },
@@ -3190,23 +3224,37 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   async #openSearchContainerSheet(item) {
     if (!isContainerItem(item)) return null;
+    const revision = this.#contextRevision;
+    const contextIsActive = () => this.#contextActive && this.#contextRevision === revision;
     const evaluatingActorUuid = this.#isTradeMode()
       ? this.#getLocalTradeActorUuid()
       : (this.#searcherActor?.uuid ?? "");
     const app = new FalloutMaWContainerSheet({
       document: item,
       evaluatingActorUuid,
+      searchContextIsActive: contextIsActive,
+      registerSearchContainerSheet: app => {
+        this.#containerSheets.add(app);
+        return () => this.#containerSheets.delete(app);
+      },
       quickDisassemblyHandler: this.#isTradeMode()
         ? (actor, ids) => this.#quickDisassembleTradeItem(actor, ids)
         : (actor, ids) => this.#quickDisassemble(actor, ids),
       canQuickDisassembleItem: (actor, candidate) => this.#isTradeMode()
         ? this.#canQuickDisassembleTradeItem(actor, candidate) : this.#canInteract(),
-      searchTransferHandler: payload => this.#executeContainerSheetTransfer(payload),
+      searchTransferHandler: payload => contextIsActive() ? this.#executeContainerSheetTransfer(payload) : false,
       contentsTransferOptions: this.#getContentsTransferOptions(item.parent)
     });
     await app.render({ force: true });
+    if (!contextIsActive()) { await app.close({ force: true }); return null; }
     app.bringToFront();
     return app;
+  }
+
+  async #closeContainerSheets() {
+    const sheets = [...this.#containerSheets];
+    this.#containerSheets.clear();
+    await Promise.allSettled(sheets.map(sheet => sheet.close({ force: true })));
   }
 
   #canQuickDisassembleTradeItem(actor, item) {
@@ -3235,10 +3283,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #executeContainerSheetTransfer(payload = {}) {
+    if (!this.#contextActive || !this.rendered || !this.#canInteract()) return false;
     const sourceActor = this.#getActorByUuid(String(payload.sourceActorUuid ?? ""));
     const targetActor = this.#getActorByUuid(String(payload.targetActorUuid ?? ""));
     const sourceItem = sourceActor?.items?.get(String(payload.itemId ?? ""));
     if (!sourceActor || !targetActor || !sourceItem) return false;
+    if (this.#isTradeMode() && sourceActor.uuid !== targetActor.uuid) {
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.WhenTradingItemsMustFirstBePlacedIn", "В торговле предметы сначала кладутся в предложение."));
+      return false;
+    }
 
     let targetParentId = payload.targetParentId;
     if (targetParentId === null || targetParentId === undefined) {
@@ -3287,7 +3340,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         if (target.kind === "offer") {
           const side = this.#getTradeSideForActor(source.actor.uuid);
           if (source.actor.uuid !== target.actor.uuid || !this.#canManageTradeOfferSide(side)) {
-            throw new Error("Нет прав на изменение предложения.");
+            throw new Error(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToChangeThe", "Нет прав на изменение предложения."));
           }
           if (this.#tradeSessionSnapshot) {
             const response = await requestTradeSessionAction("addTradeOfferContents", this.#prepareTradeSessionActionPayload({
@@ -3403,8 +3456,26 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #unequipSearchItem(actor, item) {
-    const placement = getFirstAvailableActorInventoryPlacement(actor, ROOT_CONTAINER_ID, item, [item.id], []);
-    if (!placement) {
+    const placementContext = isInstalledConstructPartItem(item)
+      ? getFirstAvailableActorInventoryPlacementContext(actor, item, [item.id])
+      : (() => {
+        const placement = getFirstAvailableActorInventoryPlacement(actor, ROOT_CONTAINER_ID, item, [item.id], []);
+        return placement ? { parentId: ROOT_CONTAINER_ID, placement } : null;
+      })();
+    if (!placementContext) {
+      if (isInstalledConstructPartItem(item)) {
+        try {
+          await prepareConstructPartDetachment(actor, item);
+          await dropActorInventoryItem(actor, item);
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereWasNotEnoughInventorySpaceTheConstruct", "В инвентаре не хватило места: деталь конструкта выброшена на землю."));
+          this.#clearInventoryTooltip({ force: true });
+          this.#captureScrollPositions();
+          await this.#renderPreservingWindowStack();
+        } catch (error) {
+          ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToDropTheConstructPart", "Не удалось выбросить деталь конструкта."));
+        }
+        return null;
+      }
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       return null;
     }
@@ -3415,12 +3486,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetActorUuid: actor.uuid,
       itemId: item.id,
       targetMode: "inventory",
-      targetParentId: ROOT_CONTAINER_ID,
+      targetParentId: placementContext.parentId,
       targetEquipmentSlot: "",
       targetWeaponSet: "",
       targetWeaponSlot: "",
-      targetX: placement.x,
-      targetY: placement.y,
+      targetX: placementContext.placement.x,
+      targetY: placementContext.placement.y,
       targetItemId: ""
     });
   }
@@ -3432,8 +3503,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (quantity <= 1) return null;
     const amount = await promptSearchItemStackQuantity({
       item,
-      title: "Разделить предмет",
-      actionLabel: "Разделить",
+      title: auditLocalize("FALLOUTMAW.AuditApps.SplitItem", "Разделить предмет"),
+      actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить"),
       max: quantity - 1,
       value: Math.max(1, Math.floor(quantity / 2))
     });
@@ -3458,7 +3529,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory split failed`, error);
-      ui.notifications.warn(error.message || "Не удалось разделить предмет.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToSplitTheItem", "Не удалось разделить предмет."));
     }
     return null;
   }
@@ -3466,7 +3537,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   async #dropSearchItem(actor, item, { stackIndex = 0, stackQuantity = 0 } = {}) {
     if (!actor || !item) return null;
     if (!game.user?.isGM && !actor.testUserPermission?.(game.user, "OWNER")) {
-      ui.notifications.warn("Нет прав на выбрасывание предметов этого актера.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToDropThis", "Нет прав на выбрасывание предметов этого актера."));
       return null;
     }
     const quantity = usesVirtualInventoryStacks(item)
@@ -3483,7 +3554,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       await this.#renderPreservingWindowStack();
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory item drop failed`, error);
-      ui.notifications.warn(error.message || "Не удалось выбросить предмет.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToDropTheItem", "Не удалось выбросить предмет."));
     }
     return null;
   }
@@ -3503,7 +3574,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (detachedSlotId) await finalizeConstructPartDetachment(actor, detachedSlotId);
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory item delete failed`, error);
-      ui.notifications.warn(error.message || "Не удалось удалить предмет.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToDeleteTheItem", "Не удалось удалить предмет."));
     }
     return null;
   }
@@ -3556,15 +3627,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (direction === "put") {
       const confirmed = await DialogV2.confirm({
         window: {
-          title: "Положить все"
+          title: auditLocalize("FALLOUTMAW.AuditApps.PlaceAll", "Положить все")
         },
-        content: `<p>Перенести все предметы и валюту из <strong>${escapeHTML(sourceActor.name)}</strong> в <strong>${escapeHTML(targetActor.name)}</strong>?</p>`,
+        content: auditFormat("FALLOUTMAW.AuditApps.TransferAllItemsAndCurrencyFromTo", { v0: (escapeHTML(sourceActor.name)), v1: (escapeHTML(targetActor.name)) }, "<p>Перенести все предметы и валюту из <strong>{v0}</strong> в <strong>{v1}</strong>?</p>"),
         yes: {
-          label: "Да",
+          label: auditLocalize("FALLOUTMAW.Common.Yes", "Да"),
           icon: "fa-solid fa-check"
         },
         no: {
-          label: "Нет"
+          label: auditLocalize("FALLOUTMAW.SkillCheck.None", "Нет")
         },
         rejectClose: false,
         modal: true
@@ -3581,10 +3652,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     try {
       const result = await this.#transferAllBetweenActors(sourceActor, targetActor);
       if (result.failedItems > 0) {
-        ui.notifications.warn(`Не удалось перенести предметов: ${result.failedItems}.`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.ItemsThatCouldNotBeTransferred", { v0: (result.failedItems) }, "Не удалось перенести предметов: {v0}."));
       }
       if (!result.items && !result.currencies && !result.failedItems) {
-        ui.notifications.info("Нечего переносить.");
+        ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNothingToTransfer", "Нечего переносить."));
       }
     } finally {
       this.#bulkTransferInProgress = false;
@@ -3660,14 +3731,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
     const available = Math.max(0, toInteger(sourceActor.system?.currencies?.[currencyKey]));
     if (!available) {
-      ui.notifications.warn("У актера нет этой валюты.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheActorDoesNotHaveThisCurrency", "У актера нет этой валюты."));
       return;
     }
 
-    const actionLabel = sourceActor.uuid === this.#searchedActorUuid ? "Забрать" : "Переложить";
+    const actionLabel = sourceActor.uuid === this.#searchedActorUuid ? auditLocalize("FALLOUTMAW.AuditApps.Take", "Забрать") : auditLocalize("FALLOUTMAW.AuditApps.Move_887", "Переложить");
     const formData = await DialogV2.input({
       window: {
-        title: `${actionLabel} валюту`
+        title: auditFormat("FALLOUTMAW.AuditApps.Currency", { v0: (actionLabel) }, "{v0} валюту")
       },
       content: `
         <p><strong>${escapeHTML(sourceActor.name)}</strong> -> <strong>${escapeHTML(targetActor.name)}</strong></p>
@@ -3683,7 +3754,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       },
       buttons: [{
         action: "cancel",
-        label: "Отмена"
+        label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена")
       }],
       position: {
         width: 420
@@ -3714,7 +3785,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search currency transfer failed`, error);
-      ui.notifications.warn(error.message || "Не удалось перенести валюту.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToTransferCurrency", "Не удалось перенести валюту."));
     }
   }
 
@@ -3734,7 +3805,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return true;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search currency transfer failed`, error);
-      if (notify) ui.notifications.warn(error.message || "Не удалось перенести валюту.");
+      if (notify) ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToTransferCurrency", "Не удалось перенести валюту."));
     }
     return false;
   }
@@ -4006,7 +4077,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         : await requestSearchInventorySocket("quickDisassembly", payload, gm);
       const { notifyQuickDisassemblyResult } = await import("./craft-window.mjs");
       notifyQuickDisassemblyResult(result);
-    } catch (error) { ui.notifications.warn(error.message || "Разбор не выполнен."); }
+    } catch (error) { ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.DismantlingFailed", "Разбор не выполнен.")); }
     finally { this.#quickDisassemblyInProgress = false; await this.#renderPreservingWindowStack(); }
   }
 
@@ -4033,10 +4104,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       } else {
         await requestSearchInventorySocket("butcherActor", payload, responsibleGM);
       }
-      ui.notifications.info(`${this.#searchedActor?.name ?? "Цель"}: разделка завершена.`);
+      ui.notifications.info(auditFormat("FALLOUTMAW.AuditApps.ButcheringCompleted", { v0: (this.#searchedActor?.name ?? auditLocalize("FALLOUTMAW.Research.Target", "Цель")) }, "{v0}: разделка завершена."));
     } catch (error) {
       console.error(`${SYSTEM_ID} | Butchering failed`, error);
-      ui.notifications.warn(error.message || "Не удалось выполнить разделку.");
+      ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.FailedToPerformButchering", "Не удалось выполнить разделку."));
     } finally {
       this.#butcheringInProgress = false;
       if (button.isConnected) button.disabled = !canStartActorButchering(this.#searchedActor);
@@ -4305,7 +4376,7 @@ export function prepareSearchActorContext(actor, {
     uuid: actor.uuid,
     name: isTrade ? formatTradeActorName(actor) : actor.name,
     selector,
-    img: normalizeImagePath(actor.img, "icons/svg/mystery-man.svg"),
+    img: normalizeImagePath(actor.img, "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
     inventory: decoratedInventory,
     currencies,
     tradeOffer: tradeOffer ? { ...tradeOffer, canControl, canConfirm, showConfirm } : tradeOffer,
@@ -4659,7 +4730,7 @@ function createTradeCatalogGrouping() {
       const label = String(item?.system?.itemSubcategory ?? item?.itemSubcategory ?? "").trim();
       return label || (orders.get(category)?.size ? "__none__" : "");
     },
-    labelOf(key) { return !key || key === "__none__" ? "Без подкатегории" : key; },
+    labelOf(key) { return !key || key === "__none__" ? auditLocalize("FALLOUTMAW.Craft.SubcategoryNone", "Без подкатегории") : key; },
     orderFor(category) { return orders.get(normalizeTradeCatalogCategory(category)) ?? emptyOrder; }
   };
 }
@@ -4691,7 +4762,7 @@ function getTradeCatalogCategoryLabels(items = [], configuredLabels = []) {
 }
 
 function normalizeTradeCatalogCategory(category = "") {
-  return String(category ?? "").trim() || TRADE_UNCATEGORIZED_LABEL;
+  return String(category ?? "").trim() || TRADE_UNCATEGORIZED_LABEL();
 }
 
 function getTradeCatalogItemQuantity(item = null) {
@@ -4718,16 +4789,16 @@ function getTradeCatalogItemFootprint(item = null, columns = TRADE_OFFER_DEFAULT
 
 async function performSearchQuickDisassembly(payload = {}, requesterUserId = "") {
   const requester = game.users?.get(requesterUserId);
-  if (!requester) throw new Error("Пользователь не найден.");
+  if (!requester) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.UserNotFound", "Пользователь не найден."));
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
   const actor = await resolveActor(payload.actorUuid);
-  if (!searcherActor || !searchedActor || !actor) throw new Error("Актёр не найден.");
-  if (isTradePayload(payload)) throw new Error("Быстрый разбор недоступен во время торговли.");
+  if (!searcherActor || !searchedActor || !actor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ActorNotFound", "Актёр не найден."));
+  if (isTradePayload(payload)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.QuickDismantlingIsUnavailableDuringTrade", "Быстрый разбор недоступен во время торговли."));
   validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
-  if (![searcherActor.uuid, searchedActor.uuid].includes(actor.uuid)) throw new Error("Предметы не относятся к этому обыску.");
+  if (![searcherActor.uuid, searchedActor.uuid].includes(actor.uuid)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheseItemsDoNotBelongToThisSearch", "Предметы не относятся к этому обыску."));
   const { getQuickDisassemblyItems, quickDisassembleItems } = await import("./craft-window.mjs");
-  if (payload.itemIds != null && !Array.isArray(payload.itemIds)) throw new Error("Неверный список предметов.");
+  if (payload.itemIds != null && !Array.isArray(payload.itemIds)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidItemList", "Неверный список предметов."));
   const candidates = (await getQuickDisassemblyItems(actor, searcherActor)).filter(item => isSearchTransferableItem(item));
   const itemIds = candidates.filter(item => !payload.itemIds || payload.itemIds.includes(item.id)).map(item => item.id);
   return quickDisassembleItems({ actor, skillActor: searcherActor, itemIds });
@@ -4736,14 +4807,14 @@ async function performSearchQuickDisassembly(payload = {}, requesterUserId = "")
 async function performActorButchering(payload = {}, requesterUserId = "") {
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
-  if (!searcherActor || !searchedActor) throw new Error("Актёр разделки не найден.");
+  if (!searcherActor || !searchedActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringActorNotFound", "Актёр разделки не найден."));
 
   validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
-  if (!isActorDeadForButchering(searchedActor)) throw new Error("Разделывать можно только мёртвую цель.");
+  if (!isActorDeadForButchering(searchedActor)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.OnlyDeadTargetsCanBeButchered", "Разделывать можно только мёртвую цель."));
 
   const config = getButcheringConfig(searchedActor);
-  if (!hasConfiguredButchering(config)) throw new Error("Разделка для этой цели не настроена.");
-  if (config.completed) throw new Error("Эта цель уже разделана.");
+  if (!hasConfiguredButchering(config)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringIsNotConfiguredForThisTarget", "Разделка для этой цели не настроена."));
+  if (config.completed) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThisTargetHasAlreadyBeenButchered", "Эта цель уже разделана."));
 
   const rewardDocuments = await resolveButcheringRewardDocuments(config);
   const worstCaseRewards = selectWorstCaseButcheringRewards(config, rewardDocuments);
@@ -4762,7 +4833,7 @@ async function performActorButchering(payload = {}, requesterUserId = "") {
     const outcomeKey = String(resolution[index]?.outcomeKey ?? "failure");
     for (const reward of stage.outcomes?.[outcomeKey] ?? []) {
       const document = rewardDocuments.get(reward.uuid);
-      if (!document) throw new Error(`Предмет награды «${reward.name}» недоступен.`);
+      if (!document) throw new Error(auditFormat("FALLOUTMAW.AuditApps.RewardItemIsUnavailable", { v0: (reward.name) }, "Предмет награды «{v0}» недоступен."));
       rewards.push({
         itemData: createSourcedInventoryItemData(document),
         quantity: randomButcheringRewardQuantity(reward)
@@ -4807,7 +4878,7 @@ async function resolveButcheringStages({
     for (const stage of config.stages) {
       if (skillValue >= stage.difficulty) continue;
       const skillLabel = getSkillSettings().find(skill => skill.key === config.skillKey)?.label ?? config.skillKey;
-      throw new Error(`Для разделки нужно ${stage.difficulty} ${skillLabel} (сейчас ${skillValue}).`);
+      throw new Error(auditFormat("FALLOUTMAW.AuditApps.ButcheringRequiresCurrently", { v0: (stage.difficulty), v1: (skillLabel), v2: (skillValue) }, "Для разделки нужно {v0} {v1} (сейчас {v2})."));
     }
     return config.stages.map(() => ({
       outcomeKey: "success",
@@ -4827,10 +4898,10 @@ async function resolveButcheringStages({
     animate: false,
     createMessage: true,
     requester: requesterUserId,
-    title: `Разделка: ${searchedActor.name}`
+    title: auditFormat("FALLOUTMAW.AuditApps.Butchering", { v0: (searchedActor.name) }, "Разделка: {v0}")
   });
   if (!batch || batch.outcomes?.length !== config.stages.length) {
-    throw new Error("Не удалось выполнить проверки разделки.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.FailedToPerformButcheringChecks", "Не удалось выполнить проверки разделки."));
   }
   return batch.outcomes.map(outcome => {
     const resultKey = String(outcome.result?.key ?? "failure");
@@ -4961,7 +5032,7 @@ async function requestSearchAuditStart(payload = {}) {
   if (responsibleGM && responsibleGM.id !== game.user?.id) {
     return requestSearchInventorySocket("startSearchAudit", payload, responsibleGM);
   }
-  if (!game.user?.isGM) throw new Error("Нет активного GM для начала обыска.");
+  if (!game.user?.isGM) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToStartThe", "Нет активного GM для начала обыска."));
   return enqueueSearchInventoryOperation(
     () => performSearchAuditStart(payload, game.user?.id ?? "")
   );
@@ -4997,7 +5068,7 @@ async function requestSearchAuditCompletion(payload = {}) {
   if (responsibleGM && responsibleGM.id !== game.user?.id) {
     return requestSearchInventorySocket("completeSearchAudit", payload, responsibleGM);
   }
-  if (!game.user?.isGM) throw new Error("Нет активного GM для завершения обыска.");
+  if (!game.user?.isGM) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToEndThe", "Нет активного GM для завершения обыска."));
   return enqueueSearchInventoryOperation(
     () => performSearchAuditCompletion(payload, game.user?.id ?? "")
   );
@@ -5126,21 +5197,10 @@ function renderGMSearchStartContent({
   requesterUserId = ""
 } = {}) {
   const requesterName = getSearchNotificationRequesterName(requesterUserId);
-  return `
-    <article class="fallout-maw-chat-card fallout-maw-search-notification-card is-start">
-      ${renderSearchNotificationHeader({
+  return auditFormat("FALLOUTMAW.AuditApps.OpenedTheSearchWindow", { v0: (renderSearchNotificationHeader({
         icon: "fa-solid fa-magnifying-glass",
-        title: "Обыск начат"
-      })}
-      <section class="fallout-maw-search-notification-route">
-        ${renderSearchNotificationActor(searcherActor, "Обыскивает")}
-        ${renderSearchNotificationActor(searchedActor, "Цель")}
-      </section>
-      <p class="fallout-maw-search-notification-description">
-        <strong>${escapeHTML(requesterName)}</strong> открыл окно обыска.
-      </p>
-    </article>
-  `;
+        title: auditLocalize("FALLOUTMAW.AuditApps.SearchStarted", "Обыск начат")
+      })), v1: (renderSearchNotificationActor(searcherActor, auditLocalize("FALLOUTMAW.AuditApps.Searching", "Обыскивает"))), v2: (renderSearchNotificationActor(searchedActor, auditLocalize("FALLOUTMAW.Research.Target", "Цель"))), v3: (escapeHTML(requesterName)) }, "\n    <article class=\"fallout-maw-chat-card fallout-maw-search-notification-card is-start\">\n      {v0}\n      <section class=\"fallout-maw-search-notification-route\">\n        {v1}\n        {v2}\n      </section>\n      <p class=\"fallout-maw-search-notification-description\">\n        <strong>{v3}</strong> открыл окно обыска.\n      </p>\n    </article>\n  ");
 }
 
 function renderGMSearchSummaryContent({
@@ -5154,60 +5214,39 @@ function renderGMSearchSummaryContent({
   const requesterName = getSearchNotificationRequesterName(requesterUserId);
   const taken = showTaken
     ? renderSearchNotificationEntries(takenEntries, {
-      title: "Забрано у цели",
-      emptyText: "Ничего не забрано",
+      title: auditLocalize("FALLOUTMAW.AuditApps.TakenFromTarget", "Забрано у цели"),
+      emptyText: auditLocalize("FALLOUTMAW.AuditApps.NothingTaken", "Ничего не забрано"),
       direction: "taken"
     })
     : "";
   const placed = renderSearchNotificationEntries(placedEntries, {
-    title: "Положено цели",
-    emptyText: "Ничего не положено",
+    title: auditLocalize("FALLOUTMAW.AuditApps.GivenToTarget", "Положено цели"),
+    emptyText: auditLocalize("FALLOUTMAW.AuditApps.NothingGiven", "Ничего не положено"),
     direction: "placed"
   });
 
-  return `
-    <article class="fallout-maw-chat-card fallout-maw-search-notification-card">
-      ${renderSearchNotificationHeader({
+  return auditFormat("FALLOUTMAW.AuditApps.CompletedTheSearch", { v0: (renderSearchNotificationHeader({
         icon: "fa-solid fa-clipboard-list",
-        title: "Итоги обыска"
-      })}
-      <section class="fallout-maw-search-notification-route">
-        ${renderSearchNotificationActor(searcherActor, "Обыскивал")}
-        ${renderSearchNotificationActor(searchedActor, "Цель")}
-      </section>
-      <p class="fallout-maw-search-notification-description">
-        <strong>${escapeHTML(requesterName)}</strong> завершил обыск.
-      </p>
-      ${taken}
-      ${placed}
-    </article>
-  `;
+        title: auditLocalize("FALLOUTMAW.AuditApps.SearchResults", "Итоги обыска")
+      })), v1: (renderSearchNotificationActor(searcherActor, auditLocalize("FALLOUTMAW.AuditApps.SearchedBy", "Обыскивал"))), v2: (renderSearchNotificationActor(searchedActor, auditLocalize("FALLOUTMAW.Research.Target", "Цель"))), v3: (escapeHTML(requesterName)), v4: (taken), v5: (placed) }, "\n    <article class=\"fallout-maw-chat-card fallout-maw-search-notification-card\">\n      {v0}\n      <section class=\"fallout-maw-search-notification-route\">\n        {v1}\n        {v2}\n      </section>\n      <p class=\"fallout-maw-search-notification-description\">\n        <strong>{v3}</strong> завершил обыск.\n      </p>\n      {v4}\n      {v5}\n    </article>\n  ");
 }
 
 function getSearchNotificationRequesterName(requesterUserId = "") {
   const requester = game.users?.get?.(String(requesterUserId ?? "")) ?? null;
-  return String(requester?.name ?? game.user?.name ?? "Неизвестный пользователь");
+  return String(requester?.name ?? game.user?.name ?? auditLocalize("FALLOUTMAW.AuditApps.UnknownUser", "Неизвестный пользователь"));
 }
 
 function renderSearchNotificationHeader({
   icon = "fa-solid fa-magnifying-glass",
   title = ""
 } = {}) {
-  return `
-    <header class="fallout-maw-search-notification-header">
-      <span class="fallout-maw-search-notification-icon"><i class="${escapeHTML(icon)}"></i></span>
-      <span>
-        <strong>${escapeHTML(title)}</strong>
-        <small>Только для GM</small>
-      </span>
-    </header>
-  `;
+  return auditFormat("FALLOUTMAW.AuditApps.GMOnly", { v0: (escapeHTML(icon)), v1: (escapeHTML(title)) }, "\n    <header class=\"fallout-maw-search-notification-header\">\n      <span class=\"fallout-maw-search-notification-icon\"><i class=\"{v0}\"></i></span>\n      <span>\n        <strong>{v1}</strong>\n        <small>Только для GM</small>\n      </span>\n    </header>\n  ");
 }
 
 function createSearchNotificationActorData(actor = null, fallback = {}) {
   return {
     uuid: String(actor?.uuid ?? fallback?.uuid ?? ""),
-    name: String(actor?.name ?? fallback?.name ?? "Неизвестный актёр"),
+    name: String(actor?.name ?? fallback?.name ?? auditLocalize("FALLOUTMAW.AuditApps.UnknownActor", "Неизвестный актёр")),
     img: String(actor?.img ?? fallback?.img ?? SEARCH_NOTIFICATION_FALLBACK_ICON)
   };
 }
@@ -5250,7 +5289,7 @@ function renderSearchNotificationEntries(entries = [], {
         <img src="${escapeHTML(img)}" alt="">
         <span>
           <strong>${escapeHTML(entry.name)}</strong>
-          <small>${entry.kind === "currency" ? "Валюта" : "Предмет"}</small>
+          <small>${entry.kind === "currency" ? auditLocalize("FALLOUTMAW.Item.PriceCurrency", "Валюта") : auditLocalize("FALLOUTMAW.Craft.Item", "Предмет")}</small>
         </span>
         <b>×${entry.quantity}</b>
       </span>
@@ -5287,7 +5326,7 @@ async function resolveButcheringRewardDocuments(config = {}) {
         if (documents.has(reward.uuid)) continue;
         const document = await fromUuid(String(reward.uuid ?? ""));
         if (!(document instanceof Item)) {
-          throw new Error(`Предмет награды «${reward.name}» недоступен.`);
+          throw new Error(auditFormat("FALLOUTMAW.AuditApps.RewardItemIsUnavailable", { v0: (reward.name) }, "Предмет награды «{v0}» недоступен."));
         }
         documents.set(reward.uuid, document);
       }
@@ -5374,10 +5413,10 @@ function createButcheringToolSpendPlan(actor, stages = []) {
     }, supplyByItemTool, depletedItemIds);
     const selected = candidates.find(candidate => candidate.supplyValue >= supplyCost) ?? null;
     if (!selected) {
-      const label = (getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey) || "Инструмент";
+      const label = (getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey) || auditLocalize("FALLOUTMAW.Item.ConditionRecoveryTool", "Инструмент");
       return {
         valid: false,
-        message: `${stage.name}: нужен инструмент «${label}» класса ${requiredClass} или выше с ресурсом не менее ${supplyCost}.`,
+        message: auditFormat("FALLOUTMAW.AuditApps.RequiresAToolOfClassOrHigherWith", { v0: (stage.name), v1: (label), v2: (requiredClass), v3: (supplyCost) }, "{v0}: нужен инструмент «{v1}» класса {v2} или выше с ресурсом не менее {v3}."),
         updates: [],
         deletes: [],
         spent: 0
@@ -5669,7 +5708,7 @@ async function performInventoryContentsTransfer(payload = {}, requesterUserId = 
   const validate = () => {
     if (owned) {
       if (!requester.isGM && (!sourceActor.testUserPermission(requester, "OWNER")
-        || !targetActor.testUserPermission(requester, "OWNER"))) throw new Error("Нет прав на перенос содержимого.");
+        || !targetActor.testUserPermission(requester, "OWNER"))) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToTransferContents", "Нет прав на перенос содержимого."));
     } else {
       if (!searcherActor || !searchedActor) throw new Error("Search actors not found.");
       validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
@@ -5679,7 +5718,7 @@ async function performInventoryContentsTransfer(payload = {}, requesterUserId = 
     }
     for (const [actor, parent] of [[sourceActor, payload.sourceParentId], [targetActor, payload.targetParentId]]) {
       if (parent === BUTCHERING_STORAGE_PARENT_ID || (!owned && parent === LOCKED_STORAGE_PARENT_ID)) {
-        throw new Error("Недоступное место переноса.");
+        throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TransferDestinationUnavailable", "Недоступное место переноса."));
       }
       if (parent !== LOCKED_STORAGE_PARENT_ID) validateTargetParent(actor, String(parent ?? ROOT_CONTAINER_ID));
     }
@@ -5728,7 +5767,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     || sourceActor.uuid !== searchedActor.uuid
     || targetActor.uuid !== searcherActor.uuid
   )) {
-    throw new Error("Предметы разделки можно только забирать у обыскиваемой цели.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringItemsCanOnlyBeTakenFromThe", "Предметы разделки можно только забирать у обыскиваемой цели."));
   }
   assertSearchTransferableItem(item, { allowButchering: true });
   const quantity = getTransferItemQuantity(item, payload.quantity);
@@ -5822,7 +5861,7 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
 
   const item = actor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
-  if (isItemInButcheringStorage(item)) throw new Error("Предмет разделки нельзя разделять в хранилище.");
+  if (isItemInButcheringStorage(item)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringItemsCannotBeSplitInStorage", "Предмет разделки нельзя разделять в хранилище."));
   assertSearchTransferableItem(item);
   if (usesVirtualInventoryStacks(item)) {
     const splitData = item.toObject();
@@ -5862,7 +5901,7 @@ async function performSearchInventoryRotate(payload = {}, requesterUserId = "") 
 
   const item = actor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
-  if (isItemInButcheringStorage(item)) throw new Error("Предмет разделки нельзя поворачивать в хранилище.");
+  if (isItemInButcheringStorage(item)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringItemsCannotBeRotatedInStorage", "Предмет разделки нельзя поворачивать в хранилище."));
   assertSearchTransferableItem(item, { allowLocked: true });
   const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
     ? LOCKED_STORAGE_PARENT_ID
@@ -5910,7 +5949,7 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     || sourceActor.uuid !== searchedActor.uuid
     || targetActor.uuid !== searcherActor.uuid
   )) {
-    throw new Error("Предметы разделки можно только забирать у обыскиваемой цели.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringItemsCanOnlyBeTakenFromThe", "Предметы разделки можно только забирать у обыскиваемой цели."));
   }
   assertSearchTransferableItem(sourceItem, { allowButchering: true });
   assertSearchTransferableItem(targetItem);
@@ -6086,7 +6125,7 @@ function ensureTradeOfferSideCanBeDelivered(targetActor, offer = {}) {
     foundry.utils.setProperty(itemData, "system.quantity", quantity);
     if (getCompletedTradeClaimTarget(targetActor, itemData, entry.containedItems ?? [], { quantity })) continue;
     if (canDropItemsForActor(targetActor)) continue;
-    throw new Error("У получателя нет места в инвентаре и нет токена на сцене для дропа.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheRecipientHasNoInventorySpaceAndNo", "У получателя нет места в инвентаре и нет токена на сцене для дропа."));
   }
 }
 
@@ -6182,6 +6221,7 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
     }, { reason: "trade-claim-currency" });
     const reduced = reduceTradeOfferEntryQuantity(offers, side, "currency", key, amount);
     session.offers = reduced;
+    await persistCompletedTradeSession(session);
     return { ok: true, offers: reduced };
   }
 
@@ -6211,6 +6251,7 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
   });
   const reduced = reduceTradeOfferEntryQuantity(offers, side, "item", key, quantity);
   session.offers = reduced;
+  await persistCompletedTradeSession(session);
   return { ok: true, offers: reduced };
 }
 
@@ -6273,6 +6314,7 @@ async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "
   const offers = normalizeTradeOffersState(session.offers);
   offers[side].items.push(depositedEntry);
   session.offers = offers;
+  await persistCompletedTradeSession(session);
   return { ok: true, offers };
 }
 
@@ -6285,7 +6327,7 @@ function validateTradeOfferSide(actor, offer = {}) {
     if (!sourceActor) throw new Error("Trade item source actor not found.");
     const item = sourceActor?.items?.get(String(entry.itemId ?? ""));
     if (!item) throw new Error("Item not found.");
-    if (isEquippedTradeCatalogItem(item)) throw new Error("Сначала снимите предмет, чтобы предложить его для торговли.");
+    if (isEquippedTradeCatalogItem(item)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.UnequipTheItemFirstToOfferItFor", "Сначала снимите предмет, чтобы предложить его для торговли."));
     assertSearchTransferableItem(item);
     const requested = Math.max(1, toInteger(entry.quantity));
     const sourceStackIndex = toInteger(entry.sourceStackIndex);
@@ -6308,7 +6350,7 @@ function validateTradeOfferSide(actor, offer = {}) {
     }
     const amount = Math.max(0, toInteger(entry.amount));
     if (!currencyKey || !amount) continue;
-    if (getActorCurrencyAmount(actor, currencyKey) < amount) throw new Error("Недостаточно валюты для обмена.");
+    if (getActorCurrencyAmount(actor, currencyKey) < amount) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughCurrencyForTheExchange", "Недостаточно валюты для обмена."));
   }
 }
 
@@ -6665,7 +6707,7 @@ async function consumeTradeOfferSides(sides = []) {
     const amount = Math.max(0, toInteger(entry.amount));
     if (!currencyKey || !amount) continue;
     const available = getActorCurrencyAmount(sourceActor, currencyKey);
-    if (available < amount) throw new Error("Недостаточно валюты для обмена.");
+    if (available < amount) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughCurrencyForTheExchange", "Недостаточно валюты для обмена."));
       queueCurrencyDeduction(sourceActor, currencyKey, amount);
     }
   }
@@ -6907,7 +6949,7 @@ function ensureTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, qu
   const available = getActorCurrencyAmount(buyerActor, currencyKey);
   if (available < price) {
     const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
-    throw new Error(`Недостаточно валюты: ${buyerActor?.name ?? ""} (${price} ${currency?.label ?? currencyKey}).`);
+    throw new Error(auditFormat("FALLOUTMAW.AuditApps.NotEnoughCurrency", { v0: (buyerActor?.name ?? ""), v1: (price), v2: (currency?.label ?? currencyKey) }, "Недостаточно валюты: {v0} ({v1} {v2})."));
   }
 }
 
@@ -6916,7 +6958,7 @@ async function applyTradeItemPayment({ buyerActor, sellerActor, item, currencyKe
   if (price <= 0) return { price: 0 };
   const buyerAmount = getActorCurrencyAmount(buyerActor, currencyKey);
   const sellerAmount = getActorCurrencyAmount(sellerActor, currencyKey);
-  if (buyerAmount < price) throw new Error("Недостаточно валюты.");
+  if (buyerAmount < price) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NotEnoughCurrency_932", "Недостаточно валюты."));
   await executeInventoryMutation([
     {
       actor: buyerActor,
@@ -7088,7 +7130,7 @@ function convertTradeFixedPrice(fixedPrice = {}, targetCurrency = null, currenci
 }
 
 function normalizeTradeOverrideText(value = "") {
-  return String(value ?? "").trim().toLocaleLowerCase("ru");
+  return String(value ?? "").trim().toLocaleLowerCase(globalThis.game?.i18n?.lang);
 }
 
 function getItemTradePriceChildren(item, itemCollection = null, containedItems = []) {
@@ -7441,8 +7483,8 @@ function normalizeTradeOfferPlacement(placement = null, fallback = null) {
 }
 
 async function addContentsToTradeOffer(state, side, actor, parentId = ROOT_CONTAINER_ID) {
-  if (!TRADE_OFFER_SIDES.includes(side) || state.completed) throw new Error("Предложение недоступно.");
-  if ([LOCKED_STORAGE_PARENT_ID, BUTCHERING_STORAGE_PARENT_ID].includes(parentId)) throw new Error("Недоступное место переноса.");
+  if (!TRADE_OFFER_SIDES.includes(side) || state.completed) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.OfferUnavailable", "Предложение недоступно."));
+  if ([LOCKED_STORAGE_PARENT_ID, BUTCHERING_STORAGE_PARENT_ID].includes(parentId)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TransferDestinationUnavailable", "Недоступное место переноса."));
   validateTargetParent(actor, parentId);
   let offers = normalizeTradeOffersState(state);
   const result = await transferInventoryContents({
@@ -7464,7 +7506,7 @@ async function addContentsToTradeOffer(state, side, actor, parentId = ROOT_CONTA
 function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "", { sourceStackIndex = 0, sourceWholeStack = false } = {}) {
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side) || !item) return offers;
-  if (isEquippedTradeCatalogItem(item)) throw new Error("Сначала снимите предмет, чтобы предложить его для торговли.");
+  if (isEquippedTradeCatalogItem(item)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.UnequipTheItemFirstToOfferItFor", "Сначала снимите предмет, чтобы предложить его для торговли."));
   const itemId = String(item.id ?? "");
   const sourceUuid = String(sourceActorUuid ?? "");
   const stackIndex = Math.max(0, toInteger(sourceStackIndex));
@@ -7940,7 +7982,7 @@ function getTradeActorSideFromActors(actor = null, searcherActor = null, searche
 }
 
 function formatTradeActorName(actor) {
-  const barterLabel = getSkillSettings().find(skill => skill.key === "barter")?.label ?? "Бартер";
+  const barterLabel = getSkillSettings().find(skill => skill.key === "barter")?.label ?? auditLocalize("FALLOUTMAW.AuditApps.Barter", "Бартер");
   return actor ? `${actor.name} (${barterLabel}: ${getActorBarterValue(actor)})` : "";
 }
 
@@ -7992,7 +8034,7 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
     });
   }
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, preferredPlacement, {
-    equipped: preferredPlacement.mode === "equipment"
+    equipped: isEquippedPlacementMode(preferredPlacement.mode)
   });
   const replacementUpdates = createActorUnequipReplacementUpdates(
     targetActor,
@@ -8016,7 +8058,7 @@ async function createCompletedTradeContainerTree(targetActor, rootItemData, cont
     throwInventoryNoSpace();
   }
   const rootCreateData = createInventoryStackData(rootItemData, 1, targetParentId, preferredPlacement, {
-    equipped: preferredPlacement.mode === "equipment"
+    equipped: isEquippedPlacementMode(preferredPlacement.mode)
   });
   const displacementUpdates = preferredPlacement.mode === "inventory"
     ? getPlacementDisplacementUpdates(targetActor, rootItemData, preferredPlacement, targetParentId, [])
@@ -8138,7 +8180,7 @@ async function prepareConstructPartDetachment(actor, item) {
     String(candidate.system?.placement?.mode ?? "") === "weapon"
     && String(candidate.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${slotId}:`)
   ));
-  if (occupied) throw new Error("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+  if (occupied) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.FirstRemoveTheWeaponsInstalledInThisConstruct", "Сначала снимите оружие, установленное в слоты этой детали конструкта."));
   await ensureConstructPartSlots(actor);
   return slotId;
 }
@@ -8201,7 +8243,7 @@ export async function transferItemBetweenActors({
     const requested = { mode: "equipment", equipmentSlot: targetEquipmentSlot };
     const conflicts = getActorPlacementConflictingItems(targetActor, itemData, requested);
     if (conflicts.length) {
-      if (conflicts.length !== 1) throw new Error("Для обмена выберите один занятый слот снаряжения.");
+      if (conflicts.length !== 1) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.SelectOneOccupiedEquipmentSlotToExchange", "Для обмена выберите один занятый слот снаряжения."));
       assertSearchTransferableItem(conflicts[0], { allowLocked });
       const swap = planEquippedItemSwap({ sourceActor, targetActor, sourceItem, targetItem: conflicts[0],
         targetPlacement: requested, resolvePlacement: resolveActorPlacement,
@@ -8213,8 +8255,10 @@ export async function transferItemBetweenActors({
           getChildData: child => child.toObject(), getChildOldId: child => child.id
         })
       });
-      await executeMutation([...swap.plans, ...mutationPlans], { reason: "equipment-swap" });
-      return targetActor.items.get(swap.targetRootId);
+      const mutation = await executeMutation([...swap.plans, ...mutationPlans], { reason: "equipment-swap" });
+      const targetPlan = mutation.plans.find(plan => plan.actor.uuid === targetActor.uuid);
+      const targetRootId = targetPlan?.createIdMap.get(swap.targetRootId) ?? swap.targetRootId;
+      return targetActor.items.get(targetRootId);
     }
   }
   const targetConstructSlot = targetMode === ITEM_FUNCTIONS.constructPart
@@ -8222,7 +8266,7 @@ export async function transferItemBetweenActors({
     : null;
   if (targetMode === ITEM_FUNCTIONS.constructPart) {
     if (!targetConstructSlot || !isConstructPartCompatibleWithSlot(itemData, targetConstructSlot)) {
-      throw new Error("Тип детали не совпадает с типом слота конструкта.");
+      throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThePartTypeDoesNotMatchTheConstruct", "Тип детали не совпадает с типом слота конструкта."));
     }
     await ensureConstructPartSlots(targetActor);
   }
@@ -9474,7 +9518,7 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
 }
 
 function isEquippedPlacementMode(mode = "") {
-  return ["equipment", "implant", "prosthesis"].includes(String(mode ?? ""));
+  return ["equipment", "implant", "prosthesis", ITEM_FUNCTIONS.constructPart].includes(String(mode ?? ""));
 }
 
 function resolveActorConstructPartPlacement(actor, itemData, placement = {}, excludeItemIds = []) {
@@ -9679,7 +9723,7 @@ export function canStackItems(sourceData, targetItem = null) {
   );
 }
 
-export async function promptSearchItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1, trade = null } = {}) {
+export async function promptSearchItemStackQuantity({ item, title = auditLocalize("FALLOUTMAW.SkillCheck.Count", "Количество"), actionLabel = auditLocalize("FALLOUTMAW.AuditApps.OK", "Ок"), max = 1, value = 1, trade = null } = {}) {
   const limit = Math.max(1, toInteger(max));
   const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
   const sellerActor = trade?.sellerActor;
@@ -9689,7 +9733,7 @@ export async function promptSearchItemStackQuantity({ item, title = "Колич�
   const currency = getCurrencySettings().find(entry => entry.key === normalizeTradeCurrencyKey(currencyKey));
   const hasTradePrice = Boolean(trade && currencyKey && sellerActor);
   const tradePriceContent = hasTradePrice
-    ? `<p class="fallout-maw-trade-quantity-price" data-trade-quantity-price><span>Итого</span><strong data-trade-quantity-total>${calculateItemTradePrice(item, currencyKey, initial, { sellerActor, buyerActor, barterAdjustmentPercent })} ${escapeHTML(currency?.label ?? currencyKey)}</strong></p>`
+    ? auditFormat("FALLOUTMAW.AuditApps.Total", { v0: (calculateItemTradePrice(item, currencyKey, initial, { sellerActor, buyerActor, barterAdjustmentPercent })), v1: (escapeHTML(currency?.label ?? currencyKey)) }, "<p class=\"fallout-maw-trade-quantity-price\" data-trade-quantity-price><span>Итого</span><strong data-trade-quantity-total>{v0} {v1}</strong></p>")
     : "";
   const formData = await DialogV2.input({
     window: { title },
@@ -9969,7 +10013,7 @@ function calculateActorLoad(items = []) {
 function getActorLoadLimitExceededMessage() {
   const key = "FALLOUTMAW.Messages.ActorLoadLimitExceeded";
   const localized = game.i18n.localize(key);
-  return localized === key ? "Актер не может нести такой вес." : localized;
+  return localized === key ? auditLocalize("FALLOUTMAW.AuditApps.TheActorCannotCarryThisMuchWeight", "Актер не может нести такой вес.") : localized;
 }
 
 function throwInventoryNoSpace() {
@@ -10051,8 +10095,8 @@ async function enqueueSearchInventoryOperation(operation) {
 }
 
 async function requestSearchInventorySocket(action, payload = {}, gm = getResponsibleGM()) {
-  if (!gm && isTradePayload(payload)) throw new Error("Нет активного GM для торговли.");
-  if (!gm) throw new Error("Нет активного GM для обыска.");
+  if (!gm && isTradePayload(payload)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMForTrade", "Нет активного GM для торговли."));
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMForTheSearch", "Нет активного GM для обыска."));
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
@@ -10115,14 +10159,14 @@ async function requestTradeSessionAction(action = "", payload = {}, { notify = t
 }
 
 async function requestTradeInviteSocket(payload = {}, recipientUser = null) {
-  if (!recipientUser?.active) throw new Error("Владелец актера не в сети.");
+  if (!recipientUser?.active) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheActorSOwnerIsOffline", "Владелец актера не в сети."));
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingSearchInventorySocketRequests.delete(requestId);
-      reject(new Error("Владелец актера не ответил на торговлю."));
+      reject(new Error(auditLocalize("FALLOUTMAW.AuditApps.TheActorSOwnerDidNotRespondTo", "Владелец актера не ответил на торговлю.")));
     }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
     pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
   });
@@ -10147,7 +10191,7 @@ async function requestPersonalTradeApproval({
 } = {}) {
   const recipientUser = getPrimaryActorOwnerUser(searchedActor);
   if (!recipientUser) {
-    ui.notifications.warn("Нет активного владельца актера для подтверждения личной торговли.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveActorOwnerToConfirm", "Нет активного владельца актера для подтверждения личной торговли."));
     return false;
   }
   const payload = {
@@ -10166,20 +10210,20 @@ async function requestPersonalTradeApproval({
     const response = await requestPersonalTradeApprovalSocket(payload, recipientUser);
     return Boolean(response?.accepted);
   } catch (error) {
-    ui.notifications.warn(error.message || "Личная торговля не подтверждена.");
+    ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditApps.PersonalTradeNotConfirmed", "Личная торговля не подтверждена."));
     return false;
   }
 }
 
 async function requestPersonalTradeApprovalSocket(payload = {}, recipientUser = null) {
-  if (!recipientUser?.active) throw new Error("Владелец актера не в сети.");
+  if (!recipientUser?.active) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheActorSOwnerIsOffline", "Владелец актера не в сети."));
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingSearchInventorySocketRequests.delete(requestId);
-      reject(new Error("Владелец актера не ответил на личную торговлю."));
+      reject(new Error(auditLocalize("FALLOUTMAW.AuditApps.TheActorSOwnerDidNotRespondTo_947", "Владелец актера не ответил на личную торговлю.")));
     }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
     pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
   });
@@ -10272,7 +10316,7 @@ async function handleSearchInventorySocketMessage(message = {}) {
     window.clearTimeout(pending.timeout);
     pendingSearchInventorySocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
-    else pending.reject(new Error(message.error || "Запрос торговли отклонен."));
+    else pending.reject(new Error(message.error || auditLocalize("FALLOUTMAW.AuditApps.TradeRequestRejected", "Запрос торговли отклонен.")));
     return;
   }
 
@@ -10283,7 +10327,7 @@ async function handleSearchInventorySocketMessage(message = {}) {
     window.clearTimeout(pending.timeout);
     pendingSearchInventorySocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
-    else pending.reject(new Error(message.error || "Личная торговля отклонена."));
+    else pending.reject(new Error(message.error || auditLocalize("FALLOUTMAW.AuditApps.PersonalTradeRejected", "Личная торговля отклонена.")));
     return;
   }
 
@@ -10444,7 +10488,7 @@ async function handleTradeInviteSocketMessage(message = {}) {
       requestId: message.requestId,
       recipientUserId: message.requesterUserId,
       ok: false,
-      error: "Запрос торговли уже открыт."
+      error: auditLocalize("FALLOUTMAW.AuditApps.ATradeRequestIsAlreadyOpen", "Запрос торговли уже открыт.")
     });
     return;
   }
@@ -10495,7 +10539,7 @@ async function handlePersonalTradeApprovalSocketMessage(message = {}) {
       requestId: message.requestId,
       recipientUserId: message.requesterUserId,
       ok: false,
-      error: "Запрос подтверждения личной торговли уже открыт."
+      error: auditLocalize("FALLOUTMAW.AuditApps.APersonalTradeConfirmationRequestIsAlreadyOpen", "Запрос подтверждения личной торговли уже открыт.")
     });
     return;
   }
@@ -10525,7 +10569,12 @@ async function handlePersonalTradeApprovalSocketMessage(message = {}) {
 
 async function performTradeSessionAction(action = "", payload = {}, requesterUserId = "") {
   if (action === "createTradeSession") return createTradeSession(payload);
-  if (action === "joinTradeSession") return joinTradeSession(payload);
+  if (action === "joinTradeSession") {
+    const result = joinTradeSession(payload);
+    const session = getActiveTradeSession(result?.snapshot?.sessionId);
+    if (session?.offers?.completed) await persistCompletedTradeSession(session);
+    return result;
+  }
   const session = getActiveTradeSession(payload.sessionId);
   if (!session) throw new Error("Trade session not found.");
   let claimResult = null;
@@ -10600,6 +10649,18 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     toggleTradeSessionReady(session, payload.side, payload.actorUuid, requesterUserId);
     if (isTradeSessionReadyToComplete(session)) await completeTradeSession(session, requesterUserId);
   } else if (action === "restartTrade") {
+    ensureTradeSessionParticipant(session, requesterUserId);
+    // Completed offers have already been withdrawn from their sources. Deliver
+    // anything still in the hub before discarding it, as closing the trade does.
+    if (session.offers?.completed) {
+      try { await reclaimCompletedTradeSessionRemainders(session); }
+      catch (error) {
+        touchTradeSession(session);
+        await persistCompletedTradeSession(session);
+        broadcastTradeSessionSnapshot(createTradeSessionSnapshot(session));
+        throw error;
+      }
+    }
     session.offers = createEmptyTradeOffers();
     session.completed = false;
   } else if (action === "leaveTradeSession") {
@@ -10612,6 +10673,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     }
     if (!tradeSessionHasConnectedClients(session)) {
       if (session.offers?.completed) await reclaimCompletedTradeSessionRemainders(session);
+      await persistCompletedTradeSession({ ...session, offers: { completed: false } });
       activeSearchInventoryTradeSessions.delete(session.sessionId);
       const snapshot = createTradeSessionSnapshot(session);
       broadcastTradeSessionSnapshot(snapshot);
@@ -10619,6 +10681,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     }
   }
   touchTradeSession(session);
+  await persistCompletedTradeSession(session);
   const snapshot = createTradeSessionSnapshot(session);
   broadcastTradeSessionSnapshot(snapshot);
   return { snapshot, completed: Boolean(session.offers.completed), claimResult, contentsResult };
@@ -10668,6 +10731,7 @@ function createTradeParticipant(actorUuid = "", userId = "", order = 0) {
 }
 
 function joinTradeSession(payload = {}) {
+  restoreCompletedTradeSessions();
   const traderActorUuid = String(payload.traderActorUuid ?? "");
   const tradeActorUuid = String(payload.tradeActorUuid ?? "");
   const requesterUserId = String(payload.requesterUserId ?? "");
@@ -10836,6 +10900,7 @@ async function completeTradeSession(session = {}, requesterUserId = "") {
       searched: searchedReceived
     });
     touchTradeSession(session);
+    await persistCompletedTradeSession(session);
     broadcastTradeSessionSnapshot(createTradeSessionSnapshot(session));
   } finally {
     broadcastTradeCompletionLock(session.sessionId, false, { render: false });
@@ -10860,6 +10925,7 @@ async function reclaimCompletedTradeSessionRemainders(session = {}) {
         Math.max(1, toInteger(entry.quantity))
       );
       session.offers = offers;
+      await persistCompletedTradeSession(session);
     }
     for (const entry of [...offers[side].currencies]) {
       const targetActor = getCompletedTradeRemainderReturnActor(session, side, entry);
@@ -10880,6 +10946,7 @@ async function reclaimCompletedTradeSessionRemainders(session = {}) {
         amount
       );
       session.offers = offers;
+      await persistCompletedTradeSession(session);
     }
   }
   return offers;
@@ -11051,7 +11118,17 @@ function normalizeTradeSessionSide(side = {}) {
 }
 
 function getActiveTradeSession(sessionId = "") {
-  return activeSearchInventoryTradeSessions.get(String(sessionId ?? "")) ?? null;
+  const id = String(sessionId ?? "");
+  if (!activeSearchInventoryTradeSessions.has(id)) restoreCompletedTradeSessions();
+  return activeSearchInventoryTradeSessions.get(id) ?? null;
+}
+
+function restoreCompletedTradeSessions() {
+  if (!game.user?.isGM) return;
+  for (const [id, saved] of Object.entries(readCompletedTradeSessions())) {
+    if (!id || saved?.sessionId !== id || !saved.offers?.completed || activeSearchInventoryTradeSessions.has(id)) continue;
+    activeSearchInventoryTradeSessions.set(id, foundry.utils.deepClone(saved));
+  }
 }
 
 function getTradeSnapshotSideParticipants(snapshot = {}, side = "") {
@@ -11130,14 +11207,14 @@ async function confirmTradeInvite(payload = {}) {
   const searchedActor = await resolveActor(payload.searchedActorUuid);
   if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
   return DialogV2.confirm({
-    window: { title: "Торговля" },
-    content: `<p><strong>${escapeHTML(searcherActor.name)}</strong> предлагает торговлю с <strong>${escapeHTML(searchedActor.name)}</strong>.</p>`,
+    window: { title: auditLocalize("FALLOUTMAW.AuditApps.Trade_836", "Торговля") },
+    content: auditFormat("FALLOUTMAW.AuditApps.OffersToTradeWith", { v0: (escapeHTML(searcherActor.name)), v1: (escapeHTML(searchedActor.name)) }, "<p><strong>{v0}</strong> предлагает торговлю с <strong>{v1}</strong>.</p>"),
     yes: {
-      label: "Принять",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Accept", "Принять"),
       icon: "fa-solid fa-check"
     },
     no: {
-      label: "Отклонить"
+      label: auditLocalize("FALLOUTMAW.AuditApps.Reject", "Отклонить")
     },
     rejectClose: false,
     modal: true
@@ -11147,7 +11224,7 @@ async function confirmTradeInvite(payload = {}) {
 async function confirmPersonalTradeApproval(payload = {}) {
   const approvalKey = getPersonalTradeApprovalKey(payload);
   if (pendingSearchInventoryPersonalTradeApprovals.has(approvalKey)) {
-    throw new Error("Запрос подтверждения личной торговли уже открыт.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.APersonalTradeConfirmationRequestIsAlreadyOpen", "Запрос подтверждения личной торговли уже открыт."));
   }
 
   const currency = getCurrencySettings().find(entry => entry.key === normalizeTradeCurrencyKey(payload.tradeCurrencyKey));
@@ -11155,22 +11232,14 @@ async function confirmPersonalTradeApproval(payload = {}) {
   pendingSearchInventoryPersonalTradeApprovals.set(approvalKey, true);
   try {
     return await DialogV2.confirm({
-      window: { title: "Личная торговля" },
-      content: `
-        <p>Подтвердить личную сделку?</p>
-        <dl class="fallout-maw-trade-approval-summary">
-          <dt>${escapeHTML(payload.searcherActorName ?? "Сторона 1")}</dt>
-          <dd>${Math.max(0, toInteger(payload.searcherTotal))} ${escapeHTML(currencyLabel)}</dd>
-          <dt>${escapeHTML(payload.searchedActorName ?? "Сторона 2")}</dt>
-          <dd>${Math.max(0, toInteger(payload.searchedTotal))} ${escapeHTML(currencyLabel)}</dd>
-        </dl>
-      `,
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.PersonalTrade", "Личная торговля") },
+      content: auditFormat("FALLOUTMAW.AuditApps.ConfirmThePersonalTrade", { v0: (escapeHTML(payload.searcherActorName ?? auditLocalize("FALLOUTMAW.AuditApps.Party1", "Сторона 1"))), v1: (Math.max(0, toInteger(payload.searcherTotal))), v2: (escapeHTML(currencyLabel)), v3: (escapeHTML(payload.searchedActorName ?? auditLocalize("FALLOUTMAW.AuditApps.Party2", "Сторона 2"))), v4: (Math.max(0, toInteger(payload.searchedTotal))), v5: (escapeHTML(currencyLabel)) }, "\n        <p>Подтвердить личную сделку?</p>\n        <dl class=\"fallout-maw-trade-approval-summary\">\n          <dt>{v0}</dt>\n          <dd>{v1} {v2}</dd>\n          <dt>{v3}</dt>\n          <dd>{v4} {v5}</dd>\n        </dl>\n      "),
       yes: {
-        label: "Подтвердить",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Confirm", "Подтвердить"),
         icon: "fa-solid fa-check"
       },
       no: {
-        label: "Отклонить"
+        label: auditLocalize("FALLOUTMAW.AuditApps.Reject", "Отклонить")
       },
       position: { width: 420 },
       rejectClose: false,

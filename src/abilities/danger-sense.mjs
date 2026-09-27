@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { ABILITY_FIXED_FUNCTION_KEYS } from "../settings/abilities.mjs";
 import { hasActorFixedAbilityFunction } from "./runtime-state.mjs";
@@ -5,7 +6,7 @@ import { getActiveRulesProfile } from "../settings/rules-profiles.mjs";
 
 const DANGER_SENSE_SOCKET = `system.${SYSTEM_ID}`;
 const DANGER_SENSE_SOCKET_SCOPE = "fallout-maw.dangerSense";
-const DANGER_SENSE_WARNING = "Чутье: рядом есть опасность.";
+const DANGER_SENSE_WARNING = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0054", "Чутье: рядом есть опасность.");
 let dangerSenseSocketRegistered = false;
 let dangerSenseSocketLifecycleRegistered = false;
 
@@ -57,14 +58,14 @@ function handleDangerSenseSocketMessage(message = {}) {
 }
 
 function showDangerSenseWarning() {
-  ui.notifications?.warn?.(DANGER_SENSE_WARNING);
+  ui.notifications?.warn?.(DANGER_SENSE_WARNING());
 }
 
 async function createDangerSenseChatMessage(actor) {
   try {
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<p><strong>${escapeHtml(actor.name)}</strong> почувствовал рядом опасность.</p>`
+      content: auditFormat("FALLOUTMAW.AuditRuntime.R0055", { p0: (escapeHtml(actor.name)) }, "<p><strong>{p0}</strong> почувствовал рядом опасность.</p>")
     });
   } catch (error) {
     console.error(`${SYSTEM_ID} | Danger sense chat message failed`, error);

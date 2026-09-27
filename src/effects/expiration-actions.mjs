@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 
 export const EFFECT_EXPIRATION_ACTION_FLAG_KEY = "onExpire";
@@ -6,7 +7,7 @@ export const EFFECT_EXPIRATION_ACTIONS = Object.freeze({
 });
 
 export function buildBearerExpirationEffectData({
-  name = "Истечение срока",
+  name = auditLocalize("FALLOUTMAW.AuditRuntime.R0863", "Истечение срока"),
   img = "icons/svg/clockwork.svg",
   durationSeconds = 1,
   startTime = 0,
@@ -14,7 +15,7 @@ export function buildBearerExpirationEffectData({
 } = {}) {
   return {
     type: "base",
-    name: String(name || "Истечение срока"),
+    name: String(name || auditLocalize("FALLOUTMAW.AuditRuntime.R0863", "Истечение срока")),
     img: String(img || "icons/svg/clockwork.svg"),
     origin: String(origin || ""),
     transfer: false,

@@ -1,5 +1,5 @@
 <div class="fallout-maw-sheet fallout-maw-search-sheet fallout-maw-craft-window-sheet" data-craft-window-root data-search-root>
-  <nav class="fallout-maw-craft-window-tabs" aria-label="Вкладки крафта">
+  <nav class="fallout-maw-craft-window-tabs" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text7ac4f3f29da4'}}">
     <div class="fallout-maw-craft-window-tab-list" role="tablist">
       {{#each craftTabs}}
       <div class="fallout-maw-craft-window-tab-shell {{#if active}}active{{/if}}" data-craft-tab-shell="{{id}}">
@@ -7,10 +7,10 @@
           <i class="fa-solid {{icon}}"></i>
           <span data-craft-tab-name title="{{name}}">{{name}}</span>
         </button>
-        <button type="button" class="fallout-maw-craft-window-tab-close {{#unless canClose}}disabled{{/unless}}" data-craft-tab-close="{{id}}" title="Закрыть вкладку" aria-label="Закрыть вкладку" {{#unless canClose}}aria-disabled="true" tabindex="-1"{{/unless}}><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="fallout-maw-craft-window-tab-close {{#unless canClose}}disabled{{/unless}}" data-craft-tab-close="{{id}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Textd19457bde2fa'}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textd19457bde2fa'}}" {{#unless canClose}}aria-disabled="true" tabindex="-1"{{/unless}}><i class="fa-solid fa-xmark"></i></button>
       </div>
       {{/each}}
-      <button type="button" class="fallout-maw-craft-window-tab-add" data-craft-tab-add title="Новая вкладка" aria-label="Новая вкладка">
+      <button type="button" class="fallout-maw-craft-window-tab-add" data-craft-tab-add title="{{localize 'FALLOUTMAW.AuditTemplates.Text193b40100911'}}" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text193b40100911'}}">
         <i class="fa-solid fa-plus"></i>
       </button>
     </div>
@@ -41,7 +41,7 @@
                     {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
                   </article>
                   {{else if phantom}}
-                  <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}: перетащите подходящую деталь">
+                  <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}{{localize 'FALLOUTMAW.AuditTemplates.Texte9e3c3d99913'}}">
                     <img src="{{phantomImg}}" alt="">
                     <i class="fa-solid fa-plus"></i>
                   </div>
@@ -54,7 +54,7 @@
             </div>
 
             {{#if inventory.prosthesisSlots.length}}
-            <h2>Протезы</h2>
+            <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}</h2>
             <div class="fallout-maw-equipment-slot-list fallout-maw-prosthesis-slot-list">
               {{#each inventory.prosthesisSlots}}
               <div class="fallout-maw-slot-card">
@@ -107,10 +107,12 @@
           </div>
         </section>
 
+        {{#if inventory.showInventoryPane}}
         <section class="fallout-maw-panel fallout-maw-inventory-pane">
           <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll">
+            {{#if inventory.showRootInventory}}
             <section data-contents-transfer-zone data-search-actor-uuid="{{actor.uuid}}" data-inventory-parent-id="">
-              <h2 data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}<button type="button" class="fallout-maw-bulk-open" data-bulk-open>Массовый разбор</button></h2>
+              <h2 data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}<button type="button" class="fallout-maw-bulk-open" data-bulk-open>{{localize 'FALLOUTMAW.AuditTemplates.Text28058653358f'}}</button></h2>
               <div class="fallout-maw-contents-transfer-grid-scroll" data-search-scroll-key="craft:inventory-grid">
                 <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if inventory.grid.hasZones}}has-zones{{/if}}" data-search-drop-zone data-search-actor-uuid="{{actor.uuid}}" data-inventory-grid data-inventory-parent-id="" style="{{inventory.grid.style}}">
                   {{#each inventory.grid.zones}}
@@ -126,6 +128,7 @@
               </div>
 
             </section>
+            {{/if}}
             {{#each inventory.containers}}
             <section class="fallout-maw-container-section" data-contents-transfer-zone data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
               <div class="fallout-maw-panel-header fallout-maw-container-header">
@@ -179,6 +182,7 @@
             {{/with}}
           </div>
         </section>
+        {{/if}}
       </div>
     </section>
 
@@ -191,7 +195,7 @@
         {{/each}}
       </div>
       <label class="fallout-maw-craft-window-recipe-search">
-        <input type="search" value="{{recipeSearch}}" placeholder="Поиск" data-craft-recipe-search>
+        <input type="search" value="{{recipeSearch}}" placeholder="{{localize 'FALLOUTMAW.Common.Search'}}" data-craft-recipe-search>
       </label>
       {{> "systems/fallout-maw/templates/actor/parts/craft-window-recipe-list.hbs"}}
     </aside>

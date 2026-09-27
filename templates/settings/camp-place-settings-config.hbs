@@ -3,14 +3,14 @@
     <header class="fallout-maw-panel-header">
       <h2>{{place.label}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="addEffect"><i class="fa-solid fa-plus"></i> Добавить влияние</button>
+        <button type="button" data-action="addEffect"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text2d6380ea950f'}}</button>
       </div>
     </header>
 
     <div class="fallout-maw-settings-table fallout-maw-camp-place-effect-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span>Потребность</span>
-        <span>В час</span>
+        <span>{{localize 'FALLOUTMAW.Events.Reaction.DepthFilters.need.Label'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text9a77cc52df2a'}}</span>
         <span></span>
       </div>
       {{#each effects}}

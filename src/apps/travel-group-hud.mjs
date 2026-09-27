@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { REACTION_RESOURCE_KEY } from "../combat/reaction-resources.mjs";
@@ -19,6 +20,8 @@ import {
   disarmTravelMovement,
   isTravelMovementArmed
 } from "../global-map/travel-movement.mjs";
+import { TRAVEL_MOVEMENT_PLANNING_OPTION } from "../global-map/constants.mjs";
+import { createRightClickPanGuard } from "../canvas/right-click-pan-guard.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 let travelGroupHud = null;
@@ -85,6 +88,7 @@ function isHudEnabled() {
 class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #openGroupId = "";
+  #movementPlanning = false;
   #trackedActorUuids = new Set();
   #keyHandler = event => {
     if (event.key !== "Escape" || !isTravelMovementArmed(this.#token)) return;
@@ -146,7 +150,7 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
         const passengers = getTravelUnitPassengers(unit, unitActor);
         vehicles.push({
           id: unit.id,
-          name: unit.actorName || unitActor?.name || unit.tokenData?.name || "Транспорт",
+          name: unit.actorName || unitActor?.name || unit.tokenData?.name || auditLocalize("FALLOUTMAW.Events.Roles.vehicle.Label", "Транспорт"),
           img: unit.actorImg || unitActor?.img || unit.tokenData?.texture?.src || FALLBACK_ICON,
           count: passengers.length,
           countLabel: participantCountLabel(passengers.length),
@@ -161,7 +165,7 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
         walkers.push({
           speedKmh,
           member: prepareMember(unitActor, {
-            name: unit.actorName || unitActor?.name || unit.tokenData?.name || "Участник путешествия",
+            name: unit.actorName || unitActor?.name || unit.tokenData?.name || auditLocalize("FALLOUTMAW.AuditApps.TravelParticipant", "Участник путешествия"),
             img: unit.actorImg || unitActor?.img || unit.tokenData?.texture?.src || FALLBACK_ICON,
             missing: !unitActor
           })
@@ -173,7 +177,7 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (walkers.length) {
       blocks.push(prepareBlock({
         id: "walkers",
-        name: "Пешая группа",
+        name: auditLocalize("FALLOUTMAW.AuditApps.WalkingGroup", "Пешая группа"),
         img: actor?.img || FALLBACK_ICON,
         count: walkers.length,
         countLabel: participantCountLabel(walkers.length),
@@ -211,6 +215,9 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onClose(options) {
     window.removeEventListener("keydown", this.#keyHandler);
+    if (this.#token?.layer?._movementPlanningContext?.object === this.#token) {
+      this.#token.layer._cancelMovementPlanning();
+    }
     if (isTravelMovementArmed(this.#token)) await disarmTravelMovement();
     await super._onClose(options);
   }
@@ -224,24 +231,63 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onToggleMovement(event) {
     event.preventDefault();
-    if (isTravelMovementArmed(this.#token)) return undefined;
-    const planning = this.#token.planMovement();
-    if (!(await this.#token.startMovementPlanningDrag())) {
-      this.#token.layer?._cancelMovementPlanning?.();
+    if (this.#movementPlanning || isTravelMovementArmed(this.#token)) return undefined;
+    this.#movementPlanning = true;
+    const token = this.#token;
+    const isCanvasEvent = pointerEvent => {
+      const view = canvas?.app?.view;
+      return Boolean(view && (
+        pointerEvent?.target === view
+        || Array.from(pointerEvent?.composedPath?.() ?? []).includes(view)
+      ));
+    };
+    const rightClickGuard = createRightClickPanGuard({
+      isCanvasEvent,
+      clickOnRelease: true,
+      onClick: () => {
+        if (token.layer?._movementPlanningContext?.object === token) {
+          token.layer._cancelMovementPlanning();
+        }
+      }
+    });
+    const onPointerDown = pointerEvent => {
+      if (isCanvasEvent(pointerEvent) && pointerEvent.button === 2) {
+        rightClickGuard.onPointerDown(pointerEvent);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, { capture: true });
+    rightClickGuard.activate();
+    try {
+      const planning = token.planTravelMovement({
+        moveOptions: { [TRAVEL_MOVEMENT_PLANNING_OPTION]: true }
+      });
+      if (!(await token.startMovementPlanningDrag())) {
+        token.layer?._cancelMovementPlanning?.();
+        return undefined;
+      }
+      const armed = await armTravelMovement(token);
+      if (!armed) {
+        token.layer?._cancelMovementPlanning?.();
+        return undefined;
+      }
+      const plan = await planning;
+      if (!plan) {
+        await disarmTravelMovement();
+        return undefined;
+      }
+      await token.document.startMovement(plan.id);
       return undefined;
+    } catch (error) {
+      if (token.layer?._movementPlanningContext?.object === token) {
+        token.layer._cancelMovementPlanning();
+      }
+      if (isTravelMovementArmed(token)) await disarmTravelMovement();
+      throw error;
+    } finally {
+      rightClickGuard.deactivate();
+      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      this.#movementPlanning = false;
     }
-    const armed = await armTravelMovement(this.#token);
-    if (!armed) {
-      this.#token.layer?._cancelMovementPlanning?.();
-      return undefined;
-    }
-    const plan = await planning;
-    if (!plan) {
-      await disarmTravelMovement();
-      return undefined;
-    }
-    await this.#token.document.startMovement(plan.id);
-    return undefined;
   }
 }
 
@@ -255,7 +301,7 @@ async function preparePassengerMember(passenger, trackedActorUuids = null) {
   const actor = await resolveTravelPassengerActor(passenger);
   if (actor?.uuid) trackedActorUuids?.add?.(String(actor.uuid));
   return prepareMember(actor, {
-    name: passenger.actorName || actor?.name || "Недоступный участник",
+    name: passenger.actorName || actor?.name || auditLocalize("FALLOUTMAW.AuditApps.UnavailableParticipant", "Недоступный участник"),
     img: passenger.actorImg || actor?.img || FALLBACK_ICON,
     missing: !actor
   });
@@ -278,12 +324,12 @@ function prepareMember(actor, fallback = {}) {
 
 function formatSpeed(value) {
   const speed = Math.max(0, Number(value) || 0);
-  return `${Number.isInteger(speed) ? speed : speed.toFixed(1)} км/ч`;
+  return auditFormat("FALLOUTMAW.AuditApps.KmH", { v0: (Number.isInteger(speed) ? speed : speed.toFixed(1)) }, "{v0} км/ч");
 }
 
 function participantCountLabel(count) {
   const value = Math.max(0, Number(count) || 0);
-  return `${value} участн.`;
+  return auditFormat("FALLOUTMAW.AuditApps.Participants", { v0: (value) }, "{v0} участн.");
 }
 
 function positionMemberPanel(element) {

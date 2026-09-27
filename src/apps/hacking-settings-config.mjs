@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
   getHackingSettings,
@@ -20,7 +21,7 @@ export class HackingSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройка взлома";
+    return auditLocalize("FALLOUTMAW.AuditApps.HackingSettings_481", "Настройка взлома");
   }
 
   async _prepareContext(options) {
@@ -38,6 +39,6 @@ export class HackingSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, formData) {
     await setHackingSettings(getFlatFormData(formData));
-    ui.notifications.info("Настройки взлома сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.HackingSettingsSaved", "Настройки взлома сохранены."));
   }
 }

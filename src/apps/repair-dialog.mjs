@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -70,9 +71,9 @@ export async function requestRepairTarget(sourceToken) {
     sourceActor,
     sourceToken,
     includeSelf: true,
-    title: "Ремонт",
-    noneWarning: "Нет подходящих целей для ремонта.",
-    instructions: "Ремонт: выберите цель. Esc/ПКМ отменяет."
+    title: auditLocalize("FALLOUTMAW.Events.Groups.repair.Label", "Ремонт"),
+    noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoSuitableRepairTargets", "Нет подходящих целей для ремонта."),
+    instructions: auditLocalize("FALLOUTMAW.AuditApps.RepairSelectATargetEscRightClickCancels", "Ремонт: выберите цель. Esc/ПКМ отменяет.")
   });
   const targetToken = selected?.token ?? null;
   if (!selected?.actor || !targetToken) return undefined;
@@ -135,8 +136,8 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   get title() {
     const sourceName = this.#sourceActor?.name ?? "";
     const targetName = this.#targetContext?.name ?? "";
-    if (this.#isSelfRepair()) return `Ремонт - ${sourceName} чинит свои предметы`;
-    return `Ремонт - ${sourceName} чинит предметы ${targetName}`;
+    if (this.#isSelfRepair()) return auditFormat("FALLOUTMAW.AuditApps.RepairIsRepairingTheirOwnItems", { v0: (sourceName) }, "Ремонт - {v0} чинит свои предметы");
+    return auditFormat("FALLOUTMAW.AuditApps.RepairIsRepairingSItems", { v0: (sourceName), v1: (targetName) }, "Ремонт - {v0} чинит предметы {v1}");
   }
 
   async _prepareContext(options) {
@@ -225,7 +226,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         };
         this.#pendingMassRepair = pending;
       } else {
-        ui.notifications.info("Повторное ожидание уже запущенного массового ремонта.");
+        ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.WaitingAgainForTheBulkRepairAlreadyIn", "Повторное ожидание уже запущенного массового ремонта."));
       }
       const result = await performMassRepair({
         sourceActor: this.#sourceActor,
@@ -289,7 +290,7 @@ async function getRepairTargetContext(targetToken, toolKey = "repair", sourceAct
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для доступа к цели ремонта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToAccessThe_771", "Нет активного GM для доступа к цели ремонта."));
     return null;
   }
 
@@ -303,7 +304,7 @@ async function getRepairTargetContext(targetToken, toolKey = "repair", sourceAct
     return result?.targetContext ?? null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | Repair target socket failed`, error);
-    ui.notifications.error(`Не удалось получить данные цели ремонта: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToRetrieveRepairTargetData", { v0: (error.message) }, "Не удалось получить данные цели ремонта: {v0}"));
     return null;
   }
 }
@@ -344,7 +345,7 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
             skillValue,
             skillLabel,
             actorSkillValue,
-            skillRequirement: skillKey ? `${skillValue} ${skillLabel}` : "Без навыка",
+            skillRequirement: skillKey ? `${skillValue} ${skillLabel}` : auditLocalize("FALLOUTMAW.AuditApps.NoSkill", "Без навыка"),
             hasSkill: Boolean(skillKey),
             requirementMet
           };
@@ -398,7 +399,7 @@ function prepareRepairableItems(items, instruments, activeItemId, sourceActor = 
 async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "repair" } = {}) {
   const items = targetContext?.items ?? [];
   if (!items.length) {
-    ui.notifications.warn("Нет предметов для массового ремонта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoItemsForBulkRepair", "Нет предметов для массового ремонта."));
     return null;
   }
 
@@ -409,52 +410,18 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
   }
   const groups = groupToolSelectionOptions(availability.instruments);
 
-  const rows = groups.map(group => `
-    <label class="fallout-maw-mass-operation-instrument">
-      <input type="checkbox" name="toolGroup" value="${escapeAttribute(group.key)}" checked>
-      <span>${escapeHtml(group.toolLabel)}</span>
-      <strong>Класс ${escapeHtml(group.toolClass)}</strong>
-      <em>${group.count} шт., запас ${group.supplyValue}/${group.supplyMax}</em>
-    </label>
-  `).join("");
-  const content = `
-    <div class="fallout-maw-mass-operation-dialog fallout-maw-mass-repair-dialog">
-      <p><strong>Предметов для ремонта:</strong> ${items.length}</p>
-      <div class="fallout-maw-mass-operation-modes">
-        <strong>Качество инструмента</strong>
-        <label>
-          <input type="radio" name="qualityMode" value="matched" checked>
-          <span>Подходящий класс — не тратить лучший без необходимости</span>
-        </label>
-        <label>
-          <input type="radio" name="qualityMode" value="best">
-          <span>Лучший доступный — максимальная эффективность</span>
-        </label>
-        <strong>Распределение запаса</strong>
-        <label>
-          <input type="radio" name="supplyMode" value="depleted" checked>
-          <span>Добивать начатые — сначала наиболее израсходованные</span>
-        </label>
-        <label>
-          <input type="radio" name="supplyMode" value="balanced">
-          <span>Равномерно — сначала наиболее наполненные</span>
-        </label>
-      </div>
-      <div class="fallout-maw-mass-operation-instruments">
-        ${rows}
-      </div>
-    </div>
-  `;
+  const rows = groups.map(group => auditFormat("FALLOUTMAW.AuditApps.ClassItemsSupplies", { v0: (escapeAttribute(group.key)), v1: (escapeHtml(group.toolLabel)), v2: (escapeHtml(group.toolClass)), v3: (group.count), v4: (group.supplyValue), v5: (group.supplyMax) }, "\n    <label class=\"fallout-maw-mass-operation-instrument\">\n      <input type=\"checkbox\" name=\"toolGroup\" value=\"{v0}\" checked>\n      <span>{v1}</span>\n      <strong>Класс {v2}</strong>\n      <em>{v3} шт., запас {v4}/{v5}</em>\n    </label>\n  ")).join("");
+  const content = auditFormat("FALLOUTMAW.AuditApps.ItemsToRepairToolQualitySuitableClassSave", { v0: (items.length), v1: (rows) }, "\n    <div class=\"fallout-maw-mass-operation-dialog fallout-maw-mass-repair-dialog\">\n      <p><strong>Предметов для ремонта:</strong> {v0}</p>\n      <div class=\"fallout-maw-mass-operation-modes\">\n        <strong>Качество инструмента</strong>\n        <label>\n          <input type=\"radio\" name=\"qualityMode\" value=\"matched\" checked>\n          <span>Подходящий класс — не тратить лучший без необходимости</span>\n        </label>\n        <label>\n          <input type=\"radio\" name=\"qualityMode\" value=\"best\">\n          <span>Лучший доступный — максимальная эффективность</span>\n        </label>\n        <strong>Распределение запаса</strong>\n        <label>\n          <input type=\"radio\" name=\"supplyMode\" value=\"depleted\" checked>\n          <span>Добивать начатые — сначала наиболее израсходованные</span>\n        </label>\n        <label>\n          <input type=\"radio\" name=\"supplyMode\" value=\"balanced\">\n          <span>Равномерно — сначала наиболее наполненные</span>\n        </label>\n      </div>\n      <div class=\"fallout-maw-mass-operation-instruments\">\n        {v1}\n      </div>\n    </div>\n  ");
 
   return DialogV2.input({
     modal: true,
     window: {
-      title: "Массовый ремонт"
+      title: auditLocalize("FALLOUTMAW.AuditApps.BulkRepair", "Массовый ремонт")
     },
     content,
     render: (_event, dialog) => bindMassOperationDialogSubmitState(dialog),
     ok: {
-      label: "Начать ремонт",
+      label: auditLocalize("FALLOUTMAW.AuditApps.StartRepair", "Начать ремонт"),
       icon: "fa-solid fa-screwdriver-wrench",
       callback: (_event, button) => {
         const form = button.form;
@@ -463,7 +430,7 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
           .map(input => String(input.value ?? ""))
           .filter(Boolean);
         if (!selectionState.hasToolGroupSelection || !allowedToolGroupKeys.length) {
-          ui.notifications.warn("Выберите хотя бы одну группу инструментов.");
+          ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneGroupOfTools", "Выберите хотя бы одну группу инструментов."));
           return "cancel";
         }
         return {
@@ -475,7 +442,7 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
     },
     buttons: [{
       action: "cancel",
-      label: "Отмена"
+      label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена")
     }],
     position: {
       width: 560
@@ -521,12 +488,12 @@ async function performMassRepair({
   requestId = ""
 } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
-    ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToUseS", { v0: (sourceActor?.name ?? "") }, "Нет прав на использование инструментов {v0}."));
     return undefined;
   }
   const normalizedOptions = normalizeToolSelectionPolicy(options);
   if (!normalizedOptions.allowedToolGroupKeys.length) {
-    ui.notifications.warn("Выберите хотя бы одну группу инструментов.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneGroupOfTools", "Выберите хотя бы одну группу инструментов."));
     return undefined;
   }
   return requestRepairResolution("performMassRepair", {
@@ -589,7 +556,7 @@ async function performRepair({
   quietWarnings = false
 } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
-    if (!quietWarnings) ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
+    if (!quietWarnings) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToUseS", { v0: (sourceActor?.name ?? "") }, "Нет прав на использование инструментов {v0}."));
     return undefined;
   }
   const resolution = await requestRepairResolution("performRepair", {
@@ -654,7 +621,7 @@ async function runRepairChecks({
     const valueForCheck = Math.min(progressPerCheck, remainingValue);
     const difficulty = getRepairDifficulty(method, currentValue);
     let resultKey = "success";
-    let resultLabel = "навык соответствует порогу";
+    let resultLabel = auditLocalize("FALLOUTMAW.AuditApps.SkillMeetsTheThreshold", "навык соответствует порогу");
     if (thresholdMode) {
       const threshold = getRepairSkillThreshold(sourceActor, method, currentValue);
       if (!threshold.met) {
@@ -663,7 +630,7 @@ async function runRepairChecks({
           spentCharges,
           remainingCharges: availableCharges,
           finalValue: currentValue,
-          reason: `Для ремонта нужно ${threshold.difficulty} ${threshold.skillLabel} (сейчас ${threshold.skillValue}).`
+          reason: auditFormat("FALLOUTMAW.AuditApps.RepairRequiresCurrently", { v0: (threshold.difficulty), v1: (threshold.skillLabel), v2: (threshold.skillValue) }, "Для ремонта нужно {v0} {v1} (сейчас {v2}).")
         };
       }
     } else {
@@ -695,7 +662,7 @@ async function runRepairChecks({
           remainingCharges: availableCharges,
           finalValue: currentValue,
           halted: true,
-          reason: "Проверка навыка ремонта не выполнена."
+          reason: auditLocalize("FALLOUTMAW.AuditApps.RepairSkillCheckFailed", "Проверка навыка ремонта не выполнена.")
         };
       }
       resultKey = String(outcome.result?.key ?? "failure");
@@ -735,25 +702,25 @@ async function runRepairChecks({
     remainingCharges: availableCharges,
     finalValue: currentValue,
     halted: false,
-    reason: availableCharges <= 0 ? "Запаса инструмента не хватило для ремонта." : ""
+    reason: availableCharges <= 0 ? auditLocalize("FALLOUTMAW.AuditApps.TheToolDidNotHaveEnoughSuppliesFor_781", "Запаса инструмента не хватило для ремонта.") : ""
   };
 }
 
 function validateInstrumentForRepair(actor, method, tool) {
-  if (!tool?.enabled) return { ok: false, message: "Инструмент не подходит для ремонта." };
-  if (toInteger(tool.resourceValue) <= 0) return { ok: false, message: "Ресурс инструмента исчерпан." };
+  if (!tool?.enabled) return { ok: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheToolIsNotSuitableForRepair", "Инструмент не подходит для ремонта.") };
+  if (toInteger(tool.resourceValue) <= 0) return { ok: false, message: auditLocalize("FALLOUTMAW.AuditApps.TheToolSResourceIsDepleted", "Ресурс инструмента исчерпан.") };
 
   const requiredClass = String(method.toolClass ?? "D");
   const toolClass = String(tool.toolClass ?? "D");
   if (!isToolClassAccepted(toolClass, requiredClass)) {
-    return { ok: false, message: `Нужен инструмент класса ${requiredClass} или выше.` };
+    return { ok: false, message: auditFormat("FALLOUTMAW.AuditApps.RequiresAToolOfClassOrHigher", { v0: (requiredClass) }, "Нужен инструмент класса {v0} или выше.") };
   }
 
   const skillKey = String(tool.skillKey ?? "");
   const skillValue = toInteger(tool.skillValue);
   if (skillKey && toInteger(actor.system?.skills?.[skillKey]?.value) < skillValue) {
     const label = getSkillSettings().find(skill => skill.key === skillKey)?.label ?? skillKey;
-    return { ok: false, message: `Нужно ${skillValue} ${label}.` };
+    return { ok: false, message: auditFormat("FALLOUTMAW.AuditApps.Requires", { v0: (skillValue), v1: (label) }, "Нужно {v0} {v1}.") };
   }
 
   return { ok: true, message: "" };
@@ -828,19 +795,19 @@ async function requestRepairResolution(action, {
   const actorUuid = String(targetContext?.actorUuid ?? targetToken?.actor?.uuid ?? "");
   const sourceActorUuid = String(sourceActor?.uuid ?? "");
   if (!actorUuid || !sourceActorUuid) {
-    ui.notifications.warn("Не удалось определить участников ремонта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.FailedToIdentifyTheRepairParticipants", "Не удалось определить участников ремонта."));
     return null;
   }
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения ремонта.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMToPerformRepairs", "Нет активного GM для выполнения ремонта."));
     return null;
   }
   const stableRequestId = String(requestId ?? "").trim();
   try {
     if (game.user?.isGM && game.user.id === gm.id) {
       const targetActor = await fromUuid(actorUuid);
-      if (!targetActor) throw new Error("цель ремонта не найдена");
+      if (!targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairTargetNotFound", "цель ремонта не найдена"));
       return action === "performMassRepair"
         ? await resolveMassRepairOnAuthority({
             sourceActor,
@@ -877,10 +844,10 @@ async function requestRepairResolution(action, {
   } catch (error) {
     console.error(`${SYSTEM_ID} | Repair authority request failed`, error);
     if (error?.code === "authority-timeout" && action === "performMassRepair") {
-      ui.notifications.warn("GM продолжает массовый ремонт. Повторное нажатие будет ожидать ту же операцию.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.TheGMIsContinuingBulkRepairClickingAgain", "GM продолжает массовый ремонт. Повторное нажатие будет ожидать ту же операцию."));
       return { pending: true, requestId: stableRequestId };
     }
-    ui.notifications.error(`Не удалось выполнить ремонт: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditApps.FailedToPerformRepair", { v0: (error.message) }, "Не удалось выполнить ремонт: {v0}"));
     return null;
   }
 }
@@ -927,7 +894,7 @@ async function runRepairLifecycle(args, scope) {
   if (!workflow.cancelled) return workflow.value;
   return createRepairReceipt(args, {
     status: "cancelled",
-    reason: workflow.reason || "Ремонт отменён событием системы."
+    reason: workflow.reason || auditLocalize("FALLOUTMAW.AuditApps.RepairCanceledByASystemEvent", "Ремонт отменён событием системы.")
   });
 }
 
@@ -943,20 +910,20 @@ async function resolveRepairOnAuthorityOperation({
   operationId = "",
   chainRef = null
 } = {}) {
-  if (!sourceActor || !targetActor) throw new Error("участники ремонта не найдены");
+  if (!sourceActor || !targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairParticipantsNotFound", "участники ремонта не найдены"));
   const contextToolKey = validateRepairToolKey(toolKey);
   const item = targetActor?.items?.get(String(itemId ?? ""));
-  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) throw new Error("предмет ремонта не найден");
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ItemToRepairNotFound", "предмет ремонта не найден"));
   const condition = getConditionFunction(item);
   const methods = normalizeRecoveryMethods(condition.recoveryMethods, contextToolKey);
   const method = methods[Math.max(0, toInteger(methodIndex))];
-  if (!method) throw new Error("метод ремонта не найден");
+  if (!method) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairMethodNotFound", "метод ремонта не найден"));
   const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
   if (
     !instrument
     || instrument.type !== "gear"
     || !hasItemFunction(instrument, createToolFunctionKey(method.toolKey))
-  ) throw new Error("инструмент ремонта не найден или сломан");
+  ) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairToolNotFoundOrBroken", "инструмент ремонта не найден или сломан"));
   const tool = getEffectiveRepairToolFunction(instrument, method.toolKey);
   const validation = validateInstrumentForRepair(sourceActor, method, tool);
   if (!validation.ok) throw new Error(validation.message);
@@ -974,7 +941,7 @@ async function resolveRepairOnAuthorityOperation({
   if (initialValue >= maxValue) {
     return createRepairReceipt({ operationId, targetActor, targetToken }, {
       status: "alreadyComplete",
-      reason: `«${item.name}» уже полностью отремонтирован.`,
+      reason: auditFormat("FALLOUTMAW.AuditApps.IsAlreadyFullyRepaired", { v0: (item.name) }, "«{v0}» уже полностью отремонтирован."),
       targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
       repairItem: snapshotRepairableItem(item, contextToolKey),
       instrument: snapshotRepairInstrument(instrument, method.toolKey),
@@ -1002,7 +969,7 @@ async function resolveRepairOnAuthorityOperation({
   if (!result.entries.length) {
     return createRepairReceipt({ operationId, targetActor, targetToken }, {
       status: result.halted ? "cancelled" : "failed",
-      reason: result.reason || "Ремонт не выполнен.",
+      reason: result.reason || auditLocalize("FALLOUTMAW.AuditApps.RepairFailed", "Ремонт не выполнен."),
       targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
       repairItem: snapshotRepairableItem(item, contextToolKey),
       instrument: snapshotRepairInstrument(instrument, method.toolKey),
@@ -1061,13 +1028,13 @@ async function commitRepairToActors({
   chainRef = null
 } = {}) {
   if (!targetItem || !hasItemFunction(targetItem, ITEM_FUNCTIONS.condition)) {
-    throw createRepairStaleError("Ремонтируемый предмет больше недоступен.");
+    throw createRepairStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheItemBeingRepairedIsNoLongerAvailable", "Ремонтируемый предмет больше недоступен."));
   }
   if (
     !instrument
     || !hasItemFunction(instrument, createToolFunctionKey(instrumentToolKey))
     || !getToolFunction(instrument, instrumentToolKey)?.enabled
-  ) throw createRepairStaleError("Инструмент ремонта больше недоступен или сломан.");
+  ) throw createRepairStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheRepairToolIsNoLongerAvailableOr", "Инструмент ремонта больше недоступен или сломан."));
   const currentInputFingerprint = createRepairInputFingerprint({
     sourceActor,
     targetItem,
@@ -1076,21 +1043,21 @@ async function commitRepairToActors({
     methodIndex
   });
   if (currentInputFingerprint !== expectedInputFingerprint) {
-    throw createRepairStaleError("Правила, требования или навык ремонта изменились во время проверок.");
+    throw createRepairStaleError(auditLocalize("FALLOUTMAW.AuditApps.RepairRulesRequirementsOrSkillChangedDuringThe", "Правила, требования или навык ремонта изменились во время проверок."));
   }
   const currentCondition = Math.max(0, toInteger(getConditionFunction(targetItem).value));
   const liveTool = getEffectiveRepairToolFunction(instrument, instrumentToolKey);
   const currentSupply = Math.max(0, toInteger(liveTool.resourceValue));
   if (currentCondition !== Math.max(0, toInteger(expectedCondition))) {
-    throw createRepairStaleError("Состояние ремонтируемого предмета изменилось во время проверок.");
+    throw createRepairStaleError(auditLocalize("FALLOUTMAW.AuditApps.TheConditionOfTheItemBeingRepairedChanged", "Состояние ремонтируемого предмета изменилось во время проверок."));
   }
   if (currentSupply !== Math.max(0, toInteger(expectedSupply))) {
-    throw createRepairStaleError("Запас инструмента изменился во время проверок.");
+    throw createRepairStaleError(auditLocalize("FALLOUTMAW.AuditApps.ToolSuppliesChangedDuringTheChecks", "Запас инструмента изменился во время проверок."));
   }
-  if (toInteger(finalValue) < currentCondition) throw new Error("Ремонт не может уменьшать состояние предмета.");
-  if (toInteger(remainingSupply) >= currentSupply) throw new Error("Ремонт должен расходовать запас инструмента.");
+  if (toInteger(finalValue) < currentCondition) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairCannotReduceItemCondition", "Ремонт не может уменьшать состояние предмета."));
+  if (toInteger(remainingSupply) >= currentSupply) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairMustConsumeToolSupplies", "Ремонт должен расходовать запас инструмента."));
   if (targetItem === instrument && liveTool.resource?.mode === "condition") {
-    throw new Error("Предмет не может ремонтировать себя ценой собственного состояния.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.AnItemCannotRepairItselfAtTheExpense", "Предмет не может ремонтировать себя ценой собственного состояния."));
   }
   const conditionUpdate = { "system.functions.condition.value": Math.max(0, toInteger(finalValue)) };
   const supplyUpdate = createToolResourceValueUpdate(instrument, liveTool, remainingSupply);
@@ -1251,10 +1218,10 @@ async function resolveMassRepairOnAuthorityOperation({
   options = {},
   operationId = ""
 } = {}) {
-  if (!sourceActor || !targetActor) throw new Error("участники массового ремонта не найдены");
+  if (!sourceActor || !targetActor) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.BulkRepairParticipantsNotFound", "участники массового ремонта не найдены"));
   const contextToolKey = validateRepairToolKey(toolKey);
   const policy = normalizeToolSelectionPolicy(options);
-  if (!policy.allowedToolGroupKeys.length) throw new Error("Выберите хотя бы одну группу инструментов.");
+  if (!policy.allowedToolGroupKeys.length) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.SelectAtLeastOneGroupOfTools", "Выберите хотя бы одну группу инструментов."));
 
   const initialContext = buildTargetContext(targetActor, targetToken, contextToolKey);
   const currentAvailability = getMassRepairAvailability(sourceActor, initialContext);
@@ -1263,7 +1230,7 @@ async function resolveMassRepairOnAuthorityOperation({
     groupToolSelectionOptions(currentAvailability.instruments).map(group => group.key)
   );
   if (!policy.allowedToolGroupKeys.some(key => compatibleGroups.has(key))) {
-    throw new Error("Выбранные группы инструментов больше недоступны.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheSelectedGroupsOfToolsAreNoLonger", "Выбранные группы инструментов больше недоступны."));
   }
 
   const summary = {
@@ -1310,7 +1277,7 @@ async function resolveMassRepairOnAuthorityOperation({
         console.error(`${SYSTEM_ID} | Mass repair step failed`, error);
         summary.stopped = true;
         summary.stopStatus = "failed";
-        summary.reason = String(error?.message ?? "Массовый ремонт остановлен.");
+        summary.reason = String(error?.message ?? auditLocalize("FALLOUTMAW.AuditApps.BulkRepairStopped", "Массовый ремонт остановлен."));
         break repairItems;
       }
       summary.repaired += Math.max(0, toInteger(resolution?.repairedCondition));
@@ -1318,13 +1285,13 @@ async function resolveMassRepairOnAuthorityOperation({
       if (["failed", "cancelled"].includes(String(resolution?.status ?? ""))) {
         summary.stopped = true;
         summary.stopStatus = String(resolution.status);
-        summary.reason = String(resolution?.reason ?? "Массовый ремонт остановлен.");
+        summary.reason = String(resolution?.reason ?? auditLocalize("FALLOUTMAW.AuditApps.BulkRepairStopped", "Массовый ремонт остановлен."));
         break repairItems;
       }
       if (resolution?.halted) {
         summary.stopped = true;
         summary.stopStatus = "cancelled";
-        summary.reason = String(resolution?.reason ?? "Проверка ремонта остановлена.");
+        summary.reason = String(resolution?.reason ?? auditLocalize("FALLOUTMAW.AuditApps.RepairCheckStopped", "Проверка ремонта остановлена."));
         break repairItems;
       }
       if (resolution?.completed) {
@@ -1339,7 +1306,7 @@ async function resolveMassRepairOnAuthorityOperation({
     if (step >= 1000) {
       summary.stopped = true;
       summary.stopStatus = "failed";
-      summary.reason = "Массовый ремонт остановлен защитным лимитом операций.";
+      summary.reason = auditLocalize("FALLOUTMAW.AuditApps.BulkRepairStoppedAtTheOperationSafetyLimit", "Массовый ремонт остановлен защитным лимитом операций.");
       break;
     }
   }
@@ -1529,14 +1496,14 @@ function normalizeRecoveryMethod(method = {}, defaultToolKey = "repair") {
 }
 
 async function requestRepairSocket(action, payload = {}, gm = getResponsibleGM(), { requestId = "" } = {}) {
-  if (!gm) throw new Error("нет активного GM");
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NoActiveGM", "нет активного GM"));
   const resolvedRequestId = String(requestId ?? "").trim() || foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingRepairSocketRequests.delete(resolvedRequestId);
-      const error = new Error("GM не ответил на запрос ремонта");
+      const error = new Error(auditLocalize("FALLOUTMAW.AuditApps.TheGMDidNotRespondToTheRepair", "GM не ответил на запрос ремонта"));
       error.code = "authority-timeout";
       reject(error);
     }, REPAIR_SOCKET_TIMEOUT);
@@ -1572,7 +1539,7 @@ async function handleRepairSocketMessage(message = {}, senderUserId = "") {
     window.clearTimeout(pending.timeout);
     pendingRepairSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
-    else pending.reject(new Error(message.error || "ошибка GM-сокета ремонта"));
+    else pending.reject(new Error(message.error || auditLocalize("FALLOUTMAW.AuditApps.RepairGMSocketError", "ошибка GM-сокета ремонта")));
     return;
   }
 
@@ -1606,7 +1573,7 @@ async function handleRepairSocketMessage(message = {}, senderUserId = "") {
 function handleRepairSocketRequestOnce(message = {}) {
   const requestId = String(message.requestId ?? "").trim();
   const requesterUserId = String(message.requesterUserId ?? "").trim();
-  if (!requestId || !requesterUserId) throw new Error("некорректный запрос ремонта");
+  if (!requestId || !requesterUserId) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidRepairRequest", "некорректный запрос ремонта"));
   const key = `${requesterUserId}:${requestId}`;
   const existing = handledRepairSocketRequests.get(key);
   if (existing) return existing.promise;
@@ -1645,7 +1612,7 @@ function pruneHandledRepairSocketRequests() {
 
 async function handleRepairSocketRequest(action, payload = {}, requesterUserId = "", operationId = "") {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
-  if (!actor || actor.documentName !== "Actor") throw new Error("цель не найдена");
+  if (!actor || actor.documentName !== "Actor") throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TargetNotFound", "цель не найдена"));
   const toolKey = validateRepairToolKey(payload.toolKey);
 
   if (action === "getTargetContext") {
@@ -1687,20 +1654,20 @@ async function handleRepairSocketRequest(action, payload = {}, requesterUserId =
     };
   }
 
-  throw new Error(`неизвестное действие ремонта: ${action}`);
+  throw new Error(auditFormat("FALLOUTMAW.AuditApps.UnknownRepairAction", { v0: (action) }, "неизвестное действие ремонта: {v0}"));
 }
 
 function assertSocketActorOwner(actor, requesterUserId) {
   const user = game.users?.get?.(String(requesterUserId ?? ""))
     ?? (game.users?.contents ?? []).find(entry => entry.id === requesterUserId);
   if (!user || (!user.isGM && !actor?.testUserPermission?.(user, "OWNER"))) {
-    throw new Error("нет прав на использование инструмента");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NoPermissionToUseTheTool", "нет прав на использование инструмента"));
   }
 }
 
 async function getRepairSocketSourceActor(actorUuid = "", requesterUserId = "") {
   const actor = await fromUuid(String(actorUuid ?? "").trim());
-  if (!actor || actor.documentName !== "Actor") throw new Error("источник ремонта не найден");
+  if (!actor || actor.documentName !== "Actor") throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairSourceNotFound", "источник ремонта не найден"));
   assertSocketActorOwner(actor, requesterUserId);
   return actor;
 }
@@ -1710,11 +1677,11 @@ function validateRepairToolKey(value = "repair") {
     getSystemActionSettings().find(entry => entry.key === "repair")?.toolKey ?? "repair"
   ).trim() || "repair";
   if (configured.includes(".") || !getToolSettings().some(entry => entry.key === configured)) {
-    throw new Error("в настройках ремонта указан некорректный тип инструмента");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.InvalidToolTypeInRepairSettings", "в настройках ремонта указан некорректный тип инструмента"));
   }
   const requested = String(value ?? configured).trim() || configured;
   if (requested !== configured) {
-    throw new Error("тип инструмента не соответствует настройкам действия ремонта");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ToolTypeDoesNotMatchRepairActionSettings", "тип инструмента не соответствует настройкам действия ремонта"));
   }
   return configured;
 }
@@ -1726,7 +1693,7 @@ function assertRepairTokenMatchesActor(token = null, actor = null) {
     || !token.actor
     || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
   ) {
-    throw new Error("токен не соответствует участнику ремонта");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheRepairParticipant", "токен не соответствует участнику ремонта"));
   }
 }
 
@@ -1738,7 +1705,7 @@ function getRepairTokenUuid(token = null) {
 async function resolveRepairTokenForActor(tokenUuid = "", actor = null, { required = false } = {}) {
   const uuid = String(tokenUuid ?? "").trim();
   if (!uuid) {
-    if (required) throw new Error("токен участника ремонта не найден");
+    if (required) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairParticipantTokenNotFound", "токен участника ремонта не найден"));
     return null;
   }
   const token = await fromUuid(uuid);
@@ -1746,7 +1713,7 @@ async function resolveRepairTokenForActor(tokenUuid = "", actor = null, { requir
     token?.documentName !== "Token"
     || !token.actor
     || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
-  ) throw new Error("токен не соответствует участнику ремонта");
+  ) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheRepairParticipant", "токен не соответствует участнику ремонта"));
   return token;
 }
 
@@ -1755,49 +1722,41 @@ async function postRepairResolutionChat(actor, resolution = {}) {
     return postRepairResultChat(actor, resolution);
   }
   return postRepairChat(actor, {
-    title: resolution.repairItem?.name ? `Ремонт: ${resolution.repairItem.name}` : "Ремонт",
+    title: resolution.repairItem?.name ? auditFormat("FALLOUTMAW.AuditApps.Repair", { v0: (resolution.repairItem.name) }, "Ремонт: {v0}") : auditLocalize("FALLOUTMAW.Events.Groups.repair.Label", "Ремонт"),
     tone: resolution.status === "alreadyComplete" ? "success" : "failure",
-    lines: [resolution.reason || "Ремонт не выполнен."]
+    lines: [resolution.reason || auditLocalize("FALLOUTMAW.AuditApps.RepairFailed", "Ремонт не выполнен.")]
   });
 }
 
 async function postRepairResultChat(actor, { repairItem, instrument, method, initialValue, finalValue, maxValue, spentCharges, entries, completed, halted = false, reason = "" }) {
-  const rows = entries.map(entry => `
-    <li>
-      Проверка ${entry.index}/${entry.total}: ${entry.resultLabel},
-      +${entry.condition} состояния,
-      запас ${entry.charges},
-      эффективность ${formatNumber(entry.efficiency)}%,
-      итог ${entry.currentValue}/${maxValue}
-    </li>
-  `).join("");
+  const rows = entries.map(entry => auditFormat("FALLOUTMAW.AuditApps.CheckConditionSuppliesEffectivenessTotal", { v0: (entry.index), v1: (entry.total), v2: (entry.resultLabel), v3: (entry.condition), v4: (entry.charges), v5: (formatNumber(entry.efficiency)), v6: (entry.currentValue), v7: (maxValue) }, "\n    <li>\n      Проверка {v0}/{v1}: {v2},\n      +{v3} состояния,\n      запас {v4},\n      эффективность {v5}%,\n      итог {v6}/{v7}\n    </li>\n  ")).join("");
   await postRepairChat(actor, {
-    title: `Ремонт: ${repairItem.name}`,
+    title: auditFormat("FALLOUTMAW.AuditApps.Repair", { v0: (repairItem.name) }, "Ремонт: {v0}"),
     tone: halted ? "failure" : completed ? "success" : "standard",
     lines: [
-      `Инструмент: ${instrument.name}`,
-      `Метод: ${method.toolLabel}, класс ${method.toolClass}, сложность ${method.difficulty}`,
-      `Состояние: ${initialValue}/${maxValue} -> ${finalValue}/${maxValue}`,
-      `Потрачено запаса: ${spentCharges}`,
+      auditFormat("FALLOUTMAW.AuditApps.Tool", { v0: (instrument.name) }, "Инструмент: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.MethodClassDifficulty", { v0: (method.toolLabel), v1: (method.toolClass), v2: (method.difficulty) }, "Метод: {v0}, класс {v1}, сложность {v2}"),
+      auditFormat("FALLOUTMAW.AuditApps.Condition_820", { v0: (initialValue), v1: (maxValue), v2: (finalValue), v3: (maxValue) }, "Состояние: {v0}/{v1} -> {v2}/{v3}"),
+      auditFormat("FALLOUTMAW.AuditApps.SuppliesConsumed_821", { v0: (spentCharges) }, "Потрачено запаса: {v0}"),
       `<ul>${rows}</ul>`,
-      halted ? `Остановлено: ${reason || "проверка ремонта не завершена"}` : "",
-      completed ? "Предмет полностью отремонтирован." : ""
+      halted ? auditFormat("FALLOUTMAW.AuditApps.Stopped", { v0: (reason || auditLocalize("FALLOUTMAW.AuditApps.RepairCheckIncomplete", "проверка ремонта не завершена")) }, "Остановлено: {v0}") : "",
+      completed ? auditLocalize("FALLOUTMAW.AuditApps.TheItemIsFullyRepaired", "Предмет полностью отремонтирован.") : ""
     ].filter(Boolean)
   });
 }
 
 async function postMassRepairChat(actor, summary) {
   await postRepairChat(actor, {
-    title: "Массовый ремонт",
+    title: auditLocalize("FALLOUTMAW.AuditApps.BulkRepair", "Массовый ремонт"),
     tone: summary.stopped ? "failure" : summary.completed > 0 ? "success" : "standard",
     lines: [
-      summary.targetName ? `Цель: ${summary.targetName}` : "",
-      `Попыток ремонта: ${summary.attempted}`,
-      `Полностью отремонтировано: ${summary.completed}`,
-      `Восстановлено состояния: ${summary.repaired}`,
-      `Потрачено запаса: ${summary.charges}`,
-      summary.skipped ? `Пропущено без подходящих инструментов: ${summary.skipped}` : "",
-      summary.stopped ? `Остановлено: ${summary.reason || "дальнейший ремонт невозможен"}` : ""
+      summary.targetName ? auditFormat("FALLOUTMAW.AuditApps.Target_689", { v0: (summary.targetName) }, "Цель: {v0}") : "",
+      auditFormat("FALLOUTMAW.AuditApps.RepairAttempts", { v0: (summary.attempted) }, "Попыток ремонта: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.FullyRepaired", { v0: (summary.completed) }, "Полностью отремонтировано: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.ConditionRestored", { v0: (summary.repaired) }, "Восстановлено состояния: {v0}"),
+      auditFormat("FALLOUTMAW.AuditApps.SuppliesConsumed_821", { v0: (summary.charges) }, "Потрачено запаса: {v0}"),
+      summary.skipped ? auditFormat("FALLOUTMAW.AuditApps.SkippedWithoutSuitableTools", { v0: (summary.skipped) }, "Пропущено без подходящих инструментов: {v0}") : "",
+      summary.stopped ? auditFormat("FALLOUTMAW.AuditApps.Stopped", { v0: (summary.reason || auditLocalize("FALLOUTMAW.AuditApps.NoFurtherRepairIsPossible", "дальнейший ремонт невозможен")) }, "Остановлено: {v0}") : ""
     ].filter(Boolean)
   });
 }
@@ -1829,10 +1788,10 @@ function escapeAttribute(value) {
 }
 
 function getRepairResultLabel(resultKey) {
-  if (resultKey === "criticalSuccess") return "критический успех";
-  if (resultKey === "success") return "успех";
-  if (resultKey === "criticalFailure") return "критический провал";
-  return "провал";
+  if (resultKey === "criticalSuccess") return auditLocalize("FALLOUTMAW.AuditApps.CriticalSuccess", "критический успех");
+  if (resultKey === "success") return auditLocalize("FALLOUTMAW.AuditApps.Success", "успех");
+  if (resultKey === "criticalFailure") return auditLocalize("FALLOUTMAW.AuditApps.CriticalFailure", "критический провал");
+  return auditLocalize("FALLOUTMAW.AuditApps.Failure", "провал");
 }
 
 function formatNumber(value) {

@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { ENERGY_RESOURCE_KEY } from "../combat/energy-resource.mjs";
 
@@ -83,12 +84,12 @@ function buildMaintainedGrantEffectData({
   targetActor = null,
   changes = [],
   metadata = {},
-  fallbackName = "Удерживаемый бонус"
+  fallbackName = auditLocalize("FALLOUTMAW.AuditRuntime.R0488", "Удерживаемый бонус")
 } = {}, { grantFlagKey }) {
   return {
     type: "base",
     name: String(abilityItem?.name ?? fallbackName),
-    img: String(abilityItem?.img ?? "") || "icons/svg/upgrade.svg",
+    img: String(abilityItem?.img ?? "") || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     origin: String(abilityItem?.uuid ?? ""),
     transfer: false,
     disabled: false,
@@ -118,7 +119,7 @@ function buildMaintainedHoldEffectData({
   targetEffectId = "",
   holdEnergy = 0,
   metadata = {},
-  fallbackName = "Удерживаемый бонус"
+  fallbackName = auditLocalize("FALLOUTMAW.AuditRuntime.R0488", "Удерживаемый бонус")
 } = {}, { holdFlagKey, color }) {
   const energy = Math.max(0, toInteger(holdEnergy));
   const functionId = String(abilityFunction?.id ?? "");
@@ -130,8 +131,8 @@ function buildMaintainedHoldEffectData({
   };
   return {
     type: "base",
-    name: `${String(abilityItem?.name ?? fallbackName)}: ${String(targetActor?.name ?? "цель")}`,
-    img: String(abilityItem?.img ?? "") || "icons/svg/upgrade.svg",
+    name: `${String(abilityItem?.name ?? fallbackName)}: ${String(targetActor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0489", "цель"))}`,
+    img: String(abilityItem?.img ?? "") || "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     origin: String(abilityItem?.uuid ?? ""),
     transfer: false,
     disabled: false,

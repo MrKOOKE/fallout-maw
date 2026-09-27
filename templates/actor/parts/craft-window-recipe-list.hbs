@@ -28,7 +28,7 @@
             </div>
             <div class="fallout-maw-craft-window-recipe-class-list">
               {{#each recipes}}
-              <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}} {{#if unknown}}unknown{{/if}}" {{#if unknown}}aria-disabled="true" aria-label="Неизвестный рецепт"{{else}}role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{itemUuid}}"{{/if}}>
+              <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}} {{#if unknown}}unknown{{/if}}" {{#if unknown}}aria-disabled="true" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Texte1acfd5a0bb8'}}"{{else}}role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{itemUuid}}"{{/if}}>
                 <img src="{{img}}" alt="{{#unless unknown}}{{displayName}}{{/unless}}">
                 <span class="name">{{displayName}}</span>
               </article>
@@ -37,13 +37,13 @@
           </section>
           {{/each}}
           {{#each recipes}}
-          <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}} {{#if unknown}}unknown{{/if}}" {{#if unknown}}aria-disabled="true" aria-label="Неизвестный рецепт"{{else}}role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{itemUuid}}"{{/if}}>
+          <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}} {{#if unknown}}unknown{{/if}}" {{#if unknown}}aria-disabled="true" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Texte1acfd5a0bb8'}}"{{else}}role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{itemUuid}}"{{/if}}>
             <img src="{{img}}" alt="{{#unless unknown}}{{displayName}}{{/unless}}">
             <span class="name">{{displayName}}</span>
           </article>
           {{/each}}
           {{#unless hasRecipes}}
-          <p class="fallout-maw-craft-window-recipe-empty">Пусто</p>
+          <p class="fallout-maw-craft-window-recipe-empty">{{localize 'FALLOUTMAW.Actor.EmptySlot'}}</p>
           {{/unless}}
         </div>
       </section>
@@ -51,6 +51,6 @@
     </div>
   </section>
   {{else}}
-  <p class="fallout-maw-empty-list">Рецептов нет.</p>
+  <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text83d7afc74af5'}}</p>
   {{/each}}
 </div>

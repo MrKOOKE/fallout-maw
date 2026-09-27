@@ -1,4 +1,5 @@
 import { createActorOperationLock } from "./actor-operation-lock.mjs";
+import { BATCH_EXPECTED_IDS_OPTION } from "./document-batch-integrity.mjs";
 
 const atomicUpdateLock = createActorOperationLock();
 const PROTECTED_DOCUMENT_OPTIONS = Object.freeze([
@@ -20,7 +21,8 @@ const PROTECTED_DOCUMENT_OPTIONS = Object.freeze([
   "falloutMawSystemEventChainRef",
   "falloutMawAtomicLeafOperationId",
   "falloutMawAtomicLeafReason",
-  "falloutMawAtomicLeafRecovery"
+  "falloutMawAtomicLeafRecovery",
+  BATCH_EXPECTED_IDS_OPTION
 ]);
 
 /**
@@ -198,6 +200,7 @@ function createUpdateOperation(plan, {
       ? { parent: plan.documentName === "Item" ? plan.actor : plan.document.parent }
       : {}),
     updates: [cloneValue(plan.update)],
+    [BATCH_EXPECTED_IDS_OPTION]: [plan.documentId],
     diff: false,
     render: Boolean(render),
     falloutMawAtomicLeafOperationId: operationId,

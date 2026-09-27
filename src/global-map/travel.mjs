@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { GLOBAL_MAP_SOCKET, LOCATION_ENTRY_MODES, TRAVEL_GROUP_TOKEN_FLAG } from "./constants.mjs";
 import { cellKey, getLocationCells, pointToCell, tokenCenter, tokenTopLeftAtCell } from "./geometry.mjs";
@@ -68,7 +69,7 @@ export async function requestTransitionTravel({
   };
   if (game.user?.isGM && isResponsibleGM()) return performTransitionTravel(payload);
   if (!getResponsibleGM()) {
-    ui.notifications.warn("Переход недоступен: нет активного GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1079", "Переход недоступен: нет активного GM."));
     return false;
   }
   game.socket.emit(GLOBAL_MAP_SOCKET, payload);
@@ -88,7 +89,7 @@ export async function requestDirectTravel(payload = {}) {
   };
   if (game.user?.isGM && isResponsibleGM()) return performDirectTravel(request);
   if (!getResponsibleGM()) {
-    ui.notifications.warn("Переход недоступен: нет активного GM.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1079", "Переход недоступен: нет активного GM."));
     return false;
   }
   game.socket.emit(GLOBAL_MAP_SOCKET, request);
@@ -142,9 +143,9 @@ async function onTokenMoved(tokenDocument, movement, _operation, user) {
 async function chooseCandidate(candidates) {
   if (candidates.length === 1) return candidates[0];
   const result = await DialogV2.input({
-    window: { title: "Выберите переход" },
-    content: `<label>Действие<select name="candidate">${candidates.map((entry, index) => `<option value="${index}">${foundry.utils.escapeHTML(entry.label)}</option>`).join("")}</select></label>`,
-    ok: { label: "Продолжить" },
+    window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R1080", "Выберите переход") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R1081", { p0: (candidates.map((entry, index) => `<option value="${index}">${foundry.utils.escapeHTML(entry.label)}</option>`).join("")) }, "<label>Действие<select name=\"candidate\">{p0}</select></label>"),
+    ok: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R1082", "Продолжить") },
     rejectClose: false
   });
   if (!result) return null;
@@ -170,10 +171,10 @@ async function executeCandidate(selected, tokenDocument, userId) {
   }
   if (selected.kind === "linkedTransition") {
     const confirmed = await DialogV2.confirm({
-      window: { title: "Переход" },
-      content: `<p>Перейти в <strong>${foundry.utils.escapeHTML(selected.linkedTransition.transition.name)}</strong>?</p>`,
-      yes: { label: "Перейти" },
-      no: { label: "Остаться" }
+      window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R1083", "Переход") },
+      content: auditFormat("FALLOUTMAW.AuditRuntime.R1084", { p0: (foundry.utils.escapeHTML(selected.linkedTransition.transition.name)) }, "<p>Перейти в <strong>{p0}</strong>?</p>"),
+      yes: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R1085", "Перейти") },
+      no: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0987", "Остаться") }
     });
     if (!confirmed) return false;
     return requestDirectTravel({
@@ -187,10 +188,10 @@ async function executeCandidate(selected, tokenDocument, userId) {
     });
   }
   const confirmed = await DialogV2.confirm({
-    window: { title: "Переход" },
-    content: `<p>Перейти в <strong>${foundry.utils.escapeHTML(selected.transition.name)}</strong>?</p>`,
-    yes: { label: "Перейти" },
-    no: { label: "Остаться" }
+    window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R1083", "Переход") },
+    content: auditFormat("FALLOUTMAW.AuditRuntime.R1084", { p0: (foundry.utils.escapeHTML(selected.transition.name)) }, "<p>Перейти в <strong>{p0}</strong>?</p>"),
+    yes: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R1085", "Перейти") },
+    no: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0987", "Остаться") }
   });
   if (!confirmed) return false;
   return requestTransitionTravel({
@@ -222,7 +223,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
       candidates.push({
         key: `transition:${transition.id}`,
         kind: "transition",
-        label: `Переход: ${transition.name}`,
+        label: auditFormat("FALLOUTMAW.AuditRuntime.R1086", { p0: (transition.name) }, "Переход: {p0}"),
         transition
       });
     }
@@ -231,7 +232,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
     candidates.push({
       key: `linkedTransition:${linkedTransition.scene.id}:${linkedTransition.transition.id}`,
       kind: "linkedTransition",
-      label: `Переход: ${linkedTransition.transition.name}`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R1086", { p0: (linkedTransition.transition.name) }, "Переход: {p0}"),
       linkedTransition
     });
   }
@@ -240,7 +241,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
     candidates.push({
       key: `locationExit:${exit.id}`,
       kind: "locationExit",
-      label: `Выход: ${exit.name}`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R1087", { p0: (exit.name) }, "Выход: {p0}"),
       exit
     });
   }
@@ -249,7 +250,7 @@ function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
     candidates.push({
       key: `location:${location.id}`,
       kind: "location",
-      label: `Локация: ${location.name}`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R1088", { p0: (location.name) }, "Локация: {p0}"),
       location
     });
   }
@@ -260,8 +261,13 @@ function getRuntimeKey(sceneId, tokenId) {
   return `${sceneId}:${tokenId}`;
 }
 
-async function handleTravelSocket(payload) {
+async function handleTravelSocket(payload, senderUserId = "") {
   if (!payload || typeof payload !== "object") return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
+  if (!authenticatedSenderId) return;
+  if (["globalMap.travel.request", "globalMap.travel.directRequest"].includes(payload.action)) {
+    if (authenticatedSenderId !== String(payload.requestingUserId ?? "")) return;
+  } else if (authenticatedSenderId !== getResponsibleGM()?.id) return;
   if (payload.action === "globalMap.travel.request") {
     if (game.user?.isGM && isResponsibleGM()) await performTransitionTravel(payload);
   } else if (payload.action === "globalMap.travel.directRequest") {
@@ -270,20 +276,20 @@ async function handleTravelSocket(payload) {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
     await completeTravelForCurrentViewer(payload);
   } else if (payload.action === "globalMap.travel.error" && payload.requestingUserId === game.user?.id) {
-    ui.notifications.error(payload.message || "Не удалось выполнить переход.");
+    ui.notifications.error(payload.message || auditLocalize("FALLOUTMAW.AuditRuntime.R1089", "Не удалось выполнить переход."));
   }
 }
 
 async function performTransitionTravel(payload) {
   const originScene = game.scenes?.get(payload.originSceneId);
   const transition = getSceneState(originScene).transitions.find(entry => entry.id === payload.transitionId);
-  if (!originScene || !transition || transition.hidden) return emitTravelError(payload, "Переход не найден.");
+  if (!originScene || !transition || transition.hidden) return emitTravelError(payload, auditLocalize("FALLOUTMAW.AuditRuntime.R1090", "Переход не найден."));
   const targetScene = transition.targetSceneId ? game.scenes?.get(transition.targetSceneId) : null;
-  if (!targetScene) return emitTravelError(payload, "Целевая сцена не найдена.");
+  if (!targetScene) return emitTravelError(payload, auditLocalize("FALLOUTMAW.AuditRuntime.R1091", "Целевая сцена не найдена."));
   if ((payload.tokenIds ?? []).some(id => {
     const token = originScene.tokens?.get(id);
     return token && !isMapAreaOnLevel(originScene, transition, getMapTokenLevelId(originScene, token));
-  })) return emitTravelError(payload, "Переход находится на другом уровне.");
+  })) return emitTravelError(payload, auditLocalize("FALLOUTMAW.AuditRuntime.R1092", "Переход находится на другом уровне."));
   return performTravel({
     ...payload,
     originScene,
@@ -296,10 +302,10 @@ async function performTransitionTravel(payload) {
 async function performDirectTravel(payload) {
   const originScene = game.scenes?.get(payload.originSceneId);
   const targetScene = game.scenes?.get(payload.targetSceneId);
-  if (!originScene || !targetScene) return emitTravelError(payload, "Сцена перехода не найдена.");
+  if (!originScene || !targetScene) return emitTravelError(payload, auditLocalize("FALLOUTMAW.AuditRuntime.R1093", "Сцена перехода не найдена."));
   const requestingUser = game.users?.get(payload.requestingUserId);
   if (!requestingUser?.isGM && !isAuthorizedDirectTarget(originScene, targetScene, payload)) {
-    return emitTravelError(payload, "Этот переход не связан с целевой сценой.");
+    return emitTravelError(payload, auditLocalize("FALLOUTMAW.AuditRuntime.R1094", "Этот переход не связан с целевой сценой."));
   }
   const linkedTransition = getSceneState(targetScene).transitions.find(entry => entry.id === payload.linkedTransitionId && entry.targetSceneId === originScene.id);
   return performTravel({ ...payload, originScene, targetScene, anchorCells: payload.anchorCells ?? [],
@@ -321,7 +327,7 @@ async function performTravel(args) {
     .filter(token => token && canUserMoveToken(requestingUser, token));
   if (!originScene || !targetScene || !tokenDocuments.length) return performTravelNow(args);
   if (tokenDocuments.some(hasPendingCarrierArrival)) {
-    return emitTravelError(args, "Сначала завершите уже начатый переход группы.");
+    return emitTravelError(args, auditLocalize("FALLOUTMAW.AuditRuntime.R1000", "Сначала завершите уже начатый переход группы."));
   }
 
   return withSystemEventRoot({
@@ -403,9 +409,9 @@ async function performTravelNow({ originScene, targetScene, tokenIds, requesting
   const tokenDocuments = (tokenIds ?? [])
     .map(id => originScene.tokens?.get(id))
     .filter(token => token && canUserMoveToken(requestingUser, token));
-  if (!tokenDocuments.length) return emitTravelError({ requestingUserId, requestId }, "Нет доступных токенов для перехода.");
+  if (!tokenDocuments.length) return emitTravelError({ requestingUserId, requestId }, auditLocalize("FALLOUTMAW.AuditRuntime.R1095", "Нет доступных токенов для перехода."));
   if (tokenDocuments.some(hasPendingCarrierArrival)) {
-    return emitTravelError({ requestingUserId, requestId }, "Сначала завершите уже начатый переход группы.");
+    return emitTravelError({ requestingUserId, requestId }, auditLocalize("FALLOUTMAW.AuditRuntime.R1000", "Сначала завершите уже начатый переход группы."));
   }
 
   const destinationUpdates = tokenDocuments.map((token, index) => {
@@ -437,7 +443,7 @@ async function performTravelNow({ originScene, targetScene, tokenIds, requesting
     console.error(`${FALLOUT_MAW.id} | Global-map travel failed`, error);
     return emitTravelError(
       { requestingUserId, requestId },
-      "Перенос токенов не подтверждён. Обновите сцену перед повторной попыткой."
+      auditLocalize("FALLOUTMAW.AuditRuntime.R1096", "Перенос токенов не подтверждён. Обновите сцену перед повторной попыткой.")
     );
   }
 

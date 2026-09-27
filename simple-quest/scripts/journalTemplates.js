@@ -1,6 +1,6 @@
 import { MODULE_ID, SYSTEM_PATH, SYSTEM_STORAGE_PATH } from "./constants.js";
 
-const TEMPLATE_IMAGE_PLACEHOLDER = `${SYSTEM_PATH}/assets/icons/location1.webp`;
+const TEMPLATE_IMAGE_PLACEHOLDER = `systems/fallout-maw/assets/System/Quests/quest-icons-location1.webp`;
 
 const TEMPLATE_ICONS = {
     banner: "fad fa-scroll-old",

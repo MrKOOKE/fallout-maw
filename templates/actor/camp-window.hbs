@@ -2,39 +2,39 @@
   {{#if active}}
   <section class="fallout-maw-camp-summary">
     <label class="fallout-maw-camp-time-field">
-      <span>Время отдыха, ч.</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Textf9aa73a71168'}}</span>
       <input type="number" value="{{restHours}}" min="0" step="0.25" data-camp-rest-hours>
     </label>
     {{#if localParticipant}}
     <label class="fallout-maw-camp-time-field">
-      <span>Время караула, ч.</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7bace8fd092c'}}</span>
       <input type="number" value="{{localParticipant.watchHours}}" min="0" step="0.25" data-camp-local-watch data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEditWatch}}disabled{{/unless}}>
     </label>
     <label class="fallout-maw-camp-time-field">
-      <span>Время исследования, ч.</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text964776b3cc95'}}</span>
       <input type="number" value="{{localParticipant.researchHours}}" min="0" step="0.5" data-camp-local-research-hours data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEdit}}disabled{{/unless}}>
     </label>
     <label class="fallout-maw-camp-time-field">
-      <span>Исследование</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text44e5276b3038'}}</span>
       <select data-camp-local-research data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEdit}}disabled{{/unless}}>
-        <option value="">Не выбрано</option>
+        <option value="">{{localize 'FALLOUTMAW.AuditTemplates.Text24da5932344a'}}</option>
         {{#each localParticipant.researchOptions}}
         <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
         {{/each}}
       </select>
     </label>
     <p class="fallout-maw-camp-time-allocation {{#if localParticipant.researchSelectionRequired}}warning{{/if}}">
-      Сон: {{localParticipant.restHours}} ч. Каждые полчаса исследования дают одну проверку.
-      {{#if localParticipant.researchSelectionRequired}} Без выбранного исследования проверки выполняться не будут.{{/if}}
+      {{localize 'FALLOUTMAW.AuditTemplates.Text7b66d222a3f2'}} {{localParticipant.restHours}} {{localize 'FALLOUTMAW.AuditTemplates.Textdf0e82007cd9'}}
+      {{#if localParticipant.researchSelectionRequired}} {{localize 'FALLOUTMAW.AuditTemplates.Textce89feb60dcc'}}{{/if}}
     </p>
     {{/if}}
   </section>
 
   <section class="fallout-maw-camp-roster">
     <div class="fallout-maw-camp-roster-header">
-      <span>Участник</span>
-      <span>Место отдыха</span>
-      <span>Готов</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text76ffe26d00be'}}</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Textba40050eb6cb'}}</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text97b8648c721d'}}</span>
       <span></span>
     </div>
     {{#each participants}}
@@ -51,15 +51,15 @@
       <label class="fallout-maw-camp-ready">
         <input type="checkbox" data-camp-ready {{#if readyChecked}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}>
       </label>
-      <button type="button" data-action="leave" title="Покинуть лагерь" {{#unless canRemove}}disabled{{/unless}}><i class="fa-solid fa-right-from-bracket"></i></button>
+      <button type="button" data-action="leave" title="{{localize 'FALLOUTMAW.AuditTemplates.Text96c2e9dd221c'}}" {{#unless canRemove}}disabled{{/unless}}><i class="fa-solid fa-right-from-bracket"></i></button>
     </div>
     {{/each}}
   </section>
-  <button type="button" class="fallout-maw-camp-rest-button" data-action="rest" {{#unless canRest}}disabled{{/unless}}><i class="fa-solid fa-bed"></i> Отдыхать</button>
+  <button type="button" class="fallout-maw-camp-rest-button" data-action="rest" {{#unless canRest}}disabled{{/unless}}><i class="fa-solid fa-bed"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text8f80f122ac6e'}}</button>
   {{else}}
   <section class="fallout-maw-camp-empty">
     <i class="fa-solid fa-campground"></i>
-    <p>Активного лагеря нет.</p>
+    <p>{{localize 'FALLOUTMAW.AuditTemplates.Text7f54e386cb66'}}</p>
   </section>
   {{/if}}
 </div>

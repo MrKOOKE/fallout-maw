@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
@@ -123,7 +124,7 @@ export function getActorAtRandomActionPointCostSources(actor, actionKey = "") {
       if (settings.actionPointCostReduction <= 0) continue;
       sources.push({
         key: `ability:${abilityItem.id}:${abilityFunction.id}:atRandom`,
-        name: String(abilityItem.name ?? "").trim() || "Способность",
+        name: String(abilityItem.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность"),
         img: String(abilityItem.img ?? "").trim(),
         reduction: settings.actionPointCostReduction
       });
@@ -230,7 +231,7 @@ function resolveRuntimeStateId(documentOrId = null, explicitId = "") {
 
 function getAbilityItemUseProgressLabel(condition = {}, abilityFunction = {}) {
   const categories = normalizeAbilityItemUseCategories(condition.itemCategories);
-  const conditionLabel = categories.length ? categories.join(", ") : "Категория не выбрана";
+  const conditionLabel = categories.length ? categories.join(", ") : auditLocalize("FALLOUTMAW.AuditRuntime.R0520", "Категория не выбрана");
   const functionName = String(abilityFunction?.name ?? "").trim();
   return functionName ? `${functionName}: ${conditionLabel}` : conditionLabel;
 }

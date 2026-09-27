@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevelId, getSceneCreationLevels } from "../canvas/creation-levels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
@@ -25,6 +26,7 @@ import {
   isInstalledConstructPartItem
 } from "../utils/construct-parts.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 
 export const DROPPED_ITEMS_FLAG = "droppedItems";
 export const DROPPED_ITEMS_ACTOR_FLAG = "droppedItemsActor";
@@ -39,6 +41,7 @@ const DROPPED_ITEMS_FALLBACK_ICON = "icons/svg/item-bag.svg";
 
 const pendingDroppedItemsSocketRequests = new Map();
 const droppedItemsCleanupInProgress = new Set();
+const droppedItemsTileLock = createActorOperationLock();
 let droppedItemsCanvasView = null;
 let droppedItemsCanvasDblClickHandler = null;
 let droppedItemsSearchOpener = null;
@@ -81,14 +84,14 @@ export async function dropActorInventoryItem(actor, item, {
 
 async function performActorInventoryItemDrop(payload = {}, requesterUserId = "") {
   const requester = game.users?.get(String(requesterUserId ?? ""));
-  if (!requester) throw new Error("Пользователь, запросивший выброс предмета, не найден.");
+  if (!requester) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1116", "Пользователь, запросивший выброс предмета, не найден."));
   const actor = await resolveDroppedActor(String(payload.actorUuid ?? ""));
-  if (!actor) throw new Error("Актёр для выброса предмета не найден.");
+  if (!actor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1117", "Актёр для выброса предмета не найден."));
   if (!requester.isGM && !actor.testUserPermission?.(requester, "OWNER")) {
-    throw new Error("Нет прав на выбрасывание предметов этого актёра.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1118", "Нет прав на выбрасывание предметов этого актёра."));
   }
   const item = actor.items?.get(String(payload.itemId ?? ""));
-  if (!item) throw new Error("Выбрасываемый предмет не найден.");
+  if (!item) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1119", "Выбрасываемый предмет не найден."));
   const constructPartSlotId = isInstalledConstructPartItem(item)
     ? getConstructPartSlotId(item)
     : "";
@@ -97,19 +100,23 @@ async function performActorInventoryItemDrop(payload = {}, requesterUserId = "")
       String(candidate.system?.placement?.mode ?? "") === "weapon"
       && String(candidate.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${constructPartSlotId}:`)
     ));
-    if (occupied) throw new Error("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+    if (occupied) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1120", "Сначала снимите оружие, установленное в слоты этой детали конструкта."));
   }
 
   const scene = game.scenes?.get(String(payload.sceneId ?? ""));
-  if (!scene) throw new Error("Сцена для выброса предмета не найдена.");
+  if (!scene) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1121", "Сцена для выброса предмета не найдена."));
   const token = scene.tokens?.get(String(payload.tokenId ?? ""));
   if (!token || !doesTokenRepresentActor(token, actor)) {
-    throw new Error("Токен этого актёра на выбранной сцене не найден.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1122", "Токен этого актёра на выбранной сцене не найден."));
   }
   const position = getActorDropPosition(actor, { scene, token });
-  if (!position) throw new Error("Не удалось определить позицию токена для выброса предмета.");
+  if (!position) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1123", "Не удалось определить позицию токена для выброса предмета."));
   if (constructPartSlotId) await ensureConstructPartSlots(actor);
 
+  // The scene write below is asynchronous. Preserve the exact source that
+  // produced the dropped entry so intervening consumption or moves cannot
+  // make us remove fewer units (or different container contents) than we drop.
+  const expectedItems = actor.items.contents.map(entry => entry.toObject());
   const stackIndex = Math.max(0, toInteger(payload.stackIndex));
   const dropped = createDroppedItemEntryFromActorItem(actor, item, {
     quantity: Math.max(0, toInteger(payload.quantity)),
@@ -117,7 +124,7 @@ async function performActorInventoryItemDrop(payload = {}, requesterUserId = "")
   });
   const tile = await addDroppedItemToScene(actor, dropped, { scene, position });
   try {
-    await removeDroppedItemFromActor(actor, item, dropped.quantity, { stackIndex });
+    await removeDroppedItemFromActor(actor, item, dropped.quantity, { stackIndex, expectedItems });
   } catch (error) {
     await rollbackDroppedItemEntry(tile, dropped.entryId).catch(rollbackError => {
       console.error(`${SYSTEM_ID} | Dropped item destination rollback failed`, rollbackError);
@@ -149,12 +156,13 @@ export async function dropItemDataForActor(actor, itemData, containedItems = [],
 }
 
 export async function commitInventoryWithDroppedItems(actor, mutation, drops = [], { reason = "disassembly", additionalMutations = [] } = {}) {
-  if (additionalMutations.length && !game.user?.isGM) throw new Error("Совместный разбор должен выполнить мастер.");
+  if (additionalMutations.length && !game.user?.isGM) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1124", "Совместный разбор должен выполнить мастер."));
   const scene = canvas?.scene;
   const token = getActorDropTokenDocument(actor, scene);
   const payload = {
     actorUuid: actor.uuid, sceneId: scene?.id, tokenId: token?.id,
     updates: mutation.updates ?? [], deletes: mutation.deletes ?? [], creates: mutation.creates ?? [],
+    actorUpdates: mutation.actorUpdates ?? mutation.actorUpdate ?? [],
     expectedItems: mutation.expectedItems ?? actor.items.contents.map(item => item.toObject()), drops, reason,
     additionalMutations: additionalMutations.map(plan => ({ actorUuid: plan.actor.uuid, updates: plan.updates ?? [], deletes: plan.deletes ?? [], expectedItems: plan.expectedItems }))
   };
@@ -167,24 +175,25 @@ async function performInventoryWithDroppedItems(payload, requesterUserId) {
   const requester = game.users?.get(String(requesterUserId ?? ""));
   const actor = await resolveDroppedActor(String(payload.actorUuid ?? ""));
   if (!requester || !actor || (!requester.isGM && !actor.testUserPermission?.(requester, "OWNER"))) {
-    throw new Error("Нет прав на разбор предметов этого актёра.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1125", "Нет прав на разбор предметов этого актёра."));
   }
   const additionalMutations = [];
-  if (payload.additionalMutations?.length && !requester.isGM) throw new Error("Совместный разбор должен выполнить мастер.");
+  if (payload.additionalMutations?.length && !requester.isGM) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1124", "Совместный разбор должен выполнить мастер."));
   for (const plan of payload.additionalMutations ?? []) {
     const toolActor = await resolveDroppedActor(plan.actorUuid);
-    if (!toolActor) throw new Error("Не найден владелец инструмента.");
+    if (!toolActor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1126", "Не найден владелец инструмента."));
     additionalMutations.push({ actor: toolActor, updates: plan.updates, deletes: plan.deletes, expectedItems: plan.expectedItems });
   }
   const scene = game.scenes?.get(String(payload.sceneId ?? ""));
   const token = scene?.tokens?.get(String(payload.tokenId ?? ""));
-  if (!scene || !token || !doesTokenRepresentActor(token, actor)) throw new Error("Для выброса результатов нужен токен актёра на сцене.");
+  if (!scene || !token || !doesTokenRepresentActor(token, actor)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1127", "Для выброса результатов нужен токен актёра на сцене."));
   const position = getActorDropPosition(actor, { scene, token });
   const staged = [];
   try {
     const entries = (payload.drops ?? []).map(spec => ({
       entryId: foundry.utils.randomID(), sourceActorUuid: actor.uuid,
-      itemData: normalizeDroppedItemData(spec.data, spec.quantity), containedItems: [],
+      itemData: normalizeDroppedItemData(spec.data, spec.quantity),
+      containedItems: normalizeDroppedContainedItems(spec.containedItems ?? []),
       quantity: Math.max(1, toInteger(spec.quantity)), createdAt: Date.now()
     }));
     if (entries.length) {
@@ -192,7 +201,7 @@ async function performInventoryWithDroppedItems(payload, requesterUserId) {
       staged.push(...entries.map(entry => ({ tile, entryId: entry.entryId })));
     }
     const mutation = { actor, updates: payload.updates, deletes: payload.deletes,
-      creates: payload.creates, expectedItems: payload.expectedItems };
+      creates: payload.creates, actorUpdates: payload.actorUpdates, expectedItems: payload.expectedItems };
     await executeInventoryMutation(additionalMutations.length ? [mutation, ...additionalMutations] : mutation, { reason: payload.reason });
     return { dropped: staged.length };
   } catch (error) {
@@ -222,7 +231,7 @@ async function onDroppedItemsCanvasDoubleClick(event) {
   event.stopPropagation?.();
   const actor = getDroppedItemsPickupActor();
   if (!actor) {
-    ui.notifications.warn("Выберите токен или назначьте персонажа, чтобы забрать выброшенные предметы.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1128", "Выберите токен или назначьте персонажа, чтобы забрать выброшенные предметы."));
     return;
   }
   await openDroppedItemsSearch(tile.document ?? tile, actor);
@@ -258,7 +267,7 @@ function getDroppedItemsPickupActor() {
 
 async function openDroppedItemsSearch(tile, actor) {
   if (!droppedItemsSearchOpener) {
-    ui.notifications.warn("Окно обыска еще не готово.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1129", "Окно обыска еще не готово."));
     return;
   }
   try {
@@ -272,26 +281,26 @@ async function openDroppedItemsSearch(tile, actor) {
         tileId: tile.id
       });
     const droppedActor = await fromUuid(String(result?.actorUuid ?? ""));
-    if (!droppedActor) throw new Error("Выброшенные предметы не найдены.");
+    if (!droppedActor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1130", "Выброшенные предметы не найдены."));
     await droppedItemsSearchOpener({
       searcherActor: actor,
       searchedActor: droppedActor
     });
   } catch (error) {
     console.error(`${SYSTEM_ID} | Dropped items search failed`, error);
-    ui.notifications.warn(error.message || "Не удалось открыть обыск выброшенных предметов.");
+    ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditRuntime.R1131", "Не удалось открыть обыск выброшенных предметов."));
   }
 }
 
 async function requestDroppedItemsSocket(action = "", payload = {}) {
   const gm = getResponsibleGM();
-  if (!gm) throw new Error("Нет активного GM для операций с выброшенными предметами.");
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1132", "Нет активного GM для операций с выброшенными предметами."));
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingDroppedItemsSocketRequests.delete(requestId);
-      reject(new Error("GM не ответил на запрос операции с выброшенными предметами."));
+      reject(new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1133", "GM не ответил на запрос операции с выброшенными предметами.")));
     }, DROPPED_ITEMS_SOCKET_TIMEOUT);
     pendingDroppedItemsSocketRequests.set(requestId, { resolve, reject, timeout });
   });
@@ -364,13 +373,17 @@ async function handleDroppedItemsSocketMessage(message = {}) {
 async function performDroppedItemsActorEnsure(payload = {}, requesterUserId = "") {
   const scene = game.scenes?.get(String(payload.sceneId ?? "")) ?? canvas?.scene;
   const tile = scene?.tiles?.get(String(payload.tileId ?? ""));
-  if (!scene || !tile) throw new Error("Выброшенные предметы не найдены.");
+  if (!scene || !tile) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1130", "Выброшенные предметы не найдены."));
 
+  return droppedItemsTileLock.run(tile, null, () => ensureDroppedItemsActorForTile(tile, requesterUserId));
+}
+
+async function ensureDroppedItemsActorForTile(tile, requesterUserId = "") {
   let state = getDroppedItemsFlag(tile);
   let actor = await resolveDroppedActor(state.actorUuid);
   if (!actor && !state.items.length) {
     await tile.delete();
-    throw new Error("Выброшенные предметы не найдены.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1130", "Выброшенные предметы не найдены."));
   }
   if (!actor) {
     actor = await createDroppedItemsActor(tile, requesterUserId);
@@ -381,7 +394,7 @@ async function performDroppedItemsActorEnsure(payload = {}, requesterUserId = ""
   }
   if (!state.items.length && !(actor.items?.contents ?? []).length) {
     await cleanupDroppedItemsActorIfEmpty(actor);
-    throw new Error("Выброшенные предметы не найдены.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1130", "Выброшенные предметы не найдены."));
   }
 
   if (state.items.length) {
@@ -395,7 +408,7 @@ async function performDroppedItemsActorEnsure(payload = {}, requesterUserId = ""
   }
 
   await tile.update({
-    name: "Выброшенные предметы",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R1134", "Выброшенные предметы"),
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.actorUuid`]: actor.uuid,
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.items`]: [],
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.updatedAt`]: Date.now()
@@ -444,7 +457,7 @@ function buildDroppedStackCreateData(actor, itemData, quantity = 1, reservedPlac
     while (remaining > 0) {
       const stackQuantity = Math.min(remaining, maxStack);
       const placement = getFirstAvailableActorRootPlacement(actor, itemData, reservedPlacements);
-      if (!placement) throw new Error("Р’ РёРЅРІРµРЅС‚Р°СЂРµ РЅРµС‚ РјРµСЃС‚Р° РґР»СЏ РІС‹Р±СЂРѕС€РµРЅРЅРѕРіРѕ РїСЂРµРґРјРµС‚Р°.");
+      if (!placement) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1135", "В инвентаре нет места для выброшенного предмета."));
       reservedPlacements.push(placement);
       stackParts.push({
         quantity: stackQuantity,
@@ -459,7 +472,7 @@ function buildDroppedStackCreateData(actor, itemData, quantity = 1, reservedPlac
   while (remaining > 0) {
     const stackQuantity = Math.min(remaining, maxStack);
     const placement = getFirstAvailableActorRootPlacement(actor, itemData, reservedPlacements);
-    if (!placement) throw new Error("В инвентаре нет места для выброшенного предмета.");
+    if (!placement) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1136", "В инвентаре нет места для выброшенного предмета."));
     reservedPlacements.push(placement);
     creates.push(createDroppedInventoryItemData(itemData, stackQuantity, placement));
     remaining -= stackQuantity;
@@ -501,7 +514,7 @@ function buildDroppedContainerCreateData(actor, rootItemData, containedItems = [
     reservedPlacements,
     projectedItems
   );
-  if (!placement) throw new Error("В инвентаре нет места для выброшенного контейнера.");
+  if (!placement) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1137", "В инвентаре нет места для выброшенного контейнера."));
   applyDroppedInventoryPlacement(rootData, placement);
   reservedPlacements.push(placement);
   return creates;
@@ -623,10 +636,11 @@ function normalizeDroppedContainedItems(containedItems = []) {
     });
 }
 
-async function removeDroppedItemFromActor(actor, item, quantity = 0, { stackIndex = 0 } = {}) {
+async function removeDroppedItemFromActor(actor, item, quantity = 0, { stackIndex = 0, expectedItems = null } = {}) {
   if (isContainerItem(item)) {
     return executeInventoryMutation({
       actor,
+      expectedItems,
       deletes: [item.id]
     }, { reason: "drop-container" });
   }
@@ -636,6 +650,7 @@ async function removeDroppedItemFromActor(actor, item, quantity = 0, { stackInde
   if (amount >= sourceQuantity) {
     return executeInventoryMutation({
       actor,
+      expectedItems,
       deletes: [item.id]
     }, { reason: "drop" });
   }
@@ -645,12 +660,14 @@ async function removeDroppedItemFromActor(actor, item, quantity = 0, { stackInde
     if (!update) return null;
     return executeInventoryMutation({
       actor,
+      expectedItems,
       updates: [update]
     }, { reason: "drop-stack" });
   }
 
   return executeInventoryMutation({
     actor,
+    expectedItems,
     updates: [{
       _id: item.id,
       "system.quantity": sourceQuantity - amount
@@ -741,6 +758,10 @@ function findNearbyDroppedItemsTile(scene, position) {
 }
 
 async function appendDroppedItemToTile(tile, droppedEntries) {
+  return droppedItemsTileLock.run(tile, null, () => appendDroppedItemToTileLocked(tile, droppedEntries));
+}
+
+async function appendDroppedItemToTileLocked(tile, droppedEntries) {
   const state = getDroppedItemsFlag(tile);
   const actor = game.user?.isGM ? await resolveDroppedActor(state.actorUuid) : null;
   if (actor) {
@@ -755,7 +776,7 @@ async function appendDroppedItemToTile(tile, droppedEntries) {
   }
   const items = [...state.items, ...droppedEntries];
   await tile.update({
-    name: state.actorUuid ? "Выброшенные предметы" : getDroppedTileName(items),
+    name: state.actorUuid ? auditLocalize("FALLOUTMAW.AuditRuntime.R1134", "Выброшенные предметы") : getDroppedTileName(items),
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.items`]: items,
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.updatedAt`]: Date.now()
   });
@@ -765,6 +786,10 @@ async function appendDroppedItemToTile(tile, droppedEntries) {
 async function rollbackDroppedItemEntry(tile, entryId = "") {
   const normalizedEntryId = String(entryId ?? "");
   if (!tile || !normalizedEntryId) return;
+  return droppedItemsTileLock.run(tile, null, () => rollbackDroppedItemEntryLocked(tile, normalizedEntryId));
+}
+
+async function rollbackDroppedItemEntryLocked(tile, normalizedEntryId) {
   const state = getDroppedItemsFlag(tile);
   const actor = await resolveDroppedActor(state.actorUuid);
   if (actor) {
@@ -858,7 +883,7 @@ async function createDroppedItemsActor(tile, requesterUserId = "") {
   if (requester?.id) ownership[requester.id] = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
   const sceneId = String(tile.parent?.id ?? canvas?.scene?.id ?? "");
   const actor = await Actor.create({
-    name: "Выброшенные предметы",
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R1134", "Выброшенные предметы"),
     type: "construct",
     img: String(tile.texture?.src || DROPPED_ITEMS_FALLBACK_ICON),
     ownership,

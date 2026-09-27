@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getItemCategorySettings, setItemCategorySettings } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -37,7 +38,7 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Категории предметов";
+    return auditLocalize("FALLOUTMAW.AuditApps.ItemCategories", "Категории предметов");
   }
 
   async _prepareContext(options) {
@@ -58,14 +59,14 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
 
     await setItemCategorySettings(categories);
     this.categories = getItemCategorySettings();
-    ui.notifications.info("Категории предметов сохранены.");
+    ui.notifications.info(auditLocalize("FALLOUTMAW.AuditApps.ItemCategoriesSaved", "Категории предметов сохранены."));
     return this.forceRender();
   }
 
   static #onCreateCategory(event) {
     event.preventDefault();
     this.categories = this.#readCategoriesFromForm();
-    this.categories.push({ label: this.#getUniqueLabel("Новая категория"), subcategories: [] });
+    this.categories.push({ label: this.#getUniqueLabel(auditLocalize("FALLOUTMAW.AuditApps.NewCategory", "Новая категория")), subcategories: [] });
     return this.forceRender();
   }
 
@@ -89,7 +90,7 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     this.categories = this.#readCategoriesFromForm();
     const category = this.categories[index];
     category.subcategories.push({
-      label: this.#getUniqueSubcategoryLabel(category, "Новая подкатегория")
+      label: this.#getUniqueSubcategoryLabel(category, auditLocalize("FALLOUTMAW.AuditApps.NewSubcategory", "Новая подкатегория"))
     });
     return this.forceRender();
   }
@@ -123,17 +124,17 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     const labels = new Set();
     for (const [index, category] of categories.entries()) {
       const label = String(category?.label ?? "").trim();
-      if (!label) throwValidationError(`Категория ${index + 1}: название не должно быть пустым.`);
-      if (labels.has(label)) throwValidationError(`Категория предметов "${label}" повторяется.`);
+      if (!label) throwValidationError(auditFormat("FALLOUTMAW.AuditApps.CategoryTheNameCannotBeEmpty", { v0: (index + 1) }, "Категория {v0}: название не должно быть пустым."));
+      if (labels.has(label)) throwValidationError(auditFormat("FALLOUTMAW.AuditApps.DuplicateItemCategory", { v0: (label) }, "Категория предметов \"{v0}\" повторяется."));
       labels.add(label);
       const subcategoryLabels = new Set();
       for (const [subcategoryIndex, subcategory] of (category.subcategories ?? []).entries()) {
         const subcategoryLabel = String(subcategory?.label ?? "").trim();
         if (!subcategoryLabel) {
-          throwValidationError(`Категория "${label}", подкатегория ${subcategoryIndex + 1}: название не должно быть пустым.`);
+          throwValidationError(auditFormat("FALLOUTMAW.AuditApps.CategorySubcategoryTheNameCannotBeEmpty", { v0: (label), v1: (subcategoryIndex + 1) }, "Категория \"{v0}\", подкатегория {v1}: название не должно быть пустым."));
         }
         if (subcategoryLabels.has(subcategoryLabel)) {
-          throwValidationError(`Подкатегория "${subcategoryLabel}" в категории "${label}" повторяется.`);
+          throwValidationError(auditFormat("FALLOUTMAW.AuditApps.DuplicateSubcategoryInCategory", { v0: (subcategoryLabel), v1: (label) }, "Подкатегория \"{v0}\" в категории \"{v1}\" повторяется."));
         }
         subcategoryLabels.add(subcategoryLabel);
       }

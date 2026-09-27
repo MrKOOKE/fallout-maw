@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { getAbilityCatalog } from "../settings/accessors.mjs";
 import { findCatalogAbility } from "../abilities/purchase.mjs";
 
@@ -14,7 +15,7 @@ const { DialogV2 } = foundry.applications.api;
 export async function pickCatalogAbilities({
   selectedIds = [],
   excludeIds = [],
-  title = "Выбор способностей"
+  title = auditLocalize("FALLOUTMAW.AuditApps.SelectAbilities", "Выбор способностей")
 } = {}) {
   const exclude = new Set((excludeIds ?? []).map(id => String(id ?? "").trim()).filter(Boolean));
   const initialSelected = new Set(
@@ -24,21 +25,11 @@ export async function pickCatalogAbilities({
   );
   const categories = buildPickerCategories(exclude);
   if (!categories.length) {
-    ui.notifications.warn("В каталоге нет доступных способностей.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoAvailableAbilitiesInTheCatalog", "В каталоге нет доступных способностей."));
     return null;
   }
 
-  const content = `
-    <div class="fallout-maw-ability-catalog-picker">
-      <label class="fallout-maw-ability-catalog-picker-search">
-        <span>Поиск</span>
-        <input type="search" data-ability-picker-search placeholder="Название способности..." autocomplete="off">
-      </label>
-      <div class="fallout-maw-ability-catalog-picker-list" data-ability-picker-list>
-        ${categories.map(category => renderPickerCategory(category, initialSelected)).join("")}
-      </div>
-    </div>
-  `;
+  const content = auditFormat("FALLOUTMAW.AuditApps.Search", { v0: (categories.map(category => renderPickerCategory(category, initialSelected)).join("")) }, "\n    <div class=\"fallout-maw-ability-catalog-picker\">\n      <label class=\"fallout-maw-ability-catalog-picker-search\">\n        <span>Поиск</span>\n        <input type=\"search\" data-ability-picker-search placeholder=\"Название способности...\" autocomplete=\"off\">\n      </label>\n      <div class=\"fallout-maw-ability-catalog-picker-list\" data-ability-picker-list>\n        {v0}\n      </div>\n    </div>\n  ");
 
   return DialogV2.wait({
     window: { title, icon: "fa-solid fa-list-check" },
@@ -47,13 +38,13 @@ export async function pickCatalogAbilities({
     buttons: [
       {
         action: "confirm",
-        label: "Подтвердить",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Confirm", "Подтвердить"),
         default: true,
         callback: (_event, button) => collectSelectedAbilityIds(button.form)
       },
       {
         action: "cancel",
-        label: "Отмена",
+        label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена"),
         callback: () => null
       }
     ],
@@ -73,7 +64,7 @@ export function resolveCatalogAbilityEntries(abilityIds = []) {
       return {
         id,
         name: entry?.ability?.name || id,
-        img: entry?.ability?.img || "icons/svg/aura.svg",
+        img: entry?.ability?.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
         categoryId: entry?.category?.id ?? "",
         categoryName: entry?.category?.name ?? ""
       };
@@ -92,9 +83,9 @@ function buildPickerCategories(exclude = new Set()) {
         .map(ability => ({
           id: ability.id,
           name: String(ability?.name ?? "").trim() || ability.id,
-          img: ability?.img || "icons/svg/aura.svg"
+          img: ability?.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp"
         }))
-        .sort((left, right) => left.name.localeCompare(right.name, "ru", { sensitivity: "base" }));
+        .sort((left, right) => left.name.localeCompare(right.name, globalThis.game?.i18n?.lang, { sensitivity: "base" }));
       return {
         id: category.id,
         name: String(category?.name ?? "").trim() || category.id,
@@ -128,11 +119,11 @@ function activateAbilityCatalogPicker(root) {
   if (!root) return;
   const search = root.querySelector("[data-ability-picker-search]");
   const applyFilter = () => {
-    const query = String(search?.value ?? "").trim().toLocaleLowerCase("ru");
+    const query = String(search?.value ?? "").trim().toLocaleLowerCase(globalThis.game?.i18n?.lang);
     root.querySelectorAll("[data-ability-picker-category]").forEach(category => {
       let visibleCount = 0;
       category.querySelectorAll("[data-ability-picker-row]").forEach(row => {
-        const haystack = String(row.dataset.abilitySearchText ?? "").toLocaleLowerCase("ru");
+        const haystack = String(row.dataset.abilitySearchText ?? "").toLocaleLowerCase(globalThis.game?.i18n?.lang);
         const visible = !query || haystack.includes(query);
         row.hidden = !visible;
         if (visible) visibleCount += 1;

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { spendActorDodgeForAreaDamage, spendDodgeForAreaDamageRequests } from "./dodge-resource.mjs";
 import { evaluateFormulaVariables, parseFormula } from "../formulas/index.mjs";
@@ -37,6 +38,7 @@ import {
   hasItemFunction,
   isItemBrokenByCondition
 } from "../utils/item-functions.mjs";
+import { prepareEquipmentDamageMitigationValue } from "../items/damage-mitigation-preparation.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import {
   isConstructPartDestroyed,
@@ -58,6 +60,7 @@ import {
   commitDamageBarrierLedger,
   createDamageBarrierLedger
 } from "./damage-barriers.mjs";
+import { createHealthOnceBarrierState, absorbHealthOnceBarrier, commitHealthOnceBarrier, hasPendingHealthOnceBarrier } from "./health-once-barrier.mjs";
 import {
   buildDamageApplicationBreakdownIndex,
   buildDamageApplicationDeltaIndex,
@@ -178,7 +181,7 @@ const DAMAGE_MITIGATION_PENETRATION_FLAT_STEP = 1;
 const RESISTANCE_OVERHEAT_DURATION_SECONDS = 24;
 const RESISTANCE_OVERHEAT_RATIO = 0.1;
 const RESISTANCE_OVERHEAT_EFFECT_KIND = "resistanceOverheat";
-const RESISTANCE_OVERHEAT_EFFECT_NAME = "Перегрев сопротивлений";
+const RESISTANCE_OVERHEAT_EFFECT_NAME = () => auditLocalize("FALLOUTMAW.AuditRuntime.R0754", "Перегрев сопротивлений");
 const RESISTANCE_OVERHEAT_EFFECT_IMG = "icons/svg/fire-shield.svg";
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead",
@@ -433,6 +436,7 @@ export async function requestDamageApplication({
   scope = SCOPE_HEALTH_AND_LIMB,
   applyMitigation = true,
   processDamageTypeSettings = true,
+  bypassBarrier = false,
   source = {}
 } = {}) {
   const resolvedActor = actor ?? await fromUuid(actorUuid);
@@ -447,6 +451,7 @@ export async function requestDamageApplication({
     scope,
     applyMitigation,
     processDamageTypeSettings,
+    bypassBarrier,
     source,
     requesterUserId: game.user?.id ?? ""
   });
@@ -508,7 +513,7 @@ async function requestDamageSocketActionFromGM(gm, payload = {}, { fallback = []
       pendingDamageSocketRequests.delete(requestId);
       reject(new Error("Damage hub socket request timed out."));
     }, DAMAGE_SOCKET_REQUEST_TIMEOUT_MS);
-    pendingDamageSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingDamageSocketRequests.set(requestId, { resolve, reject, timeout, authorityUserId: gm.id });
   });
 
   game.socket.emit(DAMAGE_SOCKET, {
@@ -688,7 +693,8 @@ export async function requestNeedChanges({
   actor = null,
   actorUuid = "",
   needs = [],
-  context = {}
+  context = {},
+  source = {}
 } = {}) {
   const resolvedActor = actor ?? await fromUuid(actorUuid);
   if (!resolvedActor) return [];
@@ -696,7 +702,8 @@ export async function requestNeedChanges({
   const request = normalizeNeedChangesRequest({
     actorUuid: resolvedActor.uuid,
     needs,
-    context
+    context,
+    source
   });
   if (!request.needs.length) return [];
 
@@ -726,7 +733,8 @@ export async function requestFirstAidRemoveEffects({
   actor = null,
   actorUuid = "",
   limbKeys = [],
-  damageTypeKeys = []
+  damageTypeKeys = [],
+  source = {}
 } = {}) {
   const resolvedActor = actor ?? await fromUuid(actorUuid);
   if (!resolvedActor) return [];
@@ -734,7 +742,8 @@ export async function requestFirstAidRemoveEffects({
   const request = normalizeFirstAidRemoveEffectsRequest({
     actorUuid: resolvedActor.uuid,
     limbKeys,
-    damageTypeKeys
+    damageTypeKeys,
+    source
   });
   if (!request.limbKeys.length || !request.damageTypeKeys.length) return [];
 
@@ -1557,7 +1566,7 @@ async function applyDamageApplicationNow(request = {}, {
       return;
     }
     if (!ownsDamageBarrierLedger || !damageBarrierLedger || damageBarrierCommitted) return;
-    await commitDamageBarrierLedger(actor, damageBarrierLedger);
+    await commitActorDamageBarrierLedger(actor, damageBarrierLedger);
     damageBarrierCommitted = true;
   };
   const ownsFeedbackQueue = !Array.isArray(feedbackQueue);
@@ -1634,7 +1643,7 @@ async function applyDamageApplicationNow(request = {}, {
   }
 
   const barrierApplication = mode === MODE_DAMAGE
-    ? absorbDamageWithBarrier(damageBarrierLedger, {
+    ? absorbActorDamageBarriers(damageBarrierLedger, {
       amount: effectiveAmountBeforeBarrier,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       bypassBarrier: data.bypassBarrier
@@ -1646,7 +1655,7 @@ async function applyDamageApplicationNow(request = {}, {
       depleted: []
     };
   const effectiveAmount = barrierApplication.remaining;
-  await commitOwnedDamageBarrier();
+  if (!hasPendingHealthOnceBarrier(damageBarrierLedger?.healthOnce)) await commitOwnedDamageBarrier();
   if (effectiveAmount <= 0) {
     if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
       await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
@@ -1809,7 +1818,9 @@ async function applyDamageApplicationNow(request = {}, {
 
   await applyPreHealthDamageTypeSettings();
 
-  const result = await applyDirectDamageApplication(actor, { ...finalRequest, mode }, damageType);
+  const result = await applyDirectDamageApplication(actor, { ...finalRequest, mode }, damageType, {
+    damageBarrierLedger: mode === MODE_DAMAGE ? damageBarrierLedger : null
+  });
   result.incomingAmount = mode === MODE_DAMAGE ? requestedAmount : 0;
   result.amountBeforeResistance = amountBeforeResistance;
   result.preBarrierAmount = effectiveAmountBeforeBarrier;
@@ -1856,6 +1867,9 @@ async function applyDamageApplicationNow(request = {}, {
     await notifyDamageApplied([result]);
   }
   return result;
+  } catch (error) {
+    if (hasPendingHealthOnceBarrier(damageBarrierLedger?.healthOnce)) damageBarrierLedger.healthOnce.failed = true;
+    throw error;
   } finally {
     try {
       await commitOwnedDamageBarrier();
@@ -2005,7 +2019,7 @@ export function estimateDamageApplication(request = {}) {
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
   const preBarrierAmount = effectiveAmount;
-  const barrierApplication = absorbDamageWithBarrier(createActorDamageBarrierLedger(actor), {
+  const barrierApplication = absorbActorDamageBarriers(createActorDamageBarrierLedger(actor), {
     amount: effectiveAmount,
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
     bypassBarrier: data.bypassBarrier
@@ -2216,7 +2230,7 @@ async function applyDamageApplicationsNow(
   let damageBarrierCommitted = false;
   const commitDamageBarrier = async () => {
     if (!damageBarrierLedger || damageBarrierCommitted) return;
-    await commitDamageBarrierLedger(actor, damageBarrierLedger);
+    await commitActorDamageBarrierLedger(actor, damageBarrierLedger);
     damageBarrierCommitted = true;
   };
   const ownsFeedbackQueue = !Array.isArray(feedbackQueue);
@@ -2263,7 +2277,7 @@ async function applyDamageApplicationsNow(
     if (entry) damageApplications.push(entry);
     if (entry?.amount > 0) batchRequests.push(entry);
   }
-  await commitDamageBarrier();
+  if (!hasPendingHealthOnceBarrier(damageBarrierLedger?.healthOnce)) await commitDamageBarrier();
   for (const entry of damageApplications) {
     if (!entry?.needIncreaseApplication) continue;
     await applyNeedIncrease(actor, entry.needIncreaseApplication);
@@ -2332,7 +2346,7 @@ async function applyDamageApplicationsNow(
       source: batchSource
     }
     : batchRequests.length
-      ? await applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks })
+      ? await applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks, damageBarrierLedger })
       : batchPreBarrierAmount > 0
         || batchBarrierAbsorbed > 0
         || batchMitigationBlocked > 0
@@ -2427,6 +2441,9 @@ async function applyDamageApplicationsNow(
     await publishDamageSummaryMessage(results);
     await notifyDamageApplied(results);
   }
+  } catch (error) {
+    if (hasPendingHealthOnceBarrier(damageBarrierLedger?.healthOnce)) damageBarrierLedger.healthOnce.failed = true;
+    throw error;
   } finally {
     try {
       await commitDamageBarrier();
@@ -2502,13 +2519,9 @@ export function buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey = ""
       const entryKey = isConstructPart ? CONSTRUCT_PART_MITIGATION_LIMB_KEY : limbKey;
       const entry = mitigation.entries?.[entryKey]?.[damageTypeKey]
         ?? (isConstructPart ? mitigation.entries?.[limbKey]?.[damageTypeKey] : null);
-      const baseValue = toInteger(entry?.value);
-      if (!baseValue) continue;
-
-      const weakening = getConditionWeakeningData(sourceItem);
-      const value = baseValue > 0
-        ? Math.floor(baseValue * (weakening.active ? weakening.ratio : 1))
-        : baseValue;
+      // Use the same per-source weakening and protection-effectiveness order
+      // as Actor preparation; prosthetic hits and armor wear use this snapshot.
+      const { value } = prepareEquipmentDamageMitigationValue(sourceItem, actor, entry?.value);
       if (!value) continue;
       if (Object.hasOwn(totals, mode)) totals[mode] += value;
       if (value < 0 || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.condition)) continue;
@@ -2640,7 +2653,7 @@ function prepareDamageBatchEntry(actor, data = {}, {
       : null;
   }
 
-  const barrierApplication = absorbDamageWithBarrier(damageBarrierLedger, {
+  const barrierApplication = absorbActorDamageBarriers(damageBarrierLedger, {
     amount: effectiveAmountBeforeBarrier,
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
     bypassBarrier: data.bypassBarrier
@@ -2692,7 +2705,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
   };
 }
 
-async function applyDirectDamageApplication(actor, data = {}, damageType = null) {
+async function applyDirectDamageApplication(actor, data = {}, damageType = null, { damageBarrierLedger = null } = {}) {
+  const wasDead = isActorDead(actor);
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   const effectiveAmount = Math.max(0, roundDamageAmount(data.amount));
@@ -2831,8 +2845,13 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   if (mode === MODE_HEALING && actualLimbDelta > 0) {
     mergeConsciousnessRecoveryUpdate(updateData, actor, actualLimbDelta);
   }
-  if (Object.keys(updateData).length) {
-    await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  if (Object.keys(updateData).length || hasPendingHealthOnceBarrier(damageBarrierLedger?.healthOnce)) {
+    const updated = await commitHealthOnceBarrier(actor, damageBarrierLedger?.healthOnce, updateData, { falloutMawSkipDamageStatusSync: true });
+    if (!updated) {
+      const error = new Error("Actor damage or healing update was cancelled before it could be saved.");
+      error.code = "damage-actor-update-cancelled";
+      throw error;
+    }
   }
   if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
 
@@ -2878,6 +2897,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     amount: effectiveAmount,
     healthDelta: actualHealthDelta,
     limbDelta: actualLimbDelta,
+    ...buildAbilityDamageOutcome(actor, limbStates, destroyedLimbKeys, [data], wasDead, effectiveAmount, actualHealthDelta),
     mode,
     scope,
     limbKey: data.limbKey,
@@ -3031,7 +3051,7 @@ async function publishFinishingBlowMessage({
   if (!target) return undefined;
   const roundedHealthPercent = Math.max(0, Math.floor(Number(healthPercent) || 0));
   const chanceText = chance > 0
-    ? ` Шанс: ${chance}%, бросок: ${roll}%.`
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0755", { p0: (chance), p1: (roll) }, " Шанс: {p0}%, бросок: {p1}%.")
     : "";
   const context = {
     attacker: {
@@ -3046,11 +3066,11 @@ async function publishFinishingBlowMessage({
       label: getLimbLabel(target, limbKey)
     },
     labels: {
-      kicker: "Добивание",
-      title: "Сработало добивание",
-      attacker: "Атакующий",
-      limb: "Критическая часть",
-      description: `Общее здоровье цели ${roundedHealthPercent}% ниже порога ${threshold}%. Критическая часть уничтожена.${chanceText}`
+      kicker: auditLocalize("FALLOUTMAW.AuditRuntime.R0756", "Добивание"),
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0757", "Сработало добивание"),
+      attacker: auditLocalize("FALLOUTMAW.AuditRuntime.R0758", "Атакующий"),
+      limb: auditLocalize("FALLOUTMAW.AuditRuntime.R0759", "Критическая часть"),
+      description: auditFormat("FALLOUTMAW.AuditRuntime.R0760", { p0: (roundedHealthPercent), p1: (threshold), p2: (chanceText) }, "Общее здоровье цели {p0}% ниже порога {p1}%. Критическая часть уничтожена.{p2}")
     }
   };
   const content = await foundry.applications.handlebars.renderTemplate(TEMPLATES.finishingBlowChatCard, context);
@@ -3246,9 +3266,9 @@ function getTraumaLimbHealingCap(trauma, limbMax = 0) {
 
 export function getDestroyedLimbStateLabel(actor, limbKey = "") {
   if (getConstructPartSlotForLimb(actor, limbKey)) {
-    return getConstructPartItemForLimb(actor, limbKey) ? "Разрушен" : "Отсутствует";
+    return getConstructPartItemForLimb(actor, limbKey) ? auditLocalize("FALLOUTMAW.AuditRuntime.R0761", "Разрушен") : auditLocalize("FALLOUTMAW.AuditRuntime.R0762", "Отсутствует");
   }
-  return "Отсутствует";
+  return auditLocalize("FALLOUTMAW.AuditRuntime.R0762", "Отсутствует");
 }
 
 export async function restoreDestroyedLimb(actor, limbKey = "") {
@@ -3256,8 +3276,8 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
   const constructSlot = getConstructPartSlotForLimb(actor, limbKey);
   if (constructSlot) {
     const message = getConstructPartItemForLimb(actor, limbKey)
-      ? "Детали конструкта восстанавливаются через ремонт самой детали."
-      : "Сначала установите подходящую деталь в пустой слот конструкта.";
+      ? auditLocalize("FALLOUTMAW.AuditRuntime.R0763", "Детали конструкта восстанавливаются через ремонт самой детали.")
+      : auditLocalize("FALLOUTMAW.AuditRuntime.R0764", "Сначала установите подходящую деталь в пустой слот конструкта.");
     ui.notifications?.warn?.(message);
     return undefined;
   }
@@ -4260,7 +4280,7 @@ function prepareLimbLossEffectData(actor, limbKey = "") {
   return {
     type: "base",
     name: `${label}: ${getDestroyedLimbStateLabel(actor, limbKey).toLocaleLowerCase(game.i18n?.lang ?? "ru")}`,
-    img: "icons/svg/blood.svg",
+    img: "systems/fallout-maw/assets/System/Traumas/trauma-default.webp",
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
     statuses,
@@ -4681,7 +4701,7 @@ async function resolveDeferredShockChecks(entries = [], {
   const runChecks = async () => {
     const batch = createSkillCheckBatchCollector({
       requester: "damageShock",
-      title: "Проверки стойкости: шок"
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0765", "Проверки стойкости: шок")
     });
     const outcomes = [];
     try {
@@ -4789,7 +4809,7 @@ function getNegativeLimbShockRequester(actor, shockCheck = {}) {
   const label = limbKeys.length > 1
     ? limbKeys.map(limbKey => getLimbLabel(actor, limbKey)).join(", ")
     : getLimbLabel(actor, limbKeys.at(0) ?? shockCheck.limbKey);
-  return `${label}: шок (${shockCheck.damage})`;
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0766", { p0: (label), p1: (shockCheck.damage) }, "{p0}: шок ({p1})");
 }
 
 export function isActorConsciousnessDepleted(actor) {
@@ -5070,7 +5090,7 @@ async function createPeriodicDamageEffect(actor, {
   const intervalSeconds = Math.max(1, toInteger(settings.intervalSeconds || ROUND_SECONDS));
   const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
   const endTime = startTime + (intervalSeconds * tickCount);
-  const effectName = String(settings.effectName || damageType.label || damageType.key || "Урон").trim();
+  const effectName = String(settings.effectName || damageType.label || damageType.key || auditLocalize("FALLOUTMAW.AuditRuntime.R0030", "Урон")).trim();
   const resolvedSourceIdentity = getPeriodicDamageSourceIdentity(source)
     || String(sourceIdentity ?? "").trim()
     || foundry.utils.randomID();
@@ -5145,8 +5165,8 @@ function buildBleedingDamageEffectData(actor, entries = []) {
   if (!bleedingEntries.some(entry => entry.tickAmounts.some(amount => amount > 0))) return null;
 
   const names = new Set(bleedingEntries.map(entry => entry.effectName).filter(Boolean));
-  const effectName = names.size === 1 ? bleedingEntries[0].effectName : "Кровотечение";
-  const img = bleedingEntries.find(entry => entry.img)?.img || "icons/skills/wounds/blood-drip-droplet-red.webp";
+  const effectName = names.size === 1 ? bleedingEntries[0].effectName : auditLocalize("FALLOUTMAW.AuditRuntime.R0767", "Кровотечение");
+  const img = bleedingEntries.find(entry => entry.img)?.img || "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp";
   const changes = combineBleedingDamageEffectEntries(bleedingEntries).map(entry => {
     const entryTotalTicks = Math.max(0, entry.tickAmounts.length);
     const entryStartTime = Number(entry.startTime) || startTime;
@@ -5241,7 +5261,7 @@ function buildBleedingDamageEffectEntry(actor, { damageType = {}, limbKey = "", 
   if (!tickAmounts.some(amount => amount > 0)) return null;
 
   const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
-  const effectName = String(settings.effectName || "Кровотечение").trim();
+  const effectName = String(settings.effectName || auditLocalize("FALLOUTMAW.AuditRuntime.R0767", "Кровотечение")).trim();
   return {
     sourceDamageTypeKey: damageType?.key ?? "",
     limbKey,
@@ -5249,7 +5269,7 @@ function buildBleedingDamageEffectEntry(actor, { damageType = {}, limbKey = "", 
     tickAmounts,
     startTime,
     effectName,
-    img: String(settings.img || "icons/skills/wounds/blood-drip-droplet-red.webp"),
+    img: String(settings.img || "systems/fallout-maw/assets/System/DamageTypes/effect-bleeding.webp"),
     source
   };
 }
@@ -5281,7 +5301,7 @@ async function createResourceLimitEffect(actor, { damageType = {}, healthDelta =
   const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: String(settings.effectName || damageType.label || "Ограничение ресурсов"),
+    name: String(settings.effectName || damageType.label || auditLocalize("FALLOUTMAW.AuditRuntime.R0768", "Ограничение ресурсов")),
     img: String(settings.img || "icons/svg/frozen.svg"),
     disabled: false,
     tint: settings.color,
@@ -5316,10 +5336,10 @@ async function createFirstAidEffect(actor, request = {}) {
   const tickCount = data.healingPerTick > 0
     ? Math.max(1, Math.ceil(data.durationSeconds / data.intervalSeconds))
     : 0;
-  const effectName = data.itemName || "Первая помощь";
+  const effectName = data.itemName || auditLocalize("FALLOUTMAW.AuditRuntime.R0523", "Первая помощь");
   const description = [
-    data.healingPerTick > 0 ? `Заживление: +${data.healingPerTick}` : "",
-    `Длительность: ${data.durationSeconds} сек.`
+    data.healingPerTick > 0 ? auditFormat("FALLOUTMAW.AuditRuntime.R0769", { p0: (data.healingPerTick) }, "Заживление: +{p0}") : "",
+    auditFormat("FALLOUTMAW.AuditRuntime.R0770", { p0: (data.durationSeconds) }, "Длительность: {p0} сек.")
   ].filter(Boolean).join("<br>");
   const damageEffect = data.healingPerTick > 0
     ? {
@@ -5384,10 +5404,10 @@ async function createFirstAidWithdrawalEffect(actor, request = {}) {
   const tickCount = data.healingPerTick > 0 && data.durationSeconds > 0
     ? Math.max(1, Math.ceil(data.durationSeconds / data.intervalSeconds))
     : 0;
-  const effectName = data.itemName ? `Отдача: ${data.itemName}` : "Отдача";
+  const effectName = data.itemName ? auditFormat("FALLOUTMAW.AuditRuntime.R0771", { p0: (data.itemName) }, "Отдача: {p0}") : auditLocalize("FALLOUTMAW.AuditRuntime.R0772", "Отдача");
   const description = [
-    data.healingPerTick > 0 ? `Заживление: ${data.healingPerTick > 0 ? "+" : ""}${data.healingPerTick}` : "",
-    data.durationSeconds > 0 ? `Длительность: ${data.durationSeconds} сек.` : ""
+    data.healingPerTick > 0 ? auditFormat("FALLOUTMAW.AuditRuntime.R0773", { p0: (data.healingPerTick > 0 ? "+" : ""), p1: (data.healingPerTick) }, "Заживление: {p0}{p1}") : "",
+    data.durationSeconds > 0 ? auditFormat("FALLOUTMAW.AuditRuntime.R0770", { p0: (data.durationSeconds) }, "Длительность: {p0} сек.") : ""
   ].filter(Boolean).join("<br>");
   const damageEffect = data.healingPerTick > 0 && data.durationSeconds > 0
     ? {
@@ -5528,7 +5548,8 @@ function normalizeNeedChangesRequest(request = {}) {
         value: toInteger(entry?.value)
       }))
       .filter(entry => entry.key && entry.value),
-    context: normalizeNeedChangeContext(request.context)
+    context: normalizeNeedChangeContext(request.context),
+    source: normalizeNeedChangeContext(request.source)
   };
 }
 
@@ -5554,6 +5575,7 @@ function normalizeFirstAidRemoveEffectsRequest(request = {}) {
     : Object.keys(request.damageTypeKeys ?? {});
   return {
     actorUuid: String(request.actorUuid ?? "").trim(),
+    source: normalizeNeedChangeContext(request.source),
     limbKeys: Array.from(new Set(limbKeys
       .map(key => String(key ?? "").trim())
       .filter(Boolean))),
@@ -5650,12 +5672,16 @@ async function applyNeedIncrease(actor, { amount = 0, settings = {} } = {}) {
   };
 }
 
-async function handleDamageSocketMessage(payload = {}) {
+async function handleDamageSocketMessage(payload = {}, senderUserId = "") {
   if (!payload) return;
+  if (!senderUserId) return;
+  const sender = game.users?.get?.(senderUserId);
+  if (!sender?.active) return;
   if (payload.action === "applyDamageCycleResult" || payload.action === "damageHubActionResult") {
     if (payload.targetUserId && payload.targetUserId !== game.user?.id) return;
     const pending = pendingDamageSocketRequests.get(payload.requestId);
     if (!pending) return;
+    if (senderUserId !== pending.authorityUserId) return;
     window.clearTimeout(pending.timeout);
     pendingDamageSocketRequests.delete(payload.requestId);
     if (payload.ok) pending.resolve(payload.results ?? payload.result ?? []);
@@ -5663,14 +5689,40 @@ async function handleDamageSocketMessage(payload = {}) {
     return;
   }
   if (payload.action === "showDamageNumbers") {
+    if (payload.senderUserId !== senderUserId) return;
     if (payload.senderUserId === game.user?.id) return;
     displayDamageNumbersForActor(payload.actorUuid, payload.entries);
     return;
   }
   if (payload.action === "showDamageMitigationIcon") {
+    if (payload.senderUserId !== senderUserId) return;
     if (payload.senderUserId === game.user?.id) return;
     displayDamageMitigationIconForActor(payload.actorUuid, payload.display);
     return;
+  }
+  const mutationActions = new Set([
+    "applyDamage", "applyDamageBatch", "applyDamageCycle", "createFirstAidEffect",
+    "createFirstAidWithdrawalEffect", "applyNeedChanges", "applyFirstAidNeedChanges", "applyFirstAidRemoveEffects"
+  ]);
+  if (!mutationActions.has(payload.action)) return;
+  if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+  if (payload.requesterUserId && payload.requesterUserId !== senderUserId) return;
+  payload = { ...payload, requesterUserId: senderUserId };
+  const requests = payload.action === "applyDamageBatch"
+    ? (Array.isArray(payload.requests) ? payload.requests : []).map(request => ({ ...request, actorUuid: payload.actorUuid }))
+    : payload.action === "applyDamageCycle"
+      ? (Array.isArray(payload.requests) ? payload.requests : [])
+      : [payload.request];
+  for (const request of requests) {
+    if (!await isDamageSocketRequestAuthorized(request, sender)) {
+      respondDamageHubSocketAction(payload, { ok: false, error: "The requester does not own the target or source actor." });
+      return;
+    }
+  }
+  if (payload.requests) {
+    payload.requests = requests.map(request => ({ ...request, requesterUserId: senderUserId }));
+  } else if (payload.request) {
+    payload.request = { ...payload.request, requesterUserId: senderUserId };
   }
   if (payload.action === "applyDamageBatch") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
@@ -5789,6 +5841,25 @@ async function handleDamageSocketMessage(payload = {}) {
   await applyDamageApplication(payload.request);
 }
 
+async function isDamageSocketRequestAuthorized(request, sender) {
+  if (sender.isGM) return true;
+  const owns = actor => actor?.testUserPermission?.(sender, "OWNER") === true;
+  try {
+    const target = await fromUuid(String(request?.actorUuid ?? ""));
+    if (owns(target)) return true;
+    const source = request?.source ?? request?.context ?? {};
+    const sourceItemUuid = String(source.itemUuid ?? source.sourceItemUuid ?? "").trim();
+    if (sourceItemUuid) {
+      const item = await fromUuid(sourceItemUuid);
+      if (owns(item?.parent)) return true;
+    }
+    const sourceActorUuid = String(source.sourceActorUuid ?? source.attackerUuid ?? source.actorUuid ?? "").trim();
+    return Boolean(sourceActorUuid && owns(await fromUuid(sourceActorUuid)));
+  } catch (_error) {
+    return false;
+  }
+}
+
 function registerDamageTimeHooks() {
   if (damageTimeHooksRegistered) return;
   timedDamageActorIndex ??= registerWorldTimeActorCandidateIndex(actorHasTimedDamageTimeWork);
@@ -5831,16 +5902,7 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
   const dt = Number(deltaTime) || 0;
   if (!game.user?.isActiveGM || dt <= 0) return;
   if (!await hasTimedDamageWorldTimeWork()) return;
-  return runDamageHubOperation(async () => {
-    const clock = Number(game.time?.worldTime) || 0;
-    let wt = Number(worldTime) || 0;
-    let dtInner = Number(deltaTime) || 0;
-    if (clock > wt) {
-      dtInner += clock - wt;
-      wt = clock;
-    }
-    return processTimedDamageEffectsNow(wt, dtInner);
-  });
+  return runDamageHubOperation(() => processTimedDamageEffectsNow(Number(worldTime) || 0, dt));
 }
 
 async function hasTimedDamageWorldTimeWork() {
@@ -6794,7 +6856,8 @@ function activeEffectMayAffectConsciousness(effect) {
   });
 }
 
-async function applyDamageEntriesBatch(actor, entries = [], { deferredShockChecks = null } = {}) {
+async function applyDamageEntriesBatch(actor, entries = [], { deferredShockChecks = null, damageBarrierLedger = null } = {}) {
+  const wasDead = isActorDead(actor);
   const normalizedEntries = entries
     .map(entry => ({
       ...entry,
@@ -6827,6 +6890,8 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
       && !installedProsthesis
       && !isLimbPhysicallyMissing(actor, entry.limbKey)
     ) destructionCandidates.add(entry.limbKey);
+    const previousOrganicLimbDelta = Array.from(limbStates.values())
+      .reduce((sum, state) => sum + Math.max(0, Number(state.totalDelta) || 0), 0);
     let result;
     let independentHealthDelta = 0;
     if (independentHealthRules && installedProsthesis) {
@@ -6893,7 +6958,10 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     if (installedProsthesis) prosthesisConditionDelta += Math.max(0, Number(result.limbDelta) || 0);
     actualHealthDelta += entryHealthDelta;
     entry.actualHealthDelta = Math.max(0, Number(entryHealthDelta) || 0);
-    entry.actualLimbDelta = Math.max(0, Number(result.limbDelta) || 0);
+    // Legacy organic calculators return the running limb-state total, while
+    // prostheses and the independent-health model return this impact's delta.
+    entry.actualLimbDelta = Math.max(0, (Number(result.limbDelta) || 0)
+      - (!independentHealthRules && !installedProsthesis ? previousOrganicLimbDelta : 0));
     if (result.shockCheck) shockChecks.push(scaleShockCheckDifficulty(result.shockCheck, entry.source));
   }
 
@@ -6911,8 +6979,13 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
 
-  if (Object.keys(updateData).length) {
-    await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  if (Object.keys(updateData).length || hasPendingHealthOnceBarrier(damageBarrierLedger?.healthOnce)) {
+    const updated = await commitHealthOnceBarrier(actor, damageBarrierLedger?.healthOnce, updateData, { falloutMawSkipDamageStatusSync: true });
+    if (!updated) {
+      const error = new Error("Actor damage batch update was cancelled before it could be saved.");
+      error.code = "damage-actor-update-cancelled";
+      throw error;
+    }
   }
   if (actor?.type === "construct" && limbStates.size) {
     await syncConstructPartConditionValues(actor, limbStates);
@@ -6929,20 +7002,15 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
   }
   await queueActorDamageStatusSync(actor);
   const healthEntries = normalizedEntries;
-  const requestedHealthDamage = healthEntries.reduce((sum, entry) => sum + entry.amount, 0);
-  const healthDeltasByType = buildBatchDamageNumberEntries(healthEntries, actualHealthDelta, requestedHealthDamage);
+  const healthDeltasByType = buildBatchDamageNumberEntries(healthEntries);
   const resourceLimitEntries = buildBatchDamageNumberEntries(
-    healthEntries.filter(entry => entry.processDamageTypeSettings !== false),
-    actualHealthDelta,
-    requestedHealthDamage
+    healthEntries.filter(entry => entry.processDamageTypeSettings !== false)
   );
   const bleedingEntries = buildBatchBleedingEntries(
     healthEntries.filter(entry => (
       entry.processDamageTypeSettings !== false
       && !isLimbTimedDamageBlocked(actor, entry.limbKey, entry.damageType, "bleeding")
-    )),
-    actualHealthDelta,
-    requestedHealthDamage
+    ))
   );
   const createdTraumas = [];
   const traumaPlans = [];
@@ -6983,6 +7051,8 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     healthDelta: actualHealthDelta,
     limbDelta: totalLimbDelta,
     limbDeltas: buildBatchLimbDeltaEntries(actor, limbStates),
+    ...buildAbilityDamageOutcome(actor, limbStates, destroyedLimbKeys, normalizedEntries, wasDead,
+      normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0), actualHealthDelta),
     mode: MODE_DAMAGE,
     scope: SCOPE_HEALTH_AND_LIMB,
     healthDeltasByType,
@@ -7079,36 +7149,21 @@ function combineDamageEffectSources(left = {}, right = {}) {
   return { combined: true, combinedSources: sources };
 }
 
-function buildBatchDamageNumberEntries(entries = [], actualHealthDelta = 0, requestedHealthDamage = 0) {
-  if (!actualHealthDelta || !requestedHealthDamage) return [];
-  const healthRatio = actualHealthDelta / requestedHealthDamage;
+function buildBatchDamageNumberEntries(entries = []) {
   const grouped = new Map();
   for (const entry of entries) {
+    const amount = Math.max(0, roundDamageAmount(entry.actualHealthDelta));
+    if (!amount) continue;
     const key = entry.damageTypeKey || "untyped";
     const current = grouped.get(key) ?? {
       damageTypeKey: key,
-      exact: 0,
+      amount: 0,
       source: entry.source && typeof entry.source === "object" ? entry.source : {}
     };
-    current.exact += entry.amount * healthRatio;
+    current.amount += amount;
     grouped.set(key, current);
   }
-  const rows = Array.from(grouped.values())
-    .map(row => ({
-      ...row,
-      amount: Math.floor(row.exact),
-      fraction: row.exact - Math.floor(row.exact)
-    }))
-    .filter(row => row.exact > 0);
-  let remaining = actualHealthDelta - rows.reduce((sum, row) => sum + row.amount, 0);
-  for (const row of rows.sort((left, right) => right.fraction - left.fraction)) {
-    if (remaining <= 0) break;
-    row.amount += 1;
-    remaining -= 1;
-  }
-  return rows
-    .filter(row => row.amount > 0)
-    .map(({ damageTypeKey, amount, source }) => ({ damageTypeKey, amount, source }));
+  return Array.from(grouped.values());
 }
 
 function buildBatchSourceDamageEntries(entries = []) {
@@ -7120,46 +7175,15 @@ function buildBatchSourceDamageEntries(entries = []) {
     .filter(entry => entry.damage > 0);
 }
 
-function buildBatchBleedingEntries(entries = [], actualHealthDelta = 0, requestedHealthDamage = 0) {
-  if (!actualHealthDelta || !requestedHealthDamage) return [];
-  const healthRatio = actualHealthDelta / requestedHealthDamage;
-  const rows = entries
-    .map((entry, index) => {
-      const exact = entry.amount * healthRatio;
-      return {
-        index,
-        entry,
-        exact,
-        healthDelta: Math.floor(exact),
-        fraction: exact - Math.floor(exact)
-      };
-    })
-    .filter(row => row.exact > 0);
-  let remaining = actualHealthDelta - rows.reduce((sum, row) => sum + row.healthDelta, 0);
-  for (const row of rows.sort((left, right) => right.fraction - left.fraction)) {
-    if (remaining <= 0) break;
-    row.healthDelta += 1;
-    remaining -= 1;
-  }
-  return rows
-    .sort((left, right) => left.index - right.index)
-    .map(row => ({
-      damageType: row.entry.damageType,
-      limbKey: row.entry.limbKey,
-      scope: row.entry.scope,
-      healthDelta: row.healthDelta,
-      source: row.entry.source && typeof row.entry.source === "object" ? row.entry.source : {},
-      worldTime: getDamageApplicationWorldTime(row.entry.source)
-    }))
-    .filter(entry => entry.healthDelta > 0)
-    .map(entry => ({
-      damageType: entry.damageType,
-      limbKey: entry.limbKey,
-      scope: entry.scope,
-      healthDelta: entry.healthDelta,
-      source: entry.source && typeof entry.source === "object" ? entry.source : {},
-      worldTime: getDamageApplicationWorldTime(entry.source)
-    }));
+function buildBatchBleedingEntries(entries = []) {
+  return entries.map(entry => ({
+    damageType: entry.damageType,
+    limbKey: entry.limbKey,
+    scope: entry.scope,
+    healthDelta: Math.max(0, roundDamageAmount(entry.actualHealthDelta)),
+    source: entry.source && typeof entry.source === "object" ? entry.source : {},
+    worldTime: getDamageApplicationWorldTime(entry.source)
+  })).filter(entry => entry.healthDelta > 0);
 }
 
 function buildBatchLimbDeltaEntries(actor, limbStates = new Map()) {
@@ -7305,13 +7329,13 @@ function buildDamageSummaryViewContext(results = []) {
     totalBarrierAbsorbed: rows.reduce((sum, victim) => sum + victim.barrierAbsorbed, 0),
     victims: rows,
     labels: {
-      kicker: "Итог цикла",
-      title: "Сводка урона",
-      totalDamage: "Урон",
-      barrierAbsorbed: "Поглощено барьером",
-      limbs: "Поврежденные конечности",
-      noLimbDamage: "Конечности не повреждены",
-      traumas: "Полученные травмы"
+      kicker: auditLocalize("FALLOUTMAW.AuditRuntime.R0774", "Итог цикла"),
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R0775", "Сводка урона"),
+      totalDamage: auditLocalize("FALLOUTMAW.AuditRuntime.R0030", "Урон"),
+      barrierAbsorbed: auditLocalize("FALLOUTMAW.AuditRuntime.R0776", "Поглощено барьером"),
+      limbs: auditLocalize("FALLOUTMAW.AuditRuntime.R0777", "Поврежденные конечности"),
+      noLimbDamage: auditLocalize("FALLOUTMAW.AuditRuntime.R0778", "Конечности не повреждены"),
+      traumas: auditLocalize("FALLOUTMAW.AuditRuntime.R0779", "Полученные травмы")
     }
   };
 }
@@ -7363,7 +7387,7 @@ function addDamageSummaryTrauma(victim, trauma) {
   victim.traumas.set(key, {
     key,
     name: String(trauma?.name ?? game.i18n.localize("DOCUMENT.Item")),
-    img: String(trauma?.img ?? "icons/svg/blood.svg"),
+    img: String(trauma?.img ?? "systems/fallout-maw/assets/System/Traumas/trauma-default.webp"),
     summary: buildDamageSummaryTraumaSummary(trauma)
   });
 }
@@ -7404,7 +7428,7 @@ function getDamageSummaryTraumaSourceText(source = {}) {
 function getActorDamageSummaryImage(actor) {
   const token = (globalThis.canvas?.tokens?.placeables ?? [])
     .find(placeable => placeable.actor?.uuid === actor.uuid && isTokenVisibleToCurrentUser(placeable));
-  return String(token?.document?.texture?.src ?? actor.img ?? "icons/svg/mystery-man.svg");
+  return String(token?.document?.texture?.src ?? actor.img ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp");
 }
 
 function getLimbLabel(actor, limbKey = "") {
@@ -9109,11 +9133,46 @@ function normalizeDamageRequest(request = {}) {
 }
 
 function createActorDamageBarrierLedger(actor) {
-  return createDamageBarrierLedger(actor, {
+  const ledger = createDamageBarrierLedger(actor, {
     evaluateChange: (targetActor, change) => evaluateActorEffectChangeBaseNumber(targetActor, change, {
       fallback: 0
     })
   });
+  ledger.healthOnce = createHealthOnceBarrierState(actor);
+  return ledger;
+}
+
+function buildAbilityDamageOutcome(actor, limbStates, destroyedKeys, entries, wasDead, amount, healthDelta) {
+  const destroyedLimbDamage = [];
+  for (const limbKey of destroyedKeys) {
+    const state = limbStates.get(limbKey);
+    if (!state || state.previousValue <= state.min) continue;
+    const applied = entries.filter(entry => entry.limbKey === limbKey && entry.mode !== MODE_HEALING
+      && (entry.actualLimbDelta === undefined || entry.actualLimbDelta > 0));
+    const last = applied.at(-1);
+    const incoming = applied.reduce((sum, entry) => sum + Math.max(0, Number(entry.amount) || 0), 0);
+    destroyedLimbDamage.push({ limbKey, max: Math.max(0, Number(actor.system?.limbs?.[limbKey]?.max) || 0),
+      excess: Math.max(0, incoming - (state.previousValue - state.min)),
+      critical: last?.source?.criticalSuccess === true || last?.source?.criticalDamageUsed === true });
+  }
+  const killedByDamage = !wasDead && (isActorHealthDepleted(actor) || hasDestroyedCriticalLimb(actor));
+  return { destroyedLimbDamage, killedByDamage,
+    overkillDamage: killedByDamage ? Math.max(0, amount - healthDelta, ...destroyedLimbDamage.map(row => row.excess)) : 0 };
+}
+
+function absorbActorDamageBarriers(ledger, options) {
+  const primary = absorbHealthOnceBarrier(ledger?.healthOnce, options);
+  const result = absorbDamageWithBarrier(ledger, { ...options, amount: primary.remaining });
+  return { ...result, incoming: Math.max(0, roundDamageAmount(options.amount)),
+    absorbed: primary.absorbed + result.absorbed, healthOnceAbsorbed: primary.absorbed };
+}
+
+async function commitActorDamageBarrierLedger(actor, ledger) {
+  // A veto of the combined health/limb write must not later spend either
+  // barrier from the outer finally block.
+  if (ledger?.healthOnce?.failed) return;
+  await commitHealthOnceBarrier(actor, ledger?.healthOnce, {}, { falloutMawSkipDamageStatusSync: true });
+  await commitDamageBarrierLedger(actor, ledger);
 }
 
 function replaceDamageAccumulation(value = {}) {
@@ -9770,7 +9829,7 @@ async function applyResistanceOverheat(actor, increments = new Map()) {
   if (existing[0]) {
     const updates = [{
       _id: existing[0].id,
-      name: RESISTANCE_OVERHEAT_EFFECT_NAME,
+      name: RESISTANCE_OVERHEAT_EFFECT_NAME(),
       img: RESISTANCE_OVERHEAT_EFFECT_IMG,
       disabled: false,
       showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -9787,7 +9846,7 @@ async function applyResistanceOverheat(actor, increments = new Map()) {
 
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: RESISTANCE_OVERHEAT_EFFECT_NAME,
+    name: RESISTANCE_OVERHEAT_EFFECT_NAME(),
     img: RESISTANCE_OVERHEAT_EFFECT_IMG,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -10449,7 +10508,7 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
   const thresholdValue = Math.floor((toInteger(limb.max) * thresholdPercent) / 100);
   const limbLabel = String(limb.label ?? limbKey);
   const name = profileEntry.profile.name || `${limbLabel}: ${damageType?.label ?? profileEntry.damageTypeKey}`;
-  const img = profileEntry.profile.img || "icons/svg/blood.svg";
+  const img = profileEntry.profile.img || "systems/fallout-maw/assets/System/Traumas/trauma-default.webp";
   const effectEntries = mergeMatchingTraumaEffectChanges(
     (profileEntry.profile.effects ?? [])
       .map(prepareEffectChange)

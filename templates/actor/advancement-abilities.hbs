@@ -1,8 +1,8 @@
 <div class="fallout-maw-config-body fallout-maw-advancement-body fallout-maw-advancement-body-abilities">
   <section class="fallout-maw-advancement-talents">
     <div class="fallout-maw-advancement-talents-row fallout-maw-advancement-available-abilities">
-      <div class="fallout-maw-advancement-talents-header">Доступные способности</div>
-      <input type="text" class="fallout-maw-advancement-talent-search-input" data-ability-search placeholder="Поиск способностей...">
+      <div class="fallout-maw-advancement-talents-header">{{localize 'FALLOUTMAW.AuditTemplates.Textaa656e7262c4'}}</div>
+      <input type="text" class="fallout-maw-advancement-talent-search-input" data-ability-search placeholder="{{localize 'FALLOUTMAW.AuditTemplates.Texte6ce51978818'}}">
 
       <div class="fallout-maw-advancement-talents-list">
         {{#each abilityCategories}}
@@ -25,10 +25,10 @@
             >
               <img class="fallout-maw-advancement-talent-icon" src="{{img}}" alt="">
               <span class="fallout-maw-advancement-talent-name">{{name}}</span>
-              {{#if hasEvolution}}<i class="fa-solid fa-code-branch fallout-maw-advancement-evolution-mark{{#if evolutionExhausted}} complete{{/if}}" title="{{#if evolutionExhausted}}Завершено{{else}}Есть ветка эволюции{{/if}}"></i>{{/if}}
+              {{#if hasEvolution}}<i class="fa-solid fa-code-branch fallout-maw-advancement-evolution-mark{{#if evolutionExhausted}} complete{{/if}}" title="{{#if evolutionExhausted}}{{localize 'FALLOUTMAW.Research.Completed'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Textaa7fbb9c6202'}}{{/if}}"></i>{{/if}}
             </button>
             {{else}}
-            <p class="fallout-maw-empty-list fallout-maw-advancement-talent-empty">В каталоге нет способностей.</p>
+            <p class="fallout-maw-empty-list fallout-maw-advancement-talent-empty">{{localize 'FALLOUTMAW.AuditTemplates.Textfcc290119d12'}}</p>
             {{/each}}
           </div>
         </div>

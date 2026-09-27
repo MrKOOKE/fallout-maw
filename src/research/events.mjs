@@ -47,6 +47,7 @@ export async function commitResearchEvent({
     }
   }, async scope => {
     const result = await operation(createResearchDocumentOptions(scope.chainRef, eventOptions.documentOptions));
+    if (!result) return result;
     const payload = buildResearchEventPayload({
       actorUuid,
       beforeResearch,

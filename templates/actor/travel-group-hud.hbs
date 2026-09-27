@@ -9,7 +9,7 @@
         <article class="fallout-maw-travel-hud-member {{#if missing}}missing{{/if}}">
           <header><img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../fallbackIcon}}'"><strong>{{name}}</strong></header>
           {{#if missing}}
-          <p>Актёр недоступен</p>
+          <p>{{localize 'FALLOUTMAW.AuditTemplates.Text9c96788d8d49'}}</p>
           {{else}}
           <div class="fallout-maw-travel-hud-member-meters">
             {{#each meters}}
@@ -22,13 +22,13 @@
           {{/if}}
         </article>
         {{else}}
-        <div class="fallout-maw-travel-hud-empty">Нет участников</div>
+        <div class="fallout-maw-travel-hud-empty">{{localize 'FALLOUTMAW.AuditTemplates.Text46be4db6ec9b'}}</div>
         {{/each}}
       </div>
     </div>
     {{/if}}
     <button type="button" class="fallout-maw-travel-hud-toggle {{#if open}}active{{/if}}" data-action="toggleGroup" data-group-id="{{id}}" aria-expanded="{{open}}">
-      <i class="fa-solid fa-chart-simple"></i><span>Показатели группы</span><i class="fa-solid fa-caret-up"></i>
+      <i class="fa-solid fa-chart-simple"></i><span>{{localize 'FALLOUTMAW.AuditTemplates.Text9913527a70b4'}}</span><i class="fa-solid fa-caret-up"></i>
     </button>
     <div class="fallout-maw-travel-hud-group-card">
       <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
@@ -39,12 +39,12 @@
     </div>
   </section>
   {{else}}
-  <div class="fallout-maw-travel-hud-empty">В группе нет участников</div>
+  <div class="fallout-maw-travel-hud-empty">{{localize 'FALLOUTMAW.AuditTemplates.Text05935cfbd285'}}</div>
   {{/each}}
 
-  <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-travel-hud-movement" data-action="toggleMovement" title="Скорость группы: {{groupSpeedLabel}}">
-    <img src="icons/svg/walk.svg" alt="Перемещение">
-    <span>Перемещение</span>
+  <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-travel-hud-movement" data-action="toggleMovement" title="{{localize 'FALLOUTMAW.AuditTemplates.Textdfae7de2b69c'}} {{groupSpeedLabel}}">
+    <img src="systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp" alt="{{localize 'FALLOUTMAW.AuditTemplates.Text3c79fb960320'}}">
+    <span>{{localize 'FALLOUTMAW.AuditTemplates.Text3c79fb960320'}}</span>
     <strong>{{groupSpeedLabel}}</strong>
   </button>
 </div>

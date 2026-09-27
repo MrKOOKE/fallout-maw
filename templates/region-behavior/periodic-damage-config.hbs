@@ -8,8 +8,8 @@
   </fieldset>
 
   <fieldset>
-    <legend>Получатели</legend>
-    <p class="hint">Отношение определяется фракциями источника области. Выбор применяется ко всем воздействиям области: эффектам, урону и особым свойствам вроде дыма. Для прикреплённой области источником считается актёр токена-носителя.</p>
+    <legend>{{localize 'FALLOUTMAW.AuditTemplates.Text4a0ea6b2e5ec'}}</legend>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text3c8b0f783d15'}}</p>
     <div class="fallout-maw-list-grid three-columns">
       {{#each targetRelationChoices}}
       <label>
@@ -19,35 +19,35 @@
       {{/each}}
     </div>
     <label>
-      <span>UUID актёра-источника (необязательно)</span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text278097f2c042'}}</span>
       <input type="text" name="system.sourceActorUuid" value="{{system.sourceActorUuid}}">
     </label>
   </fieldset>
 
   <fieldset>
-    <legend>Эффект внутри области</legend>
+    <legend>{{localize 'FALLOUTMAW.AuditTemplates.Text188cf9ca088c'}}</legend>
     <div class="fallout-maw-list-grid two-columns">
-      <label><span>Название эффекта</span><input type="text" name="system.effectName" value="{{system.effectName}}"></label>
-      <label><span>Изображение эффекта</span><input type="text" name="system.effectImg" value="{{system.effectImg}}"></label>
+      <label><span>{{localize 'FALLOUTMAW.Effects.Name'}}</span><input type="text" name="system.effectName" value="{{system.effectName}}"></label>
+      <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Textcb72800fd14b'}}</span><input type="text" name="system.effectImg" value="{{system.effectImg}}"></label>
     </div>
     <div class="fallout-maw-panel-header">
-      <h3>Изменения</h3>
-      <button type="button" data-action="addEffectChange"><i class="fa-solid fa-plus"></i> Добавить изменение</button>
+      <h3>{{localize 'FALLOUTMAW.Effects.Changes'}}</h3>
+      <button type="button" data-action="addEffectChange"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Effects.AddChange'}}</button>
     </div>
     <div class="fallout-maw-settings-table fallout-maw-region-effect-change-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span>
+        <span>{{localize 'FALLOUTMAW.Common.Key'}}</span><span>{{localize 'FALLOUTMAW.Common.Type'}}</span><span>{{localize 'FALLOUTMAW.Common.Value'}}</span><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb5b6ddbf62af'}}</span><span></span>
       </div>
       <div class="fallout-maw-region-effect-change-list">
         {{#each effectChanges}}
         <div class="fallout-maw-settings-row fallout-maw-region-effect-change-row" data-effect-change-index="{{index}}">
           <input type="text" name="system.effectChanges.{{index}}.key" value="{{key}}" data-effect-key-autocomplete>
           <select name="system.effectChanges.{{index}}.type">
-            <option value="add" {{#if (eq type "add")}}selected{{/if}}>Сложение</option>
-            <option value="multiply" {{#if (eq type "multiply")}}selected{{/if}}>Умножение</option>
-            <option value="override" {{#if (eq type "override")}}selected{{/if}}>Замена</option>
-            <option value="upgrade" {{#if (eq type "upgrade")}}selected{{/if}}>Повышение</option>
-            <option value="downgrade" {{#if (eq type "downgrade")}}selected{{/if}}>Понижение</option>
+            <option value="add" {{#if (eq type "add")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text9e0ea67036c5'}}</option>
+            <option value="multiply" {{#if (eq type "multiply")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text3af34d36d709'}}</option>
+            <option value="override" {{#if (eq type "override")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Textcd207be3c612'}}</option>
+            <option value="upgrade" {{#if (eq type "upgrade")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text032dd07c53b3'}}</option>
+            <option value="downgrade" {{#if (eq type "downgrade")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Textae3590f8bc26'}}</option>
           </select>
           <input type="text" name="system.effectChanges.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
           <input type="hidden" name="system.effectChanges.{{index}}.phase" value="{{phase}}">
@@ -55,7 +55,7 @@
           <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteEffectChange" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         </div>
         {{else}}
-        <p class="fallout-maw-empty-list">Изменения не настроены.</p>
+        <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textb0ef7ca71971'}}</p>
         {{/each}}
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { absorbLiberationOverload } from "./liberation-state.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { ENERGY_RESOURCE_KEY } from "../combat/energy-resource.mjs";
 import { getAbilitySourceId } from "../settings/abilities.mjs";
@@ -18,8 +20,8 @@ const LEGACY_ABILITY_OVERLOAD_REACTION_COST_ID = "ability-overload-energy";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 
 export function getAbilityOverloadName(item = null) {
-  const name = String(item?.name ?? "").trim() || "Способность";
-  return `Перегрузка: ${name}`;
+  const name = String(item?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0002", "Способность");
+  return auditFormat("FALLOUTMAW.AuditRuntime.R0490", { p0: (name) }, "Перегрузка: {p0}");
 }
 
 export function getAbilityOverloadReactionCostId(resourceKey = ENERGY_RESOURCE_KEY) {
@@ -135,7 +137,7 @@ export function withAbilityOverloadEnergyCostRows(actor, abilityItem, abilityFun
 }
 
 export async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-  name = "Перегрузка",
+  name = auditLocalize("FALLOUTMAW.AuditRuntime.R0491", "Перегрузка"),
   energyCost = 0,
   cost = null,
   resourceKey = ENERGY_RESOURCE_KEY,
@@ -147,12 +149,13 @@ export async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunc
   const seconds = Math.max(0, toInteger(durationSeconds));
   const resolvedResourceKey = String(resourceKey ?? "").trim() || ENERGY_RESOURCE_KEY;
   if (amount <= 0 || seconds <= 0) return false;
+  if (await absorbLiberationOverload(actor, amount)) return true;
   const startTime = Number(game.time?.worldTime) || 0;
   const effectKey = getAbilityOverloadCostEffectKey(resolvedResourceKey);
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name,
-    img: abilityItem?.img || "icons/svg/aura.svg",
+    img: abilityItem?.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: getAbilityEffectOriginUuid(actor, abilityItem),
     transfer: false,
     disabled: false,

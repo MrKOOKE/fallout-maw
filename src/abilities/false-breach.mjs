@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
 import {
@@ -13,7 +14,7 @@ export const FALSE_BREACH_ATTACK_OBSERVER_ID = "fallout-maw.fixed.falseBreach.at
 
 const ATTACK_EVENT_KEY = "fallout-maw.weapon.attack.resolved";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
-const DEFAULT_ICON = "icons/svg/target.svg";
+const DEFAULT_ICON = "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp";
 const DAMAGE_PERCENT_EFFECT_KEY = "system.combat.damagePercent";
 const activationMutationQueues = new Map();
 const markMutationQueues = new Map();
@@ -74,7 +75,7 @@ export function buildFalseBreachEffectData({
     type: "base",
     name: abilityName,
     img: abilityItem?.img || DEFAULT_ICON,
-    description: `Уклонение +${normalized.dodgeBonus}; показываемый противнику шанс не учитывает уклонение.`,
+    description: auditFormat("FALLOUTMAW.AuditRuntime.R0065", { p0: (normalized.dodgeBonus) }, "Уклонение +{p0}; показываемый противнику шанс не учитывает уклонение."),
     origin: String(abilityItem?.uuid ?? ""),
     transfer: false,
     disabled: false,
@@ -145,7 +146,7 @@ export function getFalseBreachEffectData(effect = null) {
     abilitySourceId: String(raw.abilitySourceId ?? ""),
     functionId: String(raw.functionId),
     fixedKey: String(raw.fixedKey ?? "falseBreach"),
-    abilityName: String(raw.abilityName ?? effect?.name ?? "Ложная брешь"),
+    abilityName: String(raw.abilityName ?? effect?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0066", "Ложная брешь")),
     abilityImg: String(raw.abilityImg ?? effect?.img ?? ""),
     createdAt: finiteNumber(raw.createdAt, 0),
     expiresAt: finiteNumber(raw.expiresAt, 0),
@@ -242,9 +243,9 @@ async function applyOrRefreshFalseBreachMark(markedActor, sourceEffect) {
       && data.functionId === source.functionId;
   });
   const effectData = {
-    name: `${source.abilityName}: Метка`,
+    name: auditFormat("FALLOUTMAW.AuditRuntime.R0067", { p0: (source.abilityName) }, "{p0}: Метка"),
     img: source.abilityImg || sourceEffect?.img || DEFAULT_ICON,
-    description: `Входящий урон +${settings.incomingDamagePercent}%; преимущество атак против отмеченного +${settings.attackAdvantage}.`,
+    description: auditFormat("FALLOUTMAW.AuditRuntime.R0068", { p0: (settings.incomingDamagePercent), p1: (settings.attackAdvantage) }, "Входящий урон +{p0}%; преимущество атак против отмеченного +{p1}."),
     origin: source.abilityItemUuid,
     transfer: false,
     disabled: false,
@@ -303,7 +304,7 @@ function isLiveTemporaryEffect(effect, data) {
 }
 
 function getAbilityName(abilityItem) {
-  return String(abilityItem?.name ?? "").trim() || "Ложная брешь";
+  return String(abilityItem?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0066", "Ложная брешь");
 }
 
 function getWorldTime() {

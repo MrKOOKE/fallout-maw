@@ -1107,6 +1107,7 @@ export function findFirstAvailableInventoryPlacement(
 export function createInventoryPlacementPlanner(
   contextItems, columns, rows, allItems = contextItems, reservedPlacements = [], options = {}
 ) {
+  if (toInteger(columns) <= 0 || toInteger(rows) <= 0) return null;
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
   const resolved = resolveInventoryGridPlacements(
@@ -1165,6 +1166,7 @@ export function findFirstAvailableResolvedInventoryPlacement(
   reservedPlacements = [],
   options = {}
 ) {
+  if (toInteger(columns) <= 0 || toInteger(rows) <= 0) return null;
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
 
@@ -1229,6 +1231,12 @@ function buildInventorySpanLengthStyle(span) {
 }
 
 export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem, options = {}) {
+  if (toInteger(columns) <= 0 || toInteger(rows) <= 0) {
+    return {
+      columns: 0, rows: 0, baseColumns: 0, baseRows: 0, style: "",
+      hasZones: false, zones: [], hasPhantomItems: false, cells: [], items: []
+    };
+  }
   const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options);
   const reservedPlacements = resolved.placements;
   const placedItems = [];
@@ -1457,6 +1465,7 @@ function isInventoryManagedItem(itemOrSystem = null) {
 }
 
 function validateContextPlacements(contextItems, columns, rows, allItems, options = {}) {
+  if (toInteger(columns) <= 0 || toInteger(rows) <= 0) return getItemsArray(contextItems).length === 0;
   if (validateStoredContextPlacements(contextItems, columns, rows, allItems, options)) return true;
   if (!options.allowResolvedValidationFallback) return false;
   const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options);
@@ -1630,6 +1639,7 @@ function hasContainerCycleInMap(itemId, parentId, itemMap) {
 }
 
 function validateStoredContextPlacements(contextItems, columns, rows, allItems, options = {}) {
+  if (toInteger(columns) <= 0 || toInteger(rows) <= 0) return getItemsArray(contextItems).length === 0;
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
 

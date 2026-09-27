@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "./i18n.mjs";
 import { isSameContentsZone, transferOwnedInventoryContents } from "../inventory/contents-transfer.mjs";
 import { sortInventoryContents } from "../inventory/contents-sort.mjs";
 import { InventorySortMenu } from "./inventory-sort-menu.mjs";
@@ -66,8 +67,8 @@ export class InventoryTransferMode {
           button.dataset.tooltipIgnore = "";
           button.className = "fallout-maw-contents-transfer-button";
           button.textContent = "⇄";
-          button.title = "Перенести содержимое: выберите место ЛКМ; ПКМ — отмена";
-          button.setAttribute("aria-label", "Перенести содержимое");
+          button.title = auditLocalize("FALLOUTMAW.AuditRuntime.R1302", "Перенести содержимое: выберите место ЛКМ; ПКМ — отмена");
+          button.setAttribute("aria-label", auditLocalize("FALLOUTMAW.AuditRuntime.R1303", "Перенести содержимое"));
           title.append(button);
         }
         zone.button = button;
@@ -167,9 +168,9 @@ function onClick(event) {
     batch: view.renderBatch, application: view.options.application,
     before: view.options.beforeTransfer, after: view.options.afterTransfer
   })), () => (source.view.options.transfer ?? transferOwnedInventoryContents)({ source, target: zone })).then(result => {
-    if (result.failed) ui.notifications.warn(`Перенесено стопок: ${result.moved}. Осталось на месте: ${result.failed}.${result.errors.length ? ` ${result.errors[0]}` : ""}`);
-    else if (!result.moved) ui.notifications.info("Нечего переносить.");
-  }).catch(error => ui.notifications.error(error.message || "Не удалось перенести содержимое."))
+    if (result.failed) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1304", { p0: (result.moved), p1: (result.failed), p2: (result.errors.length ? ` ${result.errors[0]}` : "") }, "Перенесено стопок: {p0}. Осталось на месте: {p1}.{p2}"));
+    else if (!result.moved) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R1305", "Нечего переносить."));
+  }).catch(error => ui.notifications.error(error.message || auditLocalize("FALLOUTMAW.AuditRuntime.R1306", "Не удалось перенести содержимое.")))
     .finally(() => { inProgress = false; refresh(); });
 }
 
@@ -182,8 +183,8 @@ async function sortZone(zone, mode) {
       batch: view.renderBatch, application: view.options.application,
       before: view.options.beforeTransfer, after: view.options.afterTransfer
     })), () => sortInventoryContents({ actor: zone.actor, parentId: zone.parentId, mode }));
-    if (!result.sorted) ui.notifications.info("Нечего сортировать.");
+    if (!result.sorted) ui.notifications.info(auditLocalize("FALLOUTMAW.AuditRuntime.R1307", "Нечего сортировать."));
   } catch (error) {
-    ui.notifications.warn(error.message || "Не удалось отсортировать содержимое.");
+    ui.notifications.warn(error.message || auditLocalize("FALLOUTMAW.AuditRuntime.R1308", "Не удалось отсортировать содержимое."));
   } finally { inProgress = false; refresh(); }
 }

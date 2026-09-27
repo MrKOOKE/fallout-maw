@@ -1,47 +1,47 @@
 <section class="tab standard-form scrollable {{tabs.basic.cssClass}}"
          data-tab="basic" data-group="{{tabs.basic.group}}">
     <fieldset>
-        <legend>Сеть</legend>
+        <legend>{{localize 'FALLOUTMAW.AuditTemplates.Textb3c4b1be5672'}}</legend>
         <div class="form-group">
-            <label>Имя сети</label>
+            <label>{{localize 'FALLOUTMAW.AuditTemplates.Textf1ab6fcccf23'}}</label>
             <div class="form-fields">
-                <input type="text" name="network.name" value="{{network.name}}" placeholder="Без названия">
+                <input type="text" name="network.name" value="{{network.name}}" placeholder="{{localize 'FALLOUTMAW.Common.Untitled'}}">
             </div>
-            <p class="hint">Пустое имя создаёт индивидуальную сеть только для этого источника. Одинаковое имя объединяет источники в одну сеть.</p>
+            <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textd0fb51c1dfeb'}}</p>
         </div>
         <div class="form-group fallout-maw-light-network-place-action-row">
-            <label>Источник взаимодействия</label>
+            <label>{{localize 'FALLOUTMAW.AuditTemplates.Textebd033d613a9'}}</label>
             <div class="form-fields">
                 <button type="button" data-action="placeNetworkInteraction">
                     <i class="fa-solid fa-location-crosshairs"></i>
-                    Установить
+                    {{localize 'FALLOUTMAW.TrapPlacement.Place'}}
                 </button>
             </div>
-            <p class="hint">Окно закроется, затем выберите место на сцене. По умолчанию двойной клик сразу переключает сеть.</p>
+            <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textfefb237691d6'}}</p>
         </div>
         <div class="form-group">
-            <label>Открывать меню по двойному клику</label>
+            <label>{{localize 'FALLOUTMAW.AuditTemplates.Text3f03e827ef10'}}</label>
             <div class="form-fields">
                 <input type="checkbox" name="network.interactionOpenMenu" {{checked network.interactionOpenMenu}}>
             </div>
-            <p class="hint">Включите, если вместо быстрого переключения нужно открывать прежнее полное окно сети.</p>
+            <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text4e31158f695b'}}</p>
         </div>
         <div class="form-group fallout-maw-light-network-placement-row">
-            <label>Изображение при включении</label>
+            <label>{{localize 'FALLOUTMAW.AuditTemplates.Text1d49ebe21c30'}}</label>
             <div class="form-fields">
                 <file-picker type="image" name="network.interactionImage" value="{{network.interactionImage}}"></file-picker>
             </div>
-            <p class="hint">Эта картинка отображается у источника взаимодействия, пока сеть включена.</p>
+            <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text2bb32c7a9375'}}</p>
         </div>
         <div class="form-group fallout-maw-light-network-placement-row">
-            <label>Изображение при выключении</label>
+            <label>{{localize 'FALLOUTMAW.AuditTemplates.Text0439fe9f89d5'}}</label>
             <div class="form-fields">
                 <file-picker type="image" name="network.interactionOffImage" value="{{network.interactionOffImage}}"></file-picker>
             </div>
-            <p class="hint">При переключении сети плитка автоматически меняет изображение. Если оставить то же изображение, внешний вид не меняется.</p>
+            <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textdff282a2b1e6'}}</p>
         </div>
         <div class="form-group fallout-maw-light-network-scale-row">
-            <label>Множитель размера</label>
+            <label>{{localize 'FALLOUTMAW.AuditTemplates.Text2636531a1408'}}</label>
             <div class="form-fields">
                 <input type="number" name="network.interactionScale" value="{{network.interactionScale}}" min="0" step="0.05">
             </div>

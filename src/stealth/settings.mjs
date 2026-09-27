@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 export const DEFAULT_STEALTH_SETTINGS = Object.freeze({
   difficulty: Object.freeze({
     skillKey: "naturalist"
@@ -19,11 +20,11 @@ export const DEFAULT_STEALTH_SETTINGS = Object.freeze({
     Object.freeze({ threshold: 0.2, penaltyPercent: 20 })
   ]),
   difficultyLevels: Object.freeze([
-    Object.freeze({ label: "Темно", threshold: 1, difficultyBonus: 0 }),
-    Object.freeze({ label: "Тускло", threshold: 0.75, difficultyBonus: 20 }),
-    Object.freeze({ label: "Светло", threshold: 0.5, difficultyBonus: 40 }),
-    Object.freeze({ label: "Яркий свет", threshold: 0.2, difficultyBonus: 80 }),
-    Object.freeze({ label: "Очень яркий свет", threshold: 0, difficultyBonus: 120 })
+    Object.freeze({ get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1200", "Темно"); }, threshold: 1, difficultyBonus: 0 }),
+    Object.freeze({ get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1201", "Тускло"); }, threshold: 0.75, difficultyBonus: 20 }),
+    Object.freeze({ get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1202", "Светло"); }, threshold: 0.5, difficultyBonus: 40 }),
+    Object.freeze({ get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1203", "Яркий свет"); }, threshold: 0.2, difficultyBonus: 80 }),
+    Object.freeze({ get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1204", "Очень яркий свет"); }, threshold: 0, difficultyBonus: 120 })
   ]),
   autoDetection: Object.freeze({
     enabled: true,
@@ -99,7 +100,7 @@ function normalizeThresholdRows(value = [], defaults = [], key = "", min = -Infi
       if (preserveLabel) {
         const fallback = defaults.find(candidate => Number(candidate.threshold) === threshold)?.label
           ?? defaults[index]?.label
-          ?? `Степень ${index + 1}`;
+          ?? auditFormat("FALLOUTMAW.AuditRuntime.R0057", { p0: (index + 1) }, "Степень {p0}");
         normalized.label = String(entry?.label ?? fallback).trim() || fallback;
       }
       return normalized;

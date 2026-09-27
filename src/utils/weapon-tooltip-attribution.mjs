@@ -22,7 +22,7 @@ import {
   getWeaponModuleSlotItemData
 } from "./weapon-modules.mjs";
 
-const FALLBACK_ICON = "icons/svg/d20-grey.svg";
+const FALLBACK_ICON = "systems/fallout-maw/assets/System/Skills/skill-default.webp";
 const ACTION_COST_EFFECT_KEYS = Object.freeze({
   aimedShot: "system.costs.actions.aimedShot",
   snapshot: "system.costs.actions.snapshot",

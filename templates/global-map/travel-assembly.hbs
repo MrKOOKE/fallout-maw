@@ -1,6 +1,6 @@
 <div class="fallout-maw-global-map-form fallout-maw-travel-assembly-body">
   {{#if missing}}
-  <p class="notification warning">Сбор группы больше не существует.</p>
+  <p class="notification warning">{{localize 'FALLOUTMAW.AuditTemplates.Text55d3f8a1a869'}}</p>
   {{else}}
   <div class="fallout-maw-travel-layout">
     <div class="fallout-maw-travel-vehicles">
@@ -12,7 +12,7 @@
         </header>
 
         <div class="fallout-maw-travel-vehicle-content">
-          <h2>Пассажирские места</h2>
+          <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textd24d43c042ef'}}</h2>
           {{#each seatGroups}}
           <div class="fallout-maw-travel-seat-group">
             <h3>{{name}}</h3>
@@ -49,12 +49,12 @@
         </div>
       </section>
       {{else}}
-      <section class="fallout-maw-travel-empty-panel">В сборе нет транспорта.</section>
+      <section class="fallout-maw-travel-empty-panel">{{localize 'FALLOUTMAW.AuditTemplates.Text6fc23641d2e7'}}</section>
       {{/each}}
     </div>
 
     <aside class="fallout-maw-travel-roster" data-travel-drop data-drop-kind="roster">
-      <h2>Участники</h2>
+      <h2>{{localize 'FALLOUTMAW.Events.Reaction.Roles'}}</h2>
       <div class="fallout-maw-travel-member-list">
         {{#each members}}
         <section
@@ -72,14 +72,14 @@
               data-action="toggleReady"
               data-member-id="{{id}}"
               class="fallout-maw-travel-ready-button {{#if ready}}ready{{/if}}"
-              title="{{#if ready}}Готовность подтверждена{{else}}Подтвердить готовность{{/if}}"
-              aria-label="{{#if ready}}Готовность подтверждена{{else}}Подтвердить готовность{{/if}}"
+              title="{{#if ready}}{{localize 'FALLOUTMAW.AuditTemplates.Texta339b08895b5'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text965b4319f3f5'}}{{/if}}"
+              aria-label="{{#if ready}}{{localize 'FALLOUTMAW.AuditTemplates.Texta339b08895b5'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Text965b4319f3f5'}}{{/if}}"
             >
               <i class="fa-solid {{#if ready}}fa-xmark{{else}}fa-check{{/if}}"></i>
             </button>
             {{/if}}
             {{#if canRemove}}
-            <button type="button" data-action="removeMember" data-member-id="{{id}}" class="danger" title="Исключить участника">
+            <button type="button" data-action="removeMember" data-member-id="{{id}}" class="danger" title="{{localize 'FALLOUTMAW.AuditTemplates.Textde37aa82fa32'}}">
               <i class="fa-solid fa-user-minus"></i>
             </button>
             {{/if}}
@@ -95,7 +95,7 @@
         {{#unless readyToDepart}}disabled{{/unless}}
       >
         <i class="fa-solid fa-route"></i>
-        <span>Отправиться</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textc87b329924c7'}}</span>
       </button>
       {{/if}}
     </aside>

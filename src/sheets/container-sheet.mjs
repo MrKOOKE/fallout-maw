@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
 import { InventoryTransferMode } from "../utils/inventory-transfer-mode.mjs";
@@ -100,6 +101,9 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #quickDisassemblyHandler = null;
   #canQuickDisassembleItem = null;
   #searchTransferId = "";
+  #searchContextIsActive = null;
+  #registerSearchContainerSheet = null;
+  #unregisterSearchContainerSheet = null;
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-container-sheet", "sheet", "item"],
@@ -128,9 +132,14 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       quickDisassemblyHandler = null,
       canQuickDisassembleItem = null,
       contentsTransferOptions = null,
+      searchContextIsActive = null,
+      registerSearchContainerSheet = null,
       ...sheetOptions
     } = options;
     super(sheetOptions);
+    this.#searchContextIsActive = typeof searchContextIsActive === "function" ? searchContextIsActive : null;
+    this.#registerSearchContainerSheet = typeof registerSearchContainerSheet === "function" ? registerSearchContainerSheet : null;
+    this.#unregisterSearchContainerSheet = this.#registerSearchContainerSheet?.(this) ?? null;
     this.#contentsTransferOptions = contentsTransferOptions;
     this.#quickDisassemblyHandler = typeof quickDisassemblyHandler === "function" ? quickDisassemblyHandler : null;
     this.#canQuickDisassembleItem = typeof canQuickDisassembleItem === "function" ? canQuickDisassembleItem : null;
@@ -200,6 +209,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   render(...args) {
+    if (this.#searchContextIsActive?.() === false) return Promise.resolve(this);
     if (this.#contentsTransfer.renderBatch.defer(args)) return Promise.resolve(this);
     return super.render(...args);
   }
@@ -246,6 +256,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     this.#contentsTransfer.destroy();
     if (this.actor) delete this.actor.apps[this.id];
     if (this.#searchTransferId) activeSearchContainerTransfers.delete(this.#searchTransferId);
+    this.#unregisterSearchContainerSheet?.();
+    this.#unregisterSearchContainerSheet = null;
     this.#unbindForegroundPriority();
     this.#draggedItemData = null;
     this.#draggedItemId = "";
@@ -254,14 +266,17 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   _canDragStart() {
+    if (this.#searchContextIsActive?.() === false) return false;
     return Boolean(this.#searchTransferHandler) || super._canDragStart();
   }
 
   _canDragDrop() {
+    if (this.#searchContextIsActive?.() === false) return false;
     return Boolean(this.#searchTransferHandler) || super._canDragDrop();
   }
 
   async #onItemClick(event) {
+    if (this.#searchContextIsActive?.() === false) return;
     if (event.button !== 0 || !event.shiftKey || !this.#searchTransferHandler) return;
     const itemElement = event.currentTarget?.closest?.("[data-item-id]");
     const item = this.actor?.items?.get(String(itemElement?.dataset?.itemId ?? ""));
@@ -561,6 +576,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   async _onDragStart(event) {
+    if (this.#searchContextIsActive?.() === false) return;
     const itemId = event.currentTarget?.dataset?.itemId ?? "";
     const item = this.actor?.items?.get(itemId);
     if (!item) return;
@@ -604,6 +620,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   async _onDrop(event) {
+    if (this.#searchContextIsActive?.() === false) return null;
     const data = this.#getDragEventData(event);
     this.#draggedItemData = null;
     this.#draggedItemId = "";
@@ -1412,6 +1429,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   async #onItemContextMenu(event) {
+    if (this.#searchContextIsActive?.() === false) return;
     event.preventDefault();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
     if (!item) return;
@@ -1430,7 +1448,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const canDisassemble = this.#searchTransferHandler ? Boolean(this.#quickDisassemblyHandler) : this.actor?.isOwner;
     if (canDisassemble && (!this.#canQuickDisassembleItem || this.#canQuickDisassembleItem(this.actor, item))
       && (await getQuickDisassemblyItems(this.actor, skillActor)).some(entry => entry.id === item.id)) {
-      menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", "Разобрать"]);
+      menuOptions.push(["quick-disassemble", "fa-screwdriver-wrench", auditLocalize("FALLOUTMAW.AuditApps.Dismantle", "Разобрать")]);
     }
     if (game.user?.isGM) {
       menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
@@ -1442,10 +1460,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       menuOptions.push(["suitableModules", "fa-puzzle-piece", game.i18n.localize("FALLOUTMAW.Item.SuitableModules")]);
     }
     if (getItemInteractionState(this.actor, item).hasInteraction) {
-      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+      menuOptions.push(["interact", "fa-hand-pointer", auditLocalize("FALLOUTMAW.AuditApps.Interaction", "Взаимодействие")]);
     }
     if (canUseActiveItem(item)) {
-      menuOptions.push(["use", "fa-play", "Применить"]);
+      menuOptions.push(["use", "fa-play", auditLocalize("FALLOUTMAW.Common.Apply", "Применить")]);
     }
     const canRotate = canShowInventoryRotateAction(item);
     const rotationResolution = canRotate ? this.#resolveInventoryRotation(item) : null;
@@ -1453,7 +1471,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
     }
     if (selectedQuantity > 1) {
-      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+      menuOptions.push(["split", "fa-code-branch", auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить")]);
     }
     if (game.user?.isGM) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
@@ -1467,6 +1485,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     document.body.append(menu);
 
     menu.addEventListener("click", async clickEvent => {
+      if (this.#searchContextIsActive?.() === false) { menu.remove(); return; }
       const action = clickEvent.target.closest("button")?.dataset.action;
       if (!action) return;
       clickEvent.preventDefault();
@@ -1477,6 +1496,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         const app = new FalloutMaWContainerSheet({
           document: item,
           evaluatingActorUuid: this.options?.evaluatingActorUuid ?? "",
+          searchContextIsActive: this.#searchContextIsActive,
+          registerSearchContainerSheet: this.#registerSearchContainerSheet,
           contentsTransferOptions: this.#contentsTransferOptions,
           quickDisassemblyHandler: this.#quickDisassemblyHandler,
           canQuickDisassembleItem: this.#canQuickDisassembleItem,
@@ -1567,8 +1588,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (quantity <= 1) return null;
     const amount = await promptItemStackQuantity({
       item,
-      title: "Разделить предмет",
-      actionLabel: "Разделить",
+      title: auditLocalize("FALLOUTMAW.AuditApps.SplitItem", "Разделить предмет"),
+      actionLabel: auditLocalize("FALLOUTMAW.AuditApps.Split", "Разделить"),
       max: quantity - 1,
       value: Math.max(1, Math.floor(quantity / 2))
     });
@@ -1669,7 +1690,7 @@ function normalizeStackComparableValue(value) {
   return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
 }
 
-async function promptItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
+async function promptItemStackQuantity({ item, title = auditLocalize("FALLOUTMAW.SkillCheck.Count", "Количество"), actionLabel = auditLocalize("FALLOUTMAW.AuditApps.OK", "Ок"), max = 1, value = 1 } = {}) {
   const limit = Math.max(1, toInteger(max));
   const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
   const formData = await DialogV2.input({

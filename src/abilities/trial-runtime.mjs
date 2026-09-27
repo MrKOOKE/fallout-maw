@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import {
   ABILITY_CONDITION_TYPES,
   ABILITY_CONSTRUCT_TYPES,
@@ -79,7 +80,7 @@ export async function executeAbilityTrials({
       animate: false,
       createMessage: true,
       requester: "abilityTrial",
-      title: title || sourceEffect?.name || "Испытание",
+      title: title || sourceEffect?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0539", "Испытание"),
       options: {
         operationId: `ability-trial:${String(sourceEffect?.id ?? sourceItemUuid)}:${trial.id}:${trialRunId}`
       },
@@ -323,7 +324,7 @@ async function applyPrimaryChangeLink({
           String(link?.id ?? "")
         ].join(":"),
         type: ABILITY_CONSTRUCT_TYPES.temporaryEffect,
-        name: title || sourceEffect?.name || "Испытание",
+        name: title || sourceEffect?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0539", "Испытание"),
         durationSeconds,
         changes
       },
@@ -480,8 +481,8 @@ async function applyTemporaryConstruct({
       : null;
     const data = {
       type: "base",
-      name: construct.name || title || sourceEffect?.name || "Испытание",
-      img: sourceEffect?.img || "icons/svg/aura.svg",
+      name: construct.name || title || sourceEffect?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0539", "Испытание"),
+      img: sourceEffect?.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
       origin: sourceEffect?.origin || sourceItemUuid,
       transfer: false,
       disabled: false,

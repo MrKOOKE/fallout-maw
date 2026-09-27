@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { createDefaultSkillSettings, normalizeSkillSettings } from "../formulas/index.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -192,6 +193,13 @@ export const ABILITY_TREATMENT_CLASS_ITEM_TYPES = Object.freeze(["trauma", "dise
 export const ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY = "abilityFixedFunctionState";
 
 export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
+  onslaught: "onslaught",
+  liberation: "liberation",
+  secondWind: "secondWind",
+  equipmentLimit: "equipmentLimit",
+  watcher: "watcher",
+  bloodbath: "bloodbath",
+  unexpectedImpulse: "unexpectedImpulse",
   deusExMachina: "deusExMachina",
   curseAndBlessing: "curseAndBlessing",
   allOrNothing: "allOrNothing",
@@ -539,13 +547,13 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
     categories: [
       createAbilityCategory({
         id: LOCKED_FEATURES_CATEGORY_ID,
-        name: "Особенности",
+        name: auditLocalize("FALLOUTMAW.AuditSystem.Text008", "Особенности"),
         locked: true,
         abilities: []
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
-        name: "Общая категория"
+        name: auditLocalize("FALLOUTMAW.AuditSystem.Text009", "Общая категория")
       }),
       ...skills.map(skill => createAbilityCategory({
         id: `skill-${skill.key}`,
@@ -558,10 +566,10 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
 export function createTwoHandsAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-two-hands",
-    name: "С двух рук",
-    img: "icons/svg/combat.svg",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text010", "С двух рук"),
+    img: "systems/fallout-maw/assets/System/TokenActionHud/hud-weapon-and-natural-attack.webp",
     visible: true,
-    description: "<p>Переключаемая функция: парный залп двух активных оружий в текущем наборе. Каждый залп расходует 10 энергии, а стоимость ОД берется по самому дорогому выбранному действию.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text011", "<p>Переключаемая функция: парная атака двумя разными оружиями из двух отдельных слотов текущего набора, независимо от оружейного навыка. Каждая парная атака расходует 10 энергии, а стоимость ОД берется по самому дорогому выбранному действию.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -592,10 +600,10 @@ export function createTwoHandsAbilityCatalogEntry() {
 export function createCommandBasicsAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-command-basics",
-    name: "Основы командования",
-    img: "icons/svg/upgrade.svg",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text012", "Основы командования"),
+    img: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     visible: true,
-    description: "<p>Активная способность: за 30 энергии отдаёт одну из трёх команд союзникам или членам одной фракции. «Цельсь, пли» заставляет до 2 + Речь / 50 союзников выполнить неприцельный выстрел; «Коли» - неприцельную атаку; «Ложись» даёт +10 + Речь / 10 к уклонению на 12 секунд. Перегрузка: +100 энергии на 12 секунд.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text013", "<p>Активная способность: за 30 энергии отдаёт одну из трёх команд союзникам или членам одной фракции. «Цельсь, пли» заставляет до 2 + Речь / 50 союзников выполнить неприцельный выстрел; «Коли» - неприцельную атаку; «Ложись» даёт +10 + Речь / 10 к уклонению на 12 секунд. Перегрузка: +100 энергии на 12 секунд.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -624,10 +632,10 @@ export function createCommandBasicsAbilityCatalogEntry() {
 export function createKnockOffBalanceAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-knock-off-balance",
-    name: "Выбить из колеи",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text014", "Выбить из колеи"),
     img: "icons/svg/daze.svg",
     visible: true,
-    description: "<p>Стоимость активации: 20 энергии. Перегрузка: 20 энергии на 12 секунд.</p><p>После активации можно выбрать до [[2+speech/50]] целей с интеллектом выше 0, затем до [[1+speech/100]] навыков. Цели проходят проверку Науки со сложностью [[50+speech]]. При провале на 12 секунд получают двойную помеху к выбранным навыкам.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text015", "<p>Стоимость активации: 20 энергии. Перегрузка: 20 энергии на 12 секунд.</p><p>После активации можно выбрать до [[2+speech/50]] целей с интеллектом выше 0, затем до [[1+speech/100]] навыков. Цели проходят проверку Науки со сложностью [[50+speech]]. При провале на 12 секунд получают двойную помеху к выбранным навыкам.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -661,7 +669,7 @@ export function normalizeAbilityCatalog(value = {}, skillSettings = createDefaul
   const normalized = hasFeatures ? categories : [
     createAbilityCategory({
       id: LOCKED_FEATURES_CATEGORY_ID,
-      name: "Особенности",
+      name: auditLocalize("FALLOUTMAW.AuditSystem.Text008", "Особенности"),
       locked: true
     }),
     ...categories
@@ -673,7 +681,7 @@ export function normalizeAbilityCatalog(value = {}, skillSettings = createDefaul
 
   return {
     categories: normalized.map(category => category.id === LOCKED_FEATURES_CATEGORY_ID
-      ? { ...category, name: "Особенности", locked: true }
+      ? { ...category, name: auditLocalize("FALLOUTMAW.AuditSystem.Text008", "Особенности"), locked: true }
       : { ...category, locked: false })
   };
 }
@@ -688,8 +696,8 @@ export function normalizeAbilityEntry(value = {}, index = 0, {
   const system = value?.system ?? {};
   return {
     id,
-    name: String(value?.name ?? "").trim() || `Новая способность ${index + 1}`,
-    img: String(value?.img ?? "").trim() || "icons/svg/aura.svg",
+    name: String(value?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditSystem.Text016", { v0: index + 1 }, "Новая способность {v0}"),
+    img: String(value?.img ?? "").trim() || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     visible: value?.visible !== false,
     evolutionSummary: String(value?.evolutionSummary ?? system.evolutionSummary ?? "").trim(),
     description: String(value?.description ?? system.description ?? "").trim(),
@@ -1030,7 +1038,7 @@ function normalizeAbilityTrialLink(value = {}) {
 
 export function normalizeAbilityTrialBranch(value = {}, {
   fallbackId = "",
-  fallbackName = "Ветка испытания"
+  fallbackName = auditLocalize("FALLOUTMAW.AuditSystem.Text017", "Ветка испытания")
 } = {}) {
   const links = Array.isArray(value?.links)
     ? value.links
@@ -1052,7 +1060,7 @@ export function normalizeAbilityTrialBranch(value = {}, {
 
 export function createAbilityTrialBranch({
   id = "",
-  name = "Ветка испытания",
+  name = auditLocalize("FALLOUTMAW.AuditSystem.Text017", "Ветка испытания"),
   resultKeys = [],
   flow = ABILITY_TRIAL_BRANCH_FLOWS.continue,
   links = []
@@ -1162,7 +1170,7 @@ export function prepareAbilityItemData(ability = {}, {
   return {
     name: normalized.name,
     type: "ability",
-    img: normalized.img || "icons/svg/aura.svg",
+    img: normalized.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     system: {
       description: normalized.description,
       category: normalized.system.category,
@@ -1206,7 +1214,7 @@ export function getAbilitySourceCategoryId(item) {
 function createAbilityCategory({ id = "", name = "", locked = false, abilities = [] } = {}, { abilityIds = null } = {}) {
   return {
     id: String(id || foundry.utils.randomID()),
-    name: String(name || "Новая категория"),
+    name: String(name || auditLocalize("FALLOUTMAW.AuditSystem.Text018", "Новая категория")),
     locked: Boolean(locked),
     abilities: (Array.isArray(abilities) ? abilities : [])
       .map((ability, index) => normalizeAbilityEntry(ability, index, { abilityIds }))
@@ -1216,7 +1224,7 @@ function createAbilityCategory({ id = "", name = "", locked = false, abilities =
 function normalizeAbilityCategory(value = {}, index = 0, { abilityIds = null } = {}) {
   return createAbilityCategory({
     id: String(value?.id ?? "").trim() || `category-${index + 1}`,
-    name: String(value?.name ?? "").trim() || `Категория ${index + 1}`,
+    name: String(value?.name ?? "").trim() || auditFormat("FALLOUTMAW.AuditSystem.Text019", { v0: index + 1 }, "Категория {v0}"),
     locked: Boolean(value?.locked),
     abilities: value?.abilities
   }, { abilityIds });
@@ -2142,7 +2150,7 @@ export function normalizeAbilityCondition(value = {}) {
       trialBranches = rawBranches.map((branch, branchIndex) => {
         const normalized = normalizeAbilityTrialBranch(branch, {
           fallbackId: `${id}-branch-${branchIndex + 1}`,
-          fallbackName: `Ветка ${branchIndex + 1}`
+          fallbackName: auditFormat("FALLOUTMAW.AuditSystem.Text020", { v0: branchIndex + 1 }, "Ветка {v0}")
         });
         normalized.resultKeys = normalized.resultKeys.filter(resultKey => {
           if (claimedResultKeys.has(resultKey)) return false;
@@ -2159,17 +2167,17 @@ export function normalizeAbilityCondition(value = {}) {
         .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
       trialBranches = [normalizeAbilityTrialBranch({
         id: `${id}-legacy-branch`,
-        name: "Подходящий результат",
+        name: auditLocalize("FALLOUTMAW.AuditSystem.Text021", "Подходящий результат"),
         resultKeys: resultKeys.length ? resultKeys : ["criticalFailure", "failure"],
         flow: ABILITY_TRIAL_BRANCH_FLOWS.continue,
         links
       })];
     } else {
       const labels = {
-        criticalFailure: "Критический провал",
-        failure: "Провал",
-        success: "Успех",
-        criticalSuccess: "Критический успех"
+        criticalFailure: auditLocalize("FALLOUTMAW.AuditSystem.Text022", "Критический провал"),
+        failure: auditLocalize("FALLOUTMAW.AuditSystem.Text023", "Провал"),
+        success: auditLocalize("FALLOUTMAW.AuditSystem.Text024", "Успех"),
+        criticalSuccess: auditLocalize("FALLOUTMAW.AuditSystem.Text025", "Критический успех")
       };
       trialBranches = ABILITY_TRIAL_RESULT_KEYS.map(resultKey => normalizeAbilityTrialBranch({
         id: `${id}-${resultKey}`,
@@ -2496,8 +2504,17 @@ export function normalizeReactiveSettings(value = {}) {
   };
 }
 
+export function normalizeBloodbathSettings(value = {}) {
+  return {
+    explosionAnimationKey: String(value?.explosionAnimationKey ?? "fallout-maw.generic.explosion.explosion_03_regular_red").trim()
+  };
+}
+
 function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   const normalizedKey = normalizeFixedFunctionKey(fixedKey);
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.bloodbath) {
+    return normalizeBloodbathSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     return normalizeDeusExMachinaSettings(value);
   }
@@ -2989,6 +3006,9 @@ export function normalizeDeusExMachinaSettings(value = {}) {
 
 export function normalizeCurseAndBlessingSettings(value = {}) {
   return {
+    passive: value.passive === true,
+    requireHit: value.requireHit !== false,
+    maxStacks: Math.max(1, toInteger(value.maxStacks ?? 1)),
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
     triggerFormula: String(value?.triggerFormula ?? "30+gambling/10").trim() || "30+gambling/10",
     durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 12))
@@ -2997,6 +3017,8 @@ export function normalizeCurseAndBlessingSettings(value = {}) {
 
 export function normalizeAllOrNothingSettings(value = {}) {
   return {
+    failureResult: value.failureResult === "normal" ? "normal" : "criticalFailure",
+    burstFirstOnly: value.burstFirstOnly === true,
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 1800)),
@@ -3008,6 +3030,7 @@ export function normalizeAllOrNothingSettings(value = {}) {
 
 export function normalizeReaperSettings(value = {}) {
   return {
+    stealLuck: value.stealLuck === true,
     killChanceFormula: String(value?.killChanceFormula ?? "50+gambling/10").trim() || "50+gambling/10",
     attackChanceFormula: String(value?.attackChanceFormula ?? "10+gambling/15").trim() || "10+gambling/15"
   };
@@ -3022,14 +3045,18 @@ export function normalizeGrapplingMasterSettings(value = {}) {
 
 export function normalizeFourLeafCloverSettings(value = {}) {
   return {
+    successCharges: Math.max(0, toInteger(value.successCharges ?? 1)),
+    keepChanceFormula: String(value.keepChanceFormula ?? "0"),
+    halfChanceFormula: String(value.halfChanceFormula ?? "0"),
     currentCharges: Math.max(0, toInteger(value?.currentCharges ?? 0)),
     failureCharges: Math.max(0, toInteger(value?.failureCharges ?? 1)),
-    criticalFailureCharges: Math.max(0, toInteger(value?.criticalFailureCharges ?? 3))
+    criticalFailureCharges: Math.max(0, toInteger(value?.criticalFailureCharges ?? 5))
   };
 }
 
 export function normalizeAtRandomSettings(value = {}) {
   return {
+    duplicateOnUnblocked: value.duplicateOnUnblocked === true,
     actionPointCostReduction: Math.max(0, toInteger(value?.actionPointCostReduction ?? 1)),
     blockChanceFormula: String(value?.blockChanceFormula ?? "110-gambling/5").trim() || "110-gambling/5",
     extraBlockChanceFormula: String(value?.extraBlockChanceFormula ?? "60+gambling/5").trim() || "60+gambling/5"
@@ -3038,15 +3065,17 @@ export function normalizeAtRandomSettings(value = {}) {
 
 export function normalizeLastChanceSettings(value = {}) {
   return {
-    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    resetChanceFormula: String(value.resetChanceFormula ?? "50+gambling/10"),
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
     chanceFormula: String(value?.chanceFormula ?? "70+gambling/10").trim() || "70+gambling/10",
-    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 50)),
-    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200))
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 14400))
   };
 }
 
 export function normalizeLuckyCoinSettings(value = {}) {
   return {
+    checkCount: Math.max(1, toInteger(value.checkCount ?? 1)),
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
     chanceFormula: String(value?.chanceFormula ?? "50+gambling/10").trim() || "50+gambling/10",
     successBonusFormula: String(value?.successBonusFormula ?? "10+gambling/5").trim() || "10+gambling/5",
@@ -3127,10 +3156,10 @@ export function normalizeKeepAwaySettings(value = {}) {
 export function createOversightAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-oversight",
-    name: "Надзор",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text026", "Надзор"),
     img: "icons/svg/eye.svg",
     visible: true,
-    description: "<p>Активная боевая способность: цель проверяет Скрытность против 50 + Натуралист. При провале получает метку и снижение восстановления уклонения; каждые потраченные 5 ОП/ОД/ОР открывают реакционную атаку.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text027", "<p>Активная боевая способность: цель проверяет Скрытность против 50 + Натуралист. При провале получает метку и снижение восстановления уклонения; каждые потраченные 5 ОП/ОД/ОР открывают реакционную атаку.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -3150,10 +3179,10 @@ export function createOversightAbilityCatalogEntry() {
 export function createWatchOutAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-watch-out",
-    name: "Берегись!",
-    img: "icons/svg/shield.svg",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text028", "Берегись!"),
+    img: "systems/fallout-maw/assets/System/TokenActionHud/hud-dodge-conversion.webp",
     visible: true,
-    description: "<p>Реакция на атаку по другому союзнику: если вы видите атакующего и цель, повышает сложность всех проверок попадания текущей атаки на 10 + Натуралист / 10. Активация способности настраивает минимальный исходный шанс попадания.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text029", "<p>Реакция на атаку по другому союзнику: если вы видите атакующего и цель, повышает сложность всех проверок попадания текущей атаки на 10 + Натуралист / 10. Активация способности настраивает минимальный исходный шанс попадания.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -3173,10 +3202,10 @@ export function createWatchOutAbilityCatalogEntry() {
 export function createDangerSenseAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-danger-sense",
-    name: "Чутье",
-    img: "icons/svg/aura.svg",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text030", "Чутье"),
+    img: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     visible: true,
-    description: "<p>Пассивная способность: при провале обнаружения ловушки или скрытого противника владелец получает предупреждение, что рядом есть опасность.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text031", "<p>Пассивная способность: при провале обнаружения ловушки или скрытого противника владелец получает предупреждение, что рядом есть опасность.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -3196,10 +3225,10 @@ export function createDangerSenseAbilityCatalogEntry() {
 export function createFullControlAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-full-control",
-    name: "Полный контроль",
-    img: "icons/svg/upgrade.svg",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text032", "Полный контроль"),
+    img: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     visible: true,
-    description: "<p>Активная способность: на 24 часа перераспределяет характеристики в максимум энергии и обратно. Общий лимит изменений зависит от Контроля энергии.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text033", "<p>Активная способность: на 24 часа перераспределяет характеристики в максимум энергии и обратно. Общий лимит изменений зависит от Контроля энергии.</p>"),
     system: {
       cost: 0,
       formula: "",
@@ -3219,10 +3248,10 @@ export function createFullControlAbilityCatalogEntry() {
 export function createHeightenedConcentrationAbilityCatalogEntry() {
   return normalizeAbilityEntry({
     id: "fixed-heightened-concentration",
-    name: "Повышенная концентрация",
-    img: "icons/svg/aura.svg",
+    name: auditLocalize("FALLOUTMAW.AuditSystem.Text034", "Повышенная концентрация"),
+    img: "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     visible: true,
-    description: "<p>Активная способность: за 20 энергии следующие 3 проверки Натуралиста получают преимущество. Перегрузка: +40 энергии на 1 час.</p>",
+    description: auditLocalize("FALLOUTMAW.AuditSystem.Text035", "<p>Активная способность: за 20 энергии следующие 3 проверки Натуралиста получают преимущество. Перегрузка: +40 энергии на 1 час.</p>"),
     system: {
       cost: 0,
       formula: "",

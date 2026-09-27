@@ -218,7 +218,7 @@ async function createTimedTriggerEffect(actor, sourceItem, abilityFunction, {
   const effectData = {
     type: "base",
     name: String(sourceItem?.name ?? ""),
-    img: String(sourceItem?.img ?? "icons/svg/aura.svg"),
+    img: String(sourceItem?.img ?? "systems/fallout-maw/assets/System/Abilities/ability-default.webp"),
     origin: getAbilityEffectOriginUuid(actor, sourceItem),
     transfer: false,
     disabled: false,

@@ -1,13 +1,14 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 const CLASS_RANKS = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 /** Shared by the display list and the authoritative candidate filter. */
 export function getHackingCandidateBlockReason({
   attemptsRemaining, toolClass, requiredClass, resourceConfigured = true, supplyValue, toolCost
 }) {
-  if (attemptsRemaining <= 0) return "Попытки метода исчерпаны";
-  if ((CLASS_RANKS[toolClass] ?? 0) < (CLASS_RANKS[requiredClass] ?? 0)) return `Нужен класс ${requiredClass} или выше`;
-  if (!resourceConfigured) return "Ресурс инструмента не настроен";
-  if (supplyValue < toolCost) return `Недостаточно ресурса: нужно ${toolCost}, есть ${supplyValue}`;
+  if (attemptsRemaining <= 0) return auditLocalize("FALLOUTMAW.AuditApps.NoAttemptsLeftForThisMethod", "Попытки метода исчерпаны");
+  if ((CLASS_RANKS[toolClass] ?? 0) < (CLASS_RANKS[requiredClass] ?? 0)) return auditFormat("FALLOUTMAW.AuditApps.ClassOrHigherRequired", { v0: (requiredClass) }, "Нужен класс {v0} или выше");
+  if (!resourceConfigured) return auditLocalize("FALLOUTMAW.AuditApps.ToolResourceIsNotConfigured", "Ресурс инструмента не настроен");
+  if (supplyValue < toolCost) return auditFormat("FALLOUTMAW.AuditApps.NotEnoughResourcesNeedHave", { v0: (toolCost), v1: (supplyValue) }, "Недостаточно ресурса: нужно {v0}, есть {v1}");
   return "";
 }
 
@@ -25,18 +26,18 @@ export function buildHackingDialogState({
   const methodCards = methods.map(method => {
     const tools = candidates.filter(candidate => candidate.methodId === method.id);
     const availableCount = tools.filter(tool => !tool.blockReason).length;
-    const blockReason = method.attemptsRemaining <= 0 ? "Попытки исчерпаны"
-      : availableCount ? "" : tools[0]?.blockReason || "Нет подходящих инструментов";
+    const blockReason = method.attemptsRemaining <= 0 ? auditLocalize("FALLOUTMAW.AuditApps.NoAttemptsLeft", "Попытки исчерпаны")
+      : availableCount ? "" : tools[0]?.blockReason || auditLocalize("FALLOUTMAW.AuditApps.NoSuitableTools", "Нет подходящих инструментов");
     return { ...method, selected: method.id === selectedMethod?.id, availableCount, blockReason };
   });
   const selectedCard = methodCards.find(method => method.selected);
-  const blockReason = !targetAvailable ? "Объект больше недоступен"
-    : unlocked ? "Замок уже вскрыт"
-      : !isOwner ? "Нет прав на управление персонажем"
-        : !hasSkill ? "У персонажа нет выбранного для взлома навыка"
-          : !hasGM ? "Для взлома нужен активный ведущий"
-            : !methods.length ? "Для объекта не настроены методы взлома"
-              : selectedCard?.blockReason || (!selectedTool ? "Выберите доступный инструмент" : "");
+  const blockReason = !targetAvailable ? auditLocalize("FALLOUTMAW.AuditApps.TheObjectIsNoLongerAvailable", "Объект больше недоступен")
+    : unlocked ? auditLocalize("FALLOUTMAW.AuditApps.TheLockIsAlreadyOpen", "Замок уже вскрыт")
+      : !isOwner ? auditLocalize("FALLOUTMAW.AuditApps.YouDoNotHavePermissionToControlThis", "Нет прав на управление персонажем")
+        : !hasSkill ? auditLocalize("FALLOUTMAW.AuditApps.TheCharacterDoesNotHaveTheSelectedHacking", "У персонажа нет выбранного для взлома навыка")
+          : !hasGM ? auditLocalize("FALLOUTMAW.AuditApps.HackingRequiresAnActiveGM", "Для взлома нужен активный ведущий")
+            : !methods.length ? auditLocalize("FALLOUTMAW.AuditApps.NoHackingMethodsAreConfiguredForThisObject", "Для объекта не настроены методы взлома")
+              : selectedCard?.blockReason || (!selectedTool ? auditLocalize("FALLOUTMAW.AuditApps.SelectAnAvailableTool", "Выберите доступный инструмент") : "");
   const exhausted = methods.length > 0 && methods.every(method => method.attemptsRemaining <= 0);
   return {
     isMechanical: selectedMethod?.interfaceType === "mechanical",
@@ -51,7 +52,7 @@ export function buildHackingDialogState({
       ...tool,
       selected: tool.candidateKey === selectedTool?.candidateKey,
       disabled: Boolean(busy || tool.blockReason),
-      resourceLabel: tool.resourceMode === "condition" ? "Прочность" : "Запас",
+      resourceLabel: tool.resourceMode === "condition" ? auditLocalize("FALLOUTMAW.AuditApps.Condition", "Прочность") : auditLocalize("FALLOUTMAW.Item.EnergySourceReserve", "Запас"),
       hasMeter: tool.supplyMax > 0,
       resourcePercent: tool.supplyMax > 0 ? Math.max(0, Math.min(100, 100 * tool.supplyValue / tool.supplyMax)) : 0
     })),
@@ -63,14 +64,14 @@ export function buildHackingDialogState({
     attemptsTotal: selectedMethod?.attempts ?? 0,
     attemptMarkers: selectedMethod && selectedMethod.attempts <= 10
       ? Array.from({ length: selectedMethod.attempts }, (_, index) => ({ remaining: index < selectedMethod.attemptsRemaining })) : [],
-    resourceLabel: selectedTool?.resourceMode === "condition" ? "Прочность" : "Запас",
+    resourceLabel: selectedTool?.resourceMode === "condition" ? auditLocalize("FALLOUTMAW.AuditApps.Condition", "Прочность") : auditLocalize("FALLOUTMAW.Item.EnergySourceReserve", "Запас"),
     remainingSupply: selectedTool ? Math.max(0, selectedTool.supplyValue - selectedTool.toolCost) : null,
     blockReason,
     busy: Boolean(busy),
-    actionLabel: busy || (selectedMethod?.interfaceType === "mechanical" ? "Вскрыть замок" : "Взломать"),
-    buttonLabel: busy ? "Выполняется…" : (selectedMethod?.interfaceType === "mechanical" ? "Вскрыть замок" : "Взломать"),
+    actionLabel: busy || (selectedMethod?.interfaceType === "mechanical" ? auditLocalize("FALLOUTMAW.AuditApps.PickLock", "Вскрыть замок") : auditLocalize("FALLOUTMAW.AuditApps.Hack", "Взломать")),
+    buttonLabel: busy ? auditLocalize("FALLOUTMAW.AuditApps.InProgress", "Выполняется…") : (selectedMethod?.interfaceType === "mechanical" ? auditLocalize("FALLOUTMAW.AuditApps.PickLock", "Вскрыть замок") : auditLocalize("FALLOUTMAW.AuditApps.Hack", "Взломать")),
     hackDisabled: Boolean(busy || blockReason),
-    statusLabel: !targetAvailable ? "Объект недоступен" : unlocked ? "Доступ получен" : exhausted ? "Попытки исчерпаны" : "Доступ закрыт",
+    statusLabel: !targetAvailable ? auditLocalize("FALLOUTMAW.AuditApps.ObjectUnavailable", "Объект недоступен") : unlocked ? auditLocalize("FALLOUTMAW.AuditApps.AccessGranted", "Доступ получен") : exhausted ? auditLocalize("FALLOUTMAW.AuditApps.NoAttemptsLeft", "Попытки исчерпаны") : auditLocalize("FALLOUTMAW.AuditApps.AccessDenied", "Доступ закрыт"),
     statusTone: !targetAvailable || exhausted ? "bad" : unlocked ? "ok" : "locked"
   };
 }

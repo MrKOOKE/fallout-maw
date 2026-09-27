@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import {
   CONSTRUCT_PART_MITIGATION_LIMB_KEY,
   DAMAGE_MITIGATION_MODES,
@@ -68,7 +69,7 @@ export function buildEquippedItemDamageMitigation(
           const sources = isResistance ? resistanceSources : defenseSources;
           sources[limbKey][damageTypeKey].push({
             itemId: String(sourceItem.id ?? ""),
-            name: String(sourceItem.name ?? "Снаряжение"),
+            name: String(sourceItem.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R1115", "Снаряжение")),
             img: String(sourceItem.img ?? "") || "icons/svg/item-bag.svg",
             baseValue,
             weakenedValue,

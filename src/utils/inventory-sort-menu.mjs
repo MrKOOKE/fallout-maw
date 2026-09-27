@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { INVENTORY_SORT_CHOICES } from "../inventory/contents-sort.mjs";
 
 /** A native, nonmodal dropdown in the top layer, anchored to its compact button. */
@@ -16,8 +17,8 @@ export class InventorySortMenu {
     button.dataset.inventorySortControl = "";
     button.dataset.tooltipIgnore = "";
     button.textContent = "≡";
-    button.title = "Сортировка";
-    button.setAttribute("aria-label", "Сортировка содержимого");
+    button.title = auditLocalize("FALLOUTMAW.AuditRuntime.R1300", "Сортировка");
+    button.setAttribute("aria-label", auditLocalize("FALLOUTMAW.AuditRuntime.R1301", "Сортировка содержимого"));
     button.setAttribute("aria-haspopup", "menu");
     button.setAttribute("aria-expanded", "false");
     controls.prepend(button);
@@ -26,7 +27,7 @@ export class InventorySortMenu {
     menu.dataset.inventorySortControl = "";
     menu.setAttribute("popover", "auto");
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Сортировка");
+    menu.setAttribute("aria-label", auditLocalize("FALLOUTMAW.AuditRuntime.R1300", "Сортировка"));
     menu.addEventListener("pointerdown", event => event.stopPropagation());
     title.append(menu);
     button.popoverTargetElement = menu;

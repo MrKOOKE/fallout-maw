@@ -1090,7 +1090,7 @@ async function requestWeaponAttackUseAuthority(payload = {}, activeGM = null) {
       console.warn(`${SYSTEM_ID} | Limited-use weapon request timed out`);
       resolve([]);
     }, LIMITED_USE_SOCKET_TIMEOUT_MS);
-    pendingSocketRequests.set(requestId, { resolve, timeout });
+    pendingSocketRequests.set(requestId, { resolve, timeout, authorityUserId: activeGM.id });
     game.socket.emit(LIMITED_USE_SOCKET, {
       type: LIMITED_USE_ATTACK_REQUEST,
       requestId,
@@ -1110,7 +1110,7 @@ async function requestCapturedUseAuthority(candidates = [], operationId = "", ac
       console.warn(`${SYSTEM_ID} | Limited-use candidate request timed out`);
       resolve([]);
     }, LIMITED_USE_SOCKET_TIMEOUT_MS);
-    pendingSocketRequests.set(requestId, { resolve, timeout });
+    pendingSocketRequests.set(requestId, { resolve, timeout, authorityUserId: activeGM.id });
     game.socket.emit(LIMITED_USE_SOCKET, {
       type: LIMITED_USE_CANDIDATES_REQUEST,
       requestId,
@@ -1124,11 +1124,13 @@ async function requestCapturedUseAuthority(candidates = [], operationId = "", ac
   });
 }
 
-async function handleLimitedUseSocketMessage(message = {}) {
+async function handleLimitedUseSocketMessage(message = {}, senderUserId = "") {
+  if (!senderUserId || (message.senderUserId && message.senderUserId !== senderUserId)) return;
   if ([LIMITED_USE_ATTACK_RESPONSE, LIMITED_USE_CANDIDATES_RESPONSE].includes(message.type)) {
     if (message.targetUserId && message.targetUserId !== game.user?.id) return;
     const pending = pendingSocketRequests.get(String(message.requestId ?? ""));
     if (!pending) return;
+    if (senderUserId !== pending.authorityUserId) return;
     globalThis.clearTimeout(pending.timeout);
     pendingSocketRequests.delete(message.requestId);
     pending.resolve([]);
@@ -1138,9 +1140,9 @@ async function handleLimitedUseSocketMessage(message = {}) {
     if (!game.user?.isGM || (message.targetUserId && message.targetUserId !== game.user.id)) return;
     let ok = false;
     try {
-      const sender = game.users?.get?.(String(message.senderUserId ?? "")) ?? null;
+      const sender = game.users?.get?.(senderUserId) ?? null;
       if (sender?.active) {
-        const candidates = await filterAuthorizedCapturedUseCandidates(message.payload?.candidates);
+        const candidates = await filterAuthorizedCapturedUseCandidates(message.payload?.candidates, sender);
         await consumeCapturedLimitedUseCandidatesDirect(
           candidates,
           String(message.payload?.operationId ?? "").trim()
@@ -1164,7 +1166,7 @@ async function handleLimitedUseSocketMessage(message = {}) {
 
   let ok = false;
   try {
-    const sender = game.users?.get?.(String(message.senderUserId ?? "")) ?? null;
+    const sender = game.users?.get?.(senderUserId) ?? null;
     const actorUuid = String(message.payload?.attackerUuid ?? "").trim();
     const actor = await resolveUuid(actorUuid);
     if (sender?.active && actor && (sender.isGM || actor.testUserPermission?.(sender, "OWNER"))) {
@@ -1191,8 +1193,9 @@ async function handleLimitedUseSocketMessage(message = {}) {
   });
 }
 
-async function filterAuthorizedCapturedUseCandidates(candidates = []) {
+async function filterAuthorizedCapturedUseCandidates(candidates = [], sender = null) {
   if (!Array.isArray(candidates)) return [];
+  const owns = actor => Boolean(sender?.isGM || actor?.testUserPermission?.(sender, "OWNER"));
   const authorized = [];
   for (const candidate of candidates) {
     if (candidate?.kind === "sourceItem") {
@@ -1203,7 +1206,7 @@ async function filterAuthorizedCapturedUseCandidates(candidates = []) {
         .some(entry => entry?.id === item.id);
       const abilityFunction = normalizeAbilityFunctions(getActiveSourceItemFunctions(item))
         .find(entry => String(entry?.id ?? "") === functionId);
-      if (activeItem
+      if (activeItem && owns(item.parent)
         && (!hostActorUuid || item.parent.uuid === hostActorUuid)
         && getLimitedUseConditions(abilityFunction?.conditions).length
         && !hasExhaustedLimitedUses(abilityFunction?.conditions)) {
@@ -1215,7 +1218,7 @@ async function filterAuthorizedCapturedUseCandidates(candidates = []) {
       const effect = await resolveUuid(String(candidate.effectUuid ?? "").trim());
       const descriptor = getEffectFunctionDescriptor(effect);
       const hostActorUuid = String(candidate.hostActorUuid ?? "").trim();
-      if (effect
+      if (effect && owns(effect.parent)
         && effect.getFlag?.(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind === EFFECT_LIFECYCLE_KINDS.disposableInstance
         && (!hostActorUuid || effect.parent?.uuid === hostActorUuid)
         && getLimitedUseConditions(descriptor?.functionData?.conditions).length) {
@@ -1234,7 +1237,7 @@ async function filterAuthorizedCapturedUseCandidates(candidates = []) {
         String(data.sourceActorUuid ?? "") === String(candidate.sourceActorUuid ?? "")
         && String(data.itemId ?? data.sourceItemId ?? "") === String(candidate.sourceItemId ?? "")
       );
-    if (effect
+    if (effect && owns(effect.parent)
       && effect.getFlag?.(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind === EFFECT_LIFECYCLE_KINDS.reconciledInstance
       && (!hostActorUuid || effect.parent?.uuid === hostActorUuid)
       && functionId === String(candidate.functionId ?? "")

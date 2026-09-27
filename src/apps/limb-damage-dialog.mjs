@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getDestroyedLimbStateLabel, isLimbDestroyed, requestDamageApplication, restoreDestroyedLimb } from "../combat/damage-hub.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
@@ -25,13 +26,13 @@ export async function openLimbDamageDialog(actor, limbKey = "") {
 
   return DialogV2.prompt({
     window: {
-      title: `${limb.label || limbKey}: урон и лечение`
+      title: auditFormat("FALLOUTMAW.AuditApps.DamageAndHealing", { v0: (limb.label || limbKey) }, "{v0}: урон и лечение")
     },
     content,
     position: { width: 430 },
     rejectClose: false,
     ok: {
-      label: "Применить",
+      label: auditLocalize("FALLOUTMAW.Common.Apply", "Применить"),
       icon: "fa-solid fa-check",
       callback: (_event, button) => new FormDataExtended(button.form).object
     }
@@ -58,18 +59,18 @@ export async function openLimbDamageDialog(actor, limbKey = "") {
 async function openLimbRestoreDialog(actor, limbKey = "", limb = {}) {
   const label = String(limb?.label ?? limbKey);
   const stateLabel = getDestroyedLimbStateLabel(actor, limbKey).toLocaleLowerCase(game.i18n?.lang ?? "ru");
-  const actionLabel = actor?.type === "construct" ? "деталь и вернуть ее функции" : "часть тела и вернуть ее функции";
+  const actionLabel = actor?.type === "construct" ? auditLocalize("FALLOUTMAW.AuditApps.ThePartAndRestoreItsFunctions", "деталь и вернуть ее функции") : auditLocalize("FALLOUTMAW.AuditApps.TheBodyPartAndRestoreItsFunctions", "часть тела и вернуть ее функции");
   const confirmed = await DialogV2.confirm({
     window: {
-      title: `${label}: восстановление`
+      title: auditFormat("FALLOUTMAW.AuditApps.Restoration", { v0: (label) }, "{v0}: восстановление")
     },
-    content: `<p>${label} ${stateLabel}. Восстановить ${actionLabel}?</p>`,
+    content: auditFormat("FALLOUTMAW.AuditApps.Restore", { v0: (label), v1: (stateLabel), v2: (actionLabel) }, "<p>{v0} {v1}. Восстановить {v2}?</p>"),
     yes: {
-      label: "Восстановить",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Restore_495", "Восстановить"),
       icon: "fa-solid fa-kit-medical"
     },
     no: {
-      label: "Отмена"
+      label: auditLocalize("FALLOUTMAW.Common.Cancel", "Отмена")
     },
     rejectClose: false
   });

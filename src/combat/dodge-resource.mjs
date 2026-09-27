@@ -13,6 +13,7 @@ import {
   DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
 } from "./dodge-effect-keys.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
+import { getOneTimeResourceValue, runOneTimeResourceMutation } from "./one-time-resources.mjs";
 
 const DODGE_RESOURCE_KEY = "dodge";
 const DODGE_SOCKET_ACTION_SPEND = "spendDodgeResource";
@@ -20,6 +21,10 @@ const DODGE_SOCKET_ACTION_RESTORE = "restoreDodgeResource";
 const DODGE_RESOURCE_QUERY = `${FALLOUT_MAW.id}.dodgeResourceMutation`;
 const DODGE_RESOURCE_QUERY_TIMEOUT_MS = 2000;
 const actorDodgeMutationQueue = new Map();
+
+export function getActorDodgeTotal(actor) {
+  return Math.max(0, toInteger(getDodgeResource(actor)?.value)) + getOneTimeResourceValue(actor, DODGE_RESOURCE_KEY);
+}
 
 export function registerCombatDodgeHooks() {
   registerDodgeResourceQuery();
@@ -184,10 +189,11 @@ async function spendActorDodgeResourceNow(actor, multiplier = 1, conditionContex
     { ...conditionContext, chanceOperationId: operationId }
   );
   const amount = calculateDodgeAmount(max, loss.value);
-  if (amount <= 0 || current <= 0) return;
+  if (amount <= 0 || getActorDodgeTotal(actor) <= 0) return;
 
   await updateActorDodgeValue(actor, Math.max(0, current - amount), {
     socketAction: DODGE_SOCKET_ACTION_SPEND,
+    spendAmount: amount,
     activeUseKey: loss.materiallyModified ? DODGE_LOSS_MODIFIER_EFFECT_KEY : "",
     activeUseKind: "dodgeLoss",
     operationId,
@@ -255,24 +261,41 @@ async function updateActorDodgeValue(actor, value, {
   activeUseKey = "",
   activeUseKind = "dodgeResource",
   operationId = "",
-  conditionContext = {}
+  conditionContext = {},
+  spendAmount = null
 } = {}) {
   if (!actor) return false;
   const nextValue = Math.max(0, toInteger(value));
   const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
-  if (nextValue === currentValue) return false;
+  if (nextValue === currentValue && !(Number(spendAmount) > 0)) return false;
   const resolvedOperationId = String(operationId ?? "").trim()
     || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
   if (actor.isOwner) {
-    const activeUsePreparations = prepareDodgeActiveUseOperations(
-      actor,
-      activeUseKey,
-      activeUseKind,
-      resolvedOperationId,
-      conditionContext
-    );
-    await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
-    await commitDodgeActiveUseOperations(activeUsePreparations, resolvedOperationId);
+    const preparations = await runOneTimeResourceMutation(actor, async () => {
+      const resource = getDodgeResource(actor);
+      const before = Math.max(0, toInteger(resource?.value));
+      const once = getOneTimeResourceValue(actor, DODGE_RESOURCE_KEY);
+      const amount = socketAction === DODGE_SOCKET_ACTION_SPEND
+        ? Math.max(0, toInteger(spendAmount ?? (before - nextValue))) : 0;
+      const onceSpent = Math.min(once, amount);
+      const target = socketAction === DODGE_SOCKET_ACTION_SPEND
+        ? Math.max(0, before - (amount - onceSpent))
+        : Math.min(Math.max(0, toInteger(resource?.max)), nextValue);
+      if (target === before && onceSpent === 0) return null;
+      const activeUsePreparations = prepareDodgeActiveUseOperations(
+        actor, activeUseKey, activeUseKind, resolvedOperationId, conditionContext
+      );
+      await actor.update({
+        [`system.resources.${DODGE_RESOURCE_KEY}.value`]: target,
+        [`system.resources.${DODGE_RESOURCE_KEY}.spent`]: Math.max(0, toInteger(resource.max) - target),
+        ...(onceSpent ? { [`system.resources.${DODGE_RESOURCE_KEY}.once`]: once - onceSpent } : {})
+      });
+      if (toInteger(getDodgeResource(actor)?.value) !== target
+        || getOneTimeResourceValue(actor, DODGE_RESOURCE_KEY) !== once - onceSpent) return null;
+      return activeUsePreparations;
+    });
+    if (!preparations) return false;
+    await commitDodgeActiveUseOperations(preparations, resolvedOperationId);
     return true;
   }
   if (game.user?.isActiveGM) return false;
@@ -283,6 +306,7 @@ async function updateActorDodgeValue(actor, value, {
     action: socketAction,
     actorUuid: actor.uuid,
     value: nextValue,
+    ...(spendAmount !== null ? { spendAmount } : {}),
     activeUseKey,
     operationId: resolvedOperationId,
     conditionContext: serializeDodgeConditionContext(conditionContext)
@@ -365,7 +389,9 @@ async function handleDodgeResourceQuery(payload = {}, { user: requester } = {}) 
 
     const nextValue = Math.max(0, toInteger(payload.value));
     const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
-    if (nextValue === currentValue) return false;
+    const spendAmount = payload.action === DODGE_SOCKET_ACTION_SPEND && payload.spendAmount !== undefined
+      ? Math.max(0, toInteger(payload.spendAmount)) : null;
+    if (nextValue === currentValue && !(spendAmount > 0)) return false;
     const conditionContext = await resolveDodgeConditionContextPayload(payload.conditionContext);
     if (!canRequesterMutateDodgeResource(requester, actor, payload.action, conditionContext)) return false;
     const expectedActiveUseKey = payload.action === DODGE_SOCKET_ACTION_SPEND
@@ -373,7 +399,7 @@ async function handleDodgeResourceQuery(payload = {}, { user: requester } = {}) 
       : DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY;
     const requestedActiveUseKey = String(payload.activeUseKey ?? "").trim();
     const directionMatches = payload.action === DODGE_SOCKET_ACTION_SPEND
-      ? nextValue < currentValue
+      ? (spendAmount !== null ? spendAmount > 0 : nextValue < currentValue)
       : nextValue > currentValue;
     if (!directionMatches) return false;
     const activeUseKey = directionMatches && requestedActiveUseKey === expectedActiveUseKey
@@ -384,16 +410,9 @@ async function handleDodgeResourceQuery(payload = {}, { user: requester } = {}) 
       : "dodgeRoundRecovery";
     const operationId = String(payload.operationId ?? "").trim()
       || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
-    const activeUsePreparations = prepareDodgeActiveUseOperations(
-      actor,
-      activeUseKey,
-      activeUseKind,
-      operationId,
-      conditionContext
-    );
-    await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
-    await commitDodgeActiveUseOperations(activeUsePreparations, operationId);
-    return true;
+    return updateActorDodgeValue(actor, nextValue, {
+      socketAction: payload.action, activeUseKey, activeUseKind, operationId, conditionContext, spendAmount
+    });
   } catch (error) {
     console.error(`${FALLOUT_MAW.id} | Dodge resource authority query failed`, error);
     return false;

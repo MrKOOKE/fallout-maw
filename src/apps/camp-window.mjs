@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
@@ -51,7 +52,7 @@ export function registerCampSocket() {
 export async function openCampFromHud(actors = []) {
   const actorUuids = collectActorUuids(actors);
   if (!actorUuids.length) {
-    ui.notifications.warn("Выберите своего актёра для лагеря.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.SelectYourActorForTheCamp", "Выберите своего актёра для лагеря."));
     return null;
   }
   localCampActorUuid = actorUuids[0];
@@ -59,21 +60,21 @@ export async function openCampFromHud(actors = []) {
   const state = getCampState();
   if (state.active && game.user?.isGM) {
     const action = await promptGmCampEntry();
-    if (action === "observe") return openCampWindow();
+    if (action === "observe") return openCampWindow({ observer: true });
     if (action !== "join") return null;
   } else {
     const confirmed = state.active
       ? await DialogV2.confirm({
-        window: { title: "Лагерь" },
-        content: "<p>Хотите присоединиться к лагерю?</p>",
-        yes: { label: "Присоединиться", icon: "fa-solid fa-campground" },
+        window: { title: auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь") },
+        content: auditLocalize("FALLOUTMAW.AuditApps.WouldYouLikeToJoinTheCamp", "<p>Хотите присоединиться к лагерю?</p>"),
+        yes: { label: auditLocalize("FALLOUTMAW.AuditApps.Join", "Присоединиться"), icon: "fa-solid fa-campground" },
         no: { label: game.i18n.localize("FALLOUTMAW.Common.Cancel") },
         rejectClose: false
       })
       : await DialogV2.confirm({
-      window: { title: "Лагерь" },
-      content: "<p>Вы хотите разбить лагерь?</p>",
-      yes: { label: "Разбить лагерь", icon: "fa-solid fa-campground" },
+      window: { title: auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь") },
+      content: auditLocalize("FALLOUTMAW.AuditApps.WouldYouLikeToSetUpCamp", "<p>Вы хотите разбить лагерь?</p>"),
+      yes: { label: auditLocalize("FALLOUTMAW.AuditApps.SetUpCamp", "Разбить лагерь"), icon: "fa-solid fa-campground" },
       no: { label: game.i18n.localize("FALLOUTMAW.Common.Cancel") },
       rejectClose: false
     });
@@ -87,26 +88,27 @@ export async function openCampFromHud(actors = []) {
   return openCampWindow();
 }
 
-export function openCampWindow() {
+export function openCampWindow({ observer = false } = {}) {
   campWindow ??= new CampWindow();
+  campWindow.setObserverMode(observer);
   return campWindow.render({ force: true });
 }
 
 async function promptGmCampEntry() {
   return DialogV2.wait({
-    window: { title: "Лагерь" },
-    content: "<p>Хотите присоединиться к лагерю?</p>",
+    window: { title: auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь") },
+    content: auditLocalize("FALLOUTMAW.AuditApps.WouldYouLikeToJoinTheCamp", "<p>Хотите присоединиться к лагерю?</p>"),
     buttons: [
       {
         action: "join",
-        label: "Присоединиться",
+        label: auditLocalize("FALLOUTMAW.AuditApps.Join", "Присоединиться"),
         icon: "fa-solid fa-campground",
         default: true,
         callback: () => "join"
       },
       {
         action: "observe",
-        label: "Зайти как наблюдатель",
+        label: auditLocalize("FALLOUTMAW.AuditApps.JoinAsObserver", "Зайти как наблюдатель"),
         icon: "fa-solid fa-eye",
         callback: () => "observe"
       },
@@ -122,6 +124,7 @@ async function promptGmCampEntry() {
 }
 
 class CampWindow extends FalloutMaWFormApplicationV2 {
+  #observer = false;
   #suppressCampClose = false;
   #changeHandler = event => void this.#onChange(event);
   #clickHandler = event => void this.#onParticipantClick(event);
@@ -149,7 +152,11 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Лагерь";
+    return auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь");
+  }
+
+  setObserverMode(observer = false) {
+    this.#observer = Boolean(observer);
   }
 
   async _prepareContext(options) {
@@ -273,7 +280,7 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
 
   _onClose(options) {
     super._onClose(options);
-    if (!this.#suppressCampClose && game.user?.isGM && getCampState().active) {
+    if (!this.#suppressCampClose && !this.#observer && game.user?.isGM && getCampState().active) {
       void runCampOperation("closeCamp", {});
     }
     if (campWindow === this) campWindow = null;
@@ -294,8 +301,8 @@ async function prepareCampParticipantContext(participant, state, restPlaceOption
   return {
     ...participant,
     actor,
-    name: actor?.name ?? "Недоступный участник",
-    img: actor?.img ?? "icons/svg/mystery-man.svg",
+    name: actor?.name ?? auditLocalize("FALLOUTMAW.AuditApps.UnavailableParticipant", "Недоступный участник"),
+    img: actor?.img ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
     missing: !actor,
     watchHours: secondsToHoursInput(watchSeconds),
     researchHours: secondsToHoursInput(researchSeconds),
@@ -320,7 +327,7 @@ function canRest(state, participantContexts = []) {
 }
 
 async function requestCampOperation(action, payload = {}, gm = getResponsibleGM()) {
-  if (!gm) throw new Error("Нет активного GM для лагеря.");
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ThereIsNoActiveGMForTheCamp", "Нет активного GM для лагеря."));
   if (game.user?.isGM && gm.id === game.user.id) {
     return enqueueCampOperation(() => handleCampOperation(action, payload, game.user.id));
   }
@@ -332,7 +339,7 @@ async function requestCampOperation(action, payload = {}, gm = getResponsibleGM(
       pendingCampSocketRequests.delete(requestId);
       reject(new Error("GM did not answer camp request."));
     }, CAMP_SOCKET_TIMEOUT);
-    pendingCampSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingCampSocketRequests.set(requestId, { resolve, reject, timeout, gmUserId: gm.id });
   });
 
   game.socket.emit(CAMP_SOCKET, {
@@ -351,23 +358,26 @@ async function runCampOperation(action, payload = {}) {
   try {
     return await requestCampOperation(action, payload);
   } catch (error) {
-    ui.notifications.error(error.message || "Операция лагеря не выполнена.");
+    ui.notifications.error(error.message || auditLocalize("FALLOUTMAW.AuditApps.CampOperationFailed", "Операция лагеря не выполнена."));
     return null;
   }
 }
 
-async function handleCampSocketMessage(message = {}) {
+async function handleCampSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== CAMP_SOCKET_SCOPE) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (!sender) return;
 
   if (message.type === "stateUpdated") {
+    if (!sender.isGM) return;
     rerenderCampWindow();
     return;
   }
 
   if (message.type === "response") {
-    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    if (message.recipientUserId !== game.user?.id) return;
     const pending = pendingCampSocketRequests.get(message.requestId);
-    if (!pending) return;
+    if (!pending || !sender.isGM || sender.id !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingCampSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
@@ -376,6 +386,7 @@ async function handleCampSocketMessage(message = {}) {
   }
 
   if (message.type !== "request") return;
+  if (String(message.requesterUserId ?? "") !== sender.id) return;
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
 
   try {
@@ -427,7 +438,7 @@ async function createOrJoinCamp({ actorUuids = [] } = {}, requesterUserId = "") 
   const current = getCampState();
   const settings = getCampSettings();
   const ids = collectActorUuids(actorUuids);
-  if (!ids.length) throw new Error("Нет участников лагеря.");
+  if (!ids.length) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheCampHasNoParticipants", "Нет участников лагеря."));
   for (const actorUuid of ids) await assertUserOwnsActor(actorUuid, requesterUserId);
 
   const next = current.active
@@ -531,9 +542,9 @@ async function restCamp(requesterUserId = "") {
   if (!current.active) return current;
   await assertUserIsCampParticipant(current, requesterUserId);
   const participantActors = await Promise.all(current.participants.map(participant => resolveActor(participant.actorUuid)));
-  if (participantActors.some(actor => !actor)) throw new Error("В лагере есть недоступный участник.");
-  if (current.participants.some(participant => !participant.ready)) throw new Error("Не все участники готовы к отдыху.");
-  if (current.restSeconds <= 0) throw new Error("Укажите время отдыха.");
+  if (participantActors.some(actor => !actor)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ACampParticipantIsUnavailable", "В лагере есть недоступный участник."));
+  if (current.participants.some(participant => !participant.ready)) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.NotAllParticipantsAreReadyToRest", "Не все участники готовы к отдыху."));
+  if (current.restSeconds <= 0) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.SpecifyTheRestDuration", "Укажите время отдыха."));
 
   return withSystemEventRoot({
     kind: "campRest",
@@ -596,7 +607,7 @@ async function restCamp(requesterUserId = "") {
         await applyResearchTime(actor, participant.researchId, researchDurationFromSeconds(researchSeconds));
       } catch (error) {
         console.error(`${SYSTEM_ID} | Camp research failed for ${actor.name}`, error);
-        ui.notifications.warn(`${actor.name}: исследование не выполнено — ${error.message}`);
+        ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.ResearchFailed", { v0: (actor.name), v1: (error.message) }, "{v0}: исследование не выполнено — {v1}"));
       }
     }
     await scope.emit("fallout-maw.camp.rest.completed", {
@@ -671,29 +682,29 @@ async function resolveActor(uuid = "") {
 
 async function assertUserOwnsActor(actorUuid = "", userId = "") {
   const user = game.users?.get(userId);
-  if (!user) throw new Error("Пользователь лагеря не найден.");
+  if (!user) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.CampUserNotFound", "Пользователь лагеря не найден."));
   if (user.isGM) return true;
   const actor = await resolveActor(actorUuid);
   if (!actor?.testUserPermission?.(user, "OWNER")) {
-    throw new Error("Нет прав владельца на участника лагеря.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditApps.YouDoNotOwnThisCampParticipant", "Нет прав владельца на участника лагеря."));
   }
   return true;
 }
 
 async function assertUserIsCampParticipant(state, userId = "") {
   const user = game.users?.get(userId);
-  if (!user) throw new Error("Пользователь лагеря не найден.");
+  if (!user) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.CampUserNotFound", "Пользователь лагеря не найден."));
   if (user.isGM) return true;
   for (const participant of state.participants) {
     const actor = await resolveActor(participant.actorUuid);
     if (actor?.testUserPermission?.(user, "OWNER")) return true;
   }
-  throw new Error("Только участник лагеря может выполнить это действие.");
+  throw new Error(auditLocalize("FALLOUTMAW.AuditApps.OnlyACampParticipantCanPerformThisAction", "Только участник лагеря может выполнить это действие."));
 }
 
 function assertUserIsGM(userId = "") {
   const user = game.users?.get(userId);
-  if (!user?.isGM) throw new Error("Только GM может закрыть лагерь.");
+  if (!user?.isGM) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.OnlyTheGMCanCloseTheCamp", "Только GM может закрыть лагерь."));
   return true;
 }
 

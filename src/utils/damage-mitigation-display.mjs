@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "./i18n.mjs";
 import { getUniqueLimbSets } from "../settings/traumas.mjs";
 import {
   getEquipmentSlotRequirement,
@@ -11,7 +12,7 @@ import {
   hasItemFunction
 } from "./item-functions.mjs";
 
-const FALLBACK_DAMAGE_TYPE_ICON = "icons/svg/d20-grey.svg";
+const FALLBACK_DAMAGE_TYPE_ICON = "systems/fallout-maw/assets/System/Skills/skill-default.webp";
 
 export function buildDamageMitigationLimbSetChoices(itemOrSystem, creatureOptions = {}) {
   if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) return [];
@@ -146,7 +147,7 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
 
 function buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings = [], { prepareCell = null } = {}) {
   const part = getConstructPartFunction(itemOrSystem);
-  const label = String(part.partType ?? "").trim() || String(itemOrSystem?.name ?? "").trim() || "Деталь";
+  const label = String(part.partType ?? "").trim() || String(itemOrSystem?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R1213", "Деталь");
   const group = {
     id: CONSTRUCT_PART_MITIGATION_LIMB_KEY,
     limbs: [{

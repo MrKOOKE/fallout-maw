@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
@@ -61,9 +62,9 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
         damageTypeChoices: buildDamageTypeChoices(damageTypes, entry.damageTypeKey)
       })),
       targetRelationChoices: [
-        { key: "ally", label: "Союзники" },
-        { key: "neutral", label: "Нейтралы" },
-        { key: "enemy", label: "Враги" }
+        { key: "ally", label: auditLocalize("FALLOUTMAW.AuditApps.Allies", "Союзники") },
+        { key: "neutral", label: auditLocalize("FALLOUTMAW.AuditApps.Neutrals", "Нейтралы") },
+        { key: "enemy", label: auditLocalize("FALLOUTMAW.AuditApps.Enemies", "Враги") }
       ].map(entry => ({ ...entry, checked: targetRelations.includes(entry.key) })),
       effectChanges: effectChanges.map((change, index) => ({ ...change, index })),
       regionSpecialProperties: regionSpecialProperties.map((property, index) => prepareRegionSpecialPropertyRow(property, index)),
@@ -196,7 +197,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     if (!container) return;
     container.innerHTML = changes.length
       ? changes.map((change, index) => renderEffectChangeRow(change, index)).join("")
-      : `<p class="fallout-maw-empty-list">Изменения не настроены.</p>`;
+      : auditLocalize("FALLOUTMAW.AuditApps.NoChangesConfigured", "<p class=\"fallout-maw-empty-list\">Изменения не настроены.</p>");
     activateFormulaAutocomplete(container, {
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings()
@@ -264,11 +265,11 @@ function normalizeRegionEffectChanges(value = [], { keepEmpty = false } = {}) {
 
 function renderEffectChangeRow(change, index) {
   const typeOptions = [
-    ["add", "Сложение"],
-    ["multiply", "Умножение"],
-    ["override", "Замена"],
-    ["upgrade", "Повышение"],
-    ["downgrade", "Понижение"]
+    ["add", auditLocalize("FALLOUTMAW.AuditApps.Addition", "Сложение")],
+    ["multiply", auditLocalize("FALLOUTMAW.AuditApps.Multiplication", "Умножение")],
+    ["override", auditLocalize("FALLOUTMAW.AuditApps.Override", "Замена")],
+    ["upgrade", auditLocalize("FALLOUTMAW.AuditApps.Upgrade", "Повышение")],
+    ["downgrade", auditLocalize("FALLOUTMAW.AuditApps.Downgrade", "Понижение")]
   ].map(([value, label]) => `<option value="${value}" ${change.type === value ? "selected" : ""}>${label}</option>`).join("");
   return `
     <div class="fallout-maw-settings-row fallout-maw-region-effect-change-row" data-effect-change-index="${index}">

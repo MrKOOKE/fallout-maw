@@ -3,7 +3,7 @@
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.DamageTypes.Title"}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
         <button type="button" data-action="createDamageType"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.DamageTypes.Create"}}</button>
       </div>
     </header>
@@ -34,7 +34,7 @@
         <input type="text" data-field="key" value="{{key}}" {{#if locked}}disabled{{/if}}>
         <input type="text" data-field="label" value="{{label}}" {{#if locked}}disabled{{/if}}>
         <input type="color" data-field="color" value="{{color}}" {{#if locked}}disabled{{/if}}>
-        <button type="button" class="fallout-maw-icon-button" data-action="openDamageTypeSettings" title="Доп. настройки урона" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-gear"></i></button>
+        <button type="button" class="fallout-maw-icon-button" data-action="openDamageTypeSettings" title="{{localize 'FALLOUTMAW.AuditTemplates.Text1271f3929030'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-gear"></i></button>
         <button type="button" data-action="deleteDamageType" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}

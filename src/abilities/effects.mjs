@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
@@ -14,6 +15,7 @@ import {
   hasAbilityWeaponContextCondition
 } from "./evaluation.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
+import { isInstalledConstructPartItem } from "../utils/construct-parts.mjs";
 import {
   AURA_GENERATED_EFFECT_FLAG_KEY,
   findAuraDistributionConditions,
@@ -27,9 +29,11 @@ import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import {
   clearManagedBarrierProjectionDepletion,
   getActorBarrierDepletions,
+  getManagedBarrierProjectionIdentity,
   isManagedBarrierProjectionDepleted,
   pruneManagedBarrierProjectionDepletions
 } from "./barrier-depletion.mjs";
+import { isDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import {
   syncNormalizedTimedTriggerCostEffects
 } from "./trigger-cost-effects.mjs";
@@ -1452,8 +1456,8 @@ function buildAuraGeneratedActiveEffectData(
     : "";
   return {
     type: "base",
-    name: sourceDocument?.name ?? source?.item?.name ?? "Аура",
-    img: sourceDocument?.img || source?.item?.img || "icons/svg/aura.svg",
+    name: sourceDocument?.name ?? source?.item?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0056", "Аура"),
+    img: sourceDocument?.img || source?.item?.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: sourceEffectUuid || getAbilityEffectOriginUuid(sourceActor, source?.item),
     transfer: false,
     disabled: false,
@@ -1626,7 +1630,7 @@ function buildAbilityActiveEffectData(
   return {
     type: "base",
     name: item.name,
-    img: item.img || "icons/svg/aura.svg",
+    img: item.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: getAbilityEffectOriginUuid(actor, item),
     transfer: false,
     disabled: false,
@@ -1729,8 +1733,8 @@ function buildManagedProjectionActiveEffectUpdate(effect, desired) {
     }
   }
 
-  const desiredChanges = desired?.system?.changes ?? [];
   const currentChanges = source?.system?.changes ?? effect?.system?.changes ?? [];
+  const desiredChanges = preserveSpentProjectionBarriers(effect, desired, currentChanges);
   if (!activeEffectChangesEqual(currentChanges, desiredChanges)) {
     update["system.changes"] = cloneProjectionValue(desiredChanges);
   }
@@ -1753,6 +1757,33 @@ function buildManagedProjectionActiveEffectUpdate(effect, desired) {
   }
 
   return Object.keys(update).length ? { _id: effect.id, ...update } : {};
+}
+
+
+function preserveSpentProjectionBarriers(effect, desired, currentChanges = []) {
+  const desiredChanges = desired?.system?.changes ?? [];
+  const currentIdentity = getManagedBarrierProjectionIdentity(effect);
+  const desiredIdentity = getManagedBarrierProjectionIdentity(desired);
+  if (!currentIdentity || !desiredIdentity
+    || currentIdentity.key !== desiredIdentity.key
+    || currentIdentity.signature !== desiredIdentity.signature) return desiredChanges;
+
+  const barrierRows = new Map();
+  const identityKey = row => JSON.stringify([row.key, row.type, row.phase, row.priority]);
+  for (const row of canonicalizeActiveEffectChanges(currentChanges)) {
+    if (!isDamageBarrierEffectKey(row.key)) continue;
+    const key = identityKey(row);
+    const rows = barrierRows.get(key) ?? [];
+    rows.push(row);
+    barrierRows.set(key, rows);
+  }
+  return canonicalizeActiveEffectChanges(desiredChanges).flatMap(row => {
+    if (!isDamageBarrierEffectKey(row.key)) return [row];
+    // A missing row has been depleted; unchanged projections cannot restore
+    // either it or a partially spent value. Source edits change the signature.
+    const current = barrierRows.get(identityKey(row))?.shift();
+    return current ? [current] : [];
+  });
 }
 
 function selectReusableManagedProjectionEffect(existing, desired, managedFlagKey, signature) {
@@ -2128,6 +2159,7 @@ function isEquipmentItem(item) {
   if (!item?.parent || item.type === "ability") return false;
   return item.system?.placement?.mode === "equipment"
     || item.system?.placement?.mode === "weapon"
+    || isInstalledConstructPartItem(item)
     || Object.values(item.system?.occupiedSlots ?? {}).some(Boolean);
 }
 

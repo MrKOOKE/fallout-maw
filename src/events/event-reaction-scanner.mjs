@@ -369,7 +369,7 @@ export function buildEventReactionCandidate({
     offerId: `event-reaction:${chanceKey}`,
     label: String(item?.name ?? ""),
     description: String(item?.system?.description ?? ""),
-    img: String(item?.img ?? "icons/svg/aura.svg"),
+    img: String(item?.img ?? "systems/fallout-maw/assets/System/Abilities/ability-default.webp"),
     changes: abilityFunction?.changes ?? []
   };
 }

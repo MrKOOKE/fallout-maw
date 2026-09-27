@@ -2,14 +2,14 @@
   <div class="fallout-maw-pg-scroll">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Персональный генератор</h2>
+      <h2>{{localize 'FALLOUTMAW.Actor.PersonalGenerator'}}</h2>
       <div class="fallout-maw-inline-check">
-        <input aria-label="Включить" type="checkbox" name="enabled" {{#if config.enabled}}checked{{/if}}>
-        <span>Включить</span>
+        <input aria-label="{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}" type="checkbox" name="enabled" {{#if config.enabled}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}</span>
       </div>
     </header>
     <div class="fallout-maw-pg-token-link-row">
-      <span>Статус прототипа токена: <strong>{{prototypeTokenLink.status}}</strong></span>
+      <span>{{localize 'FALLOUTMAW.AuditTemplates.Text274937816a69'}} <strong>{{prototypeTokenLink.status}}</strong></span>
       {{#if prototypeTokenLink.canConfigure}}
       <button type="button" data-action="togglePrototypeTokenLink">{{prototypeTokenLink.toggleLabel}}</button>
       {{/if}}
@@ -18,24 +18,24 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Имя</h2>
-      <button type="button" data-action="previewNames"><i class="fa-solid fa-dice"></i> Предпросмотр</button>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textaee78fe86022'}}</h2>
+      <button type="button" data-action="previewNames"><i class="fa-solid fa-dice"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text5d092ca855f6'}}</button>
     </header>
     <div class="fallout-maw-pg-grid">
       <div class="fallout-maw-inline-check">
-        <input aria-label="Генерировать имя" type="checkbox" name="name.enabled" {{#if config.name.enabled}}checked{{/if}}>
-        <span>Генерировать имя</span>
+        <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text64a526829c6b'}}" type="checkbox" name="name.enabled" {{#if config.name.enabled}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text64a526829c6b'}}</span>
       </div>
       <div class="fallout-maw-inline-check">
-        <input aria-label="Применять к имени токена" type="checkbox" name="name.appendToTokenName" {{#if config.name.appendToTokenName}}checked{{/if}}>
-        <span>Применять к имени токена</span>
+        <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textb30e3f5ad500'}}" type="checkbox" name="name.appendToTokenName" {{#if config.name.appendToTokenName}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textb30e3f5ad500'}}</span>
       </div>
       <div class="fallout-maw-inline-check">
-        <input aria-label="Заменять базовое имя" type="checkbox" name="name.overwriteBaseName" {{#if config.name.overwriteBaseName}}checked{{/if}}>
-        <span>Заменять базовое имя</span>
+        <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textf6e4a30316f5'}}" type="checkbox" name="name.overwriteBaseName" {{#if config.name.overwriteBaseName}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textf6e4a30316f5'}}</span>
       </div>
       <label>
-        <span>Имен в предпросмотре</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Texte472f9991faf'}}</span>
         <input type="number" name="name.countPreview" value="{{config.name.countPreview}}" min="1" max="30" step="1">
       </label>
     </div>
@@ -44,7 +44,7 @@
       {{#each nameBlockRows}}
       <div class="fallout-maw-pg-name-block-row" data-pg-name-block data-index="{{index}}">
         <label>
-          <span>Часть имени</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text905cfdde7c2b'}}</span>
           <select data-field="blockId">
             {{#each choices}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -52,13 +52,13 @@
           </select>
         </label>
         {{#if canDelete}}
-        <button type="button" data-action="deleteNameBlock" title="Удалить часть имени"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" data-action="deleteNameBlock" title="{{localize 'FALLOUTMAW.AuditTemplates.Textdc69aad4ed1a'}}"><i class="fa-solid fa-trash"></i></button>
         {{/if}}
       </div>
       {{/each}}
     </div>
     <div class="fallout-maw-pg-add-block-row">
-      <button type="button" data-action="createNameBlock"><i class="fa-solid fa-plus"></i> Добавить часть имени</button>
+      <button type="button" data-action="createNameBlock"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text2ce08cc9619e'}}</button>
     </div>
 
     <p class="fallout-maw-pg-preview">{{generatedNamePreview}}</p>
@@ -66,21 +66,21 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Валюта</h2>
+      <h2>{{localize 'FALLOUTMAW.Events.Subjects.currency.Label'}}</h2>
       <select name="currency.mode">
-        <option value="add" {{#unless (eq config.currency.mode "set")}}selected{{/unless}}>Добавить к базовой</option>
-        <option value="set" {{#if (eq config.currency.mode "set")}}selected{{/if}}>Заменить значением</option>
+        <option value="add" {{#unless (eq config.currency.mode "set")}}selected{{/unless}}>{{localize 'FALLOUTMAW.AuditTemplates.Text3bd2fed6883d'}}</option>
+        <option value="set" {{#if (eq config.currency.mode "set")}}selected{{/if}}>{{localize 'FALLOUTMAW.AuditTemplates.Text9dadb14083c4'}}</option>
       </select>
       <div class="fallout-maw-inline-check">
-        <input aria-label="Включить" type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
-        <span>Включить</span>
+        <input aria-label="{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}" type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}</span>
       </div>
     </header>
     <div class="fallout-maw-settings-table fallout-maw-pg-currency-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span>Валюта</span>
-        <span>Мин.</span>
-        <span>Макс.</span>
+        <span>{{localize 'FALLOUTMAW.Events.Subjects.currency.Label'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textc30d15328d29'}}</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7536ad85a9f1'}}</span>
       </div>
       {{#each currencyChoices}}
       <div class="fallout-maw-settings-row" data-currency-range="{{key}}">
@@ -97,17 +97,17 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Изображения</h2>
+      <h2>{{localize 'FALLOUTMAW.AnimationLibrary.Image'}}</h2>
       <div class="fallout-maw-inline-check">
-        <input aria-label="Включить" type="checkbox" name="images.enabled" {{#if config.images.enabled}}checked{{/if}}>
-        <span>Включить</span>
+        <input aria-label="{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}" type="checkbox" name="images.enabled" {{#if config.images.enabled}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}</span>
       </div>
     </header>
 
     <div class="fallout-maw-pg-image-options">
       <div class="fallout-maw-inline-check">
-        <input aria-label="Исходное изображение участвует в случайной выдаче" type="checkbox" name="images.includeCurrent" {{#if config.images.includeCurrent}}checked{{/if}}>
-        <span>Исходное изображение участвует в случайной выдаче</span>
+        <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Textca450db38390'}}" type="checkbox" name="images.includeCurrent" {{#if config.images.includeCurrent}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textca450db38390'}}</span>
       </div>
     </div>
 
@@ -116,24 +116,24 @@
       <div class="fallout-maw-pg-image-thumb" data-pg-image-thumb data-index="{{@index}}">
         <img src="{{this}}" alt="">
         <input type="hidden" data-pg-image-path value="{{this}}">
-        <button type="button" data-action="removeImage" title="Удалить изображение"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" data-action="removeImage" title="{{localize 'FALLOUTMAW.AuditTemplates.Text26115cf8568e'}}"><i class="fa-solid fa-xmark"></i></button>
       </div>
       {{else}}
-      <p class="fallout-maw-empty-list">Пока нет добавленных изображений.</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Texta238e0446c48'}}</p>
       {{/each}}
     </div>
 
     <div class="fallout-maw-pg-add-image-row">
-      <button type="button" data-action="browseImage"><i class="fa-solid fa-image"></i> Добавить изображение</button>
+      <button type="button" data-action="browseImage"><i class="fa-solid fa-image"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text70129c3d9688'}}</button>
     </div>
   </section>
 
   <section class="fallout-maw-panel fallout-maw-pg-items-section">
     <header class="fallout-maw-panel-header">
-      <h2>Предметы</h2>
+      <h2>{{localize 'FALLOUTMAW.Compendiums.Items'}}</h2>
       <div class="fallout-maw-inline-check">
-        <input aria-label="Включить" type="checkbox" name="items.enabled" {{#if config.items.enabled}}checked{{/if}}>
-        <span>Включить</span>
+        <input aria-label="{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}" type="checkbox" name="items.enabled" {{#if config.items.enabled}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.Item.LightSourceToggleOn'}}</span>
       </div>
     </header>
 
@@ -141,13 +141,13 @@
       {{#each config.itemBlocks}}
       <section class="fallout-maw-pg-block" data-pg-block data-index="{{@index}}" data-block-id="{{id}}">
         <header class="fallout-maw-pg-block-title">
-          <input type="text" data-field="name" value="{{name}}" placeholder="Название блока">
-          <button type="button" data-action="deleteItemBlock" title="Удалить блок"><i class="fa-solid fa-trash"></i></button>
+          <input type="text" data-field="name" value="{{name}}" placeholder="{{localize 'FALLOUTMAW.AuditTemplates.Textad0bc9dc4cdb'}}">
+          <button type="button" data-action="deleteItemBlock" title="{{localize 'FALLOUTMAW.AuditTemplates.Text051ee1f65733'}}"><i class="fa-solid fa-trash"></i></button>
         </header>
 
         <div class="fallout-maw-pg-block-options">
           <label>
-            <span>Режим выбора</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text8a349a486b62'}}</span>
             <select data-field="pickMode">
               {{#each pickModeChoices}}
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -155,11 +155,11 @@
             </select>
           </label>
           <label>
-            <span>Значение</span>
-            <input type="text" data-field="pick" value="{{pick}}" placeholder="1 или 2-5">
+            <span>{{localize 'FALLOUTMAW.Common.Value'}}</span>
+            <input type="text" data-field="pick" value="{{pick}}" placeholder="{{localize 'FALLOUTMAW.AuditTemplates.Text2e2b5d114f41'}}">
           </label>
           <label class="fallout-maw-pg-pick-currency" data-pg-pick-currency {{#unless showPickCurrency}}hidden{{/unless}}>
-            <span>Валюта ценности</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Textcc771455c4c0'}}</span>
             <select data-field="pickCurrency">
               {{#each currencyChoices}}
               <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -170,7 +170,7 @@
 
         <div class="fallout-maw-pg-dropzone" data-pg-block-drop>
           <div class="fallout-maw-pg-dropzone-header">
-            <span>Предметы блока</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text5ca95804c34e'}}</span>
           </div>
 
           <div class="fallout-maw-pg-entry-list">
@@ -192,24 +192,24 @@
 
                 <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="" draggable="false">
                 <div class="fallout-maw-pg-entry-content">
-                  <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
+                  <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="{{localize 'FALLOUTMAW.AuditTemplates.Text08e65d6af08e'}}">
                   <div class="fallout-maw-pg-entry-fields">
-                    <label><span>Кол-во:</span><input type="number" data-field="min" value="{{min}}" min="0" step="1"></label>
+                    <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Textea85503b0194'}}</span><input type="number" data-field="min" value="{{min}}" min="0" step="1"></label>
                     <span class="fallout-maw-pg-dash">-</span>
                     <input type="number" data-field="max" value="{{max}}" min="0" step="1">
                     {{#if hasCondition}}
-                    <label><span>Сост.:</span><input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1"></label>
+                    <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Textbcaed4e7a012'}}</span><input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1"></label>
                     <span class="fallout-maw-pg-dash">-</span>
                     <input type="number" data-field="condMax" value="{{condMax}}" min="0" max="100" step="1">
                     {{/if}}
-                    <label><span>Вес вероятности:</span><input type="number" data-field="weight" value="{{weight}}" min="1" step="1"></label>
+                    <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Text9ea52b8950ca'}}</span><input type="number" data-field="weight" value="{{weight}}" min="1" step="1"></label>
                   </div>
                 </div>
                 <div class="fallout-maw-pg-entry-actions">
-                  <button type="button" data-action="openItemEntry" title="Открыть предмет"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
-                  <button type="button" class="fallout-maw-pg-lock-button {{#if itemTradeLocked}}is-locked{{/if}}" data-action="toggleItemLock" title="{{#if itemTradeLocked}}Скрыт из обыска{{else}}Участвует в обыске{{/if}}"><i class="fa-solid fa-lock"></i></button>
-                  <button type="button" class="fallout-maw-pg-chain-button {{#if chain}}is-on{{/if}}" data-action="chainItemEntry" title="Связать предметы"><i class="fa-solid fa-link"></i></button>
-                  <button type="button" data-action="deleteItemEntry" title="Удалить предмет"><i class="fa-solid fa-trash"></i></button>
+                  <button type="button" data-action="openItemEntry" title="{{localize 'FALLOUTMAW.AuditTemplates.Text4a9469e43722'}}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                  <button type="button" class="fallout-maw-pg-lock-button {{#if itemTradeLocked}}is-locked{{/if}}" data-action="toggleItemLock" title="{{#if itemTradeLocked}}{{localize 'FALLOUTMAW.AuditTemplates.Text2e03b7a1cdc2'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Textaf695a2c9b11'}}{{/if}}"><i class="fa-solid fa-lock"></i></button>
+                  <button type="button" class="fallout-maw-pg-chain-button {{#if chain}}is-on{{/if}}" data-action="chainItemEntry" title="{{localize 'FALLOUTMAW.AuditTemplates.Textfcbc3591b1ed'}}"><i class="fa-solid fa-link"></i></button>
+                  <button type="button" data-action="deleteItemEntry" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9782f7483fc9'}}"><i class="fa-solid fa-trash"></i></button>
                 </div>
               </article>
               {{/each}}
@@ -230,42 +230,42 @@
 
               <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="" draggable="false">
               <div class="fallout-maw-pg-entry-content">
-                <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
+                <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="{{localize 'FALLOUTMAW.AuditTemplates.Text08e65d6af08e'}}">
                 <div class="fallout-maw-pg-entry-fields">
-                  <label><span>Кол-во:</span><input type="number" data-field="min" value="{{min}}" min="0" step="1"></label>
+                  <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Textea85503b0194'}}</span><input type="number" data-field="min" value="{{min}}" min="0" step="1"></label>
                   <span class="fallout-maw-pg-dash">-</span>
                   <input type="number" data-field="max" value="{{max}}" min="0" step="1">
                   {{#if hasCondition}}
-                  <label><span>Сост.:</span><input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1"></label>
+                  <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Textbcaed4e7a012'}}</span><input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1"></label>
                   <span class="fallout-maw-pg-dash">-</span>
                   <input type="number" data-field="condMax" value="{{condMax}}" min="0" max="100" step="1">
                   {{/if}}
-                  <label><span>Вес вероятности:</span><input type="number" data-field="weight" value="{{weight}}" min="1" step="1"></label>
+                  <label><span>{{localize 'FALLOUTMAW.AuditTemplates.Text9ea52b8950ca'}}</span><input type="number" data-field="weight" value="{{weight}}" min="1" step="1"></label>
                 </div>
               </div>
               <div class="fallout-maw-pg-entry-actions">
-                <button type="button" data-action="openItemEntry" title="Открыть предмет"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
-                <button type="button" class="fallout-maw-pg-lock-button {{#if itemTradeLocked}}is-locked{{/if}}" data-action="toggleItemLock" title="{{#if itemTradeLocked}}Скрыт из обыска{{else}}Участвует в обыске{{/if}}"><i class="fa-solid fa-lock"></i></button>
-                <button type="button" class="fallout-maw-pg-chain-button {{#if chain}}is-on{{/if}}" data-action="chainItemEntry" title="Связать предметы"><i class="fa-solid fa-link"></i></button>
-                <button type="button" data-action="deleteItemEntry" title="Удалить предмет"><i class="fa-solid fa-trash"></i></button>
+                <button type="button" data-action="openItemEntry" title="{{localize 'FALLOUTMAW.AuditTemplates.Text4a9469e43722'}}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                <button type="button" class="fallout-maw-pg-lock-button {{#if itemTradeLocked}}is-locked{{/if}}" data-action="toggleItemLock" title="{{#if itemTradeLocked}}{{localize 'FALLOUTMAW.AuditTemplates.Text2e03b7a1cdc2'}}{{else}}{{localize 'FALLOUTMAW.AuditTemplates.Textaf695a2c9b11'}}{{/if}}"><i class="fa-solid fa-lock"></i></button>
+                <button type="button" class="fallout-maw-pg-chain-button {{#if chain}}is-on{{/if}}" data-action="chainItemEntry" title="{{localize 'FALLOUTMAW.AuditTemplates.Textfcbc3591b1ed'}}"><i class="fa-solid fa-link"></i></button>
+                <button type="button" data-action="deleteItemEntry" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9782f7483fc9'}}"><i class="fa-solid fa-trash"></i></button>
               </div>
             </article>
             {{/each}}
             {{/if}}
             {{else}}
-            <p class="fallout-maw-empty-list">Перетащите предметы сюда.</p>
+            <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text33a924953ac2'}}</p>
             {{/each}}
           </div>
         </div>
       </section>
       {{else}}
-      <p class="fallout-maw-empty-list">Блоков пока нет. Нажмите «Добавить блок».</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textbbbd47f16190'}}</p>
       {{/each}}
     </div>
 
   </section>
   </div>
   <footer class="fallout-maw-pg-block-footer">
-    <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> Добавить блок</button>
+    <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Texta419379aee1d'}}</button>
   </footer>
 </div>

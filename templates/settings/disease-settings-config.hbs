@@ -1,10 +1,10 @@
 <div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Настройка болезней</h2>
+      <h2>{{localize 'FALLOUTMAW.AuditSystem.Text059'}}</h2>
       <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
-        <button type="button" data-action="addDisease"><i class="fa-solid fa-plus"></i> Создать болезнь</button>
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
+        <button type="button" data-action="addDisease"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text6a5e40c30e05'}}</button>
       </div>
     </header>
 
@@ -16,20 +16,20 @@
           <i class="fa-solid {{collapse.iconClass}}"></i>
         </button>
         <label>
-          <span>Название</span>
+          <span>{{localize 'FALLOUTMAW.Common.Label'}}</span>
           <input type="text" name="settings.diseases.{{@index}}.name" value="{{name}}">
         </label>
         <label>
-          <span>Изображение</span>
+          <span>{{localize 'FALLOUTMAW.AuditTemplates.Text56a1fd52891d'}}</span>
           <file-picker type="image" name="settings.diseases.{{@index}}.img" value="{{img}}"></file-picker>
         </label>
-        <button type="button" data-action="deleteDisease"><i class="fa-solid fa-trash"></i> Удалить болезнь</button>
+        <button type="button" data-action="deleteDisease"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textbf8274a23070'}}</button>
       </header>
 
       <div data-disease-collapse-body>
       <header class="fallout-maw-panel-header">
-        <h3>Стадии</h3>
-        <button type="button" data-action="addDiseaseStage"><i class="fa-solid fa-plus"></i> Добавить стадию</button>
+        <h3>{{localize 'FALLOUTMAW.AuditTemplates.Text77994205ed6c'}}</h3>
+        <button type="button" data-action="addDiseaseStage"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Texta2f14941a426'}}</button>
       </header>
 
       {{#each stages}}
@@ -37,30 +37,30 @@
         <input type="hidden" name="settings.diseases.{{@../index}}.stages.{{@index}}.id" value="{{id}}">
         <header class="fallout-maw-panel-header fallout-maw-disease-stage-header">
           <label>
-            <span>Название стадии</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7afe88f141d3'}}</span>
             <input type="text" name="settings.diseases.{{@../index}}.stages.{{@index}}.name" value="{{name}}">
           </label>
-          <button type="button" data-action="deleteDiseaseStage"><i class="fa-solid fa-trash"></i> Удалить стадию</button>
+          <button type="button" data-action="deleteDiseaseStage"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text366e8f78c242'}}</button>
         </header>
         <div class="fallout-maw-list-grid three-columns">
           <label>
-            <span>Уровень</span>
+            <span>{{localize 'FALLOUTMAW.Actor.Level'}}</span>
             <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.level" value="{{level}}" min="1" step="1">
           </label>
           <label>
-            <span>Изображение стадии</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Textad56af001aad'}}</span>
             <file-picker type="image" name="settings.diseases.{{@../index}}.stages.{{@index}}.img" value="{{img}}"></file-picker>
           </label>
           <label>
-            <span>Прогресс усугубления, ч</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text41415622cc46'}}</span>
             <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.worseningHours" value="{{worseningHours}}" min="1" step="1">
           </label>
           <label>
-            <span>Сложность лечения</span>
+            <span>{{localize 'FALLOUTMAW.Trauma.HealingDifficulty'}}</span>
             <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.healingDifficulty" value="{{healingDifficulty}}" min="0" step="1">
           </label>
           <label>
-            <span>Класс инструмента</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Textbbe41ed454b6'}}</span>
             <select name="settings.diseases.{{@../index}}.stages.{{@index}}.healingToolClass">
               {{#each healingToolClassChoices}}
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -68,11 +68,11 @@
             </select>
           </label>
           <label>
-            <span>Прогресс лечения</span>
+            <span>{{localize 'FALLOUTMAW.Trauma.HealingProgress'}}</span>
             <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.healingProgress" value="{{healingProgress}}" min="1" step="1">
           </label>
           <label>
-            <span>Навык лечения</span>
+            <span>{{localize 'FALLOUTMAW.Trauma.HealingSkill'}}</span>
             <select name="settings.diseases.{{@../index}}.stages.{{@index}}.healingSkillKey">
               {{#each healingSkillChoices}}
               <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -82,12 +82,12 @@
         </div>
 
         <header class="fallout-maw-panel-header">
-          <h4>Изменения от стадии</h4>
-          <button type="button" data-action="addDiseaseStageEffect"><i class="fa-solid fa-plus"></i> Добавить изменение</button>
+          <h4>{{localize 'FALLOUTMAW.AuditTemplates.Textbf0f98aa73eb'}}</h4>
+          <button type="button" data-action="addDiseaseStageEffect"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Effects.AddChange'}}</button>
         </header>
         <div class="fallout-maw-trauma-effect-table">
           <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
-            <span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span>
+            <span>{{localize 'FALLOUTMAW.Common.Key'}}</span><span>{{localize 'FALLOUTMAW.Common.Type'}}</span><span>{{localize 'FALLOUTMAW.Common.Value'}}</span><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb5b6ddbf62af'}}</span><span></span>
           </div>
           {{#each effects}}
           <div class="fallout-maw-trauma-effect-row" data-disease-effect-row>
@@ -104,12 +104,12 @@
         </div>
       </article>
       {{else}}
-      <p class="fallout-maw-empty-list">Стадии не настроены.</p>
+      <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textf0ed2f460415'}}</p>
       {{/each}}
       </div>
     </article>
     {{else}}
-    <p class="fallout-maw-empty-list">Болезни не настроены.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Texte054af0ef73d'}}</p>
     {{/each}}
   </section>
 

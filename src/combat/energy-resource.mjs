@@ -1,10 +1,10 @@
 import { toInteger } from "../utils/numbers.mjs";
+import { getOneTimeResourceValue, runOneTimeResourceMutation, prepareActorResourceSpend } from "./one-time-resources.mjs";
 
 export const ENERGY_RESOURCE_KEY = "power";
 const RESOURCE_BLOCK_FLAG_SCOPE = "fallout-maw";
 const RESOURCE_BLOCK_FLAG_KEY = "damageEffect";
 const RESOURCE_BLOCK_KINDS = new Set(["resourceLimit", "resourceBlock"]);
-const actorEnergyMutationQueue = new Map();
 
 export function getActorEnergy(actor) {
   return Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.value));
@@ -13,7 +13,7 @@ export function getActorEnergy(actor) {
 export function getActorAvailableEnergy(actor) {
   const resource = actor?.system?.resources?.[ENERGY_RESOURCE_KEY];
   const min = Math.max(0, toInteger(resource?.min));
-  return Math.max(min, getActorEnergy(actor) - getActorBlockedEnergy(actor));
+  return Math.max(min, getActorEnergy(actor) + getOneTimeResourceValue(actor, ENERGY_RESOURCE_KEY) - getActorBlockedEnergy(actor));
 }
 
 export function canActorSpendEnergy(actor, cost = 0) {
@@ -27,19 +27,68 @@ export function runActorEnergyMutation(actor, operation) {
     throw new TypeError("Energy mutation operation must be a function.");
   }
 
-  const actorKey = String(actor?.uuid ?? actor?.id ?? "").trim();
-  if (!actorKey) return Promise.resolve().then(operation);
+  return runOneTimeResourceMutation(actor, operation);
+}
 
-  const previous = actorEnergyMutationQueue.get(actorKey) ?? Promise.resolve();
-  let next;
-  next = previous
-    .catch(() => undefined)
-    .then(operation)
-    .finally(() => {
-      if (actorEnergyMutationQueue.get(actorKey) === next) actorEnergyMutationQueue.delete(actorKey);
-    });
-  actorEnergyMutationQueue.set(actorKey, next);
-  return next;
+export function prepareActorEnergySpend(actor, amount = 0) {
+  const min = Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.min));
+  return prepareActorResourceSpend(actor, ENERGY_RESOURCE_KEY, amount, {
+    available: Math.max(0, getActorAvailableEnergy(actor) - min)
+  });
+}
+
+export function spendActorEnergyWithReceipt(actor, amount = 0, options = {}) {
+  return runActorEnergyMutation(actor, async () => {
+    const cost = Math.max(0, toInteger(amount));
+    if (!cost) return { spent: 0, receipt: null };
+    const plan = prepareActorEnergySpend(actor, cost);
+    if (!actor?.isOwner || !plan) return { spent: 0, receipt: null };
+    const before = getActorEnergy(actor);
+    const onceBefore = getOneTimeResourceValue(actor, ENERGY_RESOURCE_KEY);
+    const receipt = Object.freeze({ actorUuid: String(actor.uuid ?? ""), resourceKey: ENERGY_RESOURCE_KEY,
+      amount: cost, normalSpent: plan.normalSpent, onceSpent: plan.onceSpent });
+    try {
+      await actor.update({ ...plan.updates }, options);
+      if (getActorEnergy(actor) !== before - plan.normalSpent
+        || getOneTimeResourceValue(actor, ENERGY_RESOURCE_KEY) !== onceBefore - plan.onceSpent) {
+        const error = new Error("Energy update was cancelled or altered."); error.cancelled = true; throw error;
+      }
+    } catch (error) {
+      const normalSpent = Math.min(plan.normalSpent, Math.max(0, before - getActorEnergy(actor)));
+      const onceSpent = Math.min(plan.onceSpent, Math.max(0, onceBefore - getOneTimeResourceValue(actor, ENERGY_RESOURCE_KEY)));
+      if (normalSpent + onceSpent > 0) {
+        try {
+          const restored = await refundActorEnergyReceiptNow(actor, { ...receipt, amount: normalSpent + onceSpent, normalSpent, onceSpent }, options);
+          if (restored !== normalSpent + onceSpent) throw new Error("Energy compensation was incomplete.");
+        } catch (rollbackError) { error.rollbackError ??= rollbackError; }
+      }
+      if (error.cancelled && !error.rollbackError) return { spent: 0, receipt: null };
+      throw error;
+    }
+    return { spent: cost, receipt };
+  });
+}
+
+export function refundActorEnergyReceipt(actor, receipt, options = {}) {
+  return runActorEnergyMutation(actor, () => refundActorEnergyReceiptNow(actor, receipt, options));
+}
+
+async function refundActorEnergyReceiptNow(actor, receipt, options = {}) {
+  if (!actor?.isOwner || receipt?.resourceKey !== ENERGY_RESOURCE_KEY
+    || String(receipt.actorUuid ?? "") !== String(actor.uuid ?? "")) return 0;
+  const before = getActorEnergy(actor);
+  const onceBefore = getOneTimeResourceValue(actor, ENERGY_RESOURCE_KEY);
+  const maximum = Math.max(0, toInteger(actor.system?.resources?.[ENERGY_RESOURCE_KEY]?.max));
+  const normal = Math.max(0, Math.min(toInteger(receipt.normalSpent), maximum - before));
+  const once = Math.max(0, toInteger(receipt.onceSpent));
+  if (!normal && !once) return 0;
+  await actor.update({
+    ...(normal ? { [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: before + normal,
+      [`system.resources.${ENERGY_RESOURCE_KEY}.spent`]: Math.max(0, maximum - before - normal) } : {}),
+    ...(once ? { [`system.resources.${ENERGY_RESOURCE_KEY}.once`]: onceBefore + once } : {})
+  }, { ...options, falloutMawAbilityResourceRefund: true });
+  return Math.min(normal, Math.max(0, getActorEnergy(actor) - before))
+    + Math.min(once, Math.max(0, getOneTimeResourceValue(actor, ENERGY_RESOURCE_KEY) - onceBefore));
 }
 
 /**

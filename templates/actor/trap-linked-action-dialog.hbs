@@ -1,7 +1,7 @@
 <div class="fallout-maw-sheet fallout-maw-trap-linked-action">
   <header class="fallout-maw-trap-linked-action-header">
     <strong>{{actorName}}</strong>
-    <span>Выберите оружие, затем действие, которое выполнится при срабатывании ловушки.</span>
+    <span>{{localize 'FALLOUTMAW.AuditTemplates.Text57e1a3bc9813'}}</span>
   </header>
 
   <div class="fallout-maw-trap-linked-action-sets">
@@ -45,16 +45,16 @@
       {{/each}}
     </section>
     {{else}}
-    <p class="fallout-maw-empty-list">У актёра нет доступного оружия с боевыми действиями.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text6982e6ec7cb2'}}</p>
     {{/each}}
   </div>
 
   <footer class="fallout-maw-trap-linked-action-footer">
     <button type="button" data-action="confirmAction" {{#unless canConfirm}}disabled{{/unless}}>
-      <i class="fa-solid fa-link"></i> Подтвердить связь
+      <i class="fa-solid fa-link"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text0fb2b5f18d35'}}
     </button>
     <button type="button" data-action="cancelAction">
-      <i class="fa-solid fa-xmark"></i> Отмена
+      <i class="fa-solid fa-xmark"></i> {{localize 'FALLOUTMAW.Common.Cancel'}}
     </button>
   </footer>
 </div>

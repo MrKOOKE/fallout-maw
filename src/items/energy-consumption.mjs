@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getSourceToggleIcon } from "../settings/accessors.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
@@ -56,7 +57,7 @@ export function hasEnergyConsumptionConditions(item = null) {
 export function getEnergyConsumptionDisplayName(item = null, condition = {}) {
   return String(condition?.name ?? "").trim()
     || item?.name
-    || "Потребление энергии";
+    || auditLocalize("FALLOUTMAW.AuditRuntime.R1138", "Потребление энергии");
 }
 
 export function getEnergyConsumptionControlEntries(actor = null, options = {}) {
@@ -109,7 +110,7 @@ export async function setEnergyConsumptionActive(actor = null, item = null, cond
   const condition = getEnergyConsumptionConditions(item).find(entry => entry.id === key);
   if (!condition) return false;
   if (active && !canActivateEnergyConsumption(actor, item, condition)) {
-    ui.notifications?.warn?.("Нет подходящего источника энергии.");
+    ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R1139", "Нет подходящего источника энергии."));
     return false;
   }
   const updated = await updateEnergyConsumptionCarrier(actor, item, {
@@ -160,7 +161,7 @@ export async function openEnergyConsumptionDialog({ actor = null, item = null, c
     const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
       .find(candidate => candidate.uuid === selectedSourceUuid);
     if (!freshItem || !source) {
-      ui.notifications?.warn?.("Нет подходящего источника энергии.");
+      ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R1139", "Нет подходящего источника энергии."));
       return;
     }
     await installEnergyConsumerSource(actor, freshItem, source);
@@ -173,25 +174,25 @@ export async function openEnergyConsumptionDialog({ actor = null, item = null, c
     const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
     if (!freshItem) return;
     const extracted = await extractEnergyConsumerSource(actor, freshItem);
-    if (!extracted) ui.notifications?.warn?.("Нет установленного источника энергии.");
+    if (!extracted) ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R1140", "Нет установленного источника энергии."));
     await disableInvalidEnergyConsumption(actor, freshItem);
     refreshDialogContent(dialog);
   };
 
   const dialog = new DialogV2({
-    window: { title: item.name || "Потребление энергии" },
+    window: { title: item.name || auditLocalize("FALLOUTMAW.AuditRuntime.R1138", "Потребление энергии") },
     content: `<form class="fallout-maw-reload-dialog-form">${renderContent()}</form>`,
     form: { closeOnSubmit: false },
     buttons: [
       {
         action: "extract",
-        label: "Извлечь",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R1141", "Извлечь"),
         type: "button",
         callback: (_event, _button, dlg) => extractSource(dlg)
       },
       {
         action: "install",
-        label: "Установить",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R1142", "Установить"),
         type: "button",
         default: true,
         callback: (_event, _button, dlg) => switchSource(dlg)
@@ -399,47 +400,18 @@ function renderEnergyConsumptionDialogContent({ actor = null, item = null, selec
   const sourceItems = getAvailableEnergySourceItems(actor, consumer);
   const activeSource = getActiveEnergySourceItem(actor, consumer);
   const conditions = getEnergyConsumptionConditions(item);
-  return `
-    <div class="fallout-maw-reload-dialog" data-energy-consumption-dialog-root>
-      <div class="fallout-maw-reload-main">
-        <div class="fallout-maw-reload-source-pane">
-          <span>Потребление энергии</span>
-          ${conditions.map(condition => renderEnergyConsumptionConditionCard(actor, item, condition, condition.id === selectedConditionId)).join("")}
-        </div>
-        <div class="fallout-maw-reload-source-pane">
-          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceCurrentEnergySource"))}</span>
-          ${renderInstalledEnergySourceCard(activeSource)}
-        </div>
-        <div class="fallout-maw-reload-source-pane">
-          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"))}</span>
-          <div class="fallout-maw-reload-source-list" data-energy-consumption-source-list>
-            ${renderEnergySourceCards(sourceItems, selectedSourceUuid)}
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  return auditFormat("FALLOUTMAW.AuditRuntime.R1143", { p0: (conditions.map(condition => renderEnergyConsumptionConditionCard(actor, item, condition, condition.id === selectedConditionId)).join("")), p1: (escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceCurrentEnergySource"))), p2: (renderInstalledEnergySourceCard(activeSource)), p3: (escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"))), p4: (renderEnergySourceCards(sourceItems, selectedSourceUuid)) }, "\n    <div class=\"fallout-maw-reload-dialog\" data-energy-consumption-dialog-root>\n      <div class=\"fallout-maw-reload-main\">\n        <div class=\"fallout-maw-reload-source-pane\">\n          <span>Потребление энергии</span>\n          {p0}\n        </div>\n        <div class=\"fallout-maw-reload-source-pane\">\n          <span>{p1}</span>\n          {p2}\n        </div>\n        <div class=\"fallout-maw-reload-source-pane\">\n          <span>{p3}</span>\n          <div class=\"fallout-maw-reload-source-list\" data-energy-consumption-source-list>\n            {p4}\n          </div>\n        </div>\n      </div>\n    </div>\n  ");
 }
 
 function renderEnergyConsumptionConditionCard(actor = null, item = null, condition = {}, selected = false) {
   const active = isEnergyConsumptionActive(item, condition.id);
   const disabled = !active && !canActivateEnergyConsumption(actor, item, condition);
-  const label = active ? "Выключить" : "Включить";
-  return `
-    <button type="button" class="fallout-maw-reload-source-card ${selected ? "active" : ""}" data-energy-consumption-condition="${escapeAttribute(condition.id)}">
-      <img src="${escapeAttribute(normalizeImagePath(item?.img, FALLBACK_ICON))}" alt="">
-      <span>${escapeHTML(getEnergyConsumptionDisplayName(item, condition))}</span>
-      <strong>${escapeHTML(formatNumberForDisplay(condition.amountPerHour))}/ч</strong>
-    </button>
-    <button type="button" class="fallout-maw-reload-source-card ${active ? "active" : ""}" data-energy-consumption-toggle="${escapeAttribute(condition.id)}" ${disabled ? "disabled" : ""}>
-      <img src="${escapeAttribute(getSourceToggleIcon(active))}" alt="">
-      <span>${escapeHTML(label)}</span>
-    </button>
-  `;
+  const label = active ? auditLocalize("FALLOUTMAW.AuditRuntime.R1144", "Выключить") : auditLocalize("FALLOUTMAW.AuditRuntime.R1145", "Включить");
+  return auditFormat("FALLOUTMAW.AuditRuntime.R1146", { p0: (selected ? "active" : ""), p1: (escapeAttribute(condition.id)), p2: (escapeAttribute(normalizeImagePath(item?.img, FALLBACK_ICON))), p3: (escapeHTML(getEnergyConsumptionDisplayName(item, condition))), p4: (escapeHTML(formatNumberForDisplay(condition.amountPerHour))), p5: (active ? "active" : ""), p6: (escapeAttribute(condition.id)), p7: (disabled ? "disabled" : ""), p8: (escapeAttribute(getSourceToggleIcon(active))), p9: (escapeHTML(label)) }, "\n    <button type=\"button\" class=\"fallout-maw-reload-source-card {p0}\" data-energy-consumption-condition=\"{p1}\">\n      <img src=\"{p2}\" alt=\"\">\n      <span>{p3}</span>\n      <strong>{p4}/ч</strong>\n    </button>\n    <button type=\"button\" class=\"fallout-maw-reload-source-card {p5}\" data-energy-consumption-toggle=\"{p6}\" {p7}>\n      <img src=\"{p8}\" alt=\"\">\n      <span>{p9}</span>\n    </button>\n  ");
 }
 
 function renderInstalledEnergySourceCard(activeSource = null) {
-  if (!activeSource) return `<div class="fallout-maw-token-hud-empty">Нет установленного источника энергии</div>`;
+  if (!activeSource) return auditLocalize("FALLOUTMAW.AuditRuntime.R1147", "<div class=\"fallout-maw-token-hud-empty\">Нет установленного источника энергии</div>");
   const reserve = getEnergySourceReserveState(activeSource);
   const reserveLabel = reserve.max > 0 ? `${formatNumberForDisplay(reserve.value)} / ${formatNumberForDisplay(reserve.max)}` : formatNumberForDisplay(reserve.value);
   return `
@@ -452,7 +424,7 @@ function renderInstalledEnergySourceCard(activeSource = null) {
 }
 
 function renderEnergySourceCards(sourceItems = [], selectedSourceUuid = "") {
-  if (!sourceItems.length) return `<div class="fallout-maw-token-hud-empty">Нет доступных источников энергии</div>`;
+  if (!sourceItems.length) return auditLocalize("FALLOUTMAW.AuditRuntime.R1148", "<div class=\"fallout-maw-token-hud-empty\">Нет доступных источников энергии</div>");
   return sourceItems.map(item => {
     const reserve = getEnergySourceReserveState(item);
     const reserveLabel = reserve.max > 0 ? `${formatNumberForDisplay(reserve.value)} / ${formatNumberForDisplay(reserve.max)}` : formatNumberForDisplay(reserve.value);

@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "./utils/i18n.mjs";
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
 import { registerTooltipItemDrag } from "./utils/tooltip-item-drag.mjs";
 import { FalloutMaWTileDocument } from "./documents/tile-reset-cache.mjs";
@@ -25,6 +26,7 @@ import { configureSmokePerceptionFormulaEvaluator } from "./canvas/smoke-percept
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
+import { registerOneTimeResourceLifecycle } from "./combat/one-time-resource-lifecycle.mjs";
 import { registerCombatTurnNavigationSocket } from "./combat/turn-navigation-socket.mjs";
 import { registerCombatLifecycleLeaseQueries } from "./combat/combat-lifecycle-lease.mjs";
 import { registerCombatEndResolutionHooks, registerCombatEndResolutionSocket } from "./combat/combat-end-resolution.mjs";
@@ -79,6 +81,7 @@ import {
   startConsciousnessStatusSynchronization
 } from "./combat/damage-hub.mjs";
 import { migrateWorldConsciousnessData } from "./migrations/world.mjs";
+import { migrateWorldOneTimeResources } from "./migrations/one-time-resources.mjs";
 import { removeObsoleteWorldSettings } from "./migrations/obsolete-world-settings.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
@@ -90,6 +93,7 @@ import {
   transferItemBetweenActors
 } from "./apps/search-inventory.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
+import { registerConsumptionReceiptSocket } from "./inventory/consumption-receipt.mjs";
 import { registerDroppedItemHooks } from "./items/dropped-items.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
@@ -208,6 +212,7 @@ Hooks.once("init", () => {
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerReactionResourceHooks();
+  registerOneTimeResourceLifecycle();
   registerCombatLifecycleLeaseQueries();
   registerCombatEndResolutionHooks();
   registerActiveActionHooks();
@@ -280,6 +285,7 @@ Hooks.once("ready", () => {
   registerSearchInventorySocket();
   registerHackingSocket();
   registerFirstAidSocket();
+  registerConsumptionReceiptSocket();
   registerTokenActionHudSocket();
   registerTravelMovementSocket();
   registerFixedAbilityFunctionSocket();
@@ -296,6 +302,7 @@ async function initializeFalloutMawReadyState() {
   await initializeSettingsPresets();
   const presetsFinished = globalThis.performance?.now?.() ?? Date.now();
   await migrateWorldConsciousnessData();
+  await migrateWorldOneTimeResources();
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorNeedThresholdEffects();
   refreshSkillCheckControlButton();
@@ -334,7 +341,7 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
   const actor = target?.actor;
   if (!actor) return undefined;
   if (!actor.isOwner) {
-    ui.notifications.warn(`Нет прав на добавление предмета актеру ${actor.name}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text001", { v0: actor.name }, "Нет прав на добавление предмета актеру {v0}."));
     return false;
   }
 
@@ -384,21 +391,21 @@ async function dropAbilityOnCanvasToken(canvas, data = {}) {
   const actor = target?.actor;
   if (!actor) return undefined;
   if (!actor.isOwner) {
-    ui.notifications.warn(`Нет прав на добавление способности актеру ${actor.name}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text002", { v0: actor.name }, "Нет прав на добавление способности актеру {v0}."));
     return false;
   }
 
   const sourceId = String(data.sourceId ?? "").trim();
-  const abilityName = String(data.name ?? "").trim() || "Способность";
+  const abilityName = String(data.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditSystem.Text003", "Способность");
   if (!sourceId) return false;
   if (actorHasAbility(actor, sourceId)) {
-    ui.notifications.warn(`${actor.name} уже имеет способность: ${abilityName}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text004", { v0: actor.name, v1: abilityName }, "{v0} уже имеет способность: {v1}."));
     return false;
   }
 
   const item = await grantCatalogAbility(actor, sourceId);
-  if (item) ui.notifications.info(`${actor.name}: добавлена способность ${item.name}.`);
-  else ui.notifications.warn(`Не удалось добавить способность: ${abilityName}.`);
+  if (item) ui.notifications.info(auditFormat("FALLOUTMAW.AuditSystem.Text005", { v0: actor.name, v1: item.name }, "{v0}: добавлена способность {v1}."));
+  else ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text006", { v0: abilityName }, "Не удалось добавить способность: {v0}."));
   return false;
 }
 
@@ -407,30 +414,30 @@ async function dropAbilityItemOnCanvasToken(canvas, data = {}, item = null) {
   const actor = target?.actor;
   if (!actor) return undefined;
   if (!actor.isOwner) {
-    ui.notifications.warn(`Нет прав на добавление способности актеру ${actor.name}.`);
+    ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text002", { v0: actor.name }, "Нет прав на добавление способности актеру {v0}."));
     return false;
   }
 
   const sourceId = getAbilitySourceId(item);
-  const abilityName = String(item?.name ?? "").trim() || "Способность";
+  const abilityName = String(item?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditSystem.Text003", "Способность");
   if (sourceId) {
     if (actorHasAbility(actor, sourceId)) {
-      ui.notifications.warn(`${actor.name} уже имеет способность: ${abilityName}.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text004", { v0: actor.name, v1: abilityName }, "{v0} уже имеет способность: {v1}."));
       return false;
     }
     const created = await grantCatalogAbility(actor, sourceId);
-    if (created) ui.notifications.info(`${actor.name}: добавлена способность ${created.name}.`);
-    else ui.notifications.warn(`Не удалось добавить способность: ${abilityName}.`);
+    if (created) ui.notifications.info(auditFormat("FALLOUTMAW.AuditSystem.Text005", { v0: actor.name, v1: created.name }, "{v0}: добавлена способность {v1}."));
+    else ui.notifications.warn(auditFormat("FALLOUTMAW.AuditSystem.Text006", { v0: abilityName }, "Не удалось добавить способность: {v0}."));
     return false;
   }
 
   const itemData = item.toObject();
   const { item: created, cancelled } = await grantAbilityItemData(actor, itemData);
   if (cancelled) {
-    ui.notifications.warn("Выбор изменений способности не завершён. Способность не добавлена.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditSystem.Text007", "Выбор изменений способности не завершён. Способность не добавлена."));
     return false;
   }
-  if (created) ui.notifications.info(`${actor.name}: добавлена способность ${created.name}.`);
+  if (created) ui.notifications.info(auditFormat("FALLOUTMAW.AuditSystem.Text005", { v0: actor.name, v1: created.name }, "{v0}: добавлена способность {v1}."));
   return false;
 }
 

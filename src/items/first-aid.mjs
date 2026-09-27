@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 ﻿import {
   getActorHealingModifierPercent,
   requestDamageApplication,
@@ -9,7 +10,7 @@
 import {
   canSpendCombatActionPoints,
   isActorInActiveCombat,
-  spendCombatActionPoints
+  spendCombatActionPointsWithReceipt
 } from "../combat/reaction-resources.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -36,7 +37,7 @@ import {
   commitPreparedActiveUseOperations,
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
-import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
+import { recoverInventoryConsumption, runInventoryConsumption } from "../inventory/consumption-receipt.mjs";
 import {
   PERIODIC_HEALING_INTERVAL_SECONDS,
   isPeriodicHealingEffectKey
@@ -67,6 +68,10 @@ export async function useFirstAidItem({
   chainRef = null,
   options = {}
 } = {}) {
+  if (item) {
+    const recovery = await recoverInventoryConsumption(item);
+    if (recovery.handled) return recovery.result;
+  }
   if (!sourceActor || !targetActor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.firstAid)) return false;
 
   const firstAid = getFirstAidFunction(item);
@@ -105,181 +110,304 @@ export async function useFirstAidItem({
     return false;
   }
 
-  const contextualAbilitySnapshots = new Map();
-  const outgoingContext = {
-    actorToken: sourceToken?.object ?? sourceToken,
-    targetActor,
-    targetToken: targetToken?.object ?? targetToken,
-    item,
-    firstAid,
-    actionKey: "firstAid",
-    requester: "firstAid",
-    activeUseStages: { action: true, check: false, damage: false },
-    chanceOperationId: firstAidOperationId,
-    limitedUseOperationId: firstAidOperationId,
-    contextualAbilitySnapshots
-  };
-  const incomingContext = {
-    actorToken: targetToken?.object ?? targetToken,
-    targetActor: sourceActor,
-    targetToken: sourceToken?.object ?? sourceToken,
-    item,
-    firstAid,
-    actionKey: "firstAid",
-    requester: "firstAid",
-    activeUseStages: { action: true, check: false, damage: false },
-    chanceOperationId: firstAidOperationId,
-    limitedUseOperationId: firstAidOperationId,
-    contextualAbilitySnapshots
-  };
-  if (!(await spendActionPointsIfNeeded(sourceActor, firstAid, outgoingContext))) return false;
-
   const inheritedChainRef = chainRef
     ?? options?.falloutMawSystemEventChainRef
     ?? options?.chainRef
     ?? workflowSource?.chainRef
     ?? null;
-  const source = {
-    kind: "firstAid",
-    sourceActorUuid: sourceActor.uuid,
-    itemUuid: item.uuid,
-    itemName: item.name,
-    worldTime: Number(game.time?.worldTime) || 0,
-    ...(inheritedChainRef ? { chainRef: inheritedChainRef } : {})
-  };
+  let applicationChat = null;
+  const used = await runInventoryConsumption({ item, kind: "firstAid", amount: chargeCost, targetActor,
+    documentOptions: createFirstAidDocumentOptions(inheritedChainRef)
+  }, async ({ markEffectsStarted }) => {
+    const contextualAbilitySnapshots = new Map();
+    const outgoingContext = {
+      actorToken: sourceToken?.object ?? sourceToken,
+      targetActor,
+      targetToken: targetToken?.object ?? targetToken,
+      item,
+      firstAid,
+      actionKey: "firstAid",
+      requester: "firstAid",
+      activeUseStages: { action: true, check: false, damage: false },
+      chanceOperationId: firstAidOperationId,
+      limitedUseOperationId: firstAidOperationId,
+      contextualAbilitySnapshots
+    };
+    const incomingContext = {
+      actorToken: targetToken?.object ?? targetToken,
+      targetActor: sourceActor,
+      targetToken: sourceToken?.object ?? sourceToken,
+      item,
+      firstAid,
+      actionKey: "firstAid",
+      requester: "firstAid",
+      activeUseStages: { action: true, check: false, damage: false },
+      chanceOperationId: firstAidOperationId,
+      limitedUseOperationId: firstAidOperationId,
+      contextualAbilitySnapshots
+    };
+    if (!(await spendActionPointsIfNeeded(sourceActor, firstAid, outgoingContext))) return false;
 
-  const checkResult = await rollFirstAidCheck({
-    sourceActor,
-    targetActor,
-    sourceToken,
-    targetToken,
-    difficulty: checkDifficulty,
-    skillKey,
-    item,
-    chainRef: inheritedChainRef
-  });
-  const resultKey = checkResult?.result?.key ?? (checkDifficulty > 0 ? "" : "success");
-  if (!resultKey) return false;
-  const resultMultiplier = resultKey === "criticalFailure"
-    ? 0
-    : resultKey === "failure"
-      ? 0.5
+    const source = {
+      kind: "firstAid",
+      sourceActorUuid: sourceActor.uuid,
+      itemUuid: item.uuid,
+      itemName: item.name,
+      worldTime: Number(game.time?.worldTime) || 0,
+      ...(inheritedChainRef ? { chainRef: inheritedChainRef } : {})
+    };
+
+    const checkResult = await rollFirstAidCheck({
+      sourceActor,
+      targetActor,
+      sourceToken,
+      targetToken,
+      difficulty: checkDifficulty,
+      skillKey,
+      item,
+      chainRef: inheritedChainRef
+    });
+    const resultKey = checkResult?.result?.key ?? (checkDifficulty > 0 ? "" : "success");
+    if (!resultKey) return false;
+    const resultMultiplier = resultKey === "criticalFailure"
+      ? 0
+      : resultKey === "failure"
+        ? 0.5
+        : 1;
+    const criticalSuccessMultiplier = resultKey === "criticalSuccess"
+      ? 1 + (Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus ?? CRITICAL_SUCCESS_DEFAULT_BONUS)) / 100)
       : 1;
-  const criticalSuccessMultiplier = resultKey === "criticalSuccess"
-    ? 1 + (Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus ?? CRITICAL_SUCCESS_DEFAULT_BONUS)) / 100)
-    : 1;
-  source.chanceOperationId = firstAidOperationId;
-  source.limitedUseOperationId = firstAidOperationId;
+    source.chanceOperationId = firstAidOperationId;
+    source.limitedUseOperationId = firstAidOperationId;
 
-  const canApplyMainEffects = resultKey !== "criticalFailure";
-  const canScaleEffects = canApplyMainEffects
-    && firstAidHasScalableEffects(firstAid, targetContext, selectedLimbs);
-  const canScaleDuration = canApplyMainEffects && firstAidHasScalableDuration(firstAid);
-  const canResistWithdrawal = firstAidHasWithdrawalEffects(firstAid);
-  const canUseOutgoingHealing = canApplyMainEffects
-    && firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs);
-  const outgoingActiveUseKeys = getFirstAidResolutionActiveUseKeys({
-    direction: "outgoing",
-    includeEffectiveness: canScaleEffects
-  });
-  if (canUseOutgoingHealing) {
-    for (const key of getHealingResolutionActiveUseKeys({ direction: "outgoing" })) {
-      outgoingActiveUseKeys.add(key);
+    const canApplyMainEffects = resultKey !== "criticalFailure";
+    const canScaleEffects = canApplyMainEffects
+      && firstAidHasScalableEffects(firstAid, targetContext, selectedLimbs);
+    const canScaleDuration = canApplyMainEffects && firstAidHasScalableDuration(firstAid);
+    const canResistWithdrawal = firstAidHasWithdrawalEffects(firstAid);
+    const canUseOutgoingHealing = canApplyMainEffects
+      && firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs);
+    const outgoingActiveUseKeys = getFirstAidResolutionActiveUseKeys({
+      direction: "outgoing",
+      includeEffectiveness: canScaleEffects
+    });
+    if (canUseOutgoingHealing) {
+      for (const key of getHealingResolutionActiveUseKeys({ direction: "outgoing" })) {
+        outgoingActiveUseKeys.add(key);
+      }
     }
-  }
-  const incomingActiveUseKeys = getFirstAidResolutionActiveUseKeys({
-    direction: "incoming",
-    includeEffectiveness: canScaleEffects,
-    includeDuration: canScaleDuration,
-    includeWithdrawalResistance: canResistWithdrawal
-  });
-  const hasDistinctActors = String(sourceActor?.uuid ?? sourceActor?.id ?? "")
-    !== String(targetActor?.uuid ?? targetActor?.id ?? "");
-  const activeUsePreparations = [
-    outgoingActiveUseKeys.size
-      ? prepareActiveUseOperation({
-        kind: "firstAidOutgoing",
-        actor: sourceActor,
-        keys: outgoingActiveUseKeys,
-        conditionContexts: [outgoingContext],
-        reverseOnly: false
-      })
-      : null,
-    hasDistinctActors && outgoingActiveUseKeys.size
-      ? prepareActiveUseOperation({
-        kind: "firstAidOutgoingReverse",
+    const incomingActiveUseKeys = getFirstAidResolutionActiveUseKeys({
+      direction: "incoming",
+      includeEffectiveness: canScaleEffects,
+      includeDuration: canScaleDuration,
+      includeWithdrawalResistance: canResistWithdrawal
+    });
+    const hasDistinctActors = String(sourceActor?.uuid ?? sourceActor?.id ?? "")
+      !== String(targetActor?.uuid ?? targetActor?.id ?? "");
+    const activeUsePreparations = [
+      outgoingActiveUseKeys.size
+        ? prepareActiveUseOperation({
+          kind: "firstAidOutgoing",
+          actor: sourceActor,
+          keys: outgoingActiveUseKeys,
+          conditionContexts: [outgoingContext],
+          reverseOnly: false
+        })
+        : null,
+      hasDistinctActors && outgoingActiveUseKeys.size
+        ? prepareActiveUseOperation({
+          kind: "firstAidOutgoingReverse",
+          actor: targetActor,
+          keys: outgoingActiveUseKeys,
+          conditionContexts: [incomingContext],
+          reverseOnly: true
+        })
+        : null,
+      incomingActiveUseKeys.size
+        ? prepareActiveUseOperation({
+          kind: "firstAidIncoming",
+          actor: targetActor,
+          keys: incomingActiveUseKeys,
+          conditionContexts: [incomingContext],
+          reverseOnly: false
+        })
+        : null,
+      hasDistinctActors && incomingActiveUseKeys.size
+        ? prepareActiveUseOperation({
+          kind: "firstAidIncomingReverse",
+          actor: sourceActor,
+          keys: incomingActiveUseKeys,
+          conditionContexts: [outgoingContext],
+          reverseOnly: true
+        })
+        : null
+    ].filter(Boolean);
+
+    const outgoingFirstAidModifiers = getActorFirstAidModifiers(sourceActor, outgoingContext);
+    const incomingFirstAidModifiers = targetContext.firstAidModifiers
+      ?? getActorFirstAidModifiers(targetActor, incomingContext);
+    const scaling = calculateFirstAidScalingMultipliers({
+      resultMultiplier: resultMultiplier * criticalSuccessMultiplier,
+      outgoingEffectivenessPercent: outgoingFirstAidModifiers.outgoingEffectivenessPercent,
+      incomingEffectivenessPercent: incomingFirstAidModifiers.incomingEffectivenessPercent,
+      outgoingHealingPercent: canUseOutgoingHealing
+        ? getActorHealingModifierPercent(sourceActor, "outgoing", outgoingContext)
+        : 0,
+      durationPercent: incomingFirstAidModifiers.durationPercent,
+      withdrawalResistancePercent: incomingFirstAidModifiers.withdrawalResistancePercent
+    });
+
+    const healing = calculateHealingAmount(targetActor, firstAid, scaling.healing, targetContext);
+    const durationSeconds = scaleFirstAidDurationSeconds(firstAid.durationSeconds, scaling.duration);
+    const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, scaling.effect, scaling.healing);
+    const healingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedChanges.healingPerTick);
+    const changes = normalizedChanges.changes;
+    const normalizedWithdrawal = normalizeFirstAidWithdrawal(
+      firstAid,
+      scaling.withdrawalEffect,
+      scaling.withdrawalHealing
+    );
+    const withdrawalHealingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedWithdrawal.healingPerTick);
+    const withdrawalChanges = normalizedWithdrawal.changes;
+    const withdrawalDurationSeconds = scaleFirstAidDurationSeconds(
+      firstAid.withdrawalDurationSeconds,
+      scaling.withdrawalDuration
+    );
+    const hasWithdrawal = withdrawalDurationSeconds > 0
+      && (withdrawalChanges.length > 0 || withdrawalHealingPerTick > 0);
+    const needs = normalizeFirstAidNeeds(firstAid.needs, scaling.effect);
+    const limbs = targetContext.isConstruct
+      ? []
+      : normalizeFirstAidLimbs(selectedLimbs, firstAid, scaling.effect, scaling.healing);
+    const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
+    const appliedDurationSeconds = hasTimedEffect ? durationSeconds : 0;
+    const appliedWithdrawalDurationSeconds = hasWithdrawal ? withdrawalDurationSeconds : 0;
+    source.limitedUseSkipOutgoing = true;
+
+    if (resultKey === "criticalFailure") {
+      markEffectsStarted();
+      const criticalFailureDamage = await applyCriticalFailureDamage(targetActor, firstAid, source);
+      if (criticalFailureDamage === null) return false;
+      if (hasWithdrawal) {
+        const effects = await requestFirstAidWithdrawalEffect({
+          actor: targetActor,
+          itemName: item.name,
+          itemImg: item.img,
+          healingPerTick: withdrawalHealingPerTick,
+          durationSeconds: withdrawalDurationSeconds,
+          intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
+          changes: withdrawalChanges,
+          source
+        });
+        if (!effects?.length) return false;
+      }
+      await commitFirstAidActiveUsePreparations(activeUsePreparations, firstAidOperationId);
+      applicationChat = {
+        sourceActor,
+        targetActor,
+        targetContext,
+        item,
+        firstAid,
+        resultKey,
+        scaling,
+        selectedLimbs,
+        healing: 0,
+        appliedLimbs: [],
+        appliedNeeds: [],
+        appliedDurationSeconds: 0,
+        appliedWithdrawalDurationSeconds,
+        hasEffectRemoval: false,
+        removeEffectDamageTypeKeys,
+        removeEffectLimbKeys,
+        criticalFailureDamage,
+        chargeCost,
+        showHealingEffectiveness: false
+      };
+      return true;
+    }
+
+    if (healing > 0) {
+      markEffectsStarted();
+      const result = await requestDamageApplication({
         actor: targetActor,
-        keys: outgoingActiveUseKeys,
-        conditionContexts: [incomingContext],
-        reverseOnly: true
-      })
-      : null,
-    incomingActiveUseKeys.size
-      ? prepareActiveUseOperation({
-        kind: "firstAidIncoming",
+        amount: healing,
+        damageTypeKey: HEALING_DAMAGE_TYPE_KEY,
+        mode: "healing",
+        scope: "health",
+        applyMitigation: false,
+        processDamageTypeSettings: false,
+        source
+      });
+      if (!result || result.cancelled || result.failed || result.status === "cancelled" || result.status === "error") return false;
+    }
+
+    for (const limb of limbs) {
+      markEffectsStarted();
+      const result = await requestDamageApplication({
         actor: targetActor,
-        keys: incomingActiveUseKeys,
-        conditionContexts: [incomingContext],
-        reverseOnly: false
+        limbKey: limb.limbKey,
+        amount: Math.abs(limb.value),
+        damageTypeKey: limb.value >= 0 ? HEALING_DAMAGE_TYPE_KEY : "",
+        mode: limb.value >= 0 ? "healing" : "damage",
+        scope: "limb",
+        applyMitigation: false,
+        processDamageTypeSettings: false,
+        source
+      });
+      if (!result || result.cancelled || result.failed || result.status === "cancelled" || result.status === "error") return false;
+    }
+
+    if (needs.length) markEffectsStarted();
+    const appliedNeeds = needs.length
+      ? await requestNeedChanges({
+        actor: targetActor,
+        needs,
+        source,
+        context: {
+          kind: "firstAidNeedChange",
+          chanceOperationId: firstAidOperationId,
+          limitedUseOperationId: firstAidOperationId,
+          itemUuid: item.uuid,
+          sourceActorUuid: sourceActor.uuid
+        }
       })
-      : null,
-    hasDistinctActors && incomingActiveUseKeys.size
-      ? prepareActiveUseOperation({
-        kind: "firstAidIncomingReverse",
-        actor: sourceActor,
-        keys: incomingActiveUseKeys,
-        conditionContexts: [outgoingContext],
-        reverseOnly: true
-      })
-      : null
-  ].filter(Boolean);
+      : [];
+    if (needs.length && !appliedNeeds?.length) return false;
 
-  const outgoingFirstAidModifiers = getActorFirstAidModifiers(sourceActor, outgoingContext);
-  const incomingFirstAidModifiers = targetContext.firstAidModifiers
-    ?? getActorFirstAidModifiers(targetActor, incomingContext);
-  const scaling = calculateFirstAidScalingMultipliers({
-    resultMultiplier: resultMultiplier * criticalSuccessMultiplier,
-    outgoingEffectivenessPercent: outgoingFirstAidModifiers.outgoingEffectivenessPercent,
-    incomingEffectivenessPercent: incomingFirstAidModifiers.incomingEffectivenessPercent,
-    outgoingHealingPercent: canUseOutgoingHealing
-      ? getActorHealingModifierPercent(sourceActor, "outgoing", outgoingContext)
-      : 0,
-    durationPercent: incomingFirstAidModifiers.durationPercent,
-    withdrawalResistancePercent: incomingFirstAidModifiers.withdrawalResistancePercent
-  });
+    if (hasEffectRemoval) {
+      markEffectsStarted();
+      await requestFirstAidRemoveEffects({
+        actor: targetActor,
+        limbKeys: removeEffectLimbKeys,
+        damageTypeKeys: removeEffectDamageTypeKeys,
+        source
+      });
+    }
 
-  const healing = calculateHealingAmount(targetActor, firstAid, scaling.healing, targetContext);
-  const durationSeconds = scaleFirstAidDurationSeconds(firstAid.durationSeconds, scaling.duration);
-  const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, scaling.effect, scaling.healing);
-  const healingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedChanges.healingPerTick);
-  const changes = normalizedChanges.changes;
-  const normalizedWithdrawal = normalizeFirstAidWithdrawal(
-    firstAid,
-    scaling.withdrawalEffect,
-    scaling.withdrawalHealing
-  );
-  const withdrawalHealingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedWithdrawal.healingPerTick);
-  const withdrawalChanges = normalizedWithdrawal.changes;
-  const withdrawalDurationSeconds = scaleFirstAidDurationSeconds(
-    firstAid.withdrawalDurationSeconds,
-    scaling.withdrawalDuration
-  );
-  const hasWithdrawal = withdrawalDurationSeconds > 0
-    && (withdrawalChanges.length > 0 || withdrawalHealingPerTick > 0);
-  const needs = normalizeFirstAidNeeds(firstAid.needs, scaling.effect);
-  const limbs = targetContext.isConstruct
-    ? []
-    : normalizeFirstAidLimbs(selectedLimbs, firstAid, scaling.effect, scaling.healing);
-  const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
-  const appliedDurationSeconds = hasTimedEffect ? durationSeconds : 0;
-  const appliedWithdrawalDurationSeconds = hasWithdrawal ? withdrawalDurationSeconds : 0;
-  source.limitedUseSkipOutgoing = true;
-
-  if (resultKey === "criticalFailure") {
-    await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
-    const criticalFailureDamage = await applyCriticalFailureDamage(targetActor, firstAid, source);
-    if (hasWithdrawal) {
-      await requestFirstAidWithdrawalEffect({
+    if (hasTimedEffect) {
+      markEffectsStarted();
+      const effects = await requestFirstAidEffect({
+        actor: targetActor,
+        itemName: item.name,
+        itemImg: item.img,
+        healingPerTick,
+        durationSeconds,
+        intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
+        changes,
+        withdrawal: hasWithdrawal ? buildFirstAidWithdrawalPayload({
+          itemName: item.name,
+          itemImg: item.img,
+          healingPerTick: withdrawalHealingPerTick,
+          durationSeconds: withdrawalDurationSeconds,
+          changes: withdrawalChanges,
+          source
+        }) : null,
+        source
+      });
+      if (!effects?.length) return false;
+    } else if (hasWithdrawal) {
+      markEffectsStarted();
+      const effects = await requestFirstAidWithdrawalEffect({
         actor: targetActor,
         itemName: item.name,
         itemImg: item.img,
@@ -289,9 +417,11 @@ export async function useFirstAidItem({
         changes: withdrawalChanges,
         source
       });
+      if (!effects?.length) return false;
     }
+
     await commitFirstAidActiveUsePreparations(activeUsePreparations, firstAidOperationId);
-    await postFirstAidApplicationChat({
+    applicationChat = {
       sourceActor,
       targetActor,
       targetContext,
@@ -300,126 +430,22 @@ export async function useFirstAidItem({
       resultKey,
       scaling,
       selectedLimbs,
-      healing: 0,
-      appliedLimbs: [],
-      appliedNeeds: [],
-      appliedDurationSeconds: 0,
+      healing,
+      appliedLimbs: limbs,
+      appliedNeeds,
+      appliedDurationSeconds,
       appliedWithdrawalDurationSeconds,
-      hasEffectRemoval: false,
+      hasEffectRemoval,
       removeEffectDamageTypeKeys,
       removeEffectLimbKeys,
-      criticalFailureDamage,
+      criticalFailureDamage: 0,
       chargeCost,
-      showHealingEffectiveness: false
-    });
+      showHealingEffectiveness: canUseOutgoingHealing
+    };
     return true;
-  }
-
-  if (healing > 0) {
-    await requestDamageApplication({
-      actor: targetActor,
-      amount: healing,
-      damageTypeKey: HEALING_DAMAGE_TYPE_KEY,
-      mode: "healing",
-      scope: "health",
-      applyMitigation: false,
-      processDamageTypeSettings: false,
-      source
-    });
-  }
-
-  for (const limb of limbs) {
-    await requestDamageApplication({
-      actor: targetActor,
-      limbKey: limb.limbKey,
-      amount: Math.abs(limb.value),
-      damageTypeKey: limb.value >= 0 ? HEALING_DAMAGE_TYPE_KEY : "",
-      mode: limb.value >= 0 ? "healing" : "damage",
-      scope: "limb",
-      applyMitigation: false,
-      processDamageTypeSettings: false,
-      source
-    });
-  }
-
-  const appliedNeeds = needs.length
-    ? await requestNeedChanges({
-      actor: targetActor,
-      needs,
-      context: {
-        kind: "firstAidNeedChange",
-        chanceOperationId: firstAidOperationId,
-        limitedUseOperationId: firstAidOperationId,
-        itemUuid: item.uuid,
-        sourceActorUuid: sourceActor.uuid
-      }
-    })
-    : [];
-
-  if (hasEffectRemoval) {
-    await requestFirstAidRemoveEffects({
-      actor: targetActor,
-      limbKeys: removeEffectLimbKeys,
-      damageTypeKeys: removeEffectDamageTypeKeys
-    });
-  }
-
-  if (hasTimedEffect) {
-    await requestFirstAidEffect({
-      actor: targetActor,
-      itemName: item.name,
-      itemImg: item.img,
-      healingPerTick,
-      durationSeconds,
-      intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
-      changes,
-      withdrawal: hasWithdrawal ? buildFirstAidWithdrawalPayload({
-        itemName: item.name,
-        itemImg: item.img,
-        healingPerTick: withdrawalHealingPerTick,
-        durationSeconds: withdrawalDurationSeconds,
-        changes: withdrawalChanges,
-        source
-      }) : null,
-      source
-    });
-  } else if (hasWithdrawal) {
-    await requestFirstAidWithdrawalEffect({
-      actor: targetActor,
-      itemName: item.name,
-      itemImg: item.img,
-      healingPerTick: withdrawalHealingPerTick,
-      durationSeconds: withdrawalDurationSeconds,
-      intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
-      changes: withdrawalChanges,
-      source
-    });
-  }
-
-  await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
-  await commitFirstAidActiveUsePreparations(activeUsePreparations, firstAidOperationId);
-  await postFirstAidApplicationChat({
-    sourceActor,
-    targetActor,
-    targetContext,
-    item,
-    firstAid,
-    resultKey,
-    scaling,
-    selectedLimbs,
-    healing,
-    appliedLimbs: limbs,
-    appliedNeeds,
-    appliedDurationSeconds,
-    appliedWithdrawalDurationSeconds,
-    hasEffectRemoval,
-    removeEffectDamageTypeKeys,
-    removeEffectLimbKeys,
-    criticalFailureDamage: 0,
-    chargeCost,
-    showHealingEffectiveness: canUseOutgoingHealing
   });
-  return true;
+  if (used && applicationChat) await postFirstAidApplicationChat(applicationChat);
+  return used;
 }
 
 function firstAidHasScalableEffects(firstAid = {}, targetContext = null, selectedLimbs = []) {
@@ -660,7 +686,7 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null, {
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для доступа к цели первой помощи.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R1149", "Нет активного GM для доступа к цели первой помощи."));
     return null;
   }
 
@@ -676,7 +702,7 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null, {
     return result?.targetContext ?? null;
   } catch (error) {
     console.error(`${SYSTEM_ID} | First aid target socket failed`, error);
-    ui.notifications.error(`Не удалось получить данные цели первой помощи: ${error.message}`);
+    ui.notifications.error(auditFormat("FALLOUTMAW.AuditRuntime.R1150", { p0: (error.message) }, "Не удалось получить данные цели первой помощи: {p0}"));
     return null;
   }
 }
@@ -750,9 +776,9 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
         : false);
     const result = calculateLimbSelectionPreview(limb.value, value, 0, limb.min, limb.max);
     const currentLabel = limb.prosthesis
-      ? "Протез"
+      ? auditLocalize("FALLOUTMAW.AuditRuntime.R1151", "Протез")
       : limb.missing
-        ? "Отсутствует"
+        ? auditLocalize("FALLOUTMAW.AuditRuntime.R0762", "Отсутствует")
         : `${limb.value} / ${limb.max}`;
     return `
     <button type="button" class="fallout-maw-first-aid-limb-choice${disabled ? " disabled" : ""}" data-limb-key="${escapeHtml(limb.key)}" data-count="0" data-current="${limb.value}" data-min="${limb.min}" data-max="${limb.max}" data-disabled="${disabled ? "true" : "false"}">
@@ -896,14 +922,14 @@ function isConstructActor(actor) {
 }
 
 async function requestFirstAidSocket(action, payload = {}, gm = getResponsibleGM()) {
-  if (!gm) throw new Error("нет активного GM");
+  if (!gm) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1154", "нет активного GM"));
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingFirstAidSocketRequests.delete(requestId);
-      reject(new Error("GM не ответил на запрос первой помощи"));
+      reject(new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1155", "GM не ответил на запрос первой помощи")));
     }, FIRST_AID_SOCKET_TIMEOUT);
     pendingFirstAidSocketRequests.set(requestId, { resolve, reject, timeout });
   });
@@ -930,7 +956,7 @@ async function handleFirstAidSocketMessage(message = {}) {
     window.clearTimeout(pending.timeout);
     pendingFirstAidSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
-    else pending.reject(new Error(message.error || "ошибка GM-сокета первой помощи"));
+    else pending.reject(new Error(message.error || auditLocalize("FALLOUTMAW.AuditRuntime.R1156", "ошибка GM-сокета первой помощи")));
     return;
   }
 
@@ -962,7 +988,7 @@ async function handleFirstAidSocketMessage(message = {}) {
 
 async function handleFirstAidSocketRequest(action, payload = {}) {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
-  if (!actor) throw new Error("цель не найдена");
+  if (!actor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1157", "цель не найдена"));
 
   if (action === "getTargetContext") {
     const [sourceActor, sourceToken, targetToken] = await Promise.all([
@@ -983,7 +1009,7 @@ async function handleFirstAidSocketRequest(action, payload = {}) {
     };
   }
 
-  throw new Error(`неизвестное действие первой помощи: ${action}`);
+  throw new Error(auditFormat("FALLOUTMAW.AuditRuntime.R1158", { p0: (action) }, "неизвестное действие первой помощи: {p0}"));
 }
 
 async function resolveFirstAidUuid(uuid = "") {
@@ -1014,9 +1040,9 @@ function getResponsibleGM() {
 async function spendActionPointsIfNeeded(actor, firstAid = {}, context = null) {
   const cost = getFirstAidActionPointCost(actor, firstAid, context);
   if (!cost || !isActorInActiveCombat(actor)) return true;
-  if (!canSpendCombatActionPoints(actor, cost, { label: "первой помощи" })) return false;
-  await spendCombatActionPoints(actor, cost);
-  return true;
+  if (!canSpendCombatActionPoints(actor, cost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R1159", "первой помощи") })) return false;
+  const transaction = await spendCombatActionPointsWithReceipt(actor, cost);
+  return transaction?.spent === cost;
 }
 
 export function isTargetInFirstAidRange(sourceToken, targetToken, firstAid = {}, { warn = true } = {}) {
@@ -1024,7 +1050,7 @@ export function isTargetInFirstAidRange(sourceToken, targetToken, firstAid = {},
   if (maxDistance <= 0 || !sourceToken || !targetToken || sourceToken === targetToken) return true;
   const distance = getTokenDistance(sourceToken, targetToken);
   if (distance <= maxDistance) return true;
-  if (warn) ui.notifications.warn(`Цель слишком далеко (${Math.round(distance)}; максимум: ${maxDistance}).`);
+  if (warn) ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R1160", { p0: (Math.round(distance)), p1: (maxDistance) }, "Цель слишком далеко ({p0}; максимум: {p1})."));
   return false;
 }
 
@@ -1061,7 +1087,7 @@ async function applyCriticalFailureDamage(actor, firstAid = {}, source = {}) {
   const max = Math.max(min, toInteger(firstAid.criticalFailureDamageMax));
   const amount = min + Math.floor(Math.random() * ((max - min) + 1));
   if (!amount) return 0;
-  await requestDamageApplication({
+  const result = await requestDamageApplication({
     actor,
     amount,
     damageTypeKey: "",
@@ -1071,27 +1097,13 @@ async function applyCriticalFailureDamage(actor, firstAid = {}, source = {}) {
     processDamageTypeSettings: false,
     source: { ...source, criticalFailure: true }
   });
+  if (!result || result.cancelled || result.failed || result.status === "cancelled" || result.status === "error") return null;
   return amount;
-}
-
-async function spendFirstAidItem(item, amount = 1, updateOptions = {}) {
-  return commitInventoryItemConsumption({
-    item,
-    amount,
-    charges: getFirstAidChargesData(item),
-    chargePath: "system.functions.firstAid.charges.value",
-    documentOptions: updateOptions,
-    reason: "first-aid-consume"
-  });
 }
 
 async function commitFirstAidActiveUsePreparations(preparations = [], operationId = "") {
   if (!preparations.length) return;
-  try {
-    await commitPreparedActiveUseOperations(preparations, { operationId });
-  } catch (error) {
-    console.error(`${SYSTEM_ID} | First-aid modifier active-use commit failed`, error);
-  }
+  await commitPreparedActiveUseOperations(preparations, { operationId });
 }
 
 function createFirstAidDocumentOptions(chainRef = null) {

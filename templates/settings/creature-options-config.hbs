@@ -1,6 +1,6 @@
 <div class="fallout-maw-config-body">
   <div class="fallout-maw-settings-actions fallout-maw-creature-options-toolbar">
-    <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+    <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textd65ee7f569f9'}}</button>
   </div>
 
   <div class="fallout-maw-two-pane">
@@ -121,7 +121,7 @@
           {{/if}}
           {{#if raceHealthEnabled}}
           <label class="fallout-maw-stacked-field">
-            <span>Формула здоровья</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text820947fd087d'}}</span>
             <input type="text" name="race.baseParameters.healthFormula" value="{{baseParameters.healthFormula}}" data-formula-autocomplete="all" placeholder="20 + str + con * 2">
           </label>
           {{/if}}
@@ -130,7 +130,7 @@
             <input type="text" name="race.baseParameters.loadFormula" value="{{baseParameters.loadFormula}}" placeholder="20 + 10*str">
           </label>
           <label class="fallout-maw-stacked-field">
-            <span>Предел нагрузки (% от базы)</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7958aefdd089'}}</span>
             <input type="number" name="race.baseParameters.loadLimitPercent" value="{{baseParameters.loadLimitPercent}}" min="0" step="1">
           </label>
         </div>
@@ -143,7 +143,7 @@
         <div class="fallout-maw-list-grid two-columns">
           {{#if raceHealthEnabled}}
           <label>
-            <span>Здоровье за уровень</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7033b1d60a60'}}</span>
             <input type="text" name="race.progression.healthPerLevel" value="{{selectedRace.progression.healthPerLevel}}" data-formula-autocomplete="characteristics">
           </label>
           {{/if}}
@@ -174,7 +174,7 @@
 
       <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.regeneration.cssClass}}" data-creature-section="regeneration">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="{{sections.regeneration.ariaExpanded}}"><i class="fa-solid {{sections.regeneration.iconClass}}"></i><span>Регенерация</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.regeneration.ariaExpanded}}"><i class="fa-solid {{sections.regeneration.iconClass}}"></i><span>{{localize 'FALLOUTMAW.AuditTemplates.Textf353b2ccd415'}}</span></button>
         </header>
         <div class="fallout-maw-list-grid two-columns">
           <label>
@@ -191,15 +191,15 @@
       <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.limbs.cssClass}}" data-creature-section="limbs">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
           <button type="button" data-creature-section-toggle aria-expanded="{{sections.limbs.ariaExpanded}}"><i class="fa-solid {{sections.limbs.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Limbs"}}</span></button>
-          <button type="button" data-action="createLimb"><i class="fa-solid fa-plus"></i> Добавить конечность</button>
+          <button type="button" data-action="createLimb"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textfb16f97317ce'}}</button>
         </header>
 
         <div class="fallout-maw-settings-table limb-settings">
           {{#each limbs}}
           <div class="fallout-maw-settings-row" data-limb-row>
-            <input type="text" data-field="key" value="{{key}}" placeholder="Код" title="Код конечности">
+            <input type="text" data-field="key" value="{{key}}" placeholder="{{localize 'FALLOUTMAW.Common.Code'}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Texte30dcd7b9970'}}">
             <input type="text" data-field="label" value="{{label}}">
-            <button type="button" class="fallout-maw-icon-button" data-action="openLimbSettings" title="Доп. настройки конечности"><i class="fa-solid fa-gear"></i></button>
+            <button type="button" class="fallout-maw-icon-button" data-action="openLimbSettings" title="{{localize 'FALLOUTMAW.AuditTemplates.Text3ebaafbbca8c'}}"><i class="fa-solid fa-gear"></i></button>
             <button type="button" data-action="deleteLimb" data-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
           {{else}}
@@ -208,8 +208,8 @@
         </div>
 
         <div class="fallout-maw-settings-actions">
-          <button type="button" data-action="configureLimbSilhouette"><i class="fa-solid fa-person"></i> Настроить силуэт</button>
-          {{#if hasLimbSilhouette}}<span class="hint">Силуэт настроен.</span>{{/if}}
+          <button type="button" data-action="configureLimbSilhouette"><i class="fa-solid fa-person"></i> {{localize 'FALLOUTMAW.AuditTemplates.Textea4de6abf4b0'}}</button>
+          {{#if hasLimbSilhouette}}<span class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text5900ddcf89fd'}}</span>{{/if}}
         </div>
       </section>
 
@@ -350,11 +350,11 @@
         <div class="fallout-maw-list-grid two-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventoryColumns"}}</span>
-            <input type="number" name="race.inventorySize.columns" value="{{inventorySize.columns}}" min="1">
+            <input type="number" name="race.inventorySize.columns" value="{{inventorySize.columns}}" min="0">
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventoryRows"}}</span>
-            <input type="number" name="race.inventorySize.rows" value="{{inventorySize.rows}}" min="1">
+            <input type="number" name="race.inventorySize.rows" value="{{inventorySize.rows}}" min="0">
           </label>
         </div>
       </section>
@@ -366,7 +366,7 @@
         <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageResistanceFormulaHint"}}</p>
         <div class="fallout-maw-list-grid two-columns">
           <label>
-            <span>Сопротивление кровотечению</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Text9e75fb2874e9'}}</span>
             <input type="text" name="race.bleedingResistanceFormula" value="{{bleedingResistanceFormula}}" data-formula-autocomplete="all">
           </label>
           {{#each resistanceDamageTypes}}
@@ -380,8 +380,8 @@
 
       <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.needs.cssClass}}" data-creature-section="needs">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="{{sections.needs.ariaExpanded}}"><i class="fa-solid {{sections.needs.iconClass}}"></i><span>Потребности</span></button>
-          <button type="button" data-action="createRaceNeed"><i class="fa-solid fa-plus"></i> Создать потребность</button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.needs.ariaExpanded}}"><i class="fa-solid {{sections.needs.iconClass}}"></i><span>{{localize 'FALLOUTMAW.Common.Needs'}}</span></button>
+          <button type="button" data-action="createRaceNeed"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Settings.Needs.Create'}}</button>
         </header>
 
         <p class="hint">{{localize "FALLOUTMAW.Settings.Needs.FormulaHint"}}</p>
@@ -403,11 +403,11 @@
             <input type="text" data-field="label" value="{{label}}">
             <input type="color" data-field="color" value="{{color}}">
             <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all">
-            <button type="button" data-action="openRaceNeedSettings" title="Доп. настройки"><i class="fa-solid fa-gear"></i></button>
+            <button type="button" data-action="openRaceNeedSettings" title="{{localize 'FALLOUTMAW.AuditTemplates.Textd3f6846d0498'}}"><i class="fa-solid fa-gear"></i></button>
             <button type="button" data-action="deleteRaceNeed" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
           {{else}}
-          <p class="fallout-maw-empty-list">Потребности не настроены.</p>
+          <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text79c6cd6cfd27'}}</p>
           {{/each}}
         </div>
       </section>

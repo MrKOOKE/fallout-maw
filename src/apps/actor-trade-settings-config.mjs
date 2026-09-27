@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCurrencySettings, getItemCategorySettings } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -38,7 +39,7 @@ export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Торговля: ${this.actor.name}`;
+    return auditFormat("FALLOUTMAW.AuditApps.Trade", { v0: (this.actor.name) }, "Торговля: {v0}");
   }
 
   async close(options = {}) {
@@ -59,7 +60,7 @@ export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
     const categorySuggestions = Array.from(new Set([
       ...getItemCategorySettings().map(category => String(category.label ?? category.name ?? category.key ?? "").trim()),
       ...this.actor.items.map(item => String(item.system?.itemCategory ?? "").trim())
-    ].filter(Boolean))).sort((left, right) => left.localeCompare(right, "ru"));
+    ].filter(Boolean))).sort((left, right) => left.localeCompare(right, globalThis.game?.i18n?.lang));
 
     return {
       ...(await super._prepareContext(options)),
@@ -180,13 +181,13 @@ export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
     if (!uuid) return;
     const item = await fromUuid(uuid);
     if (!item || item.documentName !== "Item") {
-      ui.notifications.warn("Перетащите сюда предмет.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.DragAnItemHere", "Перетащите сюда предмет."));
       return;
     }
     const primaryCurrencyKey = getCurrencySettings().find(currency => currency.primaryTrade)?.key ?? getCurrencySettings().at(0)?.key ?? "";
     const draft = this.#getCurrentDraft();
     if (draft.itemOverrides.some(entry => entry.itemUuid === item.uuid || (entry.itemId && entry.itemId === item.id))) {
-      ui.notifications.warn("Для этого предмета уже задано переопределение.");
+      ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AnOverrideIsAlreadyConfiguredForThisItem", "Для этого предмета уже задано переопределение."));
       return;
     }
     draft.itemOverrides.push({

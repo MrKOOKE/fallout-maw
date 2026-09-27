@@ -4,6 +4,7 @@ import {
   getActorRootInventoryGridOptions
 } from "../utils/actor-display-data.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
+import { BATCH_EXPECTED_IDS_OPTION } from "../utils/document-batch-integrity.mjs";
 import {
   getItemActorLoadWeight,
   getItemContainerParentId,
@@ -17,6 +18,7 @@ import {
   INVENTORY_EXPECTED_IDS_OPTION
 } from "./constants.mjs";
 import { validateActorNonInventoryPlacementState } from "./repair.mjs";
+import { assertInventoryConsumptionReservation, CONSUMPTION_RECEIPT_OPTION } from "./consumption-reservation.mjs";
 
 const inventoryActorLock = createActorOperationLock();
 
@@ -33,6 +35,8 @@ const inventoryActorLock = createActorOperationLock();
  * @param {string[]} [input.deletes]
  * @param {object[]} [input.creates]
  * @param {object|object[]} [input.actorUpdates]
+ * @param {object[]} [input.effectCreates] Actor-owned ActiveEffects granted with the inventory change.
+ * @param {object[]} [input.effectUpdates] Actor-owned ActiveEffect updates committed with the inventory change.
  * @param {object} [options]
  * @param {boolean} [options.validate]
  * @param {boolean} [options.render]
@@ -85,6 +89,8 @@ export function normalizeInventoryMutationPlans(input, { resolveActors = true } 
       updates: [],
       deletes: [],
       creates: [],
+      effectCreates: [],
+      effectUpdates: [],
       actorUpdates: [],
       expectedItems: null
     };
@@ -94,6 +100,8 @@ export function normalizeInventoryMutationPlans(input, { resolveActors = true } 
     plan.updates.push(...asArray(rawPlan.updates));
     plan.deletes.push(...asArray(rawPlan.deletes));
     plan.creates.push(...asArray(rawPlan.creates));
+    plan.effectCreates.push(...asArray(rawPlan.effectCreates));
+    plan.effectUpdates.push(...asArray(rawPlan.effectUpdates));
     plan.actorUpdates.push(...asArray(rawPlan.actorUpdates ?? rawPlan.actorUpdate));
     if (rawPlan.expectedItems !== undefined && rawPlan.expectedItems !== null) {
       if (plan.expectedItems !== null) {
@@ -191,6 +199,12 @@ async function executePreparedMutation(plans, {
 }) {
   const operationId = createOperationId();
   assertMutationPlansFresh(plans);
+  for (const plan of plans) {
+    for (const itemId of plan.touchedExistingIds) {
+      assertInventoryConsumptionReservation(plan.actor.items?.get?.(itemId), documentOptions);
+    }
+    for (const data of plan.creates) assertInventoryConsumptionReservation(data, documentOptions);
+  }
   if (validate) {
     for (const plan of plans) {
       validateActorInventoryState(plan.actor, plan.projectedItems, { validateLoad });
@@ -216,7 +230,10 @@ async function executePreparedMutation(plans, {
     results = await foundry.documents.modifyBatch(operations);
     assertCompleteBatchResults(results, operationMeta, plans, { validateLoad });
   } catch (error) {
-    const recoveryError = await recoverPartialInventoryMutation(plans, { operationId, reason });
+    const recoveryError = await recoverPartialInventoryMutation(plans, {
+      operationId, reason,
+      receiptId: documentOptions[CONSUMPTION_RECEIPT_OPTION]
+    });
     if (recoveryError) {
       console.error("Fallout MaW | Inventory mutation recovery failed.", recoveryError);
       const aggregate = new AggregateError(
@@ -253,6 +270,7 @@ function assertMutationPlansFresh(plans) {
         return !current || !inventorySnapshotsEqual(current, snapshot);
       })
       || hasActorUpdateDrift(plan)
+      || hasEffectSnapshotDrift(plan)
     ) {
       throw createInventoryStaleError();
     }
@@ -329,8 +347,59 @@ function prepareActorMutationPlan(rawPlan) {
     actorSnapshotByPath,
     actorUpdate,
     actorRecoveryUpdate,
-    actorUpdatePaths
+    actorUpdatePaths,
+    effects: prepareEffectMutationPlan(actor, rawPlan)
   };
+}
+
+function prepareEffectMutationPlan(actor, { effectCreates = [], effectUpdates = [] } = {}) {
+  if (!effectCreates.length && !effectUpdates.length) return null;
+  const snapshots = Array.from(actor.effects?.contents ?? actor.effects ?? [], toPlainObject);
+  const snapshotById = new Map(snapshots.map(data => [getItemId(data), data]));
+  const takenIds = new Set(snapshotById.keys());
+  const creates = effectCreates.map(data => {
+    const created = toPlainObject(data);
+    created._id = allocateItemId(takenIds);
+    takenIds.add(created._id);
+    delete created.id;
+    return created;
+  });
+  const updates = mergeInventoryUpdates(effectUpdates);
+  const recoveryUpdates = [];
+  for (const update of updates) {
+    const snapshot = snapshotById.get(update._id);
+    if (!snapshot) throw createInventoryStaleError(`Missing ActiveEffect "${update._id}".`);
+    const recovery = { _id: update._id };
+    for (const path of Object.keys(flattenUpdateObject(update))) {
+      if (path === "_id") continue;
+      const targetPath = parseDeletionPath(path) || path;
+      const original = getProperty(snapshot, targetPath);
+      recovery[original.exists ? targetPath : toDeletionUpdatePath(targetPath)] = original.exists
+        ? cloneValue(original.value) : null;
+    }
+    recoveryUpdates.push(recovery);
+  }
+  return { creates, updates, snapshotById, recoveryUpdates };
+}
+
+function hasEffectSnapshotDrift(plan) {
+  if (!plan.effects) return false;
+  const current = Array.from(plan.actor.effects?.contents ?? plan.actor.effects ?? []);
+  if (current.length !== plan.effects.snapshotById.size) return true;
+  return current.some(effect => {
+    const snapshot = plan.effects.snapshotById.get(getItemId(effect));
+    return !snapshot || !inventorySnapshotsEqual(effect, snapshot);
+  });
+}
+
+function hasEffectMutationDrift(plan) {
+  if (!plan.effects) return false;
+  const current = new Map(Array.from(plan.actor.effects?.contents ?? plan.actor.effects ?? [], effect => [getItemId(effect), effect]));
+  if (plan.effects.creates.some(data => current.has(data._id))) return true;
+  return plan.effects.updates.some(data => {
+    const effect = current.get(data._id);
+    return !effect || !inventorySnapshotsEqual(effect, plan.effects.snapshotById.get(data._id));
+  });
 }
 
 function prepareActorUpdatePlan(actor, rawUpdates = []) {
@@ -407,6 +476,16 @@ function createFoundryBatchOperations(plans, {
     // Foundry applies and handles modifyBatch results in request order. Every
     // embedded create/delete resets the parent Actor, so commit Item updates
     // after collection-shape changes and leave their source as the final state.
+    if (plan.effects?.creates.length) {
+      planOperations.push({
+        action: "create",
+        documentName: "ActiveEffect",
+        parent: plan.actor,
+        data: cloneValue(plan.effects.creates),
+        keepId: true,
+        expectedIds: plan.effects.creates.map(data => data._id)
+      });
+    }
     if (plan.deletes.length) {
       planOperations.push({
         action: "delete",
@@ -445,6 +524,15 @@ function createFoundryBatchOperations(plans, {
         strictIds: false
       });
     }
+    if (plan.effects?.updates.length) {
+      planOperations.push({
+        action: "update",
+        documentName: "ActiveEffect",
+        parent: plan.actor,
+        updates: cloneValue(plan.effects.updates),
+        expectedIds: plan.effects.updates.map(data => data._id)
+      });
+    }
 
     for (let index = 0; index < planOperations.length; index += 1) {
       const operation = planOperations[index];
@@ -459,6 +547,7 @@ function createFoundryBatchOperations(plans, {
         falloutMawInventoryReason: reason
       });
       if (operation.action === "update") operation.diff = false;
+      operation[BATCH_EXPECTED_IDS_OPTION] = expectedIds;
       if (operation.documentName === "Item") {
         operation[INVENTORY_ATOMIC_OPTION] = true;
         operation[INVENTORY_EXPECTED_IDS_OPTION] = expectedIds;
@@ -498,6 +587,7 @@ function sanitizeInventoryDocumentOptions(options = {}) {
     "render",
     INVENTORY_ATOMIC_OPTION,
     INVENTORY_EXPECTED_IDS_OPTION,
+    BATCH_EXPECTED_IDS_OPTION,
     "falloutMawInventoryOperationId",
     "falloutMawInventoryReason",
     "falloutMawInventoryRecovery"
@@ -582,8 +672,27 @@ function assertCommittedInventoryState(plans, {
       throw new Error("Foundry removed an Item which should only have been updated.");
     }
     if (verifyItemUpdateFields) assertCommittedItemUpdates(plan, currentById);
+    assertCommittedEffects(plan, { verifyFields: verifyItemUpdateFields });
     assertCommittedActorUpdate(plan);
     validateActorInventoryState(plan.actor, currentItems, { validateLoad });
+  }
+}
+
+function assertCommittedEffects(plan, { verifyFields = true } = {}) {
+  if (!plan.effects) return;
+  const current = new Map(Array.from(plan.actor.effects?.contents ?? plan.actor.effects ?? [], effect => [getItemId(effect), toPlainObject(effect)]));
+  for (const requested of [...plan.effects.creates, ...plan.effects.updates]) {
+    const actual = current.get(requested._id);
+    if (!actual) throw new Error(`Foundry did not persist ActiveEffect "${requested._id}".`);
+    if (!verifyFields) continue;
+    for (const [path, value] of Object.entries(flattenUpdateObject(requested))) {
+      if (path === "_id" || path === "_stats" || path.startsWith("_stats.")) continue;
+      const deletedPath = parseDeletionPath(path);
+      const persisted = getProperty(actual, deletedPath || path);
+      if (deletedPath ? persisted.exists : !persisted.exists || !deepEqual(persisted.value, value)) {
+        throw new Error(`Foundry did not persist ActiveEffect "${requested._id}" field "${path}".`);
+      }
+    }
   }
 }
 
@@ -622,7 +731,7 @@ function assertCommittedActorUpdate(plan) {
   }
 }
 
-async function recoverPartialInventoryMutation(plans, { operationId, reason }) {
+async function recoverPartialInventoryMutation(plans, { operationId, reason, receiptId }) {
   if (!plans.some(hasInventoryPlanDrift)) return null;
 
   try {
@@ -644,15 +753,16 @@ async function recoverPartialInventoryMutation(plans, { operationId, reason }) {
 
       appendRecoveryOperation(recoveryOperations, plan.actor, "delete", createdIds, {
         ids: createdIds
-      }, { operationId, reason });
+      }, { operationId, reason, receiptId });
       appendRecoveryOperation(recoveryOperations, plan.actor, "update", restoreUpdates.map(data => data._id), {
         updates: restoreUpdates
-      }, { operationId, reason });
+      }, { operationId, reason, receiptId });
       appendRecoveryOperation(recoveryOperations, plan.actor, "create", restoreCreates.map(data => data._id), {
         data: restoreCreates,
         keepId: true
-      }, { operationId, reason });
+      }, { operationId, reason, receiptId });
       appendActorRecoveryOperation(recoveryOperations, plan, { operationId, reason });
+      appendEffectRecoveryOperations(recoveryOperations, plan, { operationId, reason });
     }
     if (recoveryOperations.length) await foundry.documents.modifyBatch(recoveryOperations);
     for (const plan of plans) {
@@ -666,6 +776,28 @@ async function recoverPartialInventoryMutation(plans, { operationId, reason }) {
   }
 }
 
+function appendEffectRecoveryOperations(operations, plan, { operationId, reason }) {
+  if (!plan.effects) return;
+  const current = new Map(Array.from(plan.actor.effects?.contents ?? plan.actor.effects ?? [], effect => [getItemId(effect), effect]));
+  const createdIds = plan.effects.creates.map(data => data._id).filter(id => current.has(id));
+  const updates = plan.effects.recoveryUpdates.filter(data => current.has(data._id));
+  const creates = plan.effects.updates.filter(data => !current.has(data._id))
+    .map(data => cloneValue(plan.effects.snapshotById.get(data._id)));
+  for (const [action, data, expectedIds] of [
+    ["delete", { ids: createdIds }, createdIds],
+    ["create", { data: creates, keepId: true }, creates.map(data => data._id)],
+    ["update", { updates, diff: false }, updates.map(data => data._id)]
+  ]) {
+    if (!expectedIds.length) continue;
+    operations.push({
+      action, documentName: "ActiveEffect", parent: plan.actor, ...data,
+      [BATCH_EXPECTED_IDS_OPTION]: expectedIds,
+      render: true, falloutMawInventoryRecovery: true,
+      falloutMawInventoryOperationId: operationId, falloutMawInventoryReason: reason
+    });
+  }
+}
+
 function appendActorRecoveryOperation(operations, plan, { operationId, reason }) {
   if (!plan.actorUpdatePaths.length || !hasActorUpdateDrift(plan)) return;
   operations.push({
@@ -673,6 +805,7 @@ function appendActorRecoveryOperation(operations, plan, { operationId, reason })
     documentName: "Actor",
     ...(plan.actor.parent ? { parent: plan.actor.parent } : {}),
     updates: [cloneValue(plan.actorRecoveryUpdate)],
+    [BATCH_EXPECTED_IDS_OPTION]: [String(plan.actor.id ?? "")],
     diff: false,
     render: true,
     falloutMawInventoryRecovery: true,
@@ -681,7 +814,7 @@ function appendActorRecoveryOperation(operations, plan, { operationId, reason })
   });
 }
 
-function appendRecoveryOperation(operations, actor, action, expectedIds, data, { operationId, reason }) {
+function appendRecoveryOperation(operations, actor, action, expectedIds, data, { operationId, reason, receiptId }) {
   if (!expectedIds.length) return;
   operations.push({
     action,
@@ -692,6 +825,8 @@ function appendRecoveryOperation(operations, actor, action, expectedIds, data, {
     ...(action === "update" ? { diff: false } : {}),
     [INVENTORY_ATOMIC_OPTION]: true,
     [INVENTORY_EXPECTED_IDS_OPTION]: expectedIds,
+    [BATCH_EXPECTED_IDS_OPTION]: expectedIds,
+    ...(receiptId ? { [CONSUMPTION_RECEIPT_OPTION]: receiptId } : {}),
     falloutMawInventoryRecovery: true,
     falloutMawInventoryOperationId: operationId,
     falloutMawInventoryReason: reason
@@ -706,7 +841,7 @@ function hasInventoryPlanDrift(plan) {
     const current = currentById.get(itemId);
     return !snapshot || !current || !inventorySnapshotsEqual(current, snapshot);
   })) return true;
-  return hasActorUpdateDrift(plan);
+  return hasActorUpdateDrift(plan) || hasEffectMutationDrift(plan);
 }
 
 function hasInventoryPlanDriftFromSnapshot(plan) {
@@ -717,7 +852,7 @@ function hasInventoryPlanDriftFromSnapshot(plan) {
     const current = currentById.get(itemId);
     return !snapshot || !current || !inventorySnapshotsEqual(current, snapshot);
   })) return true;
-  return hasActorSnapshotDrift(plan);
+  return hasActorSnapshotDrift(plan) || hasEffectMutationDrift(plan);
 }
 
 function hasActorUpdateDrift(plan) {

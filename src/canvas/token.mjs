@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { stripEffectTooltipBonusWords } from "../utils/effect-tooltip-labels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
@@ -54,6 +55,7 @@ import {
   refreshTokenPeriodicDamageMaskVisibility
 } from "./periodic-damage-mask.mjs";
 import { withTokenPreviewClone } from "../documents/token-clone-initialization.mjs";
+import { TRAVEL_MOVEMENT_PLANNING_OPTION } from "../global-map/constants.mjs";
 
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
 const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -238,7 +240,12 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
    * camera or controlled token. Permission to persist the resulting plan is
    * checked separately by the owner/GM socket committer.
    */
-  planAbilityMovement({
+  planAbilityMovement({ ...options } = {}) {
+    if (!getAbilityRoutePlanCommitter(this)) throw new Error("The ability route has no authority committer.");
+    return this.#planMovementWithoutCamera(options, { allowNonOwner: true });
+  }
+
+  #planMovementWithoutCamera({
     allowedActions = null,
     direct = false,
     minCost = 0,
@@ -251,7 +258,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     measureOptions = {},
     pathfindingOptions = {},
     moveOptions = {}
-  } = {}) {
+  } = {}, { allowNonOwner = false } = {}) {
     if (allowedActions) {
       allowedActions = Array.from(allowedActions);
       if (!allowedActions.length) throw new Error("The allowed actions must not be empty.");
@@ -260,7 +267,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
       }
     }
     if (!canvas.ready) throw new Error("The canvas is not ready.");
-    if (!getAbilityRoutePlanCommitter(this)) throw new Error("The ability route has no authority committer.");
+    if (!allowNonOwner && !this.document.isOwner) throw new Error("You must be an owner of the Token in order to move it.");
 
     this.layer._cancelMovementPlanning();
     this.layer._cancelPlacement();
@@ -382,6 +389,13 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     return false;
   }
 
+  /** Plan travel from the HUD without Foundry's forced camera pan. */
+  planTravelMovement(options = {}) {
+    const planning = this.#planMovementWithoutCamera(options);
+    if (this.layer._movementPlanningContext?.object === this) this.control({ force: true });
+    return planning;
+  }
+
   /** @override */
   _initializeDragLeft(event) {
     if (!isAbilityRoutePlanningInteractive(this)) return super._initializeDragLeft(event);
@@ -409,21 +423,21 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
     const context = getAbilityRouteDragContext(this);
     if (!(await waitForAbilityRoutePathReady(context))) {
-      ui?.notifications?.warn?.("Маршрут ещё строится. Дождитесь завершения поиска пути.");
+      ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0660", "Маршрут ещё строится. Дождитесь завершения поиска пути."));
       return false;
     }
 
     const preview = getAbilityRoutePreviewBudget(this);
     if (!Array.isArray(context?.foundPath) || context.foundPath.length <= 1) {
-      ui?.notifications?.warn?.("Укажите точку назначения маршрута.");
+      ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0661", "Укажите точку назначения маршрута."));
       return false;
     }
     if (preview?.invalid || context?.unreachableWaypoints?.length) {
-      ui?.notifications?.warn?.("Маршрут недоступен по правилам перемещения.");
+      ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0662", "Маршрут недоступен по правилам перемещения."));
       return false;
     }
     if (!isAbilityRoutePreviewWithinBudget(preview)) {
-      ui?.notifications?.warn?.("Маршрут превышает заданный бюджет.");
+      ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0663", "Маршрут превышает заданный бюджет."));
       return false;
     }
 
@@ -475,6 +489,10 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     // Ability routes distinguish short RMB (undo waypoint) from RMB pan via
     // createRightClickPanGuard. Foundry's default cancels canvas pan here.
     if (isAbilityRoutePlanningInteractive(this)) return;
+    if (
+      this.layer?._movementPlanningContext?.object === this
+      && this.layer._movementPlanningContext.moveOptions?.[TRAVEL_MOVEMENT_PLANNING_OPTION]
+    ) return;
     return super._onDragClickRight(event);
   }
 
@@ -571,7 +589,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
         event.interactionData.dropped = false;
         event.interactionData.released = true;
         event.preventDefault();
-        ui?.notifications?.warn?.("Укажите точку назначения маршрута.");
+        ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0661", "Укажите точку назначения маршрута."));
         return;
       }
     }
@@ -591,14 +609,14 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
       void Promise.resolve(routePlanCommitter({ token: this, updates, options }))
         .then(committed => {
           if (committed) return;
-          ui?.notifications?.warn?.("Не удалось сохранить маршрут. Попробуйте построить его снова.");
+          ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0664", "Не удалось сохранить маршрут. Попробуйте построить его снова."));
           if (this.layer._movementPlanningContext?.object === this) {
             this.layer._movementPlanningContext.result = null;
           }
         })
         .catch(error => {
           console.warn("fallout-maw | Ability route plan commit failed", error);
-          ui?.notifications?.warn?.("Не удалось сохранить маршрут. Попробуйте построить его снова.");
+          ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0664", "Не удалось сохранить маршрут. Попробуйте построить его снова."));
           if (this.layer._movementPlanningContext?.object === this) {
             this.layer._movementPlanningContext.result = null;
           }
@@ -839,7 +857,7 @@ export function buildEffectTooltipHTML(effect, actor = null) {
       value: limitedUses.map(state => `${state.usesRemaining} / ${state.usesMax}`).join(" · ")
     } : null,
     triggeredAura ? {
-      label: "Аура",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0056", "Аура"),
       value: triggeredAura
     } : null,
     ...progressRows.map(row => ({
@@ -853,7 +871,7 @@ export function buildEffectTooltipHTML(effect, actor = null) {
   return `
     <article class="fallout-maw-effect-tooltip-content">
       <header>
-        <img src="${escapeHTML(effect.img || "icons/svg/aura.svg")}" alt="">
+        <img src="${escapeHTML(effect.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp")}" alt="">
         <div>
           <strong>${escapeHTML(name)}</strong>
           ${effect.disabled ? `<span>${escapeHTML(localize("FALLOUTMAW.Effects.Disabled"))}</span>` : ""}
@@ -896,9 +914,9 @@ function getEffectTriggeredAuraSummary(effect, actor = null) {
   if (!aura) return "";
 
   const targetLabels = {
-    ally: "союзники",
-    enemy: "враги",
-    neutral: "нейтралы"
+    ally: auditLocalize("FALLOUTMAW.AuditRuntime.R0665", "союзники"),
+    enemy: auditLocalize("FALLOUTMAW.AuditRuntime.R0666", "враги"),
+    neutral: auditLocalize("FALLOUTMAW.AuditRuntime.R0667", "нейтралы")
   };
   const targets = (aura.auraTargetGroups ?? [])
     .map(key => targetLabels[String(key ?? "")])
@@ -910,8 +928,8 @@ function getEffectTriggeredAuraSummary(effect, actor = null) {
   const repeatSeconds = Math.max(1, Math.trunc(Number(aura.auraRepeatSeconds) || 6));
   return [
     targets || null,
-    radius ? `радиус ${radius} м` : null,
-    `не чаще раза в ${repeatSeconds} с`
+    radius ? auditFormat("FALLOUTMAW.AuditRuntime.R0668", { p0: (radius) }, "радиус {p0} м") : null,
+    auditFormat("FALLOUTMAW.AuditRuntime.R0669", { p0: (repeatSeconds) }, "не чаще раза в {p0} с")
   ].filter(Boolean).join(" · ");
 }
 
@@ -1113,12 +1131,12 @@ function getDamageTypeLabel(key) {
 function getDamageBarrierLabel(barrier = {}) {
   const groupKey = "FALLOUTMAW.Effects.DamageBarriers";
   const localizedGroup = localize(groupKey);
-  const group = localizedGroup === groupKey ? "Барьер" : localizedGroup;
+  const group = localizedGroup === groupKey ? auditLocalize("FALLOUTMAW.AuditRuntime.R0670", "Барьер") : localizedGroup;
   if (barrier.kind !== "all") return `${group}: ${getDamageTypeLabel(barrier.damageTypeKey)}`;
 
   const allKey = "FALLOUTMAW.Effects.DamageBarrierAll";
   const localizedAll = localize(allKey);
-  const all = localizedAll === allKey ? "От всех видов урона" : localizedAll;
+  const all = localizedAll === allKey ? auditLocalize("FALLOUTMAW.AuditRuntime.R0671", "От всех видов урона") : localizedAll;
   return `${group}: ${all}`;
 }
 

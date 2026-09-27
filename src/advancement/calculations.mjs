@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { normalizeActorDevelopment } from "./storage.mjs";
 import { evaluateSkillFormulas } from "../formulas/index.mjs";
 import { isSkillAdvancementMultiplierTargetApplicable } from "./skill-multiplier-effects.mjs";
@@ -42,14 +43,14 @@ export function getSkillPointMultiplierBreakdown(
   if (advancementSettings?.mode === "fixed") {
     return {
       value: 1,
-      parts: [{ kind: "base", label: "База", operation: "add", amount: 1 }]
+      parts: [{ kind: "base", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0580", "База"), operation: "add", amount: 1 }]
     };
   }
   const effectiveSignature = Boolean(signature) && multiplierChanges?.signatureSkillsDisabled !== true;
   const entry = advancementSettings?.entries?.[skillKey] ?? {};
   const base = Number(entry?.base) || 0;
   let value = base;
-  const parts = [{ kind: "base", label: "База", operation: "add", amount: base }];
+  const parts = [{ kind: "base", label: auditLocalize("FALLOUTMAW.AuditRuntime.R0580", "База"), operation: "add", amount: base }];
 
   for (const [characteristicKey, coefficient] of Object.entries(entry?.characteristics ?? {})) {
     const amount = (Number(characteristics?.[characteristicKey]) || 0) * (Number(coefficient) || 0);
@@ -70,7 +71,7 @@ export function getSkillPointMultiplierBreakdown(
     value = applyMultiplierChange(value, change?.type, amount);
     parts.push({
       kind: "effect",
-      label: String(change?.sourceName ?? "").trim() || "Изменение эффекта",
+      label: String(change?.sourceName ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0581", "Изменение эффекта"),
       operation: normalizeMultiplierChangeType(change?.type),
       amount,
       before,
@@ -226,7 +227,7 @@ export function resolveSkillAdvancementMultiplierChanges(
         value: bonus,
         priority: Number.MAX_SAFE_INTEGER,
         order: changes.length,
-        sourceName: String(rule?.sourceName ?? "").trim() || "Всестороннее развитие",
+        sourceName: String(rule?.sourceName ?? "").trim() || auditLocalize("FALLOUTMAW.AuditRuntime.R0075", "Всестороннее развитие"),
         sourceImg: String(rule?.sourceImg ?? "").trim(),
         sourceUuid: String(rule?.sourceUuid ?? "").trim() || `fixed:${String(rule?.id ?? "versatileDevelopment")}`,
         fixedFunctionId: String(rule?.functionId ?? "")

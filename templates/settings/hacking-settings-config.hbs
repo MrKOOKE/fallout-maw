@@ -1,12 +1,12 @@
 <div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Взлом</h2>
+      <h2>{{localize 'FALLOUTMAW.Events.Groups.hacking.Label'}}</h2>
     </header>
 
     <div class="fallout-maw-settings-grid">
       <label>
-        <span>Используемый навык</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text8010f38c00a0'}}</span>
         <select name="skillKey">
           {{#each skillChoices}}
           <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>

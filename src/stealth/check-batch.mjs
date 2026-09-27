@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { createSkillCheckBatchCollector } from "../rolls/skill-check.mjs";
 
 /** Keep successful hidden rolls in their owner/GM audience, even in a mixed batch. */
@@ -9,7 +10,7 @@ export function createStealthCheckBatch({ successMessageData, isSuccess, createC
     const key = `${actor.uuid}:${successful ? "private" : "public"}`;
     if (!groups.has(key)) groups.set(key, createCollector({
       requester: "stealth",
-      title: "Проверки скрытности",
+      title: auditLocalize("FALLOUTMAW.AuditRuntime.R1189", "Проверки скрытности"),
       messageData: successful ? successMessageData(actor) : {}
     }));
     return groups.get(key);
@@ -27,7 +28,7 @@ export function createStealthCheckBatch({ successMessageData, isSuccess, createC
       }
       if (firstError) {
         console.error("Fallout MaW | Stealth check batch publication failed", firstError);
-        globalThis.ui?.notifications?.warn?.("Проверки скрытности выполнены, но не все карточки были созданы.");
+        globalThis.ui?.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R1190", "Проверки скрытности выполнены, но не все карточки были созданы."));
       }
     }
   };

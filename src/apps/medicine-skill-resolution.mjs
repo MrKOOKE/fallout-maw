@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 /**
@@ -26,7 +27,7 @@ export function evaluateMedicineSkillResolution(actor, {
     requiresCheck: Boolean(normalizedSkillKey && !usesThreshold),
     met: !usesThreshold || skillValue >= normalizedDifficulty,
     resultKey: usesThreshold && skillValue < normalizedDifficulty ? "failure" : "success",
-    resultLabel: usesThreshold ? "навык соответствует порогу" : "успех"
+    resultLabel: usesThreshold ? auditLocalize("FALLOUTMAW.AuditApps.SkillMeetsTheThreshold", "навык соответствует порогу") : auditLocalize("FALLOUTMAW.AuditApps.Success", "успех")
   };
 }
 

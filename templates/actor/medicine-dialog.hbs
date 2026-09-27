@@ -2,12 +2,12 @@
   <header class="fallout-maw-dialog-toolbar fallout-maw-medicine-panel-header {{#if tabs.trauma.active}}has-mass-action{{/if}}">
     <div class="fallout-maw-medicine-patient">
       <h2>{{targetActor.name}}</h2>
-      <p class="fallout-maw-medicine-subtitle">{{#unless isSelfTreatment}}Лечит: {{sourceActor.name}} <span aria-hidden="true">·</span> {{/unless}}{{toolLabel}}</p>
+      <p class="fallout-maw-medicine-subtitle">{{#unless isSelfTreatment}}{{localize 'FALLOUTMAW.AuditTemplates.Text0d84d48ed3d5'}} {{sourceActor.name}} <span aria-hidden="true">·</span> {{/unless}}{{toolLabel}}</p>
     </div>
     {{#if tabs.trauma.active}}
     <div class="fallout-maw-medicine-mass-action">
     <button type="button" class="fallout-maw-dialog-primary-action" data-action="treatAll" {{#unless hasMassTreatments}}disabled{{/unless}}>
-      <i class="fa-solid fa-kit-medical"></i> Массовое лечение
+      <i class="fa-solid fa-kit-medical"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text49382d0b4164'}}
     </button>
     </div>
     {{/if}}
@@ -26,32 +26,32 @@
   </div>
   {{/if}}
 
-  <nav class="fallout-maw-medicine-tabs" aria-label="Разделы медицины">
-    <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma" aria-pressed="{{tabs.trauma.active}}"><span aria-hidden="true">01</span> Конечности и травмы</button>
-    <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease" aria-pressed="{{tabs.disease.active}}"><span aria-hidden="true">02</span> Болезни</button>
-    <button type="button" class="{{tabs.implant.cssClass}}" data-action="setMedicineTab" data-medicine-tab="implant" aria-pressed="{{tabs.implant.active}}"><span aria-hidden="true">03</span> Импланты</button>
-    <button type="button" class="{{tabs.prosthesis.cssClass}}" data-action="setMedicineTab" data-medicine-tab="prosthesis" aria-pressed="{{tabs.prosthesis.active}}"><span aria-hidden="true">04</span> Протезы</button>
+  <nav class="fallout-maw-medicine-tabs" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Texta42c6988b2dd'}}">
+    <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma" aria-pressed="{{tabs.trauma.active}}"><span aria-hidden="true">01</span> {{localize 'FALLOUTMAW.AuditTemplates.Text473ab1df609a'}}</button>
+    <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease" aria-pressed="{{tabs.disease.active}}"><span aria-hidden="true">02</span> {{localize 'FALLOUTMAW.Common.Diseases'}}</button>
+    <button type="button" class="{{tabs.implant.cssClass}}" data-action="setMedicineTab" data-medicine-tab="implant" aria-pressed="{{tabs.implant.active}}"><span aria-hidden="true">03</span> {{localize 'FALLOUTMAW.AuditTemplates.Text93f75dab61e9'}}</button>
+    <button type="button" class="{{tabs.prosthesis.cssClass}}" data-action="setMedicineTab" data-medicine-tab="prosthesis" aria-pressed="{{tabs.prosthesis.active}}"><span aria-hidden="true">04</span> {{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}</button>
   </nav>
 
   {{#if tabs.trauma.active}}
   <div class="fallout-maw-limb-treatment-list">
     {{#if hasTraumaTreatments}}
     <div class="fallout-maw-action-row fallout-maw-action-row--target fallout-maw-action-row--head fallout-maw-limb-treatment-columns">
-      <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
-      <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Цель лечения</div>
-      <div class="fallout-maw-action-cell">Состояние</div>
-      <div class="fallout-maw-action-cell">КИ</div>
-      <div class="fallout-maw-action-cell">Сложность</div>
-      <div class="fallout-maw-action-cell">Навык</div>
-      <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Действие</div>
+      <div class="fallout-maw-action-cell fallout-maw-action-cell--image">{{localize 'FALLOUTMAW.AuditTemplates.Text23d154f2f1d1'}}</div>
+      <div class="fallout-maw-action-cell fallout-maw-action-cell--name">{{localize 'FALLOUTMAW.AuditTemplates.Text179cb7f060c3'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.FunctionCondition'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.AuditTemplates.Textc6019eacffb5'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Ability.Actions.EventSkillDifficulty'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Common.Skill'}}</div>
+      <div class="fallout-maw-action-cell fallout-maw-action-cell--button">{{localize 'FALLOUTMAW.Ability.Actions.Type'}}</div>
     </div>
     {{/if}}
     {{#each limbGroups}}
     <section class="fallout-maw-limb-treatment-block" data-limb-key="{{key}}">
       <header class="fallout-maw-limb-treatment-header">
         <h3>{{label}}</h3>
-        <span>Здоровье: <strong>{{value}} / {{max}}</strong></span>
-        {{#if hasHealingLimit}}<span>Предел лечения: <strong>{{healingCap}}</strong></span>{{/if}}
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text2b9eba706d89'}} <strong>{{value}} / {{max}}</strong></span>
+        {{#if hasHealingLimit}}<span>{{localize 'FALLOUTMAW.AuditTemplates.Text3a803c1d8e2c'}} <strong>{{healingCap}}</strong></span>{{/if}}
         {{#if statusLabel}}<small>{{statusLabel}}</small>{{/if}}
       </header>
       <div class="fallout-maw-action-table fallout-maw-action-table--medicine">
@@ -65,7 +65,7 @@
 
     {{#if unassignedTraumas.length}}
     <section class="fallout-maw-limb-treatment-block fallout-maw-limb-treatment-block--unassigned">
-      <header class="fallout-maw-limb-treatment-header"><h3>Общие травмы</h3></header>
+      <header class="fallout-maw-limb-treatment-header"><h3>{{localize 'FALLOUTMAW.AuditTemplates.Text56680a9e075c'}}</h3></header>
       <div class="fallout-maw-action-table fallout-maw-action-table--medicine">
         {{#each unassignedTraumas}}
           {{> "systems/fallout-maw/templates/actor/parts/medicine-treatment-row.hbs" this}}
@@ -76,7 +76,7 @@
 
     {{#unless hasTraumaTreatments}}
     <div class="fallout-maw-medicine-empty-state">
-      <strong><span aria-hidden="true">[ OK ]</span> Нет повреждённых конечностей или травм</strong>
+      <strong><span aria-hidden="true">[ OK ]</span> {{localize 'FALLOUTMAW.AuditTemplates.Text5914e77cb235'}}</strong>
     </div>
     {{/unless}}
   </div>
@@ -85,18 +85,18 @@
   {{#if tabs.disease.active}}
   <div class="fallout-maw-action-table fallout-maw-action-table--medicine">
     <div class="fallout-maw-action-row fallout-maw-action-row--target fallout-maw-action-row--head">
-      <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
-      <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Название</div>
-      <div class="fallout-maw-action-cell">Прогресс</div>
-      <div class="fallout-maw-action-cell">КД</div>
-      <div class="fallout-maw-action-cell">Сложность</div>
-      <div class="fallout-maw-action-cell">Навык</div>
-      <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Действие</div>
+      <div class="fallout-maw-action-cell fallout-maw-action-cell--image">{{localize 'FALLOUTMAW.AuditTemplates.Text23d154f2f1d1'}}</div>
+      <div class="fallout-maw-action-cell fallout-maw-action-cell--name">{{localize 'FALLOUTMAW.Common.Label'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Research.Progress'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.AuditTemplates.Textdaf8fa0a70a7'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Ability.Actions.EventSkillDifficulty'}}</div>
+      <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Common.Skill'}}</div>
+      <div class="fallout-maw-action-cell fallout-maw-action-cell--button">{{localize 'FALLOUTMAW.Ability.Actions.Type'}}</div>
     </div>
     {{#each diseases}}
       {{> "systems/fallout-maw/templates/actor/parts/medicine-treatment-row.hbs" this}}
     {{else}}
-    <p class="fallout-maw-empty-list">У цели нет болезней.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textc762acc72ea6'}}</p>
     {{/each}}
   </div>
   {{/if}}
@@ -107,7 +107,7 @@
     <div class="fallout-maw-prosthesis-target">
       {{#if implants.silhouette.visible}}
       <div class="fallout-maw-prosthesis-silhouette fallout-maw-implant-silhouette">
-        <svg viewBox="{{implants.silhouette.viewBox}}" role="img" aria-label="Импланты">
+        <svg viewBox="{{implants.silhouette.viewBox}}" role="img" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text93f75dab61e9'}}">
           {{#each implants.silhouette.outline}}
           <path class="fallout-maw-prosthesis-outline" d="{{d}}"></path>
           {{/each}}
@@ -146,10 +146,10 @@
 
         <div class="fallout-maw-action-table fallout-maw-action-table--prosthesis fallout-maw-action-table--implant">
           <div class="fallout-maw-action-row fallout-maw-action-row--implant-installed fallout-maw-action-row--head">
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Установлено</div>
-            <div class="fallout-maw-action-cell">Состояние</div>
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Извлечь</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">{{localize 'FALLOUTMAW.AuditTemplates.Text23d154f2f1d1'}}</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">{{localize 'FALLOUTMAW.AuditTemplates.Text434a5744a758'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.FunctionCondition'}}</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">{{localize 'FALLOUTMAW.Item.LightSourceExtract'}}</div>
           </div>
           {{#each implants.activeLimb.implants}}
           <div class="fallout-maw-action-row fallout-maw-action-row--implant-installed">
@@ -164,8 +164,8 @@
               <button
                 type="button"
                 class="fallout-maw-icon-action-button"
-                title="Извлечь"
-                aria-label="Извлечь"
+                title="{{localize 'FALLOUTMAW.Item.LightSourceExtract'}}"
+                aria-label="{{localize 'FALLOUTMAW.Item.LightSourceExtract'}}"
                 data-action="removeImplant"
                 data-limb-key="{{../implants.activeLimb.key}}"
                 data-implant-item-id="{{id}}"
@@ -176,18 +176,18 @@
             </div>
           </div>
           {{else}}
-          <p class="fallout-maw-empty-list">На выбранной части тела нет установленных имплантов.</p>
+          <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text0cfe10d2bf07'}}</p>
           {{/each}}
         </div>
 
         <div class="fallout-maw-action-table fallout-maw-action-table--prosthesis fallout-maw-action-table--implant">
           <div class="fallout-maw-action-row fallout-maw-action-row--implant-candidate fallout-maw-action-row--head">
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Название</div>
-            <div class="fallout-maw-action-cell">Состояние</div>
-            <div class="fallout-maw-action-cell">Навык</div>
-            <div class="fallout-maw-action-cell">Сл</div>
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Установка</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">{{localize 'FALLOUTMAW.AuditTemplates.Text23d154f2f1d1'}}</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">{{localize 'FALLOUTMAW.Common.Label'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.FunctionCondition'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Common.Skill'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.AuditTemplates.Text906ddead2cb0'}}</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">{{localize 'FALLOUTMAW.Item.ImplantInstallation'}}</div>
           </div>
           {{#each implants.activeLimb.candidates}}
           <div class="fallout-maw-action-row fallout-maw-action-row--implant-candidate {{#unless usable}}is-disabled{{/unless}}">
@@ -204,8 +204,8 @@
               <button
                 type="button"
                 class="fallout-maw-icon-action-button"
-                title="Установить"
-                aria-label="Установить"
+                title="{{localize 'FALLOUTMAW.TrapPlacement.Place'}}"
+                aria-label="{{localize 'FALLOUTMAW.TrapPlacement.Place'}}"
                 data-action="installImplant"
                 data-limb-key="{{../implants.activeLimb.key}}"
                 data-implant-source="{{source}}"
@@ -217,14 +217,14 @@
             </div>
           </div>
           {{else}}
-          <p class="fallout-maw-empty-list">Подходящих имплантов нет.</p>
+          <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text5c70fb1a204b'}}</p>
           {{/each}}
         </div>
       </section>
       {{/if}}
     </div>
     {{else}}
-    <p class="fallout-maw-empty-list">У цели нет частей тела с доступными слотами имплантов.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textbdd71e9c667d'}}</p>
     {{/if}}
   </div>
   {{/if}}
@@ -235,7 +235,7 @@
     <div class="fallout-maw-prosthesis-target">
       {{#if prostheses.silhouette.visible}}
       <div class="fallout-maw-prosthesis-silhouette">
-        <svg viewBox="{{prostheses.silhouette.viewBox}}" role="img" aria-label="Протезы">
+        <svg viewBox="{{prostheses.silhouette.viewBox}}" role="img" aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}">
           {{#each prostheses.silhouette.outline}}
           <path class="fallout-maw-prosthesis-outline" d="{{d}}"></path>
           {{/each}}
@@ -276,8 +276,8 @@
           <img src="{{prostheses.activeLimb.prosthesis.img}}" alt="{{prostheses.activeLimb.prosthesis.name}}" onerror="this.src='{{fallbackIcon}}'">
           <div>
             <strong>{{prostheses.activeLimb.prosthesis.name}}</strong>
-            <small>Состояние: {{prostheses.activeLimb.conditionLabel}}</small>
-            <small>Интеграция: {{prostheses.activeLimb.prosthesis.integrationPercent}}%</small>
+            <small>{{localize 'FALLOUTMAW.AuditTemplates.Text0ae07a918118'}} {{prostheses.activeLimb.conditionLabel}}</small>
+            <small>{{localize 'FALLOUTMAW.AuditTemplates.Text70414879110e'}} {{prostheses.activeLimb.prosthesis.integrationPercent}}%</small>
           </div>
           <button
             type="button"
@@ -286,19 +286,19 @@
             data-prosthesis-item-id="{{prostheses.activeLimb.prosthesis.id}}"
             {{#unless medicineOperationsUsable}}disabled{{/unless}}
           >
-            Снять
+            {{localize 'FALLOUTMAW.Item.Unequip'}}
           </button>
         </div>
         {{else}}
         <div class="fallout-maw-action-table fallout-maw-action-table--prosthesis">
           <div class="fallout-maw-action-row fallout-maw-action-row--prosthesis fallout-maw-action-row--head">
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Название</div>
-            <div class="fallout-maw-action-cell">Состояние</div>
-            <div class="fallout-maw-action-cell">Интеграция</div>
-            <div class="fallout-maw-action-cell">Навык</div>
-            <div class="fallout-maw-action-cell">Сл</div>
-            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Действие</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">{{localize 'FALLOUTMAW.AuditTemplates.Text23d154f2f1d1'}}</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">{{localize 'FALLOUTMAW.Common.Label'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.FunctionCondition'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Item.ProsthesisIntegration'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.Common.Skill'}}</div>
+            <div class="fallout-maw-action-cell">{{localize 'FALLOUTMAW.AuditTemplates.Text906ddead2cb0'}}</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">{{localize 'FALLOUTMAW.Ability.Actions.Type'}}</div>
           </div>
           {{#each prostheses.activeLimb.candidates}}
           <div class="fallout-maw-action-row fallout-maw-action-row--prosthesis {{#unless usable}}is-disabled{{/unless}}">
@@ -321,12 +321,12 @@
                 data-prosthesis-item-id="{{id}}"
                 {{#unless usable}}disabled{{/unless}}
               >
-                Установить
+                {{localize 'FALLOUTMAW.TrapPlacement.Place'}}
               </button>
             </div>
           </div>
           {{else}}
-          <p class="fallout-maw-empty-list">Подходящих протезов нет.</p>
+          <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textc8ba548cbbdb'}}</p>
           {{/each}}
         </div>
         {{/if}}
@@ -334,7 +334,7 @@
       {{/if}}
     </div>
     {{else}}
-    <p class="fallout-maw-empty-list">У цели нет отсутствующих или протезированных частей тела.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text7fd32184e004'}}</p>
     {{/if}}
   </div>
   {{/if}}

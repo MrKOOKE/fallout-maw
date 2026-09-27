@@ -12,21 +12,21 @@
 
     <section class="fallout-maw-panel fallout-maw-trauma-thresholds">
       <header class="fallout-maw-panel-header">
-        <h2>Пороги травм</h2>
-        <button type="button" data-action="addThreshold"><i class="fa-solid fa-plus"></i> Добавить порог</button>
+        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Texte52b50932938'}}</h2>
+        <button type="button" data-action="addThreshold"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Item.TrapDetectionAddThreshold'}}</button>
       </header>
 
       <div class="fallout-maw-trauma-threshold-list">
         {{#each limb.thresholds}}
         <div class="fallout-maw-trauma-threshold-row" data-trauma-threshold-row data-trauma-stage="{{id}}">
           <label class="fallout-maw-inline-stat">
-            <span>Порог, %</span>
+            <span>{{localize 'FALLOUTMAW.AuditTemplates.Textc17cf4f262da'}}</span>
             <input type="number" data-trauma-threshold-percent value="{{thresholdPercent}}" min="0" max="100" step="1">
           </label>
           <button type="button" data-action="deleteThreshold" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         </div>
         {{else}}
-        <p class="fallout-maw-empty-list">Пороги не настроены.</p>
+        <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textef056165a0fc'}}</p>
         {{/each}}
       </div>
     </section>
@@ -42,30 +42,30 @@
           {{#each traumaProfiles}}
           <section class="fallout-maw-trauma-profile" data-trauma-stage="{{id}}" data-trauma-profile="{{damageTypeKey}}">
             <header class="fallout-maw-panel-header">
-              <h4>Порог {{thresholdPercent}}%</h4>
+              <h4>{{localize 'FALLOUTMAW.AuditTemplates.Text23d893aca415'}} {{thresholdPercent}}%</h4>
             </header>
 
             <div class="fallout-maw-list-grid two-columns">
               <label>
-                <span>Название травмы</span>
+                <span>{{localize 'FALLOUTMAW.AuditTemplates.Textdee162833f73'}}</span>
                 <input type="text" data-trauma-profile-name value="{{name}}">
               </label>
               <label>
-                <span>Картинка</span>
+                <span>{{localize 'FALLOUTMAW.AuditTemplates.Text69009242f115'}}</span>
                 <div class="fallout-maw-image-picker-field">
                   <input type="text" data-trauma-profile-img value="{{img}}">
-                  <button type="button" data-action="browseTraumaImage" title="Выбрать картинку"><i class="fa-solid fa-folder-open"></i></button>
+                  <button type="button" data-action="browseTraumaImage" title="{{localize 'FALLOUTMAW.AuditTemplates.Textfa3bf5b17f38'}}"><i class="fa-solid fa-folder-open"></i></button>
                 </div>
               </label>
             </div>
 
             <div class="fallout-maw-list-grid four-columns">
               <label>
-                <span>Сложность лечения</span>
+                <span>{{localize 'FALLOUTMAW.Trauma.HealingDifficulty'}}</span>
                 <input type="number" data-trauma-profile-healing-difficulty value="{{healingDifficulty}}" min="0" step="1">
               </label>
               <label>
-                <span>Класс инструмента</span>
+                <span>{{localize 'FALLOUTMAW.AuditTemplates.Textbbe41ed454b6'}}</span>
                 <select data-trauma-profile-healing-tool-class>
                   {{#each healingToolClassChoices}}
                   <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -73,11 +73,11 @@
                 </select>
               </label>
               <label>
-                <span>Прогресс лечения</span>
+                <span>{{localize 'FALLOUTMAW.Trauma.HealingProgress'}}</span>
                 <input type="number" data-trauma-profile-healing-progress value="{{healingProgress}}" min="0" step="1">
               </label>
               <label>
-                <span>Навык лечения</span>
+                <span>{{localize 'FALLOUTMAW.Trauma.HealingSkill'}}</span>
                 <select data-trauma-profile-healing-skill>
                   {{#each healingSkillChoices}}
                   <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -88,10 +88,10 @@
 
             <div class="fallout-maw-trauma-effect-table">
               <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
-                <span>Ключ</span>
-                <span>Тип</span>
-                <span>Значение</span>
-                <span>Приоритет</span>
+                <span>{{localize 'FALLOUTMAW.Common.Key'}}</span>
+                <span>{{localize 'FALLOUTMAW.Common.Type'}}</span>
+                <span>{{localize 'FALLOUTMAW.Common.Value'}}</span>
+                <span>{{localize 'FALLOUTMAW.AuditTemplates.Textb5b6ddbf62af'}}</span>
                 <span></span>
               </div>
               {{#each effects}}
@@ -99,7 +99,7 @@
                 <input type="text" data-trauma-effect-key data-effect-key-autocomplete value="{{key}}">
                 <select data-trauma-effect-type>
                   <option value="add" {{#if addSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeAdd"}}</option>
-                  <option value="multiply" {{#if multiplySelected}}selected{{/if}}>Процент</option>
+                  <option value="multiply" {{#if multiplySelected}}selected{{/if}}>{{localize 'FALLOUTMAW.Effects.ChangeMultiply'}}</option>
                   <option value="override" {{#if overrideSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeOverride"}}</option>
                 </select>
                 <input type="text" data-trauma-effect-value value="{{value}}">
@@ -108,10 +108,10 @@
               </div>
               {{/each}}
             </div>
-            <button type="button" data-action="addEffect"><i class="fa-solid fa-plus"></i> Добавить эффект</button>
+            <button type="button" data-action="addEffect"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Item.FirstAidAddRemoveEffect'}}</button>
           </section>
           {{else}}
-          <p class="fallout-maw-empty-list">Травмы этого типа не настроены.</p>
+          <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text46e47c8f3d23'}}</p>
           {{/each}}
         </div>
       </section>
@@ -124,7 +124,7 @@
   </footer>
   {{else}}
   <section class="fallout-maw-panel">
-    <p class="fallout-maw-empty-list">Конечность не найдена.</p>
+    <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Texte45cd342a2d2'}}</p>
   </section>
   {{/if}}
 </div>

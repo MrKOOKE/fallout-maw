@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 export const SKILL_CHECK_ACTION_EFFECT_FIELDS = Object.freeze([
   "bonus",
   "advantage",
@@ -5,47 +6,47 @@ export const SKILL_CHECK_ACTION_EFFECT_FIELDS = Object.freeze([
 ]);
 
 export const SKILL_CHECK_ACTIONS = Object.freeze([
-  createAction("trapDetection", "Обнаружение ловушек", [
+  createAction("trapDetection", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1177", "Обнаружение ловушек"), [
     "trapDetection"
   ]),
-  createAction("stealth", "Раскрытие скрытности", [
+  createAction("stealth", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1178", "Раскрытие скрытности"), [
     "stealth",
     "stealthReveal"
   ]),
-  createAction("grappleResistance", "Сопротивление захвату", [
+  createAction("grappleResistance", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1179", "Сопротивление захвату"), [
     "grappleResistance",
     "grappleEscape"
   ]),
-  createAction("knockdownResistance", "Сопротивление опрокидыванию", [
+  createAction("knockdownResistance", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1180", "Сопротивление опрокидыванию"), [
     "knockdownResistance"
   ]),
-  createAction("knockbackResistance", "Сопротивление отталкиванию", [
+  createAction("knockbackResistance", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1181", "Сопротивление отталкиванию"), [
     "knockbackResistance",
     "activePushResistance",
     "weaponPushResistance",
     "keepAwayResistance"
   ]),
-  createAction("repair", "Ремонт", [
+  createAction("repair", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1182", "Ремонт"), [
     "repair"
   ]),
-  createAction("medicineProsthesis", "Протезирование", [
+  createAction("medicineProsthesis", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1183", "Протезирование"), [
     "medicineProsthesis",
     "prosthesis"
   ]),
-  createAction("medicineImplant", "Имплантирование", [
+  createAction("medicineImplant", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1184", "Имплантирование"), [
     "medicineImplant",
     "implant"
   ]),
-  createAction("craft", "Крафт", [
+  createAction("craft", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1185", "Крафт"), [
     "craft",
     "Крафт"
   ]),
-  createAction("disassembly", "Разбор", [
+  createAction("disassembly", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1186", "Разбор"), [
     "disassembly",
     "dismantle",
     "Разбор"
   ]),
-  createAction("research", "Исследование", [
+  createAction("research", () => auditLocalize("FALLOUTMAW.AuditRuntime.R1187", "Исследование"), [
     "research"
   ])
 ]);
@@ -88,7 +89,7 @@ function createAction(id, label, requesterAliases = []) {
   const normalizedId = String(id ?? "").trim();
   return Object.freeze({
     id: normalizedId,
-    label: String(label ?? normalizedId).trim() || normalizedId,
+    get label() { return String((typeof label === "function" ? label() : label) ?? normalizedId).trim() || normalizedId; },
     requesterAliases: Object.freeze(Array.from(new Set(
       [normalizedId, ...requesterAliases]
         .map(alias => String(alias ?? "").trim())

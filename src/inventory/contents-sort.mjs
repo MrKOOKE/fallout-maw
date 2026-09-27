@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import {
   BUTCHERING_STORAGE_PARENT_ID, LOCKED_STORAGE_PARENT_ID,
   getContainerInventoryGridOptions, getContextInventoryItems, getItemFootprint,
@@ -8,13 +9,12 @@ import { getCreatureOptions, getItemCategorySettings } from "../settings/accesso
 import { planSortedContentsLayout } from "./contents-sort-layout.mjs";
 
 export const INVENTORY_SORT_CHOICES = Object.freeze([
-  { key: "nameAsc", label: "А–Я" },
-  { key: "nameDesc", label: "Я–А" },
-  { key: "category", label: "Категории" },
-  { key: "sizeAsc", label: "Размер ↑" },
-  { key: "sizeDesc", label: "Размер ↓" }
+  { key: "nameAsc", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1099", "А–Я"); } },
+  { key: "nameDesc", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1100", "Я–А"); } },
+  { key: "category", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1101", "Категории"); } },
+  { key: "sizeAsc", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1102", "Размер ↑"); } },
+  { key: "sizeDesc", get label() { return auditLocalize("FALLOUTMAW.AuditRuntime.R1103", "Размер ↓"); } }
 ]);
-const collator = new Intl.Collator("ru", { numeric: true, sensitivity: "base" });
 
 function createContentsSubcategoryResolver() {
   const orders = new Map(getItemCategorySettings().map(category => [String(category.label).trim(),
@@ -27,7 +27,8 @@ function createContentsSubcategoryResolver() {
 }
 
 export function getSortedContentsEntries(actor, parentId, mode) {
-  if (!INVENTORY_SORT_CHOICES.some(choice => choice.key === mode)) throw new Error("Неизвестный порядок сортировки.");
+  const collator = new Intl.Collator(globalThis.game?.i18n?.lang || "en", { numeric: true, sensitivity: "base" });
+  if (!INVENTORY_SORT_CHOICES.some(choice => choice.key === mode)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1104", "Неизвестный порядок сортировки."));
   const subcategoryOf = mode === "category" ? createContentsSubcategoryResolver() : null;
   const entries = getContextInventoryItems(parentId, actor.items).flatMap(item => {
     const parts = usesVirtualInventoryStacks(item) ? getItemStackParts(item) : [null];
@@ -81,13 +82,13 @@ export function planInventoryContentsSort(actor, parentId, mode, grid) {
 }
 
 export async function sortInventoryContents({ actor, parentId = "", mode }) {
-  if (!actor?.isOwner) throw new Error("Нет прав на сортировку содержимого.");
-  if (parentId === BUTCHERING_STORAGE_PARENT_ID) throw new Error("Это хранилище нельзя сортировать.");
+  if (!actor?.isOwner) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1105", "Нет прав на сортировку содержимого."));
+  if (parentId === BUTCHERING_STORAGE_PARENT_ID) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1106", "Это хранилище нельзя сортировать."));
   const locked = parentId === LOCKED_STORAGE_PARENT_ID;
   let grid;
   if (parentId && !locked) {
     const container = actor.items.get(parentId);
-    if (!container?.system?.functions?.container?.enabled) throw new Error("Контейнер не найден.");
+    if (!container?.system?.functions?.container?.enabled) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1107", "Контейнер не найден."));
     grid = getContainerInventoryGridOptions(container);
   } else {
     const race = getCreatureOptions().races.find(r => r.id === actor.system?.creature?.raceId);

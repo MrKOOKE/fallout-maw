@@ -88,9 +88,12 @@ export async function applyResearchTime(actor, researchId, duration = {}, option
     }
 
     totalGain = roundSignedResearchValue(totalGain);
-    const nextProgress = clampResearchProgress(Number(research.progress) + totalGain, research.target);
-    await actor.updateResearch(researchId, { progress: nextProgress }, {
+    const currentResearch = getResearchById(actor.system?.researches, researchId);
+    if (!currentResearch) return null;
+    const nextProgress = clampResearchProgress(Number(currentResearch.progress) + totalGain, currentResearch.target);
+    const updatedActor = await actor.updateResearch(researchId, { progress: nextProgress }, {
       chainRef: scope.chainRef,
+      progressDelta: totalGain,
       occurrenceId,
       operationId: `research-progress-commit:${actor.uuid}:${research.id}:${occurrenceId}`,
       progressSource: String(options?.progressSource ?? "researchTime"),
@@ -102,19 +105,23 @@ export async function applyResearchTime(actor, researchId, duration = {}, option
         totalGain
       }
     });
+    if (!updatedActor) return null;
+    const committedResearch = typeof updatedActor.getResearch === "function"
+      ? updatedActor.getResearch(researchId)
+      : { ...currentResearch, progress: nextProgress };
+    if (!committedResearch) return null;
 
     return {
       research: {
-        ...research,
-        progress: nextProgress,
-        completed: nextProgress >= research.target
+        ...committedResearch,
+        completed: committedResearch.progress >= committedResearch.target
       },
       checks,
       counts,
       totalGain,
       gainLabel: `${totalGain > 0 ? "+" : ""}${formatResearchValue(totalGain)}`,
-      progressLabel: formatResearchValue(nextProgress),
-      targetLabel: formatResearchValue(research.target)
+      progressLabel: formatResearchValue(committedResearch.progress),
+      targetLabel: formatResearchValue(committedResearch.target)
     };
   });
 }

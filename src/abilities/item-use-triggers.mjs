@@ -359,7 +359,7 @@ async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunctio
   const effectData = {
     type: "base",
     name: abilityItem.name,
-    img: abilityItem.img || "icons/svg/aura.svg",
+    img: abilityItem.img || "systems/fallout-maw/assets/System/Abilities/ability-default.webp",
     origin: getAbilityEffectOriginUuid(actor, abilityItem),
     transfer: false,
     disabled: false,

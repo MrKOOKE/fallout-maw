@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getPreparedRuntimeSettings } from "../settings/accessors.mjs";
 import {
   DEFAULT_ORGANISM_DEVELOPMENT_LIMIT
@@ -11,6 +12,13 @@ import {
 } from "../advancement/pure-value-effects.mjs";
 
 const ORGANISM_EFFECT_NAME = "Развитие организма";
+const ORGANISM_EFFECT_FLAG = "organismDevelopmentEffect";
+
+function isOrganismDevelopmentEffect(effect) {
+  return effect?.getFlag?.(SYSTEM_ID, ORGANISM_EFFECT_FLAG) === true
+    || effect?.flags?.[SYSTEM_ID]?.[ORGANISM_EFFECT_FLAG] === true
+    || [ORGANISM_EFFECT_NAME, "Organism development"].includes(effect?.name || effect?.label);
+}
 const ORGANISM_FLAG_KEY = "organismDevelopment";
 const CHARACTERISTIC_BONUS = 1;
 
@@ -179,7 +187,7 @@ export function prepareActorOrganismDevelopmentLimitBase(system) {
 }
 
 function getOrganismDevelopmentCharacteristicBonuses(actor) {
-  const effect = actor?.effects?.find(entry => (entry.name || entry.label) === ORGANISM_EFFECT_NAME);
+  const effect = actor?.effects?.find(isOrganismDevelopmentEffect);
   if (!effect) return {};
 
   const bonuses = {};
@@ -229,17 +237,25 @@ function normalizeOrganismDevelopmentProgress(values = {}) {
 }
 
 async function setOrganismDevelopmentProgress(actor, progress = {}) {
-  await actor.setFlag(SYSTEM_ID, ORGANISM_FLAG_KEY, normalizeOrganismDevelopmentProgress(progress));
+  const normalized = normalizeOrganismDevelopmentProgress(progress);
+  const current = getOrganismDevelopmentProgress(actor);
+  if (Object.entries(normalized).every(([key, value]) => current[key] === value)) return;
+  const result = await actor.setFlag(SYSTEM_ID, ORGANISM_FLAG_KEY, normalized);
+  const persisted = getOrganismDevelopmentProgress(actor);
+  if (!result || Object.entries(normalized).some(([key, value]) => persisted[key] !== value)) {
+    throw new Error("Не удалось сохранить прогресс развития организма.");
+  }
 }
 
 async function applyOrganismDevelopmentEffect(actor, characteristicKey) {
   if (!actor || !characteristicKey) return;
   const changeKey = `system.characteristics.${characteristicKey}`;
   const legacyChangeKey = `${changeKey}.value`;
-  let existingEffect = actor.effects.find(effect => (effect.name || effect.label) === ORGANISM_EFFECT_NAME);
+  let existingEffect = actor.effects.find(isOrganismDevelopmentEffect);
 
   if (existingEffect) {
-    const changes = [...(existingEffect.changes ?? [])];
+    // Do not change the live prepared row before Foundry accepts the update.
+    const changes = (existingEffect.changes ?? []).map(({ effect, ...change }) => ({ ...change }));
     const existingChange = changes.find(change => change.key === changeKey || change.key === legacyChangeKey);
     if (existingChange) {
       existingChange.key = changeKey;
@@ -251,19 +267,22 @@ async function applyOrganismDevelopmentEffect(actor, characteristicKey) {
         value: String(CHARACTERISTIC_BONUS)
       });
     }
-    await existingEffect.update({ changes });
+    const updated = await existingEffect.update({ changes });
+    if (!updated) throw new Error("Не удалось обновить эффект развития организма.");
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [{
-    name: ORGANISM_EFFECT_NAME,
-    img: "icons/svg/upgrade.svg",
+  const created = await actor.createEmbeddedDocuments("ActiveEffect", [{
+    name: auditLocalize("FALLOUTMAW.AuditRuntime.R1175", ORGANISM_EFFECT_NAME),
+    flags: { [SYSTEM_ID]: { [ORGANISM_EFFECT_FLAG]: true } },
+    img: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp",
     changes: [{
       key: changeKey,
       mode: CONST.ACTIVE_EFFECT_MODES.ADD,
       value: String(CHARACTERISTIC_BONUS)
     }]
   }]);
+  if (!created?.length) throw new Error("Не удалось создать эффект развития организма.");
 }
 
 const ORGANISM_DEVELOPMENT_METER_COLOR = "#c9a227";

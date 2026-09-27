@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
@@ -57,7 +58,7 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
   };
 
   get title() {
-    return String(this.#abilityItem?.name ?? "").trim() || "Изучение анатомии";
+    return String(this.#abilityItem?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.AnatomyStudy", "Изучение анатомии");
   }
 
   matches({ actor = null, abilityItem = null, abilityFunction = null } = {}) {
@@ -98,7 +99,7 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
     return {
       ...context,
       actorName: String(this.#actor?.name ?? ""),
-      actorImg: String(this.#actor?.img ?? "icons/svg/mystery-man.svg"),
+      actorImg: String(this.#actor?.img ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
       memory: {
         used,
         capacity,
@@ -110,7 +111,7 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
       overloadEnergyCost: Math.max(0, Number(activation.overloadEnergyCost) || 0),
       overloadDurationLabel: String(activation.overloadDurationLabel ?? ""),
       researchDisabled: this.#busy || full,
-      researchDisabledReason: full ? "Память заполнена. Забудьте одно из направлений, чтобы продолжить." : "",
+      researchDisabledReason: full ? auditLocalize("FALLOUTMAW.AuditApps.MemoryIsFullForgetOneResearchAreaTo", "Память заполнена. Забудьте одно из направлений, чтобы продолжить.") : "",
       races: knowledge.races
         .map(race => ({
           raceId: race.raceId,
@@ -135,7 +136,7 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
     const capacity = getAnatomyStudyMemoryCapacity(this.#actor, this.#abilityFunction?.fixedSettings);
     const knowledge = getAnatomyStudyFunctionState(this.#abilityItem, this.#abilityFunction);
     if (getAnatomyStudyMemoryUsage(knowledge) >= capacity) {
-      ui.notifications.warn(`Изучение анатомии: память заполнена (${capacity}/${capacity}).`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.AnatomyStudyMemoryIsFull", { v0: (capacity), v1: (capacity) }, "Изучение анатомии: память заполнена ({v0}/{v1})."));
       return;
     }
 
@@ -147,8 +148,8 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
         sourceToken: this.#sourceToken,
         includeSelf: false,
         title: this.title,
-        noneWarning: "Нет доступных мёртвых целей с неизученной анатомией.",
-        instructions: "Изучение анатомии: выберите подсвеченную мёртвую цель. Esc/ПКМ отменяет.",
+        noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoAvailableDeadTargetsWithUnstudied", "Нет доступных мёртвых целей с неизученной анатомией."),
+        instructions: auditLocalize("FALLOUTMAW.AuditApps.AnatomyStudySelectAHighlightedDeadTargetEsc", "Изучение анатомии: выберите подсвеченную мёртвую цель. Esc/ПКМ отменяет."),
         getReason: ({ actor }) => getAnatomyTargetUnavailableReason(
           actor,
           this.#abilityItem,
@@ -195,8 +196,8 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
       .find(entry => entry.key === bonusKey);
     if (!definition) return;
     const confirmed = await DialogV2.confirm({
-      window: { title: "Забыть знание" },
-      content: `<p>Забыть «${escapeHtml(definition.label)}» для расы «${escapeHtml(raceLabel)}»?</p>`,
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.ForgetKnowledge", "Забыть знание") },
+      content: auditFormat("FALLOUTMAW.AuditApps.ForgetForTheRace", { v0: (escapeHtml(definition.label)), v1: (escapeHtml(raceLabel)) }, "<p>Забыть «{v0}» для расы «{v1}»?</p>"),
       rejectClose: false,
       modal: true
     });
@@ -212,11 +213,11 @@ class AnatomyStudyApplication extends HandlebarsApplicationMixin(ApplicationV2) 
 }
 
 function getAnatomyTargetUnavailableReason(actor = null, abilityItem = null, abilityFunction = null) {
-  if (!isActorDeadForAnatomyStudy(actor)) return "Цель не мертва.";
+  if (!isActorDeadForAnatomyStudy(actor)) return auditLocalize("FALLOUTMAW.AuditApps.TheTargetIsNotDead", "Цель не мертва.");
   const raceId = getActorRaceId(actor);
-  if (!raceId) return "У цели не указана раса.";
+  if (!raceId) return auditLocalize("FALLOUTMAW.AuditApps.TheTargetHasNoRaceSpecified", "У цели не указана раса.");
   const knowledge = getAnatomyStudyFunctionState(abilityItem, abilityFunction);
-  if (!getAnatomyStudyAvailableBonusKeys(knowledge, raceId).length) return "Все бонусы этой расы уже изучены.";
+  if (!getAnatomyStudyAvailableBonusKeys(knowledge, raceId).length) return auditLocalize("FALLOUTMAW.AuditApps.AllBonusesForThisRaceHaveAlreadyBeen", "Все бонусы этой расы уже изучены.");
   return "";
 }
 
@@ -231,7 +232,7 @@ async function promptAnatomyStudyBonus({
   const choices = getAnatomyStudyBonusDefinitions(abilityFunction?.fixedSettings)
     .filter(entry => available.has(entry.key));
   if (!choices.length) {
-    ui.notifications.warn("Для этой расы уже изучены все направления.");
+    ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditApps.AllResearchAreasForThisRaceHaveAlready", "Для этой расы уже изучены все направления."));
     return "";
   }
   const raceLabel = getRaceLabels().get(raceId) ?? raceId;
@@ -247,10 +248,10 @@ async function promptAnatomyStudyBonus({
     </div>
   `;
   const result = await DialogV2.input({
-    window: { title: "Выберите направление исследования" },
+    window: { title: auditLocalize("FALLOUTMAW.AuditApps.SelectAResearchArea", "Выберите направление исследования") },
     content,
     ok: {
-      label: "Изучить",
+      label: auditLocalize("FALLOUTMAW.AuditApps.Study", "Изучить"),
       icon: "fa-solid fa-microscope",
       callback: (_event, button) => String(button.form?.querySelector?.("input[name='bonusKey']:checked")?.value ?? "")
     },

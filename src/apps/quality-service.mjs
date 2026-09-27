@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { getActorAvailableEnergy } from "../combat/energy-resource.mjs";
@@ -58,7 +59,7 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
   };
 
   get title() {
-    return String(this.#abilityItem?.name ?? "").trim() || "Качественное обслуживание";
+    return String(this.#abilityItem?.name ?? "").trim() || auditLocalize("FALLOUTMAW.AuditApps.QualityService", "Качественное обслуживание");
   }
 
   matches({ actor = null, abilityItem = null, abilityFunction = null } = {}) {
@@ -96,8 +97,8 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
       const target = globalThis.fromUuidSync?.(String(data.targetActorUuid ?? ""));
       return {
         effectId: String(effect.id ?? ""),
-        name: String(target?.name ?? data.targetActorName ?? "Удалённая цель"),
-        img: String(target?.img ?? data.targetActorImg ?? "icons/svg/mystery-man.svg"),
+        name: String(target?.name ?? data.targetActorName ?? auditLocalize("FALLOUTMAW.AuditApps.RemovedTarget", "Удалённая цель")),
+        img: String(target?.img ?? data.targetActorImg ?? "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp"),
         energy: Math.max(0, Number(data.holdEnergy) || 0),
         summary: String(data.tierSummary ?? ""),
         targetActorUuid: String(data.targetActorUuid ?? "")
@@ -107,9 +108,9 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
     const availableEnergy = getActorAvailableEnergy(this.#actor);
     const insufficientEnergy = availableEnergy < Number(selectedTier?.holdEnergy ?? 0);
     const selectionDisabledReason = inCombat
-      ? "Новые цели можно выбирать только вне боя. Активные удержания можно отключать."
+      ? auditLocalize("FALLOUTMAW.AuditApps.NewTargetsCanOnlyBeSelectedOutsideCombat", "Новые цели можно выбирать только вне боя. Активные удержания можно отключать.")
       : insufficientEnergy
-        ? `Для выбранного набора нужно ${selectedTier?.holdEnergy ?? 0} доступной энергии.`
+        ? auditFormat("FALLOUTMAW.AuditApps.TheSelectedSetRequiresAvailableEnergy", { v0: (selectedTier?.holdEnergy ?? 0) }, "Для выбранного набора нужно {v0} доступной энергии.")
         : "";
     return {
       ...context,
@@ -137,7 +138,7 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
     if (this.#busy || isActorInActiveCombat(this.#actor)) return;
     const tier = getQualityServiceTier(this.#abilityFunction?.fixedSettings, this.#selectedTierId);
     if (!tier || getActorAvailableEnergy(this.#actor) < tier.holdEnergy) {
-      ui.notifications.warn(`${this.title}: недостаточно доступной энергии.`);
+      ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.NotEnoughAvailableEnergy", { v0: (this.title) }, "{v0}: недостаточно доступной энергии."));
       return;
     }
     const heldActorUuids = new Set(getQualityServiceHolds(this.#actor, {
@@ -152,16 +153,16 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
         sourceToken: this.#sourceToken,
         includeSelf: true,
         title: this.title,
-        noneWarning: "Нет доступных целей для Качественного обслуживания.",
-        instructions: `${this.title}: выберите подсвеченную цель для набора «${tier.label}». Esc/ПКМ отменяет.`,
+        noneWarning: auditLocalize("FALLOUTMAW.AuditApps.ThereAreNoAvailableTargetsForQualityService", "Нет доступных целей для Качественного обслуживания."),
+        instructions: auditFormat("FALLOUTMAW.AuditApps.SelectAHighlightedTargetForTheSetEsc", { v0: (this.title), v1: (tier.label) }, "{v0}: выберите подсвеченную цель для набора «{v1}». Esc/ПКМ отменяет."),
         getReason: ({ actor, isSelf }) => {
-          if (heldActorUuids.has(String(actor?.uuid ?? ""))) return "Бонус для этой цели уже удерживается.";
+          if (heldActorUuids.has(String(actor?.uuid ?? ""))) return auditLocalize("FALLOUTMAW.AuditApps.TheBonusForThisTargetIsAlreadyBeing", "Бонус для этой цели уже удерживается.");
           if (isSelf) {
             return this.#hasPassiveSelfBonus()
-              ? "Владелец уже получает этот бонус пассивно — удержание на себе не требуется."
+              ? auditLocalize("FALLOUTMAW.AuditApps.TheOwnerAlreadyReceivesThisBonusPassivelyMaintaining", "Владелец уже получает этот бонус пассивно — удержание на себе не требуется.")
               : "";
           }
-          return findQualityServiceGrant(actor) ? "На цели уже действует Качественное обслуживание." : "";
+          return findQualityServiceGrant(actor) ? auditLocalize("FALLOUTMAW.AuditApps.QualityServiceIsAlreadyActiveOnTheTarget", "На цели уже действует Качественное обслуживание.") : "";
         }
       });
       if (selected?.actor) await this.#addHandler?.({ targetActor: selected.actor, tierId: tier.id });
@@ -197,8 +198,8 @@ class QualityServiceApplication extends HandlebarsApplicationMixin(ApplicationV2
     const data = getQualityServiceHoldData(effect);
     if (!effect || !data) return;
     const confirmed = await DialogV2.confirm({
-      window: { title: "Отключить удержание" },
-      content: `<p>Отключить Качественное обслуживание для «${escapeHtml(data.targetActorName ?? "цель")}»?</p>`,
+      window: { title: auditLocalize("FALLOUTMAW.AuditApps.ReleaseHold", "Отключить удержание") },
+      content: auditFormat("FALLOUTMAW.AuditApps.DisableQualityServiceFor", { v0: (escapeHtml(data.targetActorName ?? auditLocalize("FALLOUTMAW.AuditApps.Target", "цель"))) }, "<p>Отключить Качественное обслуживание для «{v0}»?</p>"),
       rejectClose: false,
       modal: true
     });

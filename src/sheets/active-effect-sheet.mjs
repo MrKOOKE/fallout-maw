@@ -1,10 +1,11 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
-import { buildEffectKeyTokens, buildResourceBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import {
   EFFECT_EXPIRATION_ACTIONS,
   EFFECT_EXPIRATION_ACTION_FLAG_KEY
@@ -104,10 +105,10 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
 
 function buildExpirationActionChoices(selected = "") {
   return [
-    { value: "", label: "Ничего", selected: !selected },
+    { value: "", label: auditLocalize("FALLOUTMAW.AuditApps.Nothing", "Ничего"), selected: !selected },
     {
       value: EFFECT_EXPIRATION_ACTIONS.deleteBearer,
-      label: "Удалить предмет-носитель",
+      label: auditLocalize("FALLOUTMAW.AuditApps.DeleteCarrierItem", "Удалить предмет-носитель"),
       selected: selected === EFFECT_EXPIRATION_ACTIONS.deleteBearer
     }
   ];
@@ -180,59 +181,4 @@ function getEffectKind(effect) {
   if (effect.disabled) return "active";
   if (effect.isTemporary) return "temporary";
   return "active";
-}
-
-function buildLegacyEffectKeyTokens() {
-  return [
-    ...getCharacteristicSettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.characteristics.${entry.key}`,
-      group: game.i18n.localize("FALLOUTMAW.Common.Characteristics")
-    })),
-    ...getSkillSettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.skills.${entry.key}.bonus`,
-      group: game.i18n.localize("FALLOUTMAW.Common.Skills")
-    })),
-    ...buildResourceBonusEffectKeyTokens(),
-    ...getNeedSettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.needs.${entry.key}.bonus`,
-      group: game.i18n.localize("FALLOUTMAW.Common.Needs")
-    })),
-    ...getProficiencySettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.proficiencies.${entry.key}.bonus`,
-      group: game.i18n.localize("FALLOUTMAW.Common.Proficiencies")
-    })),
-    createEffectKeyToken({
-      code: "blind",
-      key: "blind",
-      label: "Слепота",
-      path: "status.blind",
-      group: "Статусы"
-    }),
-    createEffectKeyToken({
-      code: "moveCost",
-      key: "movement",
-      label: "Стоимость перемещения",
-      path: "system.costs.movement",
-      group: "Стоимость"
-    }),
-    createEffectKeyToken({
-      code: "actionCost",
-      key: "action",
-      label: "Стоимость действий",
-      path: "system.costs.action",
-      group: "Стоимость"
-    })
-  ].filter(Boolean);
 }

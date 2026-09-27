@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { buildEquipmentEffectivenessChanges } from "../items/equipment-effectiveness.mjs";
 import { createMaintainedTargetEffectApi } from "./maintained-target-effects.mjs";
 
@@ -59,7 +60,7 @@ export function normalizeQualityServiceSettings(value = {}) {
 export function getQualityServiceTiers(value = {}) {
   return normalizeQualityServiceSettings(value).tiers.map(tier => ({
     ...tier,
-    label: `${tier.holdEnergy} энергии`,
+    label: auditFormat("FALLOUTMAW.AuditRuntime.R0511", { p0: (tier.holdEnergy) }, "{p0} энергии"),
     summary: formatQualityServiceTierSummary(tier)
   }));
 }
@@ -97,7 +98,7 @@ export function buildQualityServiceGrantEffectData({ tier = null, metadata, ...c
   const profile = tier ?? getQualityServiceTier();
   return QUALITY_SERVICE_MAINTAINED_EFFECTS.buildGrantEffectData({
     ...context,
-    fallbackName: "Качественное обслуживание",
+    fallbackName: auditLocalize("FALLOUTMAW.AuditRuntime.R0136", "Качественное обслуживание"),
     changes: buildQualityServiceChanges(profile),
     metadata: { ...buildTierMetadata(profile), ...(metadata ?? {}) }
   });
@@ -108,20 +109,20 @@ export function buildQualityServiceHoldEffectData({ tier = null, ...context } = 
   return QUALITY_SERVICE_MAINTAINED_EFFECTS.buildHoldEffectData({
     ...context,
     holdEnergy: profile.holdEnergy,
-    fallbackName: "Качественное обслуживание",
+    fallbackName: auditLocalize("FALLOUTMAW.AuditRuntime.R0136", "Качественное обслуживание"),
     metadata: buildTierMetadata(profile)
   });
 }
 
 export function formatQualityServiceTierSummary(tier = {}) {
   const parts = [
-    `урон +${toNumber(tier.damagePercent)}%`,
-    `точность +${toNumber(tier.accuracy)}`,
-    `защита +${toNumber(tier.protectionPercent)}%`
+    auditFormat("FALLOUTMAW.AuditRuntime.R0512", { p0: (toNumber(tier.damagePercent)) }, "урон +{p0}%"),
+    auditFormat("FALLOUTMAW.AuditRuntime.R0513", { p0: (toNumber(tier.accuracy)) }, "точность +{p0}"),
+    auditFormat("FALLOUTMAW.AuditRuntime.R0514", { p0: (toNumber(tier.protectionPercent)) }, "защита +{p0}%")
   ];
-  if (toNumber(tier.criticalChance)) parts.splice(1, 0, `крит +${toNumber(tier.criticalChance)}%`);
-  if (toNumber(tier.criticalDamagePercent)) parts.splice(2, 0, `крит. урон +${toNumber(tier.criticalDamagePercent)}%`);
-  if (toNumber(tier.equipmentBonusPercent)) parts.push(`предметные бонусы +${toNumber(tier.equipmentBonusPercent)}%`);
+  if (toNumber(tier.criticalChance)) parts.splice(1, 0, auditFormat("FALLOUTMAW.AuditRuntime.R0515", { p0: (toNumber(tier.criticalChance)) }, "крит +{p0}%"));
+  if (toNumber(tier.criticalDamagePercent)) parts.splice(2, 0, auditFormat("FALLOUTMAW.AuditRuntime.R0516", { p0: (toNumber(tier.criticalDamagePercent)) }, "крит. урон +{p0}%"));
+  if (toNumber(tier.equipmentBonusPercent)) parts.push(auditFormat("FALLOUTMAW.AuditRuntime.R0517", { p0: (toNumber(tier.equipmentBonusPercent)) }, "предметные бонусы +{p0}%"));
   return parts.join(" · ");
 }
 
@@ -148,7 +149,7 @@ function normalizeSelfPassive(value) {
 function buildTierMetadata(tier) {
   return {
     tierId: String(tier?.id ?? ""),
-    tierLabel: String(tier?.label ?? `${toInteger(tier?.holdEnergy)} энергии`),
+    tierLabel: String(tier?.label ?? auditFormat("FALLOUTMAW.AuditRuntime.R0511", { p0: (toInteger(tier?.holdEnergy)) }, "{p0} энергии")),
     tierSummary: String(tier?.summary ?? formatQualityServiceTierSummary(tier)),
     damagePercent: toNumber(tier?.damagePercent),
     criticalChance: toNumber(tier?.criticalChance),

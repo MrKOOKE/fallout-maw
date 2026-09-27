@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { getMapTokenLevelId, isMapAreaOnLevel } from "./levels.mjs";
 import { GLOBAL_MAP_SOCKET } from "./constants.mjs";
 import {
@@ -490,8 +491,13 @@ async function discoverVisibleObjects() {
   }
 }
 
-async function handleFogSocket(payload) {
+async function handleFogSocket(payload, senderUserId = "") {
   if (!payload || typeof payload !== "object") return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
+  if (!authenticatedSenderId) return;
+  if (["globalMap.cellFog.request", "globalMap.discovery.request"].includes(payload.action)) {
+    if (authenticatedSenderId !== String(payload.userId ?? "")) return;
+  } else if (authenticatedSenderId !== getResponsibleGM()?.id) return;
   if (payload.action === "globalMap.cellFog.request" && game.user?.isGM && isResponsibleGM()) {
     const scene = game.scenes?.get(payload.sceneId);
     const user = game.users?.get(payload.userId);
@@ -788,10 +794,10 @@ async function onFogReset() {
   if (!game.user?.isGM || !isResponsibleGM() || !getGlobalMapFlag(canvas?.scene)) return;
   if (getSceneState(canvas.scene).fog.mode === "cells") return;
   const confirmed = await foundry.applications.api.DialogV2.confirm({
-    window: { title: "Сбросить обнаружение карты?" },
-    content: "<p>Туман сброшен. Также скрыть все обнаруженные локации, переходы и зоны выхода этой сцены?</p>",
-    yes: { label: "Сбросить обнаружение" },
-    no: { label: "Сохранить обнаружение" }
+    window: { title: auditLocalize("FALLOUTMAW.AuditRuntime.R0940", "Сбросить обнаружение карты?") },
+    content: auditLocalize("FALLOUTMAW.AuditRuntime.R0941", "<p>Туман сброшен. Также скрыть все обнаруженные локации, переходы и зоны выхода этой сцены?</p>"),
+    yes: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0942", "Сбросить обнаружение") },
+    no: { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0943", "Сохранить обнаружение") }
   });
   if (!confirmed) return;
   await updateSceneState(canvas.scene, state => {

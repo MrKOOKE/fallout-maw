@@ -5,6 +5,7 @@ import {
   isInstalledProsthesis,
   resolveActorItemOrInstalledModule
 } from "../utils/item-functions.mjs";
+import { isInstalledConstructPartItem } from "../utils/construct-parts.mjs";
 
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 
@@ -60,6 +61,7 @@ function getEquippedBonusSourceItem(actor, effect) {
   if (mode === "equipment") return item;
   if (mode === ITEM_FUNCTIONS.prosthesis && isInstalledProsthesis(item)) return item;
   if (mode === ITEM_FUNCTIONS.implant && isInstalledImplant(item)) return item;
+  if (mode === ITEM_FUNCTIONS.constructPart && isInstalledConstructPartItem(item)) return item;
   return null;
 }
 

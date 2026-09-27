@@ -411,8 +411,6 @@
         },
         "tours": {
             "interface": {
-                "name": "Interface Tour & Quest Tab",
-                "description": "This tour will show you how to use the Simple Quest main interface and the Quests tab.",
                 "1": {
                     "title": "Sections",
                     "content": "This area shows the various sections of Simple Quest, you can click on a section to navigate to it, Right click to Edit tab names and Hover on the top right corner to bring up the Toggle full-screen button."
@@ -428,11 +426,11 @@
                 "4": {
                     "title": "Font Size",
                     "content": "This area allows you to change the font size of Simple Quest"
-                }
+                },
+                "name": "Interface Tour & Quest Tab",
+                "description": "This tour will show you how to use the Simple Quest main interface and the Quests tab."
             },
             "lore-tab": {
-                "name": "Lore Tab",
-                "description": "This tour will show you how to use the Lore tab.",
                 "1": {
                     "title": "Lore Tab",
                     "content": "The Lore Tab displays all the Journals Present in the Lore folder within the Simple Quest interface. While this tab does not offer any special functionality, it is a convenient way to access your lore. The Permissions to view Lore pages is mirrored from the Core Foundry Journal Permissions."
@@ -444,11 +442,11 @@
                 "3": {
                     "title": "Lore Details",
                     "content": "This area shows the details of the selected lore. In the top right corner you will find buttons to manage the lore, you can hover the buttons for a tooltip explaining what they do."
-                }
+                },
+                "name": "Lore Tab",
+                "description": "This tour will show you how to use the Lore tab."
             },
             "map-tab": {
-                "name": "Map Tab",
-                "description": "This tour will show you how to use the Map tab.",
                 "1": {
                     "title": "Map Tab",
                     "content": "The Map Tab displays all the Maps Present in the Maps Journal inside the Quests Folder."
@@ -472,11 +470,11 @@
                 "6": {
                     "title": "Measuring",
                     "content": "You can hold the Ctrl key to engage the measuring tool. While holding Ctrl, Left Click and drag to measure."
-                }
+                },
+                "name": "Map Tab",
+                "description": "This tour will show you how to use the Map tab."
             },
             "my-journal-tab": {
-                "name": "My Journal Tab",
-                "description": "This tour will show you how to use the My Journal tab.",
                 "1": {
                     "title": "My Journal Tab",
                     "content": "The My Journal Tab displays a personal Journal only you and the Game Master can see."
@@ -488,11 +486,11 @@
                 "3": {
                     "title": "Journal Content",
                     "content": "This area shows the contents of your journal. You can edit the contents of your journal by clicking the Edit button in the top right corner."
-                }
+                },
+                "name": "My Journal Tab",
+                "description": "This tour will show you how to use the My Journal tab."
             },
             "party-journal-tab": {
-                "name": "Party Journal Tab",
-                "description": "This tour will show you how to use the Party Journal tab.",
                 "1": {
                     "title": "Party Journal Tab",
                     "content": "The Party Journal Tab displays a Journal which is visible and editable by all users."
@@ -504,11 +502,11 @@
                 "3": {
                     "title": "Journal Content",
                     "content": "This area shows the contents of the Party Journal. You can edit the contents of this journal by clicking the Edit button in the top right corner."
-                }
+                },
+                "name": "Party Journal Tab",
+                "description": "This tour will show you how to use the Party Journal tab."
             },
             "journal-page": {
-                "name": "Journal Page Features",
-                "description": "This tour will show you how to use the Journal Page.",
                 "1": {
                     "title": "Page Templates",
                     "content": "Simple Quest adds Page Tempates. A convinient feature to quickly append a pre-formatted template or section to your journal page. Click this button to see the available templates."
@@ -516,11 +514,11 @@
                 "2": {
                     "title": "Formatting",
                     "content": "Inside this dropdown you will find the new 'Callout' and 'Page Insert' option to give some extra flare to your documents."
-                }
+                },
+                "name": "Journal Page Features",
+                "description": "This tour will show you how to use the Journal Page."
             },
             "timeline-tab": {
-                "name": "Timeline Tab",
-                "description": "This tour will show you how to use the Timeline tab.",
                 "1": {
                     "title": "Timeline Tab",
                     "content": "The Timeline Tab displays a timeline of events."
@@ -532,7 +530,9 @@
                 "3": {
                     "title": "Add Event or Era",
                     "content": "This button is all you need to add a new event or era to the timeline. The configuration form will allow you to set the details of the event or era. To get started, create an Era."
-                }
+                },
+                "name": "Timeline Tab",
+                "description": "This tour will show you how to use the Timeline tab."
             }
         },
         "demo": {
@@ -542,7 +542,7 @@
             },
             "lore": {
                 "name": "Welcome to the Lore tab!",
-                "content": "<table style=\"width:100%;border:none;background:transparent\"><tbody><tr style=\"background:transparent\"><td style=\"width:50%;padding:0;margin:0\"><img style=\"-webkit-mask-size:100% 100%;-webkit-mask-image:url('systems/fallout-maw/simple-quest/assets/mask/mask4.webp');object-fit:cover;border:none;border-radius:5px;width:100%;aspect-ratio:1/1\" src=\"systems/fallout-maw/simple-quest/assets/icons/location1.webp\"></td><td style=\"padding:2rem;font-size:1.5rem\"><p><strong>Region: </strong>Demo</p><p><strong>Population: </strong>6969</p><p><strong>Founded: </strong>420 A.D.</p><p><strong>Type: </strong>Location</p></td></tr><tr style=\"background:transparent\"><td colspan=\"2\"><ul><li>Use the <strong>Lore</strong> tab to organize information about your world.</li><li>Existing Foundry journals can be moved into the Lore folder and used immediately.</li><li>Edit this entry or create a new one to try the Simple Quest page templates.</li><li>Lore categories and entries remain ordinary Foundry journals and can be managed from the journal sidebar.</li><li>Hover over the left side of an entry name to reveal the hide or reveal control.</li></ul></td></tr></tbody></table>"
+                "content": "<table style=\"width:100%;border:none;background:transparent\"><tbody><tr style=\"background:transparent\"><td style=\"width:50%;padding:0;margin:0\"><img style=\"-webkit-mask-size:100% 100%;-webkit-mask-image:url('systems/fallout-maw/assets/System/Quests/quest-mask-mask4.webp');object-fit:cover;border:none;border-radius:5px;width:100%;aspect-ratio:1/1\" src=\"systems/fallout-maw/assets/System/Quests/quest-icons-location1.webp\"></td><td style=\"padding:2rem;font-size:1.5rem\"><p><strong>Region: </strong>Demo</p><p><strong>Population: </strong>6969</p><p><strong>Founded: </strong>420 A.D.</p><p><strong>Type: </strong>Location</p></td></tr><tr style=\"background:transparent\"><td colspan=\"2\"><ul><li>Use the <strong>Lore</strong> tab to organize information about your world.</li><li>Existing Foundry journals can be moved into the Lore folder and used immediately.</li><li>Edit this entry or create a new one to try the Simple Quest page templates.</li><li>Lore categories and entries remain ordinary Foundry journals and can be managed from the journal sidebar.</li><li>Hover over the left side of an entry name to reveal the hide or reveal control.</li></ul></td></tr></tbody></table>"
             }
         },
         "default-structure": {
@@ -555,6 +555,7 @@
             "organizations": "Organizations",
             "history": "History",
             "bestiary": "Bestiary"
-        }
+        },
+        "no-maps": "No maps available."
     }
 }

@@ -1,3 +1,5 @@
+import { prepareActorResourceSpend, runOneTimeResourceMutation } from "../combat/one-time-resources.mjs";
+
 export const REACTION_POINTS_RESOURCE_KEY = "reactionPoints";
 export const HEALTH_RESOURCE_KEY = "health";
 export const POWER_RESOURCE_KEY = "power";
@@ -294,64 +296,80 @@ export async function spendActorResourceCostVector(actor, costs = [], {
   context = {}
 } = {}) {
   if (!actor?.update) throw new Error("Trigger-cost actor is unavailable.");
-  const vector = new Map((costs ?? []).map(cost => [
-    String(cost?.resourceKey ?? "").trim(),
-    Math.max(0, Math.trunc(Number(cost?.amount) || 0))
-  ]));
-  const healthCost = vector.get(healthResourceKey) ?? 0;
-  vector.delete(healthResourceKey);
-  const updates = {};
-  const rollbackUpdates = {};
-  const expectedResources = [];
-  const paidCosts = [];
-  for (const [resourceKey, amount] of vector) {
-    if (amount <= 0) continue;
-    const resource = actor.system?.resources?.[resourceKey];
-    if (!resource) throw new Error(`Missing trigger-cost resource '${resourceKey}'.`);
-    const current = Math.trunc(Number(resource.value) || 0);
-    const minimum = Math.trunc(Number(resource.min) || 0);
-    const next = current - amount;
-    if (next < minimum) throw new Error(`Insufficient trigger-cost resource '${resourceKey}'.`);
-    updates[`system.resources.${resourceKey}.value`] = next;
-    const nextSpent = Math.max(0, Math.trunc(Number(resource.max) || 0) - next);
-    updates[`system.resources.${resourceKey}.spent`] = nextSpent;
-    rollbackUpdates[`system.resources.${resourceKey}.value`] = current;
-    if (resource.spent !== undefined) {
-      rollbackUpdates[`system.resources.${resourceKey}.spent`] = resource.spent;
-    }
-    expectedResources.push({
-      resourceKey,
-      current,
-      spent: resource.spent,
-      next,
-      nextSpent
-    });
-    paidCosts.push({ resourceKey, amount });
-  }
-  let ordinaryCommitted = false;
-  let healthCommitted = false;
-  try {
-    if (Object.keys(updates).length) {
-      await actor.update(updates, {
-        [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
-        falloutMawTriggerCost: true,
-        ...updateOptions
+  const committed = await runOneTimeResourceMutation(actor, async () => {
+    const vector = new Map((costs ?? []).map(cost => [
+      String(cost?.resourceKey ?? "").trim(),
+      Math.max(0, Math.trunc(Number(cost?.amount) || 0))
+    ]));
+    const updates = {};
+    const expectedResources = [];
+    const refunds = [];
+    const paidCosts = [];
+    let normalHealthCost = 0;
+    for (const [resourceKey, amount] of vector) {
+      if (amount <= 0) continue;
+      const resource = actor.system?.resources?.[resourceKey];
+      if (!resource) throw new Error(`Missing trigger-cost resource '${resourceKey}'.`);
+      const plan = prepareActorResourceSpend(actor, resourceKey, amount);
+      if (!plan) throw new Error(`Insufficient trigger-cost resource '${resourceKey}'.`);
+      if (resourceKey === healthResourceKey) normalHealthCost = plan.normalSpent;
+      refunds.push({
+        resourceKey,
+        current: plan.current,
+        onceBefore: plan.onceBefore,
+        normalSpent: resourceKey === healthResourceKey ? 0 : plan.normalSpent,
+        onceSpent: plan.onceSpent
       });
-      ordinaryCommitted = expectedResources.some(entry => (
-        getActorResourceField(actor, entry.resourceKey, "value") !== entry.current
-      ));
-      if (!doesActorResourceVectorMatch(actor, expectedResources, { expected: "next" })) {
-        const error = new Error("Trigger-cost Actor update was cancelled or altered.");
-        error.reason = REACTION_COST_FAILURES.spendFailed;
+      for (const [path, next] of Object.entries(plan.updates)) {
+        const field = path.split(".").at(-1);
+        // Normal health costs use Damage Hub so limb and health models stay synchronized.
+        if (resourceKey === healthResourceKey && field !== "once") continue;
+        updates[path] = next;
+        expectedResources.push({ resourceKey, field, next });
+      }
+      paidCosts.push({ resourceKey, amount });
+    }
+    if (Object.keys(updates).length) {
+      try {
+        await actor.update(updates, {
+          [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
+          falloutMawTriggerCost: true,
+          ...updateOptions
+        });
+        if (!doesActorResourceVectorMatch(actor, expectedResources)) {
+          const error = new Error("Trigger-cost Actor update was cancelled or altered.");
+          error.reason = REACTION_COST_FAILURES.spendFailed;
+          throw error;
+        }
+      } catch (error) {
+        // A failed persistence call may still have written part of the vector.
+        // Compensate only the observed debit before releasing the shared queue.
+        const partial = refunds.map(entry => ({
+          ...entry,
+          normalSpent: Math.min(entry.normalSpent, Math.max(0,
+            entry.current - (getActorResourceField(actor, entry.resourceKey, "value") ?? entry.current))),
+          onceSpent: Math.min(entry.onceSpent, Math.max(0,
+            entry.onceBefore - (getActorResourceField(actor, entry.resourceKey, "once") ?? 0))),
+          correctSpent: entry.normalSpent > 0
+        }));
+        try {
+          await refundActorResourceCostVector(actor, partial, updateOptions);
+        } catch (rollbackError) {
+          error.rollbackError ??= rollbackError;
+        }
         throw error;
       }
-      ordinaryCommitted = true;
     }
-    if (healthCost > 0) {
+    return { normalHealthCost, paidCosts, refunds };
+  });
+  const { normalHealthCost, paidCosts, refunds } = committed;
+  let healthCommitted = false;
+  // These callbacks may trigger nested reactions or use the same resource queue.
+  try {
+    if (normalHealthCost > 0) {
       if (typeof spendHealth !== "function") throw new Error("Trigger health-cost adapter is unavailable.");
-      await spendHealth(actor, healthCost, context);
+      await spendHealth(actor, normalHealthCost, context);
       healthCommitted = true;
-      paidCosts.push({ resourceKey: healthResourceKey, amount: healthCost });
     }
     if (typeof afterSpend === "function") {
       await afterSpend({ actor, costs: paidCosts, context });
@@ -359,38 +377,54 @@ export async function spendActorResourceCostVector(actor, costs = [], {
   } catch (error) {
     if (healthCommitted && typeof restoreHealth === "function") {
       try {
-        await restoreHealth(actor, healthCost, context);
+        await restoreHealth(actor, normalHealthCost, context);
       } catch (rollbackError) {
         error.rollbackError ??= rollbackError;
       }
     }
-    if (ordinaryCommitted) {
-      try {
-        await actor.update(rollbackUpdates, {
-          [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
-          falloutMawTriggerCostRollback: true,
-          ...updateOptions
-        });
-        if (!doesActorResourceVectorMatch(actor, expectedResources, { expected: "current" })) {
-          throw new Error("Trigger-cost Actor rollback was cancelled or altered.");
-        }
-      } catch (rollbackError) {
-        error.rollbackError ??= rollbackError;
-      }
+    try {
+      await runOneTimeResourceMutation(actor, () => refundActorResourceCostVector(actor, refunds, updateOptions));
+    } catch (rollbackError) {
+      error.rollbackError ??= rollbackError;
     }
     throw error;
   }
   return { costs: paidCosts };
 }
 
-function doesActorResourceVectorMatch(actor, entries = [], { expected = "next" } = {}) {
-  return entries.every(entry => {
-    const expectedValue = expected === "current" ? entry.current : entry.next;
-    if (getActorResourceField(actor, entry.resourceKey, "value") !== expectedValue) return false;
-    const expectedSpent = expected === "current" ? entry.spent : entry.nextSpent;
-    if (expectedSpent === undefined) return true;
-    return getActorResourceField(actor, entry.resourceKey, "spent") === expectedSpent;
+/** Called only while holding the shared resource queue. Preserve intervening grants/spends. */
+async function refundActorResourceCostVector(actor, refunds, updateOptions) {
+  const updates = {};
+  const expected = [];
+  const put = (resourceKey, field, next) => {
+    if (getActorResourceField(actor, resourceKey, field) === next) return;
+    updates[`system.resources.${resourceKey}.${field}`] = next;
+    expected.push({ resourceKey, field, next });
+  };
+  for (const entry of refunds) {
+    const { resourceKey, normalSpent, onceSpent } = entry;
+    const resource = actor.system?.resources?.[resourceKey];
+    if (!resource) throw new Error(`Trigger-cost refund resource '${resourceKey}' is unavailable.`);
+    if (normalSpent > 0 || entry.correctSpent) {
+      const current = getActorResourceField(actor, resourceKey, "value") ?? 0;
+      const maximum = getActorResourceField(actor, resourceKey, "max") ?? current;
+      const next = current + Math.min(normalSpent, Math.max(0, maximum - current));
+      put(resourceKey, "value", next);
+      put(resourceKey, "spent", Math.max(0, maximum - next));
+    }
+    if (onceSpent > 0) put(resourceKey, "once", (getActorResourceField(actor, resourceKey, "once") ?? 0) + onceSpent);
+  }
+  if (!Object.keys(updates).length) return;
+  await actor.update(updates, {
+    [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
+    falloutMawTriggerCostRollback: true,
+    ...updateOptions
   });
+  if (!doesActorResourceVectorMatch(actor, expected)) throw new Error("Trigger-cost Actor rollback was cancelled or altered.");
+}
+
+function doesActorResourceVectorMatch(actor, entries = []) {
+  return entries.every(entry => getActorResourceField(actor, entry.resourceKey, entry.field) === entry.next);
 }
 
 function getActorResourceField(actor, resourceKey = "", field = "value") {

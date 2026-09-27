@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerDamageAppliedHandler } from "../combat/damage-hub.mjs";
 import { registerWeaponAttackTerminalHandler } from "../combat/weapon-attack-controller.mjs";
@@ -116,8 +117,8 @@ export async function activateDanceOfThousandShadows({
 
     [effect] = await sourceActor.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
-      name: abilityItem?.name || "Танец тысячи теней",
-      img: abilityItem?.img || sourceActor.img || "icons/svg/mystery-man.svg",
+      name: abilityItem?.name || auditLocalize("FALLOUTMAW.AuditRuntime.R0052", "Танец тысячи теней"),
+      img: abilityItem?.img || sourceActor.img || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp",
       origin: abilityItem?.uuid ?? sourceActor.uuid,
       transfer: false,
       disabled: false,
@@ -310,7 +311,7 @@ export function findDancePhantomPlacement({
 function buildDancePhantomActorData(sourceActor, data) {
   const actorData = buildPhantomActorData(sourceActor, data);
   delete actorData.flags?.[SYSTEM_ID]?.[PHANTOM_FLAG_KEY];
-  actorData.name = `${sourceActor?.name ?? "Актёр"} — Тень`;
+  actorData.name = auditFormat("FALLOUTMAW.AuditRuntime.R0053", { p0: (sourceActor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")) }, "{p0} — Тень");
   actorData.flags[SYSTEM_ID][DANCE_OF_THOUSAND_SHADOWS_PHANTOM_FLAG_KEY] = cloneData(data);
   return actorData;
 }
@@ -318,7 +319,7 @@ function buildDancePhantomActorData(sourceActor, data) {
 function buildDancePhantomTokenData(sourceToken, phantomActor, data, placement) {
   const tokenData = buildPhantomTokenData(sourceToken, phantomActor, data);
   delete tokenData.flags?.[SYSTEM_ID]?.[PHANTOM_FLAG_KEY];
-  tokenData.name = `${sourceToken?.name ?? sourceToken?.actor?.name ?? "Актёр"} — Тень`;
+  tokenData.name = auditFormat("FALLOUTMAW.AuditRuntime.R0053", { p0: (sourceToken?.name ?? sourceToken?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0007", "Актёр")) }, "{p0} — Тень");
   tokenData.x = placement.x;
   tokenData.y = placement.y;
   tokenData.elevation = placement.elevation;

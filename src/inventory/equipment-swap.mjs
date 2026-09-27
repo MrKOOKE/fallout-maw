@@ -1,16 +1,17 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 /** Build both final inventories before committing either side of an exchange. */
 export function planEquippedItemSwap({ sourceActor, targetActor, sourceItem, targetItem,
   targetPlacement, resolvePlacement, createTransferTree }) {
   if (sourceActor.uuid === targetActor.uuid || sourceItem.system?.placement?.mode !== "equipment"
     || targetItem.system?.placement?.mode !== "equipment") {
-    throw new Error("Обмен требует надетого снаряжения у двух актёров.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1108", "Обмен требует надетого снаряжения у двух актёров."));
   }
   const sourcePlacement = resolvePlacement(sourceActor, targetItem.toObject(),
     sourceItem.system.placement, [sourceItem.id]);
   const destinationPlacement = resolvePlacement(targetActor, sourceItem.toObject(),
     targetPlacement, [targetItem.id]);
   if (!sourcePlacement || !destinationPlacement) {
-    throw new Error("Обмен невозможен: снаряжение не подходит к одному из слотов или занимает другие занятые слоты.");
+    throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1109", "Обмен невозможен: снаряжение не подходит к одному из слотов или занимает другие занятые слоты."));
   }
   const intoSource = createTransferTree(targetActor, sourceActor, targetItem, sourcePlacement);
   const intoTarget = createTransferTree(sourceActor, targetActor, sourceItem, destinationPlacement);

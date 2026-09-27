@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "./i18n.mjs";
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
 import { ATTACKING_WEAPON_ACTION_KEYS } from "../abilities/runtime-state.mjs";
 import {
@@ -138,7 +139,7 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     createEffectKeyToken({
       code: "rea",
       key: "reactionPoints",
-      label: "Очки реакции",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R0781", "Очки реакции"),
       path: "system.resources.reactionPoints.bonus",
       group: game.i18n.localize("FALLOUTMAW.Common.Resources")
     }),
@@ -171,14 +172,14 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     createEffectKeyToken({
       code: "inventoryWidth",
       key: "inventoryWidth",
-      label: "Инвентарь: ширина",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1220", "Инвентарь: ширина"),
       path: "system.inventory.columnsBonus",
       group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
     }),
     createEffectKeyToken({
       code: "inventoryHeight",
       key: "inventoryHeight",
-      label: "Инвентарь: высота",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1221", "Инвентарь: высота"),
       path: "system.inventory.rowsBonus",
       group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
     }),
@@ -196,23 +197,23 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     createEffectKeyToken({
       code: "blind",
       key: "blind",
-      label: "Слепота",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1222", "Слепота"),
       path: "status.blind",
-      group: "Статусы"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1223", "Статусы")
     }),
     createEffectKeyToken({
       code: "moveCost",
       key: "movement",
-      label: "Стоимость перемещения",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1224", "Стоимость перемещения"),
       path: "system.costs.movement",
-      group: "Стоимость"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1225", "Стоимость")
     }),
     createEffectKeyToken({
       code: "actionCost",
       key: "action",
-      label: "Стоимость действий",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1226", "Стоимость действий"),
       path: "system.costs.action",
-      group: "Стоимость"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1225", "Стоимость")
     }),
     buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
@@ -246,19 +247,19 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
 }
 
 export function buildRequirementModifierEffectKeyTokens() {
-  const group = "Требования предметов";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1227", "Требования предметов");
   return [
     createEffectKeyToken({
       code: "equipmentRequirementPercent",
       key: "equipmentRequirementPercent",
-      label: "Требования снаряжения, изменение, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1228", "Требования снаряжения, изменение, %"),
       path: EQUIPMENT_REQUIREMENT_PERCENT_EFFECT_KEY,
       group
     }),
     createEffectKeyToken({
       code: "weaponRequirementPercent",
       key: "weaponRequirementPercent",
-      label: "Требования оружия, изменение, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1229", "Требования оружия, изменение, %"),
       path: WEAPON_REQUIREMENT_PERCENT_EFFECT_KEY,
       group
     })
@@ -266,19 +267,19 @@ export function buildRequirementModifierEffectKeyTokens() {
 }
 
 export function buildEquipmentEffectivenessEffectKeyTokens() {
-  const group = "Эффективность снаряжения";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1230", "Эффективность снаряжения");
   return [
     createEffectKeyToken({
       code: "protectionEffectivenessPercent",
       key: "protectionEffectivenessPercent",
-      label: "Эффективность защиты, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1231", "Эффективность защиты, %"),
       path: PROTECTION_EFFECTIVENESS_PERCENT_EFFECT_KEY,
       group
     }),
     createEffectKeyToken({
       code: "equipmentBonusEffectivenessPercent",
       key: "equipmentBonusEffectivenessPercent",
-      label: "Бонусы снаряжения, протезов и имплантов, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1232", "Бонусы снаряжения, протезов и имплантов, %"),
       path: EQUIPMENT_BONUS_EFFECTIVENESS_PERCENT_EFFECT_KEY,
       group
     })
@@ -313,9 +314,9 @@ export function buildCoverBonusPercentEffectKeyTokens() {
   return getCoverSettings().entries.map(entry => createEffectKeyToken({
     code: `cover:${entry.key}`,
     key: entry.key,
-    label: `Укрытие: ${entry.label || entry.key}, изменение базы, %`,
+    label: auditFormat("FALLOUTMAW.AuditRuntime.R1233", { p0: (entry.label || entry.key) }, "Укрытие: {p0}, изменение базы, %"),
     path: getCoverBonusPercentEffectKey(entry.key),
-    group: "Укрытия"
+    group: auditLocalize("FALLOUTMAW.AuditRuntime.R1234", "Укрытия")
   })).filter(Boolean);
 }
 
@@ -324,16 +325,16 @@ export function buildDodgeResourceEffectKeyTokens() {
     createEffectKeyToken({
       code: "dodgeLoss",
       key: "dodgeLoss",
-      label: "Уклонение: изменение процента потери",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1235", "Уклонение: изменение процента потери"),
       path: DODGE_LOSS_MODIFIER_EFFECT_KEY,
-      group: "Уклонение"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1236", "Уклонение")
     }),
     createEffectKeyToken({
       code: "dodgeRoundRecovery",
       key: "dodgeRoundRecovery",
-      label: "Уклонение: изменение процента восстановления за раунд",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1237", "Уклонение: изменение процента восстановления за раунд"),
       path: DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY,
-      group: "Уклонение"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1236", "Уклонение")
     })
   ];
 }
@@ -402,13 +403,13 @@ export function buildSkillAdvancementMultiplierEffectKeyTokens() {
   if (getSkillAdvancementSettings().mode === "fixed") return [];
   const group = localizeOrFallback(
     "FALLOUTMAW.Effects.SkillAdvancementMultiplierGroup",
-    "Множители развития навыков"
+    auditLocalize("FALLOUTMAW.AuditRuntime.R1238", "Множители развития навыков")
   );
   return [
     ...getSkillSettings().map(entry => createEffectKeyToken({
       code: `${entry.abbr || entry.key}:developmentMultiplier`,
       key: `${entry.key}.developmentMultiplier`,
-      label: `${localizeOrFallback("FALLOUTMAW.Effects.SkillAdvancementMultiplier", "Множитель развития")}: ${entry.label || entry.key}`,
+      label: `${localizeOrFallback("FALLOUTMAW.Effects.SkillAdvancementMultiplier", auditLocalize("FALLOUTMAW.AuditRuntime.R1239", "Множитель развития"))}: ${entry.label || entry.key}`,
       path: getSkillAdvancementMultiplierEffectKey(entry.key),
       group
     })),
@@ -417,7 +418,7 @@ export function buildSkillAdvancementMultiplierEffectKeyTokens() {
       key: "allSkillDevelopmentMultipliers",
       label: localizeOrFallback(
         "FALLOUTMAW.Effects.AllSkillAdvancementMultipliers",
-        "Множитель развития: все навыки"
+        auditLocalize("FALLOUTMAW.AuditRuntime.R1240", "Множитель развития: все навыки")
       ),
       path: getSkillAdvancementMultiplierEffectKey(ALL_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET),
       group
@@ -427,7 +428,7 @@ export function buildSkillAdvancementMultiplierEffectKeyTokens() {
       key: "signatureSkillDevelopmentMultipliers",
       label: localizeOrFallback(
         "FALLOUTMAW.Effects.SignatureSkillAdvancementMultipliers",
-        "Множитель развития: все коронные навыки"
+        auditLocalize("FALLOUTMAW.AuditRuntime.R1241", "Множитель развития: все коронные навыки")
       ),
       path: getSkillAdvancementMultiplierEffectKey(SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET),
       group
@@ -489,11 +490,11 @@ export function buildSkillCriticalChanceEffectKeyTokens() {
 }
 
 export function buildSkillCheckActionEffectKeyTokens() {
-  const group = "Проверки действий";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1242", "Проверки действий");
   const fields = [
-    { field: "bonus", code: "bonus", label: "Изменение навыка" },
-    { field: "advantage", code: "adv", label: "Преимущество" },
-    { field: "disadvantage", code: "dis", label: "Помеха" }
+    { field: "bonus", code: "bonus", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1243", "Изменение навыка") },
+    { field: "advantage", code: "adv", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1244", "Преимущество") },
+    { field: "disadvantage", code: "dis", label: auditLocalize("FALLOUTMAW.AuditRuntime.R1245", "Помеха") }
   ];
   return SKILL_CHECK_ACTIONS.flatMap(action => fields.map(field => createEffectKeyToken({
     code: `skillCheck:${action.id}:${field.code}`,
@@ -533,7 +534,7 @@ export function buildInitiativeAdvantageEffectKeyToken() {
   return createEffectKeyToken({
     code: "init:adv",
     key: "initiative.advantage",
-    label: `${label}: преимущество`,
+    label: auditFormat("FALLOUTMAW.AuditRuntime.R1246", { p0: (label) }, "{p0}: преимущество"),
     path: INITIATIVE_ADVANTAGE_EFFECT_KEY,
     group: label
   });
@@ -544,7 +545,7 @@ export function buildInitiativeDisadvantageEffectKeyToken() {
   return createEffectKeyToken({
     code: "init:dis",
     key: "initiative.disadvantage",
-    label: `${label}: помеха`,
+    label: auditFormat("FALLOUTMAW.AuditRuntime.R1247", { p0: (label) }, "{p0}: помеха"),
     path: INITIATIVE_DISADVANTAGE_EFFECT_KEY,
     group: label
   });
@@ -605,14 +606,14 @@ export function buildActionCostEffectKeyTokens() {
       key: entry.key,
       label: entry.label,
       path: `system.costs.actions.${entry.key}`,
-      group: "Стоимость"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1225", "Стоимость")
     })),
     createEffectKeyToken({
       code: "firstAidCost",
       key: "firstAid",
       label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidActionPointCost"),
       path: FIRST_AID_ACTION_POINT_COST_EFFECT_KEY,
-      group: "Стоимость"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1225", "Стоимость")
     })
   ].filter(Boolean);
 }
@@ -647,26 +648,26 @@ export function buildWeaponSwitchCostEffectKeyToken() {
   return createEffectKeyToken({
     code: "weaponSwitchCost",
     key: "weaponSwitch",
-    label: "Смена оружия: стоимость",
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R1248", "Смена оружия: стоимость"),
     path: WEAPON_SWITCH_COST_KEY,
-    group: "Стоимость"
+    group: auditLocalize("FALLOUTMAW.AuditRuntime.R1225", "Стоимость")
   });
 }
 
 export function buildPostureEffectKeyTokens() {
-  const group = "Положения";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1249", "Положения");
   return getPostureEffectKeyEntries().flatMap(posture => [
     createEffectKeyToken({
       code: `${posture.code}MoveMultiplier`,
       key: `${posture.key}.movementMultiplier`,
-      label: `${posture.label}: множитель передвижения`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R1250", { p0: (posture.label) }, "{p0}: множитель передвижения"),
       path: `system.postures.${posture.key}.movementMultiplier`,
       group
     }),
     createEffectKeyToken({
       code: `${posture.code}WeaponActionCost`,
       key: `${posture.key}.weaponActionCost`,
-      label: `${posture.label}: стоимость оружейных действий`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R1251", { p0: (posture.label) }, "{p0}: стоимость оружейных действий"),
       path: `system.postures.${posture.key}.weaponActionCost`,
       group
     })
@@ -679,9 +680,9 @@ export function buildActionBlockEffectKeyTokens() {
     return createEffectKeyToken({
       code: `${entry.key}Block`,
       key: entry.key,
-      label: `${actionLabel}: Блокировка`,
+      label: auditFormat("FALLOUTMAW.AuditRuntime.R1252", { p0: (actionLabel) }, "{p0}: Блокировка"),
       path: `system.blocks.actions.${entry.key}`,
-      group: "Блокировки"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1253", "Блокировки")
     });
   }).filter(Boolean);
 }
@@ -702,14 +703,14 @@ export function buildActionPenetrationEffectKeyTokens() {
 
 export function getWeaponActionCostEntries() {
   return [
-    { key: "aimedShot", code: "aimedShotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", "Прицельный выстрел")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", "Прицельный выстрел") },
-    { key: "snapshot", code: "snapshotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", "Выстрел на вскидку")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", "Выстрел на вскидку") },
-    { key: "burst", code: "burstCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", "Очередь")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", "Очередь") },
-    { key: "volley", code: "volleyCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп") },
-    { key: "meleeAttack", code: "meleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака") },
-    { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака") },
-    { key: "push", code: "pushCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", "Толчок")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", "Толчок") },
-    { key: "reload", code: "reloadCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка") }
+    { key: "aimedShot", code: "aimedShotCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", auditLocalize("FALLOUTMAW.AuditRuntime.R0293", "Прицельный выстрел"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", auditLocalize("FALLOUTMAW.AuditRuntime.R0293", "Прицельный выстрел")) },
+    { key: "snapshot", code: "snapshotCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", auditLocalize("FALLOUTMAW.AuditRuntime.R1255", "Выстрел на вскидку"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", auditLocalize("FALLOUTMAW.AuditRuntime.R1255", "Выстрел на вскидку")) },
+    { key: "burst", code: "burstCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", auditLocalize("FALLOUTMAW.AuditRuntime.R1256", "Очередь"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", auditLocalize("FALLOUTMAW.AuditRuntime.R1256", "Очередь")) },
+    { key: "volley", code: "volleyCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", auditLocalize("FALLOUTMAW.AuditRuntime.R1257", "Залп"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", auditLocalize("FALLOUTMAW.AuditRuntime.R1257", "Залп")) },
+    { key: "meleeAttack", code: "meleeAttackCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", auditLocalize("FALLOUTMAW.AuditRuntime.R1258", "Неприцельная атака"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", auditLocalize("FALLOUTMAW.AuditRuntime.R1258", "Неприцельная атака")) },
+    { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", auditLocalize("FALLOUTMAW.AuditRuntime.R0352", "Прицельная атака"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", auditLocalize("FALLOUTMAW.AuditRuntime.R0352", "Прицельная атака")) },
+    { key: "push", code: "pushCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", auditLocalize("FALLOUTMAW.AuditRuntime.R1259", "Толчок"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", auditLocalize("FALLOUTMAW.AuditRuntime.R1259", "Толчок")) },
+    { key: "reload", code: "reloadCost", label: auditFormat("FALLOUTMAW.AuditRuntime.R1254", { p0: (localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", auditLocalize("FALLOUTMAW.AuditRuntime.R1260", "Перезарядка"))) }, "{p0}: стоимость"), actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", auditLocalize("FALLOUTMAW.AuditRuntime.R1260", "Перезарядка")) }
   ];
 }
 
@@ -720,20 +721,20 @@ function getAttackingWeaponActionEntries() {
 
 function getPostureEffectKeyEntries() {
   return [
-    { key: "walk", code: "walkPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Walk", "Ходьба") },
-    { key: "crawl", code: "crouchPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Crouch", "Присед") },
-    { key: "burrow", code: "pronePosture", label: localizeOrFallback("FALLOUTMAW.Movement.Prone", "Лежа") },
-    { key: "knocked", code: "knockedPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Knocked", "Опрокинутый") }
+    { key: "walk", code: "walkPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Walk", auditLocalize("FALLOUTMAW.AuditRuntime.R1261", "Ходьба")) },
+    { key: "crawl", code: "crouchPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Crouch", auditLocalize("FALLOUTMAW.AuditRuntime.R1262", "Присед")) },
+    { key: "burrow", code: "pronePosture", label: localizeOrFallback("FALLOUTMAW.Movement.Prone", auditLocalize("FALLOUTMAW.AuditRuntime.R1263", "Лежа")) },
+    { key: "knocked", code: "knockedPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Knocked", auditLocalize("FALLOUTMAW.AuditRuntime.R1264", "Опрокинутый")) }
   ];
 }
 
 function buildAbilityRuntimeEffectKeyTokens() {
-  const abilityGroup = "Способности";
+  const abilityGroup = auditLocalize("FALLOUTMAW.AuditRuntime.R1265", "Способности");
   const overloadTokens = [
     createEffectKeyToken({
       code: "abilityOverloadEnergy",
       key: "abilityOverloadEnergy",
-      label: "Расход энергии на способность",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1266", "Расход энергии на способность"),
       path: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
       group: abilityGroup
     }),
@@ -745,7 +746,7 @@ function buildAbilityRuntimeEffectKeyTokens() {
         return createEffectKeyToken({
           code: `abilityOverload_${resourceKey}`,
           key: `abilityOverload_${resourceKey}`,
-          label: `Расход ${label.toLocaleLowerCase()} на способность`,
+          label: auditFormat("FALLOUTMAW.AuditRuntime.R1267", { p0: (label.toLocaleLowerCase()) }, "Расход {p0} на способность"),
           path: getAbilityOverloadCostEffectKey(resourceKey),
           group: abilityGroup
         });
@@ -756,7 +757,7 @@ function buildAbilityRuntimeEffectKeyTokens() {
       : [createEffectKeyToken({
         code: "abilityOverload_reactionPoints",
         key: "abilityOverload_reactionPoints",
-        label: "Расход очков реакции на способность",
+        label: auditLocalize("FALLOUTMAW.AuditRuntime.R1268", "Расход очков реакции на способность"),
         path: getAbilityOverloadCostEffectKey("reactionPoints"),
         group: abilityGroup
       })])
@@ -766,37 +767,37 @@ function buildAbilityRuntimeEffectKeyTokens() {
     createEffectKeyToken({
       code: "nextSkillModifier",
       key: "nextSkillModifier",
-      label: "Следующая проверка выбранного навыка",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1269", "Следующая проверка выбранного навыка"),
       path: ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
-      group: "Навыки"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1270", "Навыки")
     }),
     createEffectKeyToken({
       code: "smartCriticalSuccess",
       key: "smartCriticalSuccess",
-      label: "Подтасовка: критический успех",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1271", "Подтасовка: критический успех"),
       path: SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess,
-      group: "Подтасовка"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1272", "Подтасовка")
     }),
     createEffectKeyToken({
       code: "smartSuccess",
       key: "smartSuccess",
-      label: "Подтасовка: успех",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1273", "Подтасовка: успех"),
       path: SMART_FUDGE_RESULT_EFFECT_KEYS.success,
-      group: "Подтасовка"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1272", "Подтасовка")
     }),
     createEffectKeyToken({
       code: "smartFailure",
       key: "smartFailure",
-      label: "Подтасовка: провал",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1274", "Подтасовка: провал"),
       path: SMART_FUDGE_RESULT_EFFECT_KEYS.failure,
-      group: "Подтасовка"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1272", "Подтасовка")
     }),
     createEffectKeyToken({
       code: "smartCriticalFailure",
       key: "smartCriticalFailure",
-      label: "Подтасовка: критический провал",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1275", "Подтасовка: критический провал"),
       path: SMART_FUDGE_RESULT_EFFECT_KEYS.criticalFailure,
-      group: "Подтасовка"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1272", "Подтасовка")
     })
   ];
 }
@@ -958,44 +959,44 @@ export function buildCombatEffectKeyTokens() {
     createEffectKeyToken({
       code: "unconsciousnessResistance",
       key: "unconsciousnessResistance",
-      label: "Сопротивление к потере сознания",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1276", "Сопротивление к потере сознания"),
       path: "system.combat.unconsciousnessResistance",
-      group: "Бой"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1277", "Бой")
     }),
     createEffectKeyToken({
       code: "unconsciousnessImmunity",
       key: "unconsciousnessImmunity",
-      label: "Невосприимчивость к потере сознания",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1278", "Невосприимчивость к потере сознания"),
       path: UNCONSCIOUSNESS_IMMUNITY_EFFECT_KEY,
-      group: "Бой"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1277", "Бой")
     }),
     createEffectKeyToken({
       code: "stun",
       key: "stun",
-      label: "Оглушение, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1279", "Оглушение, %"),
       path: STUN_EFFECT_KEY,
-      group: "Бой"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1277", "Бой")
     }),
     createEffectKeyToken({
       code: "stunImmunity",
       key: "stunImmunity",
-      label: "Невосприимчивость к оглушению",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1280", "Невосприимчивость к оглушению"),
       path: STUN_IMMUNITY_EFFECT_KEY,
-      group: "Бой"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1277", "Бой")
     }),
     createEffectKeyToken({
       code: "incomingHealing",
       key: "incomingHealing",
-      label: "Входящее лечение, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1281", "Входящее лечение, %"),
       path: "system.healing.incomingPercent",
-      group: "Лечение"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1282", "Лечение")
     }),
     createEffectKeyToken({
       code: "outgoingHealing",
       key: "outgoingHealing",
-      label: "Исходящее лечение, %",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1283", "Исходящее лечение, %"),
       path: "system.healing.outgoingPercent",
-      group: "Лечение"
+      group: auditLocalize("FALLOUTMAW.AuditRuntime.R1282", "Лечение")
     }),
     createEffectKeyToken({
       code: "incomingFirstAidEffectiveness",
@@ -1200,33 +1201,33 @@ export function buildReverseInteractionEffectKeyTokens() {
 }
 
 export function buildSuppressionEffectKeyTokens() {
-  const group = "Подавление";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1284", "Подавление");
   return [
     createEffectKeyToken({
       code: "suppressTraumas",
       key: "suppressTraumas",
-      label: "Травмы: подавить случайные",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1285", "Травмы: подавить случайные"),
       path: TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY,
       group
     }),
     createEffectKeyToken({
       code: "suppressDiseases",
       key: "suppressDiseases",
-      label: "Болезни: подавить случайные",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1286", "Болезни: подавить случайные"),
       path: DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
       group
     }),
     createEffectKeyToken({
       code: "suppressAllTraumas",
       key: "suppressAllTraumas",
-      label: "Травмы: подавить все",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1287", "Травмы: подавить все"),
       path: TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
       group
     }),
     createEffectKeyToken({
       code: "suppressAllDiseases",
       key: "suppressAllDiseases",
-      label: "Болезни: подавить все",
+      label: auditLocalize("FALLOUTMAW.AuditRuntime.R1288", "Болезни: подавить все"),
       path: DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
       group
     })
@@ -1234,9 +1235,9 @@ export function buildSuppressionEffectKeyTokens() {
 }
 
 export function buildDamageMitigationEffectKeyTokens() {
-  const allLabel = localizeOrFallback("FALLOUTMAW.Common.All", "Все");
-  const allLimbsLabel = `${allLabel} ${localizeOrFallback("FALLOUTMAW.Common.Limbs", "части тела").toLocaleLowerCase()}`;
-  const allDamageTypesLabel = `${allLabel} ${localizeOrFallback("FALLOUTMAW.Common.DamageTypes", "типы урона").toLocaleLowerCase()}`;
+  const allLabel = localizeOrFallback("FALLOUTMAW.Common.All", auditLocalize("FALLOUTMAW.AuditRuntime.R1289", "Все"));
+  const allLimbsLabel = `${allLabel} ${localizeOrFallback("FALLOUTMAW.Common.Limbs", auditLocalize("FALLOUTMAW.AuditRuntime.R1290", "части тела")).toLocaleLowerCase()}`;
+  const allDamageTypesLabel = `${allLabel} ${localizeOrFallback("FALLOUTMAW.Common.DamageTypes", auditLocalize("FALLOUTMAW.AuditRuntime.R1291", "типы урона")).toLocaleLowerCase()}`;
   const damageTypes = getDamageTypeSettings();
   const limbs = getEffectKeyLimbs();
   const tokens = [];
@@ -1287,8 +1288,8 @@ export function buildDamageMitigationEffectKeyTokens() {
 }
 
 export function buildDamageBarrierEffectKeyTokens() {
-  const group = localizeOrFallback("FALLOUTMAW.Effects.DamageBarriers", "Барьер");
-  const allDamageTypes = localizeOrFallback("FALLOUTMAW.Effects.DamageBarrierAll", "От всех видов урона");
+  const group = localizeOrFallback("FALLOUTMAW.Effects.DamageBarriers", auditLocalize("FALLOUTMAW.AuditRuntime.R0670", "Барьер"));
+  const allDamageTypes = localizeOrFallback("FALLOUTMAW.Effects.DamageBarrierAll", auditLocalize("FALLOUTMAW.AuditRuntime.R0671", "От всех видов урона"));
   const tokens = [
     createEffectKeyToken({
       code: "barrier:all",
@@ -1316,8 +1317,8 @@ export function buildDamageBarrierEffectKeyTokens() {
 }
 
 export function buildLimbMaxBonusEffectKeyTokens() {
-  const group = "Максимальное ОЗ частей тела";
-  const allLimbsLabel = "Все части тела";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1292", "Максимальное ОЗ частей тела");
+  const allLimbsLabel = auditLocalize("FALLOUTMAW.AuditRuntime.R1293", "Все части тела");
   const tokens = [
     createEffectKeyToken({
       code: "limbMax:all",
@@ -1342,8 +1343,8 @@ export function buildLimbMaxBonusEffectKeyTokens() {
 }
 
 export function buildImplantLimitEffectKeyTokens() {
-  const group = "Изменение доступных имплантов";
-  const allLimbsLabel = "Все части тела";
+  const group = auditLocalize("FALLOUTMAW.AuditRuntime.R1294", "Изменение доступных имплантов");
+  const allLimbsLabel = auditLocalize("FALLOUTMAW.AuditRuntime.R1293", "Все части тела");
   const tokens = [
     createEffectKeyToken({
       code: "implantLimit:all",
@@ -1371,11 +1372,11 @@ function getDamageMitigationTokenGroups() {
   return [
     {
       rootPath: "damageDefenseBonuses",
-      groupLabel: localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона")
+      groupLabel: localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", auditLocalize("FALLOUTMAW.AuditRuntime.R1295", "Бонус защиты от урона"))
     },
     {
       rootPath: "damageResistanceBonuses",
-      groupLabel: localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону")
+      groupLabel: localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", auditLocalize("FALLOUTMAW.AuditRuntime.R1296", "Бонус сопротивлений урону"))
     }
   ];
 }

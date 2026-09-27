@@ -7,45 +7,45 @@
 
     <div class="fallout-maw-list-grid two-columns">
       <label>
-        <span>Максимальное состояние конечности</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Texta6324a123d2a'}}</span>
         <input type="text" name="limb.stateMax" value="{{limb.stateMax}}" data-formula-autocomplete="all">
       </label>
       <label>
-        <span>Базовый лимит имплантов</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Texta19c82fab2c4'}}</span>
         <input type="number" name="limb.implantLimit" value="{{limb.implantLimit}}" min="0" step="1">
       </label>
       <label>
-        <span>Множитель урона</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text6653132ed627'}}</span>
         <input type="number" name="limb.damageMultiplier" value="{{limb.damageMultiplier}}" min="0" step="0.1">
       </label>
       <label>
-        <span>Доп. сложность поражения, % от уклонения</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textedf50358fae0'}}</span>
         <input type="number" name="limb.aimedDifficultyPercent" value="{{limb.aimedDifficultyPercent}}" step="1">
       </label>
       <div>
-        <span>Критическая часть тела</span>
-        <input aria-label="Критическая часть тела" type="checkbox" name="limb.critical" {{#if limb.critical}}checked{{/if}}>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Text7eaadb735046'}}</span>
+        <input aria-label="{{localize 'FALLOUTMAW.AuditTemplates.Text7eaadb735046'}}" type="checkbox" name="limb.critical" {{#if limb.critical}}checked{{/if}}>
       </div>
     </div>
   </section>
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Эффекты утраты</h2>
+      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textf894528673b0'}}</h2>
       {{#if limb.critical}}
-      <p class="hint">Критическая часть тела при утрате вызывает смерть; отдельные дебафы утраты недоступны.</p>
+      <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text479183648037'}}</p>
       {{else}}
-      <p class="hint">Работает как эффекты травм, но применяется при состоянии -100% и удаляется при восстановлении части тела.</p>
+      <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textd5166faf5a3f'}}</p>
       {{/if}}
     </header>
 
     {{#unless limb.critical}}
     <div class="fallout-maw-trauma-effect-table">
       <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
-        <span>Ключ</span>
-        <span>Тип</span>
+        <span>{{localize 'FALLOUTMAW.Common.Key'}}</span>
+        <span>{{localize 'FALLOUTMAW.Common.Type'}}</span>
         <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
-        <span>Приоритет</span>
+        <span>{{localize 'FALLOUTMAW.AuditTemplates.Textb5b6ddbf62af'}}</span>
         <span></span>
       </div>
       {{#each limb.lossEffects}}
@@ -53,7 +53,7 @@
         <input type="text" data-limb-loss-effect-key data-effect-key-autocomplete value="{{key}}">
         <select data-limb-loss-effect-type>
           <option value="add" {{#if addSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeAdd"}}</option>
-          <option value="multiply" {{#if multiplySelected}}selected{{/if}}>Процент</option>
+          <option value="multiply" {{#if multiplySelected}}selected{{/if}}>{{localize 'FALLOUTMAW.Effects.ChangeMultiply'}}</option>
           <option value="override" {{#if overrideSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeOverride"}}</option>
         </select>
         <input type="text" data-limb-loss-effect-value value="{{value}}">
@@ -64,7 +64,7 @@
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
       {{/each}}
     </div>
-    <button type="button" data-action="addLossEffect"><i class="fa-solid fa-plus"></i> Добавить эффект</button>
+    <button type="button" data-action="addLossEffect"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.Item.FirstAidAddRemoveEffect'}}</button>
     {{/unless}}
   </section>
 

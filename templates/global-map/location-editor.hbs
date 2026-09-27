@@ -1,73 +1,73 @@
 <div class="fallout-maw-global-map-form">
   <div class="form-group">
-    <label>Название</label>
+    <label>{{localize 'FALLOUTMAW.Common.Label'}}</label>
     <div class="form-fields"><input type="text" name="location.name" value="{{location.name}}" required></div>
   </div>
   <div class="form-group">
-    <label>Размер в клетках</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textd27e7f77fcaf'}}</label>
     <div class="form-fields"><input type="number" name="location.size" value="{{location.size}}" min="1" step="1"></div>
   </div>
   <div class="form-group">
-    <label>Режим входа</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textf1b01c42a26b'}}</label>
     <div class="form-fields">
       <select name="location.entryMode">
         {{#each entryModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
       </select>
     </div>
-    <p class="hint">На подкарте путешествия группа остаётся собранной. В конечной локации персонажи высаживаются из группы.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Textd040faa9f84c'}}</p>
   </div>
   <div class="form-group">
-    <label>Иконка</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text25b8ac0dd866'}}</label>
     <div class="form-fields">
       <file-picker name="location.image" value="{{location.image}}" type="image"></file-picker>
     </div>
   </div>
   {{#if canConnectExistingScene}}
   <div class="form-group">
-    <label>Подключить существующую сцену</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textf4bd2a6c7cbf'}}</label>
     <div class="form-fields">
       <input type="hidden" name="location.existingSceneId" value="">
       <div class="fallout-maw-global-map-dropzone" data-global-map-location-scene-drop>
         <i class="fa-solid fa-arrow-down-to-bracket"></i>
-        <span data-global-map-location-scene-name>Перетащите сюда сцену из правой панели</span>
+        <span data-global-map-location-scene-name>{{localize 'FALLOUTMAW.AuditTemplates.Texte09aceae3b62'}}</span>
       </div>
     </div>
-    <p class="hint">Сцена будет встроена в папку этой локации и получит стабильные flags.</p>
+    <p class="hint">{{localize 'FALLOUTMAW.AuditTemplates.Text152d592ba930'}}</p>
   </div>
   {{else}}
   <div class="form-group">
-    <label>Подключённая сцена</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textffacdbb57046'}}</label>
     <div class="form-fields">
       <input type="text" value="{{linkedSceneName}}" disabled>
-      <button type="button" data-action="deleteLinkedScene" class="danger" title="Отключить сцену, чтобы подключить другую"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" data-action="deleteLinkedScene" class="danger" title="{{localize 'FALLOUTMAW.AuditTemplates.Text1b6e9bed3a92'}}"><i class="fa-solid fa-trash"></i></button>
     </div>
   </div>
   {{/if}}
   <div class="form-group">
-    <label>Цвет рамки</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text2553243c2e64'}}</label>
     <div class="form-fields"><input type="color" name="location.strokeColor" value="{{location.strokeColor}}"></div>
   </div>
   <div class="form-group">
-    <label>Толщина рамки</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text2e302c7da8dd'}}</label>
     <div class="form-fields"><input type="number" name="location.strokeWidth" value="{{location.strokeWidth}}" min="1"></div>
   </div>
   <div class="form-group">
-    <label>Цвет текста</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Text80c359a2a3a5'}}</label>
     <div class="form-fields"><input type="color" name="location.textColor" value="{{location.textColor}}"></div>
   </div>
   <div class="form-group">
-    <label>Размер текста</label>
+    <label>{{localize 'FALLOUTMAW.AuditTemplates.Textb1e23e1ff004'}}</label>
     <div class="form-fields"><input type="number" name="location.fontSize" value="{{location.fontSize}}" min="8"></div>
   </div>
   <div class="form-group">
     <div class="fallout-maw-global-map-visibility" style="display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 0.75rem; width: 100%;">
-      <label class="checkbox"><span>Раскрыта</span><input type="checkbox" name="location.alwaysDiscovered" title="Локация видна на карте всегда, даже до обнаружения." {{checked location.alwaysDiscovered}}></label>
-      <label class="checkbox"><span>Скрыта</span><input type="checkbox" name="location.hidden" title="Локация не отображается на карте и не срабатывает при входе в её клетки. Взаимоисключающа с «Раскрыта»." {{checked location.hidden}}></label>
+      <label class="checkbox"><span>{{localize 'FALLOUTMAW.AuditTemplates.Textd1a318ecb8c6'}}</span><input type="checkbox" name="location.alwaysDiscovered" title="{{localize 'FALLOUTMAW.AuditTemplates.Text0b7d6ec7d5b2'}}" {{checked location.alwaysDiscovered}}></label>
+      <label class="checkbox"><span>{{localize 'FALLOUTMAW.AuditTemplates.Textb4def752e70f'}}</span><input type="checkbox" name="location.hidden" title="{{localize 'FALLOUTMAW.AuditTemplates.Text2a7a5997e1e6'}}" {{checked location.hidden}}></label>
     </div>
   </div>
   <footer class="form-footer">
-    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
-    {{#if canConfigureExitZones}}<button type="button" data-action="configureExitZones"><i class="fa-solid fa-person-walking-arrow-right"></i> Установить точки выхода</button>{{/if}}
-    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
+    {{#if canConfigureExitZones}}<button type="button" data-action="configureExitZones"><i class="fa-solid fa-person-walking-arrow-right"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text615932574cd9'}}</button>{{/if}}
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.Common.Delete'}}</button>{{/if}}
   </footer>
 </div>

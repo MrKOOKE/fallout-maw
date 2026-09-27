@@ -1,3 +1,4 @@
+import { localize as auditLocalize } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getActorActiveCombat } from "../combat/combat-membership.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
@@ -362,7 +363,7 @@ function buildTempoFlagData({ actor, combat, entry, settings, tempo, nextGainAt,
     combatUuid: String(combat?.uuid ?? ""),
     abilityItemId: String(entry.abilityItem.id ?? ""),
     abilityItemUuid: String(entry.abilityItem.uuid ?? ""),
-    abilityName: String(entry.abilityItem.name ?? "Темп"),
+    abilityName: String(entry.abilityItem.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0134", "Темп")),
     functionId: String(entry.abilityFunction.id ?? ""),
     fixedKey: ABILITY_FIXED_FUNCTION_KEYS.tempo,
     createdAt: finiteNumber(createdAt, getWorldTime()),
@@ -383,7 +384,7 @@ export function getTempoEffectData(effect = null) {
     combatUuid: String(raw.combatUuid ?? ""),
     abilityItemId: String(raw.abilityItemId ?? ""),
     abilityItemUuid: String(raw.abilityItemUuid ?? ""),
-    abilityName: String(raw.abilityName ?? "Темп"),
+    abilityName: String(raw.abilityName ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0134", "Темп")),
     functionId: String(raw.functionId ?? ""),
     fixedKey: ABILITY_FIXED_FUNCTION_KEYS.tempo,
     createdAt: finiteNumber(raw.createdAt),
@@ -468,13 +469,13 @@ function tempoEffectConfigurationMatches(effect, data, entry, settings, combat) 
   return data.combatUuid === String(combat?.uuid ?? "")
     && data.abilityItemId === String(entry.abilityItem.id ?? "")
     && data.functionId === String(entry.abilityFunction.id ?? "")
-    && data.abilityName === String(entry.abilityItem.name ?? "Темп")
+    && data.abilityName === String(entry.abilityItem.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0134", "Темп"))
     && String(effect.img ?? "") === String(entry.abilityItem.img || DEFAULT_ICON)
     && JSON.stringify(data.settings) === JSON.stringify(settings);
 }
 
-function buildTempoEffectName(abilityName = "Темп", tempo = 0) {
-  return `${String(abilityName || "Темп")} ×${Math.max(0, toInteger(tempo))}`;
+function buildTempoEffectName(abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0134", "Темп"), tempo = 0) {
+  return `${String(abilityName || auditLocalize("FALLOUTMAW.AuditRuntime.R0134", "Темп"))} ×${Math.max(0, toInteger(tempo))}`;
 }
 
 function resolveCombat(uuid = "") {

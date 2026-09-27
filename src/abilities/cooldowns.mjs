@@ -1,3 +1,4 @@
+import { format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
@@ -222,8 +223,8 @@ function getCooldownEffectName(item, abilityFunction, condition) {
   const functionLabel = String(abilityFunction?.name ?? "").trim();
   const suffix = label || functionLabel;
   return suffix
-    ? `Перезарядка: ${item.name} (${suffix})`
-    : `Перезарядка: ${item.name}`;
+    ? auditFormat("FALLOUTMAW.AuditRuntime.R0049", { p0: (item.name), p1: (suffix) }, "Перезарядка: {p0} ({p1})")
+    : auditFormat("FALLOUTMAW.AuditRuntime.R0050", { p0: (item.name) }, "Перезарядка: {p0}");
 }
 
 function getCooldownDurationSeconds(condition = {}) {

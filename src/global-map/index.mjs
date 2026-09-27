@@ -40,7 +40,7 @@ export function registerGlobalMapSystem() {
     default: ""
   });
   game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_TRAVEL_IMAGE_SETTING, {
-    name: "Изображение путешествующей группы",
+    name: "FALLOUTMAW.AuditRuntime.R0945",
     scope: "world",
     preset: true,
     config: false,
@@ -48,7 +48,7 @@ export function registerGlobalMapSystem() {
     default: TRAVEL_GROUP_IMAGE_DEFAULT
   });
   game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_TRAVEL_SPEED_FORMULA_SETTING, {
-    name: "Формула скорости путешествия",
+    name: "FALLOUTMAW.AuditRuntime.R0946",
     scope: "world",
     preset: true,
     config: false,
@@ -56,15 +56,15 @@ export function registerGlobalMapSystem() {
     default: GLOBAL_MAP_TRAVEL_SPEED_FORMULA_DEFAULT
   });
   game.settings.registerMenu(FALLOUT_MAW.id, "globalMapTravel", {
-    name: "Путешествие",
-    label: "Настроить путешествие",
+    name: "FALLOUTMAW.AuditRuntime.R0947",
+    label: "FALLOUTMAW.AuditRuntime.R0948",
     icon: "fa-solid fa-people-group",
     type: GlobalMapTravelSettings,
     restricted: true
   });
   game.settings.registerMenu(FALLOUT_MAW.id, "globalMapManager", {
-    name: "Глобальная карта",
-    label: "Открыть управление",
+    name: "FALLOUTMAW.AuditRuntime.R0938",
+    label: "FALLOUTMAW.AuditRuntime.R0949",
     icon: "fa-solid fa-map-location-dot",
     type: GlobalMapManager,
     restricted: true
@@ -135,8 +135,8 @@ async function openGlobalMap() {
 
 function registerGlobalMapKeybinding() {
   game.keybindings.register(FALLOUT_MAW.id, "openGlobalMap", {
-    name: "Открыть глобальную карту",
-    hint: "Открыть назначенную корневую сцену глобальной карты.",
+    name: "FALLOUTMAW.AuditRuntime.R0950",
+    hint: "FALLOUTMAW.AuditRuntime.R0951",
     editable: [{ key: "KeyN" }],
     onDown: () => {
       void openGlobalMap();

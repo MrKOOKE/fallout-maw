@@ -1,11 +1,13 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getCraftItemSourceUuid } from "../utils/craft-item-source.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 
 export const KNOWN_CRAFT_ITEMS_FLAG = "knownCraftItems";
 export const DEFAULT_CRAFT_RECIPE_ID = "recipe1";
 
 const knownCraftItemUuidCache = new WeakMap();
+const knowledgeGrantLock = createActorOperationLock();
 
 export function getKnownCraftItemUuids(actor = null) {
   const stored = actor?.getFlag?.(SYSTEM_ID, KNOWN_CRAFT_ITEMS_FLAG);
@@ -42,16 +44,21 @@ export function actorKnowsCraftItem(actor = null, itemOrUuid = null) {
 }
 
 export async function grantCraftItemKnowledge(actor = null, itemUuids = []) {
-  const known = getKnownCraftItemUuids(actor);
-  const granted = [];
-  for (const value of itemUuids ?? []) {
-    const uuid = getCraftKnowledgeItemUuid(value);
-    if (!uuid || known.has(uuid)) continue;
-    known.add(uuid);
-    granted.push(uuid);
-  }
-  if (granted.length) await setKnownCraftItemUuids(actor, known);
-  return granted;
+  if (!actor) return [];
+  return knowledgeGrantLock.run(actor, null, async () => {
+    // The cached set describes committed knowledge. A failed flag write must
+    // not make a recipe appear learned, and concurrent grants must accumulate.
+    const known = new Set(getKnownCraftItemUuids(actor));
+    const granted = [];
+    for (const value of itemUuids ?? []) {
+      const uuid = getCraftKnowledgeItemUuid(value);
+      if (!uuid || known.has(uuid)) continue;
+      known.add(uuid);
+      granted.push(uuid);
+    }
+    if (granted.length) await setKnownCraftItemUuids(actor, known);
+    return granted;
+  });
 }
 
 export function getCraftKnowledgeItemUuid(itemOrUuid = null) {

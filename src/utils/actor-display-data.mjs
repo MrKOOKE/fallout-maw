@@ -1,3 +1,4 @@
+import { localize as auditLocalize, format as auditFormat } from "./i18n.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./actor-inventory-size.mjs";
 export { getInventoryGridDimensions, getActorInventoryGridDimensions, actorHasInfiniteRootInventory, getActorRootInventoryGridOptions } from "./actor-inventory-size.mjs";
 import { getCurrencySettings } from "../settings/accessors.mjs";
@@ -57,7 +58,7 @@ import {
   getInstalledConstructPartForSlot,
   isInstalledConstructPartItem
 } from "./construct-parts.mjs";
-export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
+export const FALLBACK_ICON = "systems/fallout-maw/assets/System/Skills/skill-default.webp";
 
 export function normalizeImagePath(path, fallback = FALLBACK_ICON) {
   const normalized = String(path ?? "").trim();
@@ -268,6 +269,10 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     (maximum, item) => Math.max(maximum, getItemFootprint(item, allItems).width),
     Math.max(1, columns)
   );
+  const lockedStorageColumns = lockedStorageItems.reduce(
+    (maximum, item) => Math.max(maximum, getItemFootprint(item, allItems).width),
+    Math.max(1, columns)
+  );
   const butcheringStorage = {
     id: BUTCHERING_STORAGE_PARENT_ID,
     columns: butcheringStorageColumns,
@@ -292,9 +297,9 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
   };
   const lockedStorage = {
     id: LOCKED_STORAGE_PARENT_ID,
-    columns,
+    columns: lockedStorageColumns,
     rows: 1,
-    grid: prepareInventoryGridContext(lockedStorageItems, columns, 1, allItems, (item, placement) => {
+    grid: prepareInventoryGridContext(lockedStorageItems, lockedStorageColumns, 1, allItems, (item, placement) => {
       const normalizedPlacement = {
         ...placement,
         mode: LOCKED_STORAGE_PLACEMENT_MODE
@@ -342,7 +347,9 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     });
 
   return {
-    equipmentHeading: actor?.type === "construct" ? "Строение" : game.i18n.localize("FALLOUTMAW.Common.Equipment"),
+    equipmentHeading: actor?.type === "construct" ? auditLocalize("FALLOUTMAW.AuditRuntime.R1207", "Строение") : game.i18n.localize("FALLOUTMAW.Common.Equipment"),
+    showRootInventory: columns > 0 && rows > 0,
+    showInventoryPane: (columns > 0 && rows > 0) || containers.length > 0 || lockedStorage.grid.items.length > 0,
     actorContainers: prepareActorContainerInventoryContext(actor),
     equipmentSlots,
     prosthesisSlots,
@@ -390,7 +397,7 @@ function getConstructNaturalWeaponSetContext(actor, allItemData = []) {
   if (!slots.length) return null;
   return {
     key: "constructPartWeapons",
-    label: "Оружие",
+    label: auditLocalize("FALLOUTMAW.AuditRuntime.R1208", "Оружие"),
     slots
   };
 }
@@ -433,7 +440,7 @@ function prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds) {
       return normalizeConstructPartWeaponSets(part.weaponSets).map(set => {
         const slotId = getConstructPartSlotId(document);
         const setKey = getConstructPartWeaponSetKey(slotId, set.id);
-        const label = set.label || `${partType}: оружие`;
+        const label = set.label || auditFormat("FALLOUTMAW.AuditRuntime.R1209", { p0: (partType) }, "{p0}: оружие");
         const slots = Array.from({ length: set.quantity }, (_value, index) => {
           const slotKey = getConstructPartWeaponSlotKey(index);
           return {
