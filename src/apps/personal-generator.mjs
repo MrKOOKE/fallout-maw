@@ -60,6 +60,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { canStackItems } from "./search-inventory.mjs";
+import { pickPersonalGeneratorPreset } from "./personal-generator-preset-picker.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const BaseFilePicker = foundry.applications.apps.FilePicker.implementation;
@@ -293,6 +294,8 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     },
     actions: {
       createItemBlock: this.#onCreateItemBlock,
+      loadPreset: this.#onLoadPreset,
+      savePreset: this.#onSavePreset,
       deleteItemBlock: this.#onDeleteItemBlock,
       deleteItemEntry: this.#onDeleteItemEntry,
       browseImage: this.#onBrowseImage,
@@ -347,6 +350,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return {
       ...(await super._prepareContext(options)),
       actor: this.#actor,
+      canSavePreset: game.user?.isGM === true,
       config: preparePersonalGeneratorContext(this.#config),
       prototypeTokenLink: getPrototypeTokenLinkContext(this.#actor),
       currencyChoices: getCurrencyChoices(this.#config),
@@ -414,6 +418,69 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     this.#createdBlockId = block.id;
     await this.#saveCurrentConfig();
     return this.render({ force: true });
+  }
+
+  static async #onSavePreset(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return;
+    const config = this.#readConfigFromForm();
+    const name = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "FALLOUTMAW.PersonalGeneratorPresets.Save", icon: "fa-solid fa-bookmark" },
+      content: `<p>${presetText("SaveHint")}</p><label class="form-group">
+        <span>${presetText("Name")}</span>
+        <input type="text" name="presetName" maxlength="80" required autofocus autocomplete="off"
+          value="${foundry.utils.escapeHTML(this.#actor?.name ?? "")}">
+      </label>`,
+      ok: { label: "FALLOUTMAW.PersonalGeneratorPresets.Save", callback: (_event, button) => button.form.elements.presetName.value.trim() },
+      rejectClose: false,
+      modal: true
+    });
+    if (!name) return;
+    const existing = getPersonalGeneratorPresets().find(preset => preset.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (existing && !await foundry.applications.api.DialogV2.confirm({
+      window: { title: "FALLOUTMAW.PersonalGeneratorPresets.Replace" },
+      content: `<p>${foundry.utils.escapeHTML(game.i18n.format("FALLOUTMAW.PersonalGeneratorPresets.ReplaceHint", { name: existing.name }))}</p>`,
+      yes: { label: "FALLOUTMAW.PersonalGeneratorPresets.Replace" },
+      rejectClose: false,
+      modal: true
+    })) return;
+    try {
+      const presets = foundry.utils.deepClone(game.settings.get(SYSTEM_ID, PERSONAL_GENERATOR_PRESETS_SETTING) ?? {});
+      const id = existing?.id ?? foundry.utils.randomID();
+      presets[id] = { name, config: createPersonalGeneratorConfig(config) };
+      await game.settings.set(SYSTEM_ID, PERSONAL_GENERATOR_PRESETS_SETTING, presets);
+      ui.notifications.info(game.i18n.format("FALLOUTMAW.PersonalGeneratorPresets.Saved", { name }));
+    } catch (error) {
+      console.error("Fallout-MaW | Failed to save personal generator preset", error);
+      ui.notifications.error(presetText("SaveError"));
+    }
+  }
+
+  static async #onLoadPreset(event) {
+    event.preventDefault();
+    const presets = getPersonalGeneratorPresets();
+    if (!presets.length) {
+      ui.notifications.info(presetText("Empty"));
+      return;
+    }
+    const actorUuid = this.#actorUuid;
+    const selection = await pickPersonalGeneratorPreset(presets);
+    const preset = presets.find(entry => entry.id === selection);
+    if (!preset || !this.rendered || this.#actorUuid !== actorUuid) return;
+    const previous = this.#readConfigFromForm();
+    try {
+      this.#cancelChainLink();
+      if (this.#autosaveTimeout) window.clearTimeout(this.#autosaveTimeout);
+      this.#autosaveTimeout = null;
+      this.#config = createPersonalGeneratorConfig(preset.config);
+      await this.#saveCurrentConfig();
+      await this.render({ force: true });
+      ui.notifications.info(game.i18n.format("FALLOUTMAW.PersonalGeneratorPresets.Loaded", { name: preset.name }));
+    } catch (error) {
+      this.#config = previous;
+      console.error("Fallout-MaW | Failed to load personal generator preset", error);
+      ui.notifications.error(presetText("LoadError"));
+    }
   }
 
   static async #onDeleteItemBlock(event, target) {
@@ -1748,6 +1815,18 @@ function getPersonalGeneratorConfig(actorOrConfig = null) {
     raw,
     { inplace: false, overwrite: true }
   ));
+}
+
+function presetText(key) {
+  return game.i18n.localize(`FALLOUTMAW.PersonalGeneratorPresets.${key}`);
+}
+
+function getPersonalGeneratorPresets() {
+  const presets = game.settings.get(SYSTEM_ID, PERSONAL_GENERATOR_PRESETS_SETTING) ?? {};
+  return Object.entries(presets)
+    .filter(([, preset]) => preset && typeof preset.name === "string" && preset.config && typeof preset.config === "object")
+    .map(([id, preset]) => ({ id, name: preset.name, config: foundry.utils.deepClone(preset.config) }))
+    .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
 }
 
 function createPersonalGeneratorConfig(config = {}) {

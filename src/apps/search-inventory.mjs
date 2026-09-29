@@ -152,6 +152,8 @@ import { getButcheringConfig, hasConfiguredButchering } from "./butchering-confi
 import { requestActorHacking } from "./hacking-dialog.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { moveOwnedInventoryItemInInventoryFast } from "../inventory/movement.mjs";
+import { hasActiveSearchInventorySession } from "../inventory/search-session-auth.mjs";
+import { getSelectedItemTransferQuantity, getStackTransferQuantity } from "../inventory/transfer-quantity.mjs";
 import {
   canMaybeStackInventoryItems,
   canStackInventoryItems
@@ -242,8 +244,7 @@ async function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {
     tradeCurrencyKey: "",
     searchAuditSessionId
   });
-  const result = searchInventoryWindow.render({ force: true });
-  void requestSearchAuditStart({
+  await requestSearchAuditStart({
     searchAuditSessionId,
     searcherActorUuid: searcherActor.uuid,
     searchedActorUuid: searchedActor.uuid,
@@ -251,7 +252,8 @@ async function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {
     searchedActorName: searchedActor.name ?? "",
     searcherActorImg: searcherActor.img ?? "",
     searchedActorImg: searchedActor.img ?? ""
-  }).catch(error => console.error(`${SYSTEM_ID} | Search audit start failed`, error));
+  });
+  const result = searchInventoryWindow.render({ force: true });
   return result;
   });
 }
@@ -581,6 +583,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   matchesTradeSession(sessionId) {
     return this.#contextActive && this.#isTradeMode() && this.#tradeSessionId === String(sessionId ?? "");
+  }
+
+  canReceiveTradeSocketFrom(sender) {
+    if (!this.#contextActive || !this.#isTradeMode() || !sender) return false;
+    if (sender.isGM) return true;
+    if (this.#tradeSessionSnapshot) return canUserParticipateInTradeSession(this.#tradeSessionSnapshot, sender.id);
+    return Boolean(this.#searcherActor?.testUserPermission?.(sender, "OWNER")
+      || this.#searchedActor?.testUserPermission?.(sender, "OWNER"));
   }
 
   async closeTradeSessionFromSocket(sessionId) {
@@ -3510,14 +3520,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     });
     if (!amount) return null;
 
-    const payload = {
+    const payload = this.#prepareSearchOperationPayload({
       searcherActorUuid: this.#searcherActorUuid,
       searchedActorUuid: this.#searchedActorUuid,
       actorUuid: actor.uuid,
       itemId: item.id,
       amount,
       stackIndex: Math.max(0, toInteger(stackIndex))
-    };
+    });
     try {
       const responsibleGM = getResponsibleGM();
       if (responsibleGM && responsibleGM.id !== game.user?.id) {
@@ -3765,14 +3775,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const amount = Math.max(1, Math.min(available, toInteger(formData.amount)));
     if (!amount) return;
-    const payload = {
+    const payload = this.#prepareSearchOperationPayload({
       searcherActorUuid: this.#searcherActorUuid,
       searchedActorUuid: this.#searchedActorUuid,
       sourceActorUuid: sourceActor.uuid,
       targetActorUuid: targetActor.uuid,
       currencyKey,
       amount
-    };
+    });
 
     try {
       const responsibleGM = getResponsibleGM();
@@ -3790,6 +3800,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #executeSearchCurrencyTransfer(payload, { notify = true } = {}) {
+    payload = this.#prepareSearchOperationPayload(payload);
     const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
     const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
     if (!sourceActor || !targetActor) return false;
@@ -4070,7 +4081,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#quickDisassemblyInProgress = true;
     for (const button of this.element?.querySelectorAll("[data-search-quick-disassembly]") ?? []) button.disabled = true;
     try {
-      const payload = { searcherActorUuid: this.#searcherActorUuid, searchedActorUuid: this.#searchedActorUuid, actorUuid: actor.uuid, itemIds };
+      const payload = this.#prepareSearchOperationPayload({
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid,
+        actorUuid: actor.uuid,
+        itemIds
+      });
       const gm = getResponsibleGM();
       const result = game.user?.isGM && (!gm || gm.id === game.user.id)
         ? await enqueueSearchInventoryOperation(() => performSearchQuickDisassembly(payload, game.user.id))
@@ -4090,10 +4106,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#butcheringInProgress = true;
     button.disabled = true;
     try {
-      const payload = {
+      const payload = this.#prepareSearchOperationPayload({
         searcherActorUuid: this.#searcherActorUuid,
         searchedActorUuid: this.#searchedActorUuid
-      };
+      });
       const responsibleGM = getResponsibleGM();
       if (responsibleGM && responsibleGM.id !== game.user?.id) {
         await requestSearchInventorySocket("butcherActor", payload, responsibleGM);
@@ -4454,6 +4470,15 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
       ...inventory.grid,
       items: (inventory.grid?.items ?? []).map(decorateItem)
     },
+    recovery: inventory.recovery
+      ? {
+        ...inventory.recovery,
+        grid: {
+          ...inventory.recovery.grid,
+          items: (inventory.recovery.grid?.items ?? []).map(decorateItem)
+        }
+      }
+      : null,
     containers: (inventory.containers ?? []).map(container => ({
       ...decorateItem(container),
       grid: {
@@ -4597,6 +4622,7 @@ function collectTradeCatalogItems(inventory = {}) {
     for (const slot of set.slots ?? []) if (!slot.phantom) addItem(slot.item, `weapon:${set.key}:${slot.key}`);
   }
   for (const item of inventory.grid?.items ?? []) addItem(item, "inventory");
+  for (const item of inventory.recovery?.grid?.items ?? []) addItem(item, "recovery");
   for (const container of inventory.containers ?? []) {
     for (const item of container.grid?.items ?? []) addItem(item, `container:${container.id}`);
   }
@@ -5044,11 +5070,17 @@ async function performSearchAuditStart(payload = {}, requesterUserId = "") {
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
   if (!searcherActor || !searchedActor) throw new Error("Search actor not found.");
-  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor, { allowSearchStart: true });
 
   pruneExpiredSearchAudits();
   const auditKey = getSearchAuditKey(sessionId, requesterUserId);
-  if (activeSearchInventoryAudits.has(auditKey)) return { ok: true, idempotent: true };
+  const previous = activeSearchInventoryAudits.get(auditKey);
+  if (previous) {
+    if (previous.searcherActor.uuid !== searcherActor.uuid || previous.searchedActor.uuid !== searchedActor.uuid) {
+      throw new Error("Search session actor mismatch.");
+    }
+    return { ok: true, idempotent: true };
+  }
   activeSearchInventoryAudits.set(auditKey, createSearchAuditRecord({
     sessionId,
     requesterUserId,
@@ -5080,7 +5112,8 @@ async function performSearchAuditCompletion(payload = {}, requesterUserId = "") 
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
   if (!searcherActor) throw new Error("Searching actor not found.");
-  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor,
+    searchedActor ?? { uuid: String(payload.searchedActorUuid ?? "") });
 
   pruneExpiredSearchAudits();
   const auditKey = getSearchAuditKey(sessionId, requesterUserId);
@@ -5752,6 +5785,9 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
   const sourceActor = await resolveActor(payload.sourceActorUuid);
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
+  if (isTradePayload(payload) && !String(payload.tradeSessionId ?? "") && sourceActor.uuid !== targetActor.uuid) {
+    throw new Error("Cross-actor trade requires an active server session.");
+  }
 
   validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
@@ -5770,7 +5806,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     throw new Error(auditLocalize("FALLOUTMAW.AuditApps.ButcheringItemsCanOnlyBeTakenFromThe", "Предметы разделки можно только забирать у обыскиваемой цели."));
   }
   assertSearchTransferableItem(item, { allowButchering: true });
-  const quantity = getTransferItemQuantity(item, payload.quantity);
+  const quantity = getSelectedItemTransferQuantity(item, payload.quantity, payload.sourceStackIndex);
   const sourceQuantityBefore = Math.max(0, getItemQuantity(item));
   const targetParentId = String(payload.targetParentId ?? ROOT_CONTAINER_ID);
   validateTargetParent(targetActor, targetParentId);
@@ -5933,6 +5969,9 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   const sourceActor = await resolveActor(payload.sourceActorUuid);
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
+  if (isTradePayload(payload) && !String(payload.tradeSessionId ?? "") && sourceActor.uuid !== targetActor.uuid) {
+    throw new Error("Cross-actor trade requires an active server session.");
+  }
 
   validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
@@ -5953,7 +5992,10 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   }
   assertSearchTransferableItem(sourceItem, { allowButchering: true });
   assertSearchTransferableItem(targetItem);
-  const quantity = toInteger(payload.quantity);
+  const quantity = getStackTransferQuantity(
+    sourceItem, targetItem, payload.quantity, payload.sourceStackIndex, payload.targetStackIndex
+  );
+  if (!quantity) throw new Error("No stack room.");
   const sourceQuantityBefore = Math.max(0, getItemQuantity(sourceItem));
   const tradePayment = getTradePaymentRequest({
     payload,
@@ -6011,6 +6053,9 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
   const sourceActor = await resolveActor(payload.sourceActorUuid);
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
+  if (isTradePayload(payload) && !String(payload.tradeSessionId ?? "")) {
+    throw new Error("Cross-actor trade requires an active server session.");
+  }
 
   validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
@@ -6747,7 +6792,8 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
 
 async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceItem, quantity = 0, sourceStackIndex = 0 } = {}) {
   assertSearchTransferableItem(sourceItem);
-  const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
+  const transferQuantity = getSelectedItemTransferQuantity(sourceItem, quantity, sourceStackIndex);
+  if (!transferQuantity) throw new Error("No transferable quantity.");
   const itemData = sourceItem.toObject();
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
 
@@ -6814,19 +6860,35 @@ async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceI
   return mutation.createdDocuments;
 }
 
-function validateSearchOrTradeRequester(payload = {}, requesterUserId = "", searcherActor = null, searchedActor = null) {
+function validateSearchOrTradeRequester(payload = {}, requesterUserId = "", searcherActor = null, searchedActor = null, {
+  allowSearchStart = false
+} = {}) {
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (!requester || requester.isGM) return;
+  if (!requester) throw new Error("Inventory requester not found.");
   if (isTradePayload(payload)) {
-    const session = getActiveTradeSession(payload.tradeSessionId);
-    if (session && TRADE_OFFER_SIDES.some(side => canUserControlTradeSessionSide(session, side, requesterUserId))) return;
+    const sessionId = String(payload.tradeSessionId ?? "");
+    if (sessionId) {
+      const session = getActiveTradeSession(sessionId);
+      if (!session) throw new Error("Trade session is no longer active.");
+      if (requester.isGM || canUserParticipateInTradeSession(session, requester.id)) return;
+      throw new Error("No trade session participant permission.");
+    }
+    if (requester.isGM) return;
     if (searcherActor?.testUserPermission?.(requester, "OWNER")) return;
     if (searchedActor?.testUserPermission?.(requester, "OWNER")) return;
     throw new Error("No trade actor owner permission.");
   }
-  if (!searcherActor?.testUserPermission?.(requester, "OWNER")) {
+  if (!requester.isGM && !searcherActor?.testUserPermission?.(requester, "OWNER")) {
     throw new Error("No searcher actor owner permission.");
   }
+  if (allowSearchStart) return;
+  pruneExpiredSearchAudits();
+  if (!hasActiveSearchInventorySession(activeSearchInventoryAudits, {
+    sessionId: payload.searchAuditSessionId,
+    requesterUserId: requester.id,
+    searcherActorUuid: searcherActor?.uuid,
+    searchedActorUuid: searchedActor?.uuid
+  })) throw new Error("Search session is not active for this target.");
 }
 
 function getStackAnchorSelector(anchor = null) {
@@ -6845,6 +6907,11 @@ function getSearchOrTradeAllowedActorUuids(payload = {}, searcherActor = null, s
       : TRADE_OFFER_SIDES
         .filter(side => canUserControlTradeSessionSide(session, side, requesterUserId))
         .flatMap(side => getTradeSessionSideActorUuids(session, side, { includeDisconnected }));
+  } else if (isTradePayload(payload)) {
+    const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+    uuids = [searcherActor, searchedActor]
+      .filter(actor => requester?.isGM || actor?.testUserPermission?.(requester, "OWNER"))
+      .map(actor => actor?.uuid);
   }
   return new Set(uuids.filter(Boolean));
 }
@@ -8236,7 +8303,8 @@ export async function transferItemBetweenActors({
   if (targetRotated !== null && targetRotated !== undefined) {
     foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(targetRotated));
   }
-  const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
+  const transferQuantity = getSelectedItemTransferQuantity(sourceItem, quantity, sourceStackIndex);
+  if (!transferQuantity) throw new Error("No transferable quantity.");
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
   if (allowEquipmentSwap && sourceActor.uuid !== targetActor.uuid && targetMode === "equipment"
     && sourceItem.system?.placement?.mode === "equipment" && transferQuantity === getItemQuantity(sourceItem)) {
@@ -9241,6 +9309,7 @@ function getBulkTransferSourceItemIds(actor) {
   };
 
   addGridItems(inventory.grid);
+  addGridItems(inventory.recovery?.grid);
   addGridItems(inventory.butcheringStorage?.grid);
   for (const container of inventory.containers ?? []) addGridItems(container.grid);
 
@@ -9656,10 +9725,9 @@ export async function stackActorInventoryItem({
   const targetQuantity = getItemQuantity(targetItem);
   const virtualTarget = usesVirtualInventoryStacks(targetItem);
   const virtualSource = usesVirtualInventoryStacks(sourceItem);
-  const availableSpace = virtualTarget
-    ? Math.max(0, getItemMaxStack(targetItem) - getItemStackPartQuantity(targetItem, targetStackIndex))
-    : Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
-  const appliedQuantity = Math.min(Math.max(1, toInteger(quantity)), sourceQuantity, availableSpace);
+  const appliedQuantity = getStackTransferQuantity(
+    sourceItem, targetItem, quantity, sourceStackIndex, targetStackIndex
+  );
   if (!appliedQuantity) throw new Error("No stack room.");
 
   const targetUpdate = virtualTarget
@@ -10105,7 +10173,7 @@ async function requestSearchInventorySocket(action, payload = {}, gm = getRespon
       pendingSearchInventorySocketRequests.delete(requestId);
       reject(new Error("GM did not answer search inventory request."));
     }, action === "quickDisassembly" ? 120000 : SEARCH_INVENTORY_SOCKET_TIMEOUT);
-    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout, responderUserId: gm.id });
   });
 
   game.socket.emit(SEARCH_INVENTORY_SOCKET, {
@@ -10168,7 +10236,7 @@ async function requestTradeInviteSocket(payload = {}, recipientUser = null) {
       pendingSearchInventorySocketRequests.delete(requestId);
       reject(new Error(auditLocalize("FALLOUTMAW.AuditApps.TheActorSOwnerDidNotRespondTo", "Владелец актера не ответил на торговлю.")));
     }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
-    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout, responderUserId: recipientUser.id });
   });
 
   game.socket.emit(SEARCH_INVENTORY_SOCKET, {
@@ -10225,7 +10293,7 @@ async function requestPersonalTradeApprovalSocket(payload = {}, recipientUser = 
       pendingSearchInventorySocketRequests.delete(requestId);
       reject(new Error(auditLocalize("FALLOUTMAW.AuditApps.TheActorSOwnerDidNotRespondTo_947", "Владелец актера не ответил на личную торговлю.")));
     }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
-    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout, responderUserId: recipientUser.id });
   });
 
   game.socket.emit(SEARCH_INVENTORY_SOCKET, {
@@ -10295,8 +10363,26 @@ function broadcastTradeCompletionLock(sessionId = "", locked = false, { render =
   });
 }
 
-async function handleSearchInventorySocketMessage(message = {}) {
+async function handleSearchInventorySocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== SEARCH_INVENTORY_SOCKET_SCOPE) return;
+  const sender = game.users?.get?.(String(senderUserId ?? ""));
+  if (!sender) return;
+  if (["response", "tradeInviteResponse", "personalTradeApprovalResponse"].includes(message.type)) {
+    const pending = pendingSearchInventorySocketRequests.get(message.requestId);
+    if (message.recipientUserId !== game.user?.id || sender.id !== pending?.responderUserId) return;
+  } else if (["request", "tradeInvite", "personalTradeApproval"].includes(message.type)) {
+    if (String(message.requesterUserId ?? "") !== sender.id) return;
+    if (message.payload?.requesterUserId && message.payload.requesterUserId !== sender.id) return;
+    if (message.type !== "request") {
+      const actor = await resolveActor(message.payload?.searcherActorUuid);
+      if (!sender.isGM && !actor?.testUserPermission?.(sender, "OWNER")) return;
+    }
+  } else {
+    if (String(message.senderUserId ?? "") !== sender.id) return;
+    if (["tradeSessionSnapshot", "tradeCompletionLock"].includes(message.type)) {
+      if (!sender.isGM || sender.id !== getResponsibleGM()?.id) return;
+    } else if (!searchInventoryWindow?.canReceiveTradeSocketFrom?.(sender)) return;
+  }
 
   if (message.type === "response") {
     if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;

@@ -1,5 +1,6 @@
 import { localize as auditLocalize, format as auditFormat } from "./i18n.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./actor-inventory-size.mjs";
+import { createActorNonInventoryPlacementValidator, planInventoryRepair } from "../inventory/repair.mjs";
 export { getInventoryGridDimensions, getActorInventoryGridDimensions, actorHasInfiniteRootInventory, getActorRootInventoryGridOptions } from "./actor-inventory-size.mjs";
 import { getCurrencySettings } from "../settings/accessors.mjs";
 import {
@@ -346,10 +347,36 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
       };
     });
 
+  // Keep invalid documents visible until their owner moves them. The normal
+  // grid resolver can make an out-of-bounds item look valid by repacking it
+  // visually without changing its stored placement.
+  const repairPlan = planInventoryRepair(actor.items, { columns, rows }, {
+    rootOptions: getActorRootInventoryGridOptions(actor, ""),
+    isNonInventoryPlacementValid: createActorNonInventoryPlacementValidator(actor, race, actor.items)
+  });
+  const recoveryIds = new Set(repairPlan.repairs.map(repair => repair.itemId));
+  const recoveryItems = allItems.filter(item => recoveryIds.has(item.id));
+  const recoveryColumns = Math.max(4, ...recoveryItems.map(item => getItemFootprint(item, allItems).width));
+  const recovery = {
+    grid: prepareInventoryGridContext(recoveryItems, recoveryColumns, 1, allItems, (item, placement) => ({
+      ...createInventoryItemData(item, allItems, currencies, placement, itemDisplayOptions),
+      gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
+    }), {
+      allowOverflowRows: true,
+      compactRows: true,
+      compactVerticalOffset: true,
+      extraRows: 1,
+      preferredPlacementModes: []
+    })
+  };
+  for (const currentGrid of [grid, ...containers.map(container => container.grid), lockedStorage.grid, butcheringStorage.grid]) {
+    currentGrid.items = currentGrid.items.filter(item => !recoveryIds.has(item.id));
+  }
+
   return {
     equipmentHeading: actor?.type === "construct" ? auditLocalize("FALLOUTMAW.AuditRuntime.R1207", "Строение") : game.i18n.localize("FALLOUTMAW.Common.Equipment"),
     showRootInventory: columns > 0 && rows > 0,
-    showInventoryPane: (columns > 0 && rows > 0) || containers.length > 0 || lockedStorage.grid.items.length > 0,
+    showInventoryPane: (columns > 0 && rows > 0) || containers.length > 0 || lockedStorage.grid.items.length > 0 || recoveryItems.length > 0,
     actorContainers: prepareActorContainerInventoryContext(actor),
     equipmentSlots,
     prosthesisSlots,
@@ -357,6 +384,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     weaponSets,
     naturalWeaponSet,
     containers,
+    recovery,
     butcheringStorage,
     lockedStorage,
     grid

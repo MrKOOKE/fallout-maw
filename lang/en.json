@@ -20,6 +20,32 @@
     }
   },
   "FALLOUTMAW": {
+    "PersonalGeneratorPresets": {
+      "Search": "Search presets",
+      "SearchPlaceholder": "Search…",
+      "Delete": "Delete preset",
+      "DeleteNamed": "Delete preset “{name}”",
+      "DeleteHint": "Delete preset “{name}” from the list? Actors that already use these settings will keep them.",
+      "DeleteError": "Could not delete the preset.",
+      "NoPresets": "No presets yet",
+      "ResultCount": "{count} of {total}",
+      "NoMatches": "No presets found",
+      "NoMatchesHint": "Try another name or clear the search.",
+      "Load": "Load preset",
+      "Save": "Save preset",
+      "Name": "Name",
+      "Preset": "Preset",
+      "SaveHint": "Save all generator settings for reuse with other actors in this world.",
+      "LoadHint": "The preset will replace all current generator settings. Changes are saved automatically.",
+      "Empty": "No presets yet. Configure the generator and choose Save preset.",
+      "GMOnly": "Only the GM can save shared world presets.",
+      "Replace": "Overwrite preset",
+      "ReplaceHint": "A preset named “{name}” already exists. Replace it with the current settings?",
+      "Saved": "Preset “{name}” saved.",
+      "Loaded": "Preset “{name}” loaded.",
+      "SaveError": "Could not save the preset.",
+      "LoadError": "Could not load the preset."
+    },
     "SystemTitle": "Fallout-MaW",
     "Tile": {
       "Tabs": {
@@ -1400,6 +1426,7 @@
       "Hunger": "Hunger",
       "Image": "Image",
       "Inventory": "Inventory",
+      "InventoryRecovery": "Recovery grid",
       "Kg": "kg",
       "Key": "Key",
       "Label": "Name",

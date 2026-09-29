@@ -17,7 +17,7 @@ import {
   INVENTORY_ATOMIC_OPTION,
   INVENTORY_EXPECTED_IDS_OPTION
 } from "./constants.mjs";
-import { validateActorNonInventoryPlacementState } from "./repair.mjs";
+import { planInventoryRepair, validateActorNonInventoryPlacementState } from "./repair.mjs";
 import { assertInventoryConsumptionReservation, CONSUMPTION_RECEIPT_OPTION } from "./consumption-reservation.mjs";
 
 const inventoryActorLock = createActorOperationLock();
@@ -42,6 +42,7 @@ const inventoryActorLock = createActorOperationLock();
  * @param {boolean} [options.render]
  * @param {string} [options.reason]
  * @param {object} [options.documentOptions]
+ * @param {string} [options.allowPartialInventoryRepairItemId] Permit one recovered Item to be extracted while other existing damaged placements remain.
  * @returns {Promise<object>}
  */
 export async function executeInventoryMutation(input, {
@@ -49,7 +50,8 @@ export async function executeInventoryMutation(input, {
   validateLoad = true,
   render = true,
   reason = "inventory",
-  documentOptions = {}
+  documentOptions = {},
+  allowPartialInventoryRepairItemId = ""
 } = {}) {
   const plans = normalizeInventoryMutationPlans(input);
   if (!plans.length) return createEmptyMutationResult(reason);
@@ -64,7 +66,8 @@ export async function executeInventoryMutation(input, {
       validateLoad,
       render,
       reason,
-      documentOptions
+      documentOptions,
+      allowPartialInventoryRepairItemId
     })
   );
 }
@@ -159,14 +162,21 @@ export function expandInventoryDeleteIds(items, deleteIds = []) {
  * Validate topology, placement, capacity and Actor carrying load for a
  * projected collection.
  */
-export function validateActorInventoryState(actor, projectedItems, { validateLoad = true } = {}) {
+export function validateActorInventoryState(actor, projectedItems, {
+  validateLoad = true,
+  allowPartialInventoryRepairItemId = "",
+  previousItems = null
+} = {}) {
   const raceId = String(actor?.system?.creature?.raceId ?? "");
   const race = getCreatureOptions().races.find(entry => String(entry.id) === raceId);
   const dimensions = getActorInventoryGridDimensions(actor, race);
   const treeValidation = validateInventoryTree(projectedItems, dimensions, {
     rootOptions: getActorRootInventoryGridOptions(actor, "")
   });
-  if (!treeValidation.valid) throw createInventoryValidationError(treeValidation);
+  if (!treeValidation.valid && !isPartialInventoryRepairImprovement(
+    previousItems ?? getActorItems(actor), projectedItems, dimensions,
+    getActorRootInventoryGridOptions(actor, ""), allowPartialInventoryRepairItemId
+  )) throw createInventoryValidationError(treeValidation);
   const nonInventoryValidation = validateActorNonInventoryPlacementState(
     actor,
     projectedItems,
@@ -190,12 +200,23 @@ export function validateActorInventoryState(actor, projectedItems, { validateLoa
   return true;
 }
 
+function isPartialInventoryRepairImprovement(previousItems, projectedItems, dimensions, rootOptions, selectedItemId) {
+  const itemId = String(selectedItemId ?? "");
+  if (!itemId) return false;
+  const options = { rootOptions };
+  const before = new Set(planInventoryRepair(previousItems, dimensions, options).repairs.map(repair => repair.itemId));
+  if (!before.has(itemId)) return false;
+  const after = new Set(planInventoryRepair(projectedItems, dimensions, options).repairs.map(repair => repair.itemId));
+  return !after.has(itemId) && [...after].every(otherId => before.has(otherId));
+}
+
 async function executePreparedMutation(plans, {
   validate,
   validateLoad,
   render,
   reason,
-  documentOptions
+  documentOptions,
+  allowPartialInventoryRepairItemId
 }) {
   const operationId = createOperationId();
   assertMutationPlansFresh(plans);
@@ -207,7 +228,11 @@ async function executePreparedMutation(plans, {
   }
   if (validate) {
     for (const plan of plans) {
-      validateActorInventoryState(plan.actor, plan.projectedItems, { validateLoad });
+      validateActorInventoryState(plan.actor, plan.projectedItems, {
+        validateLoad,
+        allowPartialInventoryRepairItemId,
+        previousItems: plan.snapshots
+      });
     }
   }
 
@@ -228,7 +253,10 @@ async function executePreparedMutation(plans, {
   let results;
   try {
     results = await foundry.documents.modifyBatch(operations);
-    assertCompleteBatchResults(results, operationMeta, plans, { validateLoad });
+    assertCompleteBatchResults(results, operationMeta, plans, {
+      validateLoad,
+      allowPartialInventoryRepairItemId
+    });
   } catch (error) {
     const recoveryError = await recoverPartialInventoryMutation(plans, {
       operationId, reason,
@@ -596,7 +624,10 @@ function sanitizeInventoryDocumentOptions(options = {}) {
   return forwarded;
 }
 
-function assertCompleteBatchResults(results, operationMeta, plans, { validateLoad = true } = {}) {
+function assertCompleteBatchResults(results, operationMeta, plans, {
+  validateLoad = true,
+  allowPartialInventoryRepairItemId = ""
+} = {}) {
   if (
     !Array.isArray(results)
     || results.length > operationMeta.length
@@ -636,6 +667,7 @@ function assertCompleteBatchResults(results, operationMeta, plans, { validateLoa
   try {
     assertCommittedInventoryState(plans, {
       validateLoad,
+      allowPartialInventoryRepairItemId,
       // A complete modifyBatch result is the server acknowledgement for each
       // Item write. Its client-side Document can contain a normalized version
       // of an ObjectField, so only compare exact requested values when Foundry
@@ -656,7 +688,8 @@ function assertCompleteBatchResults(results, operationMeta, plans, { validateLoa
 
 function assertCommittedInventoryState(plans, {
   validateLoad = true,
-  verifyItemUpdateFields = true
+  verifyItemUpdateFields = true,
+  allowPartialInventoryRepairItemId = ""
 } = {}) {
   for (const plan of plans) {
     const currentItems = getActorItems(plan.actor);
@@ -674,7 +707,11 @@ function assertCommittedInventoryState(plans, {
     if (verifyItemUpdateFields) assertCommittedItemUpdates(plan, currentById);
     assertCommittedEffects(plan, { verifyFields: verifyItemUpdateFields });
     assertCommittedActorUpdate(plan);
-    validateActorInventoryState(plan.actor, currentItems, { validateLoad });
+    validateActorInventoryState(plan.actor, currentItems, {
+      validateLoad,
+      allowPartialInventoryRepairItemId,
+      previousItems: plan.snapshots
+    });
   }
 }
 

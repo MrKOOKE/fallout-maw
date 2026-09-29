@@ -267,5 +267,9 @@
   </div>
   <footer class="fallout-maw-pg-block-footer">
     <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> {{localize 'FALLOUTMAW.AuditTemplates.Texta419379aee1d'}}</button>
+    <div class="fallout-maw-pg-preset-actions">
+      <button type="button" data-action="loadPreset" title="{{localize 'FALLOUTMAW.PersonalGeneratorPresets.LoadHint'}}"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> {{localize 'FALLOUTMAW.PersonalGeneratorPresets.Load'}}</button>
+      <button type="button" data-action="savePreset" {{#unless canSavePreset}}disabled{{/unless}} title="{{#if canSavePreset}}{{localize 'FALLOUTMAW.PersonalGeneratorPresets.SaveHint'}}{{else}}{{localize 'FALLOUTMAW.PersonalGeneratorPresets.GMOnly'}}{{/if}}"><i class="fa-solid fa-bookmark" aria-hidden="true"></i> {{localize 'FALLOUTMAW.PersonalGeneratorPresets.Save'}}</button>
+    </div>
   </footer>
 </div>

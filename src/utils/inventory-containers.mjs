@@ -585,7 +585,7 @@ export function getContainerSpecialGridBlocks(itemOrSystem = null) {
 export function getContainerInventoryGridOptions(itemOrSystem = null) {
   const dimensions = getContainerDimensions(itemOrSystem);
   const extraBlocks = getContainerSpecialGridBlocks(itemOrSystem);
-  if (!extraBlocks.length) return { ...dimensions };
+  if (!extraBlocks.length) return { ...dimensions, originShiftX: 0, originShiftY: 0 };
 
   const baseZone = {
     id: "base",
@@ -625,6 +625,8 @@ export function getContainerInventoryGridOptions(itemOrSystem = null) {
   return {
     columns,
     rows,
+    originShiftX,
+    originShiftY,
     baseColumns: dimensions.columns,
     baseRows: dimensions.rows,
     zones

@@ -327,6 +327,25 @@
         </section>
         {{/each}}
 
+        {{#if inventory.recovery.grid.items.length}}
+        <section class="fallout-maw-container-section fallout-maw-inventory-recovery-section" data-inventory-recovery-section>
+          <div class="fallout-maw-panel-header fallout-maw-container-header" data-inventory-block-header>
+            <h2 class="fallout-maw-container-overview-name">{{localize "FALLOUTMAW.Common.InventoryRecovery"}}</h2>
+          </div>
+          <div class="fallout-maw-contents-transfer-grid-scroll" data-scroll-key="inventory-recovery">
+            <div class="fallout-maw-inventory-grid has-phantom-items" data-inventory-recovery-grid style="{{inventory.recovery.grid.style}}">
+              {{#each inventory.recovery.grid.items}}
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item phantom {{#if placement.rotated}}rotated{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-inventory-grid-item data-item-id="{{id}}" data-tooltip-item="{{id}}" data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="{{parentId}}" style="{{gridStyle}}" title="{{name}}">
+                <img src="{{img}}" alt="{{name}}">
+                {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
+                {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+              </article>
+              {{/each}}
+            </div>
+          </div>
+        </section>
+        {{/if}}
+
         {{#with inventory.lockedStorage}}
         {{#if grid.items.length}}
         <section class="fallout-maw-container-section fallout-maw-locked-storage-section" data-contents-transfer-zone data-inventory-parent-id="{{id}}">

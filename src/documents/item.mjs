@@ -29,15 +29,10 @@ import {
   INVENTORY_ATOMIC_OPTION,
   INVENTORY_EXPECTED_IDS_OPTION
 } from "../inventory/constants.mjs";
-import { validateActorNonInventoryPlacementState } from "../inventory/repair.mjs";
-import { getCreatureOptions, getPreparedRuntimeSettings } from "../settings/accessors.mjs";
+import { planInventoryRepair, validateActorNonInventoryPlacementState } from "../inventory/repair.mjs";
+import { getCreatureOptions } from "../settings/accessors.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
 import { handleItemDamageUpdate, prepareItemDamageUpdate } from "../combat/damage-hub.mjs";
-import {
-  cleanBooleanSlotSelections,
-  getCreatureEquipmentSlotSelectionKeys,
-  getCreatureWeaponSlotSelectionKeys
-} from "../utils/equipment-slots.mjs";
 import {
   AbilityDataModel,
   DiseaseDataModel,
@@ -49,6 +44,7 @@ import { getPreviewItemValidationOptions } from "./token-clone-initialization.mj
 import { completeInventoryContentsRender } from "../utils/inventory-render-batch.mjs";
 import { assertBatchPreflightIds } from "../utils/document-batch-integrity.mjs";
 import { assertInventoryConsumptionReservation } from "../inventory/consumption-reservation.mjs";
+import { createContainerGridOriginShiftUpdates } from "../inventory/container-grid-origin.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 const REUSABLE_ITEM_MODELS = new Set([AbilityDataModel, DiseaseDataModel, GearDataModel, TraumaDataModel]);
@@ -63,8 +59,9 @@ export class FalloutMaWItem extends Item {
   }
 
   static async updateDocuments(updates = [], operation = {}) {
-    await assertItemReservationOperations(updates.map(update => update._id), operation);
-    const documents = await super.updateDocuments(updates, operation);
+    const preparedUpdates = await prepareContainerOriginShiftOperation(updates, operation);
+    await assertItemReservationOperations(preparedUpdates.map(update => update._id), operation);
+    const documents = await super.updateDocuments(preparedUpdates, operation);
     assertBatchPreflightIds(operation, "update");
     if (operation.dryRun) assertAtomicInventoryOperationIds(operation.updates, operation, "update");
     return documents;
@@ -181,7 +178,6 @@ export class FalloutMaWItem extends Item {
       return cancelInventoryDocumentOperation(this, options, "create");
     }
     prepareItemDamageUpdate(this, data, options, { operation: "create" });
-    this.updateSource(getCleanSlotRequirementSource(this));
     if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
       ui.notifications?.warn?.(auditLocalize("FALLOUTMAW.AuditRuntime.R0861", "Травмы создаются только системой при получении повреждения."));
       return cancelInventoryDocumentOperation(this, options, "create");
@@ -278,7 +274,8 @@ export class FalloutMaWItem extends Item {
 
     preserveLockedAbilityAttackFunctionTypes(this, changes);
     const requestedSource = foundry.utils.mergeObject(this.toObject(), changes, { inplace: false });
-    Object.assign(changes, getSlotRequirementDeletionUpdates(requestedSource));
+    // Slot requirements belong to the Item. A different world preset can make
+    // them unavailable for equipping, but must not erase them on an unrelated edit.
     if (isContainerItem(requestedSource)) {
       foundry.utils.setProperty(changes, "system.quantity", 1);
       foundry.utils.setProperty(changes, "system.maxStack", 1);
@@ -322,6 +319,10 @@ export class FalloutMaWItem extends Item {
     ) {
       const validation = validateProjectedActorInventoryUpdate(this, changes);
       if (!validation.valid) {
+        if (isRecoverableContainerResize(this, changes, validation)) {
+          options.falloutMawContainerResize = true;
+          return undefined;
+        }
         warnInventoryValidationFailure(validation);
         return false;
       }
@@ -428,6 +429,34 @@ async function getInventoryOperationActor(operation = {}) {
   return parent;
 }
 
+async function prepareContainerOriginShiftOperation(updates, operation) {
+  // Inventory mutations already supply a complete atomic projection. A normal
+  // container edit needs its direct contents shifted in the same Item batch.
+  if (operation?.[INVENTORY_ATOMIC_OPTION] === true || updates.length !== 1) return updates;
+  const actor = await getInventoryOperationActor(operation);
+  if (!actor) return updates;
+  const [update] = updates;
+  const container = actor.items?.get?.(update?._id);
+  if (!container || !isContainerItem(container)) return updates;
+  const after = foundry.utils.mergeObject(container.toObject(), update, {
+    applyOperators: true,
+    inplace: false
+  });
+  const shiftedContents = createContainerGridOriginShiftUpdates(container, after, actor.items);
+  if (!shiftedContents.length) return updates;
+
+  const preparedUpdates = [update, ...shiftedContents];
+  const validation = validateProjectedActorInventoryUpdates(actor, preparedUpdates);
+  if (!validation.valid && !isRecoverableContainerResize(container, update, validation, shiftedContents)) {
+    warnInventoryValidationFailure(validation);
+    return [];
+  }
+  operation[INVENTORY_ATOMIC_OPTION] = true;
+  operation[INVENTORY_EXPECTED_IDS_OPTION] = preparedUpdates.map(change => change._id);
+  operation.falloutMawContainerResize = true;
+  return preparedUpdates;
+}
+
 function normalizeDeletionIds(ids = []) {
   if (!Array.isArray(ids)) throw new TypeError("Item deletion IDs must be an Array.");
   const normalized = ids.map(id => String(id ?? ""));
@@ -504,16 +533,55 @@ function shouldValidateProjectedInventoryUpdate(item, changes = {}) {
   });
 }
 
+function isRecoverableContainerResize(item, changes, validation, additionalUpdates = []) {
+  if (item.parent?.documentName !== "Actor" || validation.valid) return false;
+  const paths = Object.keys(foundry.utils.flattenObject(changes));
+  if (!paths.length || !paths.every(path => (
+    path === "_id"
+    || path === "system.container.columns"
+    || path === "system.container.rows"
+    || path.startsWith("system.functions.container.specialGrids.")
+    || path === "system.quantity"
+    || path === "system.maxStack"
+    || path === "system.stackParts"
+  ))) return false;
+
+  // A previous shrink can already leave another bag invalid. Ignore only the
+  // documents that were in recovery before this edit, then validate the new
+  // projection. The edited bag may add its own recoverable overflow; it must
+  // not introduce an unrelated placement, load, or topology failure.
+  const actor = item.parent;
+  const raceId = String(actor.system?.creature?.raceId ?? "");
+  const race = getCreatureOptions().races.find(entry => String(entry.id) === raceId) ?? null;
+  const dimensions = getActorInventoryGridDimensions(actor, race);
+  const rootOptions = getActorRootInventoryGridOptions(actor, "");
+  const existingRecoveryIds = new Set(planInventoryRepair(actor.items, dimensions, { rootOptions })
+    .repairs.map(repair => repair.itemId));
+  const remainingValidation = validateProjectedActorInventoryUpdates(actor, [
+    { _id: item.id, ...changes }, ...additionalUpdates
+  ], { excludedItemIds: existingRecoveryIds });
+  return remainingValidation.valid || (
+    remainingValidation.reason === "no-space"
+    && remainingValidation.parentId === item.id
+  );
+}
+
 function validateProjectedActorInventoryUpdate(item, changes = {}) {
   const actor = item.parent;
+  return validateProjectedActorInventoryUpdates(actor, [{ _id: item.id, ...changes }]);
+}
+
+function validateProjectedActorInventoryUpdates(actor, updates = [], { excludedItemIds = new Set() } = {}) {
+  const updatesById = new Map(updates.map(update => [update._id, update]));
   const projectedItems = Array.from(actor.items ?? [], candidate => {
     const source = candidate.toObject();
-    if (candidate.id !== item.id) return source;
-    return foundry.utils.mergeObject(source, changes, {
+    const change = updatesById.get(candidate.id);
+    if (!change) return source;
+    return foundry.utils.mergeObject(source, change, {
       applyOperators: true,
       inplace: false
     });
-  });
+  }).filter(candidate => !excludedItemIds.has(candidate._id));
   const raceId = String(actor.system?.creature?.raceId ?? "");
   const race = getCreatureOptions().races.find(entry => String(entry.id) === raceId) ?? null;
   const treeValidation = validateInventoryTree(projectedItems, getActorInventoryGridDimensions(actor, race), {
@@ -686,46 +754,6 @@ function hasStoredStackPartPlacement(part) {
   return Number(part?.x) > 0 && Number(part?.y) > 0;
 }
 
-function getCleanSlotRequirementSource(itemOrData) {
-  const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
-  if (!hasSlotRequirementSource(source)) return {};
-  const { creatureOptions } = getPreparedRuntimeSettings();
-  return {
-    system: {
-      occupiedSlots: cleanBooleanSlotSelections(
-        source.system?.occupiedSlots ?? {},
-        getCreatureEquipmentSlotSelectionKeys(creatureOptions)
-      ),
-      weaponSlotRequirement: {
-        slots: cleanBooleanSlotSelections(
-          source.system?.weaponSlotRequirement?.slots ?? {},
-          getCreatureWeaponSlotSelectionKeys(creatureOptions)
-        )
-      }
-    }
-  };
-}
-
-function getSlotRequirementDeletionUpdates(itemOrData) {
-  const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
-  if (!hasSlotRequirementSource(source)) return {};
-  // Slot validity depends on world settings, not on the Item update. Keep
-  // cleaning stale selections after settings changes without rebuilding all
-  // race data (including natural Items and needs) for each durability change.
-  const { creatureOptions } = getPreparedRuntimeSettings();
-  const validEquipmentKeys = getCreatureEquipmentSlotSelectionKeys(creatureOptions);
-  const validWeaponKeys = getCreatureWeaponSlotSelectionKeys(creatureOptions);
-  return {
-    ...getSlotRequirementRecordDeletionUpdates("system.occupiedSlots", source.system?.occupiedSlots, validEquipmentKeys),
-    ...getSlotRequirementRecordDeletionUpdates("system.weaponSlotRequirement.slots", source.system?.weaponSlotRequirement?.slots, validWeaponKeys)
-  };
-}
-
-function hasSlotRequirementSource(source = {}) {
-  return Object.keys(source.system?.occupiedSlots ?? {}).length > 0
-    || Object.keys(source.system?.weaponSlotRequirement?.slots ?? {}).length > 0;
-}
-
 async function assertItemReservationOperations(ids, operation = {}) {
   const actor = await getInventoryOperationActor(operation);
   const collection = actor?.items
@@ -735,13 +763,4 @@ async function assertItemReservationOperations(ids, operation = {}) {
     ? Array.from(collection.contents ?? collection.values?.() ?? collection)
     : ids.map(id => collection.get?.(id)).filter(Boolean);
   for (const document of documents) assertInventoryConsumptionReservation(document, operation);
-}
-
-function getSlotRequirementRecordDeletionUpdates(path, slots = {}, validKeys = new Set()) {
-  const updates = {};
-  for (const [key, selected] of Object.entries(slots ?? {})) {
-    if (selected && validKeys.has(key)) continue;
-    updates[`${path}.${key}`] = globalThis._del;
-  }
-  return updates;
 }

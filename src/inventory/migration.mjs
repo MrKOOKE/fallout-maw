@@ -33,6 +33,7 @@ export function registerInventoryRepairHooks() {
     if (
       isRepairOperation(options)
       || options?.[INVENTORY_ATOMIC_OPTION] === true
+      || options?.falloutMawContainerResize === true
       || !isInventoryRelevantItemUpdate(changes)
     ) return;
     queueInventoryRepair(item?.parent);
@@ -117,7 +118,10 @@ export async function repairActorInventory(actor, {
 
     const expectedItems = Array.from(actor.items ?? [], cloneInventoryItemData);
     const resolvedRace = race ?? getActorRace(actor);
-    const plan = await planActorInventoryRepair(actor, resolvedRace, { items: expectedItems });
+    const plan = await planActorInventoryRepair(actor, resolvedRace, {
+      items: expectedItems,
+      preserveContainerOverflow: automatic
+    });
     if (!plan.updates.length) {
       return { actor, changed: false, ...plan };
     }

@@ -26,6 +26,7 @@ import {
   isInstalledConstructPartItem
 } from "../utils/construct-parts.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { isAuthenticatedDroppedItemsSocketMessage } from "./dropped-items-socket-auth.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 
 export const DROPPED_ITEMS_FLAG = "droppedItems";
@@ -302,7 +303,7 @@ async function requestDroppedItemsSocket(action = "", payload = {}) {
       pendingDroppedItemsSocketRequests.delete(requestId);
       reject(new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1133", "GM не ответил на запрос операции с выброшенными предметами.")));
     }, DROPPED_ITEMS_SOCKET_TIMEOUT);
-    pendingDroppedItemsSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingDroppedItemsSocketRequests.set(requestId, { resolve, reject, timeout, responderUserId: gm.id });
   });
   game.socket.emit(DROPPED_ITEMS_SOCKET, {
     scope: DROPPED_ITEMS_SOCKET_SCOPE,
@@ -316,12 +317,15 @@ async function requestDroppedItemsSocket(action = "", payload = {}) {
   return promise;
 }
 
-async function handleDroppedItemsSocketMessage(message = {}) {
+async function handleDroppedItemsSocketMessage(message = {}, senderUserId = "") {
   if (message.scope !== DROPPED_ITEMS_SOCKET_SCOPE) return;
+  if (!isAuthenticatedDroppedItemsSocketMessage(message, senderUserId, {
+    users: game.users,
+    currentUserId: game.user?.id,
+    pendingRequests: pendingDroppedItemsSocketRequests
+  })) return;
   if (message.type === "response") {
-    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
     const pending = pendingDroppedItemsSocketRequests.get(message.requestId);
-    if (!pending) return;
     window.clearTimeout(pending.timeout);
     pendingDroppedItemsSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);

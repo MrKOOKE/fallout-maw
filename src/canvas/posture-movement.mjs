@@ -144,9 +144,16 @@ function collectActorPostureUpdates(updatesByScene, actor, action = "walk") {
 }
 
 async function applyScenePostureUpdates(updatesByScene) {
-  await Promise.all(Array.from(updatesByScene, ([scene, updates]) => (
-    scene.updateEmbeddedDocuments("Token", updates, { [AUTOMATIC_POSTURE_OPTION]: true })
-  )));
+  await Promise.all(Array.from(updatesByScene, async ([scene, updates]) => {
+    const documents = await scene.updateEmbeddedDocuments("Token", updates, { [AUTOMATIC_POSTURE_OPTION]: true });
+    const confirmed = new Map((documents ?? []).map(document => [document.id, document]));
+    if (updates.some(update => {
+      const document = confirmed.get(update._id);
+      return !document || normalizeMovementAction(document._source?.movementAction) !== update.movementAction;
+    })) {
+      throw new Error("Posture update was cancelled or could not be confirmed.");
+    }
+  }));
 }
 
 function configureTokenMovementActions() {

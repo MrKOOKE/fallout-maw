@@ -696,7 +696,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       .filter(item => item.type === "ability")
       .map(item => item.id);
     if (abilityItemIds.length) await this.actor.deleteEmbeddedDocuments("Item", abilityItemIds);
-    await this.#applyDraftToActor();
+    if (!(await this.#applyDraftToActor())) return false;
     await this.actor.setFlag(FALLOUT_MAW.id, ADVANCEMENT_COMMIT_FLAG, {
       level: this.#draft.level,
       characteristics: foundry.utils.deepClone(this.#draft.characteristics),
@@ -2905,10 +2905,24 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       .catch(error => {
         console.error(`${FALLOUT_MAW.id} | Failed to commit advancement repeat update`, error);
       })
-      .then(() => this.actor.update(actorUpdate, {
-        render: false,
-        [ADVANCEMENT_UPDATE_SOURCE_OPTION]: this.id
-      }));
+      .then(async () => {
+        try {
+          const updated = await this.actor.update(actorUpdate, {
+            render: false,
+            [ADVANCEMENT_UPDATE_SOURCE_OPTION]: this.id
+          });
+          if (updated) return updated;
+          // A native preUpdate veto returns no document. Discard the attempted
+          // investment so closing the window cannot silently apply it later.
+          this.#syncDraftFromActor();
+          this.#rebuildSkillUpgradeCostLedger();
+          return false;
+        } catch (error) {
+          this.#syncDraftFromActor();
+          this.#rebuildSkillUpgradeCostLedger();
+          throw error;
+        }
+      });
     this.#repeatCommitPromise = commit;
     return commit;
   }

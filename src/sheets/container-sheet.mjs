@@ -63,6 +63,7 @@ import {
 } from "../utils/inventory-grid-dom.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { canStackInventoryItems } from "../inventory/stacking.mjs";
+import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -470,6 +471,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const tooltip = this.#itemTooltipElement;
     const anchor = this.#itemTooltipAnchor;
     if (!tooltip || !anchor?.isConnected) return;
+
+    const overlayZIndex = getOverlayBaseZIndex(this.element) + 2;
+    tooltip.style.zIndex = String(overlayZIndex);
+    reserveOverlayZIndex(overlayZIndex + 1);
 
     const ownerDocument = tooltip.ownerDocument;
     const view = ownerDocument.defaultView ?? window;
@@ -1483,6 +1488,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
     document.body.append(menu);
+    this.bringToFront();
+    const overlayZIndex = getOverlayBaseZIndex(this.element) + 2;
+    menu.style.zIndex = String(overlayZIndex);
+    reserveOverlayZIndex(overlayZIndex + 1);
 
     menu.addEventListener("click", async clickEvent => {
       if (this.#searchContextIsActive?.() === false) { menu.remove(); return; }

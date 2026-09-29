@@ -40,7 +40,8 @@ export async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, r
   sourceStackIndex = 0,
   rotatedItemData = null,
   render = true,
-  renderParts = []
+  renderParts = [],
+  allowPartialInventoryRepairItemId = ""
 } = {}) {
   const updateData = planOwnedInventoryItemInInventoryFast(actor, sourceItem, requestedPlacement, {
     parentId,
@@ -58,6 +59,7 @@ export async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, r
   }, {
     reason: "move",
     render,
+    allowPartialInventoryRepairItemId,
     documentOptions: parts.length ? { [INVENTORY_RENDER_PARTS_OPTION]: parts } : {}
   });
   return actor.items.get(sourceItem.id) ?? sourceItem;

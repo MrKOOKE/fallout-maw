@@ -106,14 +106,14 @@ async function migrateConsciousnessActor(actor, { label = "" } = {}) {
         pendingLegacyMigration.progress
       );
       if (!valueData) return { migrated: 0, failed: 0 };
-      await actor.update({
+      await persistConsciousnessMigration(actor, {
         [`flags.${SYSTEM_ID}.-=${LEGACY_SHOCK_FLAG}`]: null,
         [`flags.${SYSTEM_ID}.-=${LEGACY_CONSCIOUSNESS_MIGRATION_PENDING_FLAG}`]: null,
         [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.min`]: 0,
         [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`]: valueData.value,
         [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.spent`]: valueData.spent,
         [CONSCIOUSNESS_RECOVERY_TARGET_PATH]: valueData.recoveryTarget
-      }, createPersistentMigrationOptions());
+      });
       return { migrated: 1, failed: 0 };
     }
 
@@ -130,12 +130,12 @@ async function migrateConsciousnessActor(actor, { label = "" } = {}) {
     const resource = actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
     const valueData = buildConsciousnessUpdateData(resource, 0);
     if (!valueData) return { migrated: 0, failed: 0 };
-    await actor.update({
+    await persistConsciousnessMigration(actor, {
       [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.min`]: 0,
       [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`]: valueData.value,
       [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.spent`]: valueData.spent,
       [CONSCIOUSNESS_RECOVERY_TARGET_PATH]: valueData.recoveryTarget
-    }, createPersistentMigrationOptions());
+    });
     return { migrated: 1, failed: 0 };
   } catch (error) {
     console.error(`${SYSTEM_ID} | Consciousness migration failed for ${label}`, error);
@@ -150,6 +150,17 @@ function getPendingLegacyConsciousnessMigration(actor) {
   return {
     progress: Math.max(0, Math.trunc(Number(pending.progress) || 0))
   };
+}
+
+async function persistConsciousnessMigration(actor, updates) {
+  await actor.update(updates, createPersistentMigrationOptions());
+  for (const [path, expected] of Object.entries(updates)) {
+    const actual = path.replace(".-=", ".").split(".")
+      .reduce((value, key) => value?.[key], actor._source);
+    if (path.includes(".-=") ? actual !== undefined : actual !== expected) {
+      throw new Error("Consciousness migration update was cancelled or changed.");
+    }
+  }
 }
 
 function hasStoredConsciousness(actor) {

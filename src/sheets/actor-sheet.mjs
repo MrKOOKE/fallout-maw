@@ -156,10 +156,10 @@ import { openButcheringConfig } from "../apps/butchering-config.mjs";
 import { openConstructStructure } from "../apps/construct-structure.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
-import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { executeInventoryMutation, validateActorInventoryState } from "../inventory/mutation.mjs";
 import { moveOwnedInventoryItemInInventoryFast } from "../inventory/movement.mjs";
 import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
-import { repairActorInventory } from "../inventory/migration.mjs";
+import { planInventoryRepair } from "../inventory/repair.mjs";
 import { canStackInventoryItems } from "../inventory/stacking.mjs";
 import { openActorFactionConfig } from "../apps/faction-settings-config.mjs";
 import {
@@ -910,11 +910,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     ) {
       const updateData = createItemStackPartMergeUpdate(dropped.item, sourceStackIndex, targetStackIndex, getItemQuantity(itemData));
       if (!updateData) return null;
-      if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+      const recoveryItemId = this.#getRecoveryItemId(dropped.item);
+      if (!this.#validateProjectedInventoryState({ updates: [updateData] }, { recoveryItemId })) return null;
       await executeInventoryMutation({
         actor: this.actor,
         updates: [updateData]
-      }, { reason: "stack" });
+      }, { reason: "stack", allowPartialInventoryRepairItemId: recoveryItemId });
       return this.actor.items.get(dropped.item.id) ?? null;
     }
     const targetItem = (
@@ -2600,6 +2601,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (detachedSlotId === null) return null;
 
     if (placement.mode === "inventory" || placement.mode === LOCKED_STORAGE_PLACEMENT_MODE) {
+      const recoveryItemId = this.#getRecoveryItemId(item);
       const itemData = item.toObject();
       foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(placement.rotated));
       if (usesVirtualInventoryStacks(item)) {
@@ -2617,13 +2619,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         sourceStackIndex,
         rotatedItemData: itemData,
         render: true,
-        renderParts: sameInventoryContext ? ["inventory"] : []
+        renderParts: sameInventoryContext ? ["inventory"] : [],
+        allowPartialInventoryRepairItemId: recoveryItemId
       });
       if (fastMoved) {
         if (detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
         return fastMoved;
       }
-      const moved = await this.#insertItemIntoInventory(itemData, placement, { sourceItem: item, targetItem, parentId, sourceStackIndex });
+      const moved = await this.#insertItemIntoInventory(itemData, placement, {
+        sourceItem: item, targetItem, parentId, sourceStackIndex, recoveryItemId
+      });
       if (moved && detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
       return moved;
     }
@@ -2759,6 +2764,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #stackDroppedItemQuantity(sourceItem, itemData, targetItem, quantity, sourceStackIndex = 0, targetStackIndex = null) {
     const transferQuantity = Math.max(1, toInteger(quantity));
     const sourceOwned = sourceItem?.parent === this.actor;
+    const recoveryItemId = sourceOwned ? this.#getRecoveryItemId(sourceItem) : "";
     const sourceQuantity = Math.max(1, getItemQuantity(usesVirtualInventoryStacks(itemData) ? itemData : (sourceOwned ? sourceItem : itemData)));
     const targetQuantity = getItemQuantity(targetItem);
     const availableSpace = usesVirtualInventoryStacks(targetItem)
@@ -2790,12 +2796,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       }
     }
 
-    if (!this.#validateProjectedInventoryState({ updates, deletes })) return null;
+    if (!this.#validateProjectedInventoryState({ updates, deletes }, { recoveryItemId })) return null;
     await executeInventoryMutation({
       actor: this.actor,
       updates,
       deletes
-    }, { reason: "stack" });
+    }, { reason: "stack", allowPartialInventoryRepairItemId: recoveryItemId });
     return this.actor.items.get(targetItem.id) ?? null;
   }
 
@@ -2864,9 +2870,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return mutation.createdDocuments;
   }
 
-  async #insertItemIntoInventory(itemData, requestedPlacement, { sourceItem = null, targetItem = null, parentId = ROOT_CONTAINER_ID, sourceStackIndex = 0 } = {}) {
+  async #insertItemIntoInventory(itemData, requestedPlacement, {
+    sourceItem = null, targetItem = null, parentId = ROOT_CONTAINER_ID,
+    sourceStackIndex = 0, recoveryItemId = ""
+  } = {}) {
     if (usesVirtualInventoryStacks(itemData)) {
-      return this.#insertVirtualStackItemIntoInventory(itemData, requestedPlacement, { sourceItem, targetItem, parentId, sourceStackIndex });
+      return this.#insertVirtualStackItemIntoInventory(itemData, requestedPlacement, {
+        sourceItem, targetItem, parentId, sourceStackIndex, recoveryItemId
+      });
     }
 
     const maxStack = getItemMaxStack(itemData);
@@ -2960,7 +2971,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       updates: [...targetUpdates, ...(sourceUpdate ? [sourceUpdate] : [])],
       deletes: (!sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [],
       creates: createData
-    })) return null;
+    }, { recoveryItemId })) return null;
 
     const updates = [...targetUpdates, ...(sourceUpdate ? [sourceUpdate] : [])];
     const deletes = (!sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [];
@@ -2969,7 +2980,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       updates,
       deletes,
       creates: createData
-    }, { reason: sourceItem ? "move" : "insert" });
+    }, {
+      reason: sourceItem ? "move" : "insert",
+      allowPartialInventoryRepairItemId: recoveryItemId
+    });
     if (createData.length) return mutation.createdDocuments;
     if (sourceUpdate) return this.actor.items.get(sourceItem.id) ?? null;
     if (targetUpdates.length) return this.actor.items.get(targetUpdates[0]._id) ?? null;
@@ -2980,7 +2994,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     sourceItem = null,
     targetItem = null,
     parentId = ROOT_CONTAINER_ID,
-    sourceStackIndex = 0
+    sourceStackIndex = 0,
+    recoveryItemId = ""
   } = {}) {
     const quantity = Math.max(1, getItemQuantity(itemData));
     const storedParentId = this.#getStoredInventoryParentId(parentId);
@@ -2996,11 +3011,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && sourceItem.system?.placement?.mode === this.#getInventoryPlacementModeForParent(parentId)
     ) {
       const placementUpdate = createItemStackPartPlacementUpdate(sourceItem, sourceStackIndex, preferredPlacement);
-      if (!placementUpdate || !this.#validateProjectedInventoryState({ updates: [placementUpdate] })) return null;
+      if (!placementUpdate || !this.#validateProjectedInventoryState({ updates: [placementUpdate] }, { recoveryItemId })) return null;
       await executeInventoryMutation({
         actor: this.actor,
         updates: [placementUpdate]
-      }, { reason: "move-stack" });
+      }, { reason: "move-stack", allowPartialInventoryRepairItemId: recoveryItemId });
       return this.actor.items.get(sourceItem.id) ?? null;
     }
 
@@ -3070,13 +3085,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       else if (removalUpdate) updates.push(removalUpdate);
     }
 
-    if (!this.#validateProjectedInventoryState({ updates, deletes, creates })) return null;
+    if (!this.#validateProjectedInventoryState({ updates, deletes, creates }, { recoveryItemId })) return null;
     const mutation = await executeInventoryMutation({
       actor: this.actor,
       updates,
       deletes,
       creates
-    }, { reason: sourceItem ? "move-stack" : "insert-stack" });
+    }, {
+      reason: sourceItem ? "move-stack" : "insert-stack",
+      allowPartialInventoryRepairItemId: recoveryItemId
+    });
     if (creates.length) return mutation.createdDocuments;
     return target ? this.actor.items.get(target.id) ?? null : null;
   }
@@ -3173,8 +3191,30 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return createData;
   }
 
-  #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
+  #getRecoveryItemId(item) {
+    if (!item?.id) return "";
+    const plan = planInventoryRepair(
+      this.actor.items,
+      getInventoryGridDimensions(this.#getCurrentRace(), this.actor),
+      { rootOptions: this.#getInventoryGridOptions(ROOT_CONTAINER_ID) }
+    );
+    return plan.repairs.some(repair => repair.itemId === item.id) ? item.id : "";
+  }
+
+  #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}, { recoveryItemId = "" } = {}) {
     const projectedItems = this.#projectInventoryState({ updates, deletes, creates });
+    if (recoveryItemId) {
+      try {
+        validateActorInventoryState(this.actor, projectedItems, {
+          allowPartialInventoryRepairItemId: recoveryItemId,
+          previousItems: this.actor.items
+        });
+        return true;
+      } catch (error) {
+        this.#warnInventoryValidation(error.validation ?? {});
+        return false;
+      }
+    }
     const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace(), this.actor), {
       previousItems: this.actor.items,
       rootOptions: this.#getInventoryGridOptions(ROOT_CONTAINER_ID)
@@ -3187,13 +3227,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     this.#warnInventoryValidation(validation);
     return false;
-  }
-
-  async #repairInventoryTreePlacements() {
-    await repairActorInventory(this.actor, {
-      race: this.#getCurrentRace()
-    });
-    return true;
   }
 
   #projectInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
@@ -3917,9 +3950,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async #cycleInventoryItemContainer(item, { sourceStackIndex = 0, sourceStackQuantity = 0 } = {}) {
     if (item.system?.placement?.mode !== "inventory") return null;
-    if (!await this.#repairInventoryTreePlacements()) return null;
-    item = this.actor.items.get(item.id) ?? item;
-    if (item.system?.placement?.mode !== "inventory") return null;
 
     const itemData = item.toObject();
     if (usesVirtualInventoryStacks(item)) {
@@ -3927,7 +3957,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     const currentParentId = getItemContainerParentId(item);
     const candidates = this.#getInventoryPlacementParentCandidates(item, [item.id]);
-    if (candidates.length < 2) {
+    if (candidates.length < 2 && currentParentId === ROOT_CONTAINER_ID) {
       this.#warnInventoryNoSpace();
       return null;
     }
@@ -3946,18 +3976,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         const moved = await this.#insertItemIntoInventory(itemData, placement, {
           sourceItem: item,
           parentId,
-          sourceStackIndex
+          sourceStackIndex,
+          recoveryItemId: this.#getRecoveryItemId(item)
         });
         return moved ?? null;
       }
-
-      const updateData = this.#createInventoryPlacementUpdate(item, { parentId, placement });
-      if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
-      await executeInventoryMutation({
-        actor: this.actor,
-        updates: [updateData]
-      }, { reason: "move-container" });
-      return this.actor.items.get(item.id) ?? null;
+      return this.#moveOwnedItem(item, placement, null, parentId, sourceStackIndex);
     }
 
     this.#warnInventoryNoSpace();

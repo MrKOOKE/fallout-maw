@@ -348,6 +348,21 @@
                   </div>
                 </section>
                 {{/each}}
+                {{#if inventory.recovery.grid.items.length}}
+                <section class="fallout-maw-container-section fallout-maw-inventory-recovery-section" data-inventory-recovery-section>
+                  <h2>{{localize "FALLOUTMAW.Common.InventoryRecovery"}}</h2>
+                  <div class="fallout-maw-contents-transfer-grid-scroll" data-search-scroll-key="{{side}}:inventory-recovery">
+                    <div class="fallout-maw-inventory-grid has-phantom-items" data-inventory-recovery-grid style="{{inventory.recovery.grid.style}}">
+                      {{#each inventory.recovery.grid.items}}
+                      <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item phantom {{#if placement.rotated}}rotated{{/if}}" data-inventory-grid-item data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="{{parentId}}" style="{{gridStyle}}" title="{{name}}">
+                        <img src="{{img}}" alt="{{name}}">
+                        {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+                      </article>
+                      {{/each}}
+                    </div>
+                  </div>
+                </section>
+                {{/if}}
               </div>
             </section>
             {{/if}}

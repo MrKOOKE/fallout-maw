@@ -596,8 +596,12 @@ export class FalloutMaWCombat extends Combat {
   }
 
   #getTurnNavigationSnapshot(options = {}) {
-    const progress = isBlockTurnOrderEnabled(this) ? getActiveBlockProgress(this) : null;
-    const target = progress ? getBlockTurnTargetCombatant(this, options) : null;
+    const blockTurnOrder = isBlockTurnOrderEnabled(this);
+    const progress = blockTurnOrder ? getActiveBlockProgress(this) : null;
+    // HUD requests identify the acting token in both turn-order schemes.
+    const target = blockTurnOrder
+      ? (progress ? getBlockTurnTargetCombatant(this, options) : null)
+      : this.combatant;
     const requestedCombatantId = String(options?.[BLOCK_TURN_COMBATANT_OPTION] ?? "");
     const requestedActorUuid = String(options?.[BLOCK_TURN_ACTOR_OPTION] ?? "");
     const explicitTargetValid = (

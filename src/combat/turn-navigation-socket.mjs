@@ -19,6 +19,9 @@ const ALLOWED_METHODS = new Set([
 const PLAYER_METHODS = new Set(["nextTurn", "previousTurn"]);
 const CONVERSION_MODES = new Set(["dodge", "reaction", "none", "skip"]);
 const pendingRequests = new Map();
+const handledRequests = new Map();
+const REQUEST_RECEIPT_TTL_MS = 5 * 60 * 1000;
+const MAX_REQUEST_RECEIPTS = 1000;
 let socketRegistered = false;
 
 export function registerCombatTurnNavigationSocket() {
@@ -100,7 +103,7 @@ async function handleCombatTurnNavigationSocketMessage(message = {}, senderUserI
   if (message.requesterUserId !== senderUserId) return;
 
   try {
-    await performCombatTurnNavigationRequest(message);
+    await performCombatTurnNavigationRequestOnce(message);
     sendResponse(message, { ok: true });
   } catch (error) {
     sendResponse(message, {
@@ -108,6 +111,34 @@ async function handleCombatTurnNavigationSocketMessage(message = {}, senderUserI
       error: error?.message ?? String(error)
     });
   }
+}
+
+function performCombatTurnNavigationRequestOnce(message) {
+  const requestId = String(message.requestId ?? "").trim();
+  if (!requestId) throw new Error("Invalid combat turn request identifier.");
+  const key = JSON.stringify([message.requesterUserId, requestId]);
+  const existing = handledRequests.get(key);
+  if (existing) return existing.promise;
+
+  const entry = { promise: null, settled: false };
+  entry.promise = Promise.resolve().then(() => performCombatTurnNavigationRequest(message));
+  handledRequests.set(key, entry);
+  const settle = () => {
+    entry.settled = true;
+    const timer = globalThis.setTimeout(() => {
+      if (handledRequests.get(key) === entry) handledRequests.delete(key);
+    }, REQUEST_RECEIPT_TTL_MS);
+    timer?.unref?.();
+  };
+  entry.promise.then(settle, settle);
+  if (handledRequests.size > MAX_REQUEST_RECEIPTS) {
+    for (const [storedKey, storedEntry] of handledRequests) {
+      if (!storedEntry.settled) continue;
+      handledRequests.delete(storedKey);
+      if (handledRequests.size <= MAX_REQUEST_RECEIPTS) break;
+    }
+  }
+  return entry.promise;
 }
 
 export async function performCombatTurnNavigationRequest(message = {}) {

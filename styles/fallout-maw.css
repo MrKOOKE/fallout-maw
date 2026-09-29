@@ -11456,9 +11456,184 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-pg-block-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   flex: 0 0 auto;
   padding-top: 0.5rem;
   border-top: 1px solid var(--fallout-maw-border);
+}
+
+.application.fallout-maw-pg-preset-dialog {
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+}
+
+.application.fallout-maw-pg-preset-dialog .window-content,
+.fallout-maw-pg-preset-dialog .dialog-form,
+.fallout-maw-pg-preset-dialog .dialog-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fallout-maw-pg-preset-picker {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0.75rem;
+}
+
+.fallout-maw-pg-preset-search {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 0 0 auto;
+  padding: 0 0.85rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 5px;
+  background: var(--color-cool-5-50, rgba(0, 0, 0, 0.15));
+}
+
+.fallout-maw-pg-preset-search:focus-within {
+  border-color: var(--color-text-hyperlink, #c9ab66);
+}
+
+.fallout-maw-pg-preset-search input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  height: 2.65rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.fallout-maw-pg-preset-list-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-inline: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.fallout-maw-pg-preset-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 5px;
+}
+
+.fallout-maw-pg-preset-row {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  border-bottom: 1px solid var(--fallout-maw-border);
+}
+
+.fallout-maw-pg-preset-choice {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  cursor: pointer;
+}
+
+.fallout-maw-pg-preset-row:has(+ .fallout-maw-pg-preset-empty) { border-bottom: 0; }
+.fallout-maw-pg-preset-row[hidden],
+.fallout-maw-pg-preset-empty[hidden] { display: none; }
+
+.fallout-maw-pg-preset-row:hover {
+  background: rgba(150, 140, 110, 0.10);
+}
+
+.fallout-maw-pg-preset-row:has(input:checked) {
+  background: rgba(190, 156, 82, 0.16);
+  box-shadow: inset 3px 0 0 var(--color-text-hyperlink, #c9ab66);
+}
+
+.fallout-maw-pg-preset-row:focus-within {
+  outline: 2px solid var(--color-text-hyperlink, #c9ab66);
+  outline-offset: -2px;
+}
+
+.fallout-maw-pg-preset-row input { flex: 0 0 auto; margin: 0; }
+.fallout-maw-pg-preset-name { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.fallout-maw-pg-preset-choice > i { visibility: hidden; flex: 0 0 auto; }
+.fallout-maw-pg-preset-choice:has(input:checked) > i { visibility: visible; }
+
+.fallout-maw-pg-preset-row .fallout-maw-pg-preset-delete {
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  margin-inline-end: 0.65rem;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.fallout-maw-pg-preset-row .fallout-maw-pg-preset-delete:hover {
+  color: #e7a298;
+  border-color: rgba(210, 106, 92, 0.45);
+  background: rgba(210, 106, 92, 0.12);
+}
+
+.fallout-maw-pg-preset-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 12rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.fallout-maw-pg-preset-hint {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.fallout-maw-pg-preset-dialog .form-footer { flex: 0 0 auto; }
+
+.fallout-maw-pg-preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+.fallout-maw-pg-block-footer button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.fallout-maw-pg-preset-actions button {
+  background: transparent;
+}
+
+.fallout-maw-pg-block-footer button:focus-visible {
+  outline: 2px solid var(--color-text-hyperlink, #c9ab66);
+  outline-offset: 2px;
 }
 
 .fallout-maw-token-hud-ability-section {

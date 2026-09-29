@@ -679,13 +679,14 @@ export async function promptEndTurnConversion(actor) {
     }, {
       action: "cancel",
       label: auditLocalize("FALLOUTMAW.AuditRuntime.R0064", "Отмена"),
-      callback: () => null
+      callback: () => false
     }],
     rejectClose: false,
     modal: true
   });
-  if (!result) return null;
-  return result;
+  return [TURN_CONVERSION_MODES.reaction, TURN_CONVERSION_MODES.dodge].includes(result)
+    ? result
+    : null;
 }
 
 export function isReactionResourceUpdateOption(options = {}) {

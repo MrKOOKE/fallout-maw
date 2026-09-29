@@ -119,7 +119,8 @@ export function planInventoryRepair(items, rootDimensions = {}, options = {}) {
     projectedItems,
     projectedById,
     recoveryById,
-    requestRecovery
+    requestRecovery,
+    preserveContainerOverflow: options.preserveContainerOverflow === true
   });
 
   const rootOccupied = [];
@@ -606,7 +607,8 @@ function repairInvalidContainerContexts({
   projectedItems,
   projectedById,
   recoveryById,
-  requestRecovery
+  requestRecovery,
+  preserveContainerOverflow = false
 }) {
   const containers = projectedItems
     .filter(isContainerItem)
@@ -639,6 +641,14 @@ function repairInvalidContainerContexts({
         containerId,
         occupied
       )) continue;
+
+      const storedPlacements = preserveContainerOverflow
+        ? getStoredVisualPlacements(item, projectedItems, INVENTORY_PLACEMENT_MODE)
+        : [];
+      if (preserveContainerOverflow
+        && hasValidInventoryMetadata(item, INVENTORY_PLACEMENT_MODE, containerId)
+        && storedPlacements.length
+        && storedPlacements.every(isStoredPlacementCoordinateValid)) continue;
 
       requestRecovery(itemId, "invalid-placement");
       prepareProjectedItemForContext(item, ROOT_TARGET);
