@@ -1,4 +1,5 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { decorateConstructResourceAvailability } from "../utils/construct-systems.mjs";
 import { getWeaponModuleActionTooltipRows } from "../utils/weapon-module-actions.mjs";
 import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction, getProtectionModuleTooltipEntry, getProtectionModuleTooltipItem } from "../utils/function-module-tooltip.mjs";
 import { WeaponModuleDropPreview, canShowSuitableWeaponModules, canUseWeaponModuleDrag, getWeaponModuleDropElement, installDroppedWeaponModule, isWeaponModuleDrop } from "../utils/weapon-module-drop.mjs";
@@ -711,7 +712,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           data: actor.system.resources?.[resource.key],
           inputName: `system.resources.${resource.key}.value`
         }))
-        .map(entry => decorateOneTimeResourceDisplay(actor, decorateActionPointHudEntry(actor, entry))),
+        .map(entry => decorateConstructResourceAvailability(actor, decorateOneTimeResourceDisplay(actor, decorateActionPointHudEntry(actor, entry)))),
       needs: needSettings.map(need => prepareDisplayIndicatorEntry({
         ...need,
         data: actor.system.needs?.[need.key],
@@ -8913,8 +8914,12 @@ function getToolLabel(toolKey = "") {
 
 function getConditionRecoveryMethodRows(condition = {}) {
   return (condition.recoveryMethods ?? [])
-    .filter(method => String(method?.type ?? "tools") === "tools")
     .map(method => {
+      if (method.type === "resources") {
+        const cost = method.resources.map(row => `${resolveWorldItemSync(row.uuid)?.name || "Предмет не найден"} × ${row.quantity}`)
+          .join(method.mode === "all" ? " + " : " / ");
+        return ["Расход ресурсов", `${cost} → +${method.recovery}${method.recoveryMode === "amount" ? "" : "%"}`];
+      }
       const toolKey = String(method.toolKey ?? "").trim();
       const tool = toolKey
         ? getToolLabel(toolKey)

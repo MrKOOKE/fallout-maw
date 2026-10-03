@@ -117,6 +117,21 @@
       {{/if}}
 
       {{#if (eq activeTray "passengers")}}
+      {{#if tray.constructCrew}}
+      <div class="fallout-maw-token-hud-crew-list">
+      {{#each tray.passengers}}
+      <section class="fallout-maw-token-hud-crew-seat {{#unless occupied}}empty{{/unless}} {{#if selected}}selected{{/if}}" {{#if droppable}}data-crew-seat-drop="{{seatId}}"{{/if}}>
+        <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile fallout-maw-token-hud-crew-summary {{#if selected}}active{{/if}} {{#unless occupied}}empty{{/unless}}" data-action="selectConstructCrewPassenger" data-passenger-id="{{id}}" title="{{title}}" aria-pressed="{{selected}}" aria-expanded="{{expanded}}" {{#unless canInteract}}aria-disabled="true"{{/unless}} {{#if draggable}}draggable="true" data-crew-passenger-drag="{{id}}"{{/if}}>
+          <img src="{{img}}" alt="{{name}}" draggable="false" onerror="this.src='{{../fallbackIcon}}'">
+          <span>{{seatName}}<small>{{name}}</small></span>
+        </button>
+        {{#if canExit}}
+        <button type="button" class="fallout-maw-token-hud-crew-exit" data-action="exitActorContainerPassenger" data-passenger-id="{{id}}" title="{{exitLabel}}" aria-label="{{exitLabel}}" draggable="false"><img src="{{icons.exit}}" alt="" draggable="false"></button>
+        {{/if}}
+      </section>
+      {{/each}}
+      </div>
+      {{else}}
       {{#each tray.passengers}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile variable-width" data-action="exitActorContainerPassenger" data-passenger-id="{{id}}" title="{{localize 'FALLOUTMAW.AuditTemplates.Text9084f31e4a54'}} {{name}}">
         <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
@@ -126,6 +141,7 @@
       {{else}}
       <div class="fallout-maw-token-hud-empty">{{localize 'FALLOUTMAW.AuditTemplates.Texte0406529310c'}}</div>
       {{/each}}
+      {{/if}}
       {{/if}}
 
       {{#if (eq activeTray "abilities")}}
@@ -313,11 +329,17 @@
     {{/if}}
 
     <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
+      {{#each constructSystems}}
+      <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleConstructSystem" data-system-id="{{id}}" title="{{title}}" aria-label="{{label}}"><img src="{{img}}" alt=""><span>{{label}}</span></button>
+      {{/each}}
+      {{#each constructTurns}}<button type="button" class="fallout-maw-token-hud-main-action {{#if disabled}}unusable{{/if}}" data-action="turnConstructHull" data-delta="{{delta}}" title="{{label}}" aria-label="{{label}}" {{#if disabled}}aria-disabled="true"{{/if}}><img src="{{img}}" alt=""><strong class="fallout-maw-token-hud-weapon-badge magazine">{{cost}} ОП</strong><span>{{label}}</span></button>{{/each}}
       {{#if weaponSet}}
+      {{#if showWeaponSetSelector}}
       <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-set-toggle {{#if weaponSet.active}}selected{{/if}} {{#if (eq activeTray "weaponSets")}}active{{/if}}" data-action="toggleTray" data-tray="weaponSets" title="{{weaponSet.label}}">
         <span>{{localize 'FALLOUTMAW.AuditTemplates.Text9276259877b0'}}</span>
         <i class="fa-solid fa-caret-up" inert></i>
       </button>
+      {{/if}}
       {{#each weaponSet.weapons}}
       <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-button {{#if selected}}active{{/if}} {{#if useDisabled}}unusable{{/if}} variable-width" data-action="toggleWeaponActions" data-item-id="{{item.id}}" data-weapon-set="{{weaponSetKey}}" title="{{item.name}}" {{#if hudAspectStyle}}style="{{hudAspectStyle}}"{{/if}} {{#if useDisabled}}aria-disabled="true"{{/if}}>
         <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../fallbackIcon}}'">

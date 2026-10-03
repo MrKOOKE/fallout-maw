@@ -15,6 +15,11 @@ import {
 } from "../utils/equipment-hud-placement.mjs";
 import { getConditionFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
+import { hasActorContainer } from "../utils/actor-containers.mjs";
+import { hasConstructCrew } from "../utils/construct-crew.mjs";
+import { requestActorContainerBoarding } from "./actor-containers.mjs";
+import { openRepairForTarget } from "../apps/repair-dialog.mjs";
+import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 
 const SEARCH_ICON = `systems/${FALLOUT_MAW.id}/assets/System/SystemActions/action-search.webp`;
 const TRADE_ICON = `systems/${FALLOUT_MAW.id}/assets/System/SystemActions/action-trade.webp`;
@@ -89,8 +94,8 @@ export function decorateTokenHudEquipment(app, html) {
 
   if (!token.isOwner) {
     hideDefaultTokenHudControls(element);
-    leftColumn.prepend(buildInteractionActions(token));
   }
+  if (!token.isOwner) leftColumn.prepend(buildInteractionActions(token));
 }
 
 function getHTMLElement(html) {
@@ -579,9 +584,39 @@ function escapeAttribute(value) {
 function buildInteractionActions(token) {
   const wrapper = document.createElement("div");
   wrapper.className = HUD_ACTIONS_CLASS;
-  wrapper.append(buildActionButton("search", auditLocalize("FALLOUTMAW.AuditRuntime.R0657", "Обыск"), SEARCH_ICON, () => openSearchForHudTarget(token)));
-  wrapper.append(buildActionButton("trade", auditLocalize("FALLOUTMAW.AuditRuntime.R0658", "Торговля"), TRADE_ICON, () => requestTradeForHudTarget(token)));
+  if (!token.isOwner) {
+    wrapper.append(buildActionButton("search", auditLocalize("FALLOUTMAW.AuditRuntime.R0657", "Обыск"), SEARCH_ICON, () => openSearchForHudTarget(token)));
+    wrapper.append(buildActionButton("trade", auditLocalize("FALLOUTMAW.AuditRuntime.R0658", "Торговля"), TRADE_ICON, () => requestTradeForHudTarget(token)));
+  }
+  const icons = getTokenActionHudIcons().activeActions;
+  if (hasActorContainer(token.actor)) wrapper.append(buildActionButton("boardTransport", "Сесть в транспорт",
+    icons?.boardTransport || "systems/fallout-maw/assets/System/TokenDefaults/default-character-and-transport.webp", () => boardHudTarget(token)));
+  wrapper.append(buildActionButton("repair", token.actor.type === "construct" ? "Ремонт / обслуживание" : "Ремонт",
+    icons?.repair || "systems/fallout-maw/assets/System/SystemActions/action-repair.webp", async () => {
+      const sourceToken = getInteractionSourceToken(); if (!sourceToken) return;
+      await openRepairForTarget({ sourceActor: sourceToken.actor, sourceToken, targetToken: token });
+    }));
   return wrapper;
+}
+
+function getInteractionSourceToken() {
+  const token = canvas?.tokens?.controlled?.find(entry => entry.actor?.isOwner);
+  if (!token) ui.notifications.warn("Выберите свой токен, который будет взаимодействовать с целью.");
+  return token;
+}
+
+async function boardHudTarget(targetToken) {
+  const sourceToken = getInteractionSourceToken(); if (!sourceToken || sourceToken === targetToken) return;
+  try {
+    const payload = { sceneId: sourceToken.document.parent.id, passengerActorUuid: sourceToken.actor.uuid,
+      passengerTokenId: sourceToken.id, vehicleActorUuid: targetToken.actor.uuid };
+    if (hasConstructCrew(targetToken.actor)) {
+      const { chooseConstructCrewBoardingSeat } = await import("../apps/construct-crew-dialogs.mjs");
+      payload.seatId = await chooseConstructCrewBoardingSeat(targetToken.actor, sourceToken.actor, sourceToken.document);
+      if (!payload.seatId) return;
+    }
+    await requestActorContainerBoarding(payload);
+  } catch (error) { ui.notifications.warn(error.message); }
 }
 
 function buildActionButton(key, title, img, callback) {

@@ -1,4 +1,6 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { getConstructSystems, decorateConstructResourceAvailability } from "../utils/construct-systems.mjs";
+import { getConstructHudSystemControls, requestConstructSystemAction } from "../constructs/system-actions.mjs";
 import { ModuleTooltipMutation, getModuleTooltipPickerKey, getModuleTooltipSlotContext, getModuleTooltipTargetFunction } from "../utils/function-module-tooltip.mjs";
 ﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
@@ -79,9 +81,31 @@ import { startTrapInteractionMode, startTrapPlacement } from "../canvas/traps.mj
 import {
   openActorContainerPassengerSheet,
   prepareHudActorContainerPassengers,
+  queueActorContainerOperation,
+  requestActorContainerPassengerMove,
   startActorContainerBoardingMode,
   startActorContainerPassengerExitPlacement
 } from "../canvas/actor-containers.mjs";
+import { configureConstructCrewActions, requestConstructCrewControl } from "../canvas/construct-crew.mjs";
+import { planConstructRotation, getConstructRotationAngle, getConstructRotationPrice } from "../constructs/rotation-actions.mjs";
+import { getActorContainerFlag } from "../utils/actor-containers.mjs";
+import { getConstructCrewContext, getConstructCrewContexts, canUserUseConstructCrewPersonalWeapon, resolveConstructCrewWeaponSetItem } from "../utils/construct-crew-context.mjs";
+import {
+  canUserManageConstructPassenger,
+  canUserControlConstruct,
+  canUserRearrangeConstructCrew,
+  getConstructCrewSeats,
+  getConstructCrewSeatState,
+  getConstructWeaponPartSlotId,
+  getUserConstructCrewSeats,
+  hasConstructCrew
+} from "../utils/construct-crew.mjs";
+import {
+  canUserUseConstructWeapon,
+  getConstructWeaponExecutor,
+  getConstructWeaponOperatorConfig,
+  resolveConstructWeaponOperatorActor
+} from "../utils/construct-weapon-operator.mjs";
 import { useActiveItem } from "../items/active-item-use.mjs";
 import { createFullItemRestorationUpdate } from "../items/full-restoration.mjs";
 import {
@@ -146,6 +170,7 @@ import {
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { getHudWeaponSetsForActor } from "../utils/hud-active-items.mjs";
+import { canSelectWeaponMagazineSource } from "../utils/weapon-reload-source-selection.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
@@ -247,6 +272,8 @@ let tokenActionHudMovementPreview = null;
 const pendingTokenActionHudSocketRequests = new Map();
 const pendingEndCombatTurnOperations = new Map();
 const hudImageAspectCache = new Map();
+const selectedConstructCrewPassengers = new Map();
+const SELECTED_CONSTRUCT_CREW_PASSENGERS_FLAG = "selectedConstructCrewPassengers";
 
 function isHudActionBlockedByReactionLock() {
   if (!isReactionSystemLocked()) return false;
@@ -256,6 +283,7 @@ function isHudActionBlockedByReactionLock() {
 
 export function registerTokenActionHudHooks() {
   if (hooksRegistered) return;
+  configureConstructCrewActions({ getSelectedContext: getSelectedConstructCrewContext });
   Hooks.on("getSceneControlButtons", addTokenActionHudControlButton);
   Hooks.on("controlToken", scheduleTokenActionHudRefresh);
   Hooks.on("canvasReady", scheduleTokenActionHudRefresh);
@@ -270,7 +298,14 @@ export function registerTokenActionHudHooks() {
   Hooks.on("createActiveEffect", scheduleTokenActionHudRefreshForEffect);
   Hooks.on("updateActiveEffect", scheduleTokenActionHudRefreshForEffect);
   Hooks.on("deleteActiveEffect", scheduleTokenActionHudRefreshForEffect);
-  Hooks.on("updateToken", scheduleTokenActionHudRefresh);
+  Hooks.on("updateToken", (document, changes = {}) => {
+    // Turret yaw only changes the canvas. Rebuilding the crew inventory and
+    // weapon controls for a saved aim preview serves no HUD state change.
+    if (document.actor?.type === "construct" && Object.keys(changes).every(key => key === "flags")
+      && Object.keys(changes.flags ?? {}).every(key => key === SYSTEM_ID)
+      && Object.keys(changes.flags?.[SYSTEM_ID] ?? {}).every(key => key === "constructVisualState")) return;
+    scheduleTokenActionHudRefresh();
+  });
   Hooks.on("updateCombat", scheduleTokenActionHudRefresh);
   Hooks.on("deleteCombat", scheduleTokenActionHudRefresh);
   Hooks.on("createCombatant", scheduleTokenActionHudRefresh);
@@ -292,6 +327,10 @@ export function registerTokenActionHudHooks() {
 }
 
 export function registerTokenActionHudSocket() {
+  configureConstructCrewActions({ reload: ({ actor, weapon, weaponFunctionId, passengerId, requester, payload }) =>
+    performAuthorizedWeaponReloadOperation({ actorUuid: actor.uuid, weaponId: weapon.id, weaponFunctionId,
+      operatorPassengerId: passengerId, action: String(payload.reloadAction || "insert"),
+      sourceUuid: String(payload.sourceUuid ?? "") }, requester.id) });
   game.socket.on(TOKEN_ACTION_HUD_SOCKET, handleTokenActionHudSocketMessage);
 }
 
@@ -321,7 +360,27 @@ export function refreshTokenActionHudForActor(actor) {
   scheduleTokenActionHudRefreshForActor(actor);
 }
 
+/** Native vehicle input follows the crew actor selected in the ordinary HUD. */
+export function getSelectedConstructCrewContext(tokenDocument, user = game.user) {
+  const document = tokenDocument?.document ?? tokenDocument;
+  if (user?.id === game.user?.id && tokenActionHud?.token?.document?.uuid === document?.uuid) {
+    return tokenActionHud.crewContext;
+  }
+  const passengerId = getRememberedConstructCrewPassengerId(document?.actor, user);
+  return (passengerId ? getConstructCrewContext(document?.actor, user, { passengerId }) : null)
+    ?? getConstructCrewContext(document?.actor, user);
+}
+
+function getRememberedConstructCrewPassengerId(actor, user) {
+  const key = `${user?.id}:${actor?.uuid}`;
+  const rows = user?.getFlag?.(SYSTEM_ID, SELECTED_CONSTRUCT_CREW_PASSENGERS_FLAG);
+  return selectedConstructCrewPassengers.get(key)
+    ?? (Array.isArray(rows) ? rows : [])
+      .find(row => row.actorUuid === actor?.uuid)?.passengerId ?? "";
+}
+
 function scheduleTokenActionHudRefresh() {
+  tokenActionHud?.invalidateCrewContext();
   tokenActionHudRefresh?.();
 }
 
@@ -338,6 +397,7 @@ function updateArmedExplosionTooltipCountdowns(worldTime = 0) {
 
 function scheduleTokenActionHudRefreshForActor(actor, _changes = {}, options = {}) {
   if (!isActiveHudActor(actor)) return;
+  tokenActionHud?.invalidateCrewContext();
   if (options?.[COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION]) {
     if (!tokenActionHud?.rendered) return;
     void tokenActionHud.render({ parts: ["resources"] });
@@ -352,6 +412,7 @@ function scheduleTokenActionHudRefreshForItem(item) {
 }
 
 function scheduleTokenActionHudRefreshForUpdatedItem(item, changes) {
+  if (isActiveHudActor(item?.parent)) tokenActionHud?.invalidateCrewContext();
   if (isActiveHudDamageSourcePrototype(item)) {
     scheduleTokenActionHudRefresh();
     return;
@@ -393,7 +454,9 @@ function scheduleTokenActionHudRefreshForSetting(setting) {
 }
 
 function isActiveHudActor(actor) {
-  return Boolean(actor && tokenActionHud?.actor?.uuid === actor.uuid);
+  return Boolean(actor && (tokenActionHud?.actor?.uuid === actor.uuid
+    || tokenActionHud?.interactionActor?.uuid === actor.uuid
+    || getActorContainerFlag(tokenActionHud?.actor).passengers.some(row => row.actorUuid === actor.uuid)));
 }
 
 function closeTokenActionHud() {
@@ -469,7 +532,12 @@ function applyTokenActionHudScale(percent) {
 
 function getSelectedTokenForHud() {
   const controlled = canvas?.tokens?.controlled ?? [];
-  return controlled.find(token => token?.actor?.testUserPermission?.(game.user, "LIMITED")) ?? null;
+  const selected = controlled.find(token => token?.actor?.testUserPermission?.(game.user, "LIMITED"));
+  if (selected) return selected;
+  if (game.user?.isGM) return null;
+  const candidates = (canvas?.tokens?.placeables ?? []).filter(token => hasConstructCrew(token.actor)
+    && getUserConstructCrewSeats(token.actor, game.user, { availableOnly: false }).length);
+  return candidates.find(token => token.document?.uuid === tokenActionHud?.token?.document?.uuid) ?? candidates.at(0) ?? null;
 }
 
 function getSelectedHudActors() {
@@ -522,6 +590,11 @@ function createHudTargetInteraction({ restoreAbilities = false, abilityUse = fal
 
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
+  #crewPassengerId = "";
+  #crewWeaponId = "";
+  #activeCrewPassengerId = "";
+  #crewWeaponSetKey = "";
+  #crewContexts = null;
   #activeTray = "";
   #weaponEquipTarget = null;
   #dualWeaponActionSelection = null;
@@ -583,10 +656,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
       useItem: { handler: TokenActionHud.#onUseItem, buttons: [0] },
+      toggleConstructSystem: { handler: TokenActionHud.#onToggleConstructSystem, buttons: [0] },
+      turnConstructHull: { handler: TokenActionHud.#onTurnConstructHull, buttons: [0] },
       useAbility: { handler: TokenActionHud.#onUseAbility, buttons: [0] },
       useActiveAction: TokenActionHud.#onUseActiveAction,
       dragGrappledTarget: TokenActionHud.#onDragGrappledTarget,
       exitActorContainerPassenger: { handler: TokenActionHud.#onExitActorContainerPassenger, buttons: [0, 2] },
+      selectConstructCrewPassenger: { handler: TokenActionHud.#onSelectConstructCrewPassenger, buttons: [0] },
+      selectConstructCrewWeapon: { handler: TokenActionHud.#onSelectConstructCrewWeapon, buttons: [0, 1] },
+      useConstructCrewWeaponAction: { handler: TokenActionHud.#onUseConstructCrewWeaponAction, buttons: [0, 1] },
       useSystemAction: TokenActionHud.#onUseSystemAction
     }
   };
@@ -609,6 +687,42 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.#token?.actor ?? null;
   }
 
+  get crewContext() {
+    const contexts = this.#crewContexts ??= getConstructCrewContexts(this.actor, game.user);
+    const passengerId = this.#activeCrewPassengerId || getRememberedConstructCrewPassengerId(this.actor, game.user);
+    return contexts.find(row => row.passenger.id === passengerId) ?? contexts.at(0) ?? null;
+  }
+
+  invalidateCrewContext() { this.#crewContexts = null; }
+
+  get interactionActor() {
+    return this.crewContext?.actor ?? this.actor;
+  }
+
+  #resolveHudItem(itemId, { weaponContext = false, weaponSetKey = "" } = {}) {
+    const crew = this.crewContext;
+    if (crew && weaponContext) {
+      const sets = this.#getCrewWeaponSets(crew);
+      const active = sets.find(set => set.key === (weaponSetKey || this.#crewWeaponSetKey)) ?? sets.at(0);
+      const weapon = resolveConstructCrewWeaponSetItem(this.actor, crew.actor, active, itemId);
+      if (weapon) return weapon;
+    }
+    return resolveActorItemOrInstalledModule(this.interactionActor, itemId)
+      ?? (crew ? resolveActorItemOrInstalledModule(this.actor, itemId) : null);
+  }
+
+  #getCrewWeaponSets(crew) {
+    const mounted = (this.actor?.items?.contents ?? []).filter(weapon => getConstructWeaponPartSlotId(this.actor, weapon) && getEnabledWeaponFunctions(weapon, { ignoreBroken: true })
+      .some(fn => (getConstructWeaponOperatorConfig(weapon, fn.id).partSlotId || getConstructWeaponPartSlotId(this.actor, weapon)) === crew.partSlotId
+        && (crew.seat.functions.includes("fire") || crew.seat.functions.includes("reload"))));
+    return [
+      ...(mounted.length ? [{ key: `crew-mounted:${crew.seat.id}`, label: crew.seat.name, crewMounted: true,
+        slots: mounted.map((item, index) => ({ key: `gun-${index}`, label: item.name, item,
+          canReplace: false, useDisabled: !crew.available || isItemBrokenByCondition(item) })) }] : []),
+      ...(crew.personalWeapons.enabled ? getHudWeaponSetsForActor(crew.actor) : [])
+    ];
+  }
+
   close(options = {}) {
     return super.close({ ...options, animate: false });
   }
@@ -618,6 +732,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#clearTargetInteractions();
       cancelWeaponAttack();
       this.#activeTray = "";
+      this.#crewPassengerId = "";
+      this.#crewWeaponId = "";
+      this.#activeCrewPassengerId = "";
+      this.#crewWeaponSetKey = "";
+      this.#crewContexts = null;
       this.#weaponEquipTarget = null;
       this.#dualWeaponActionSelection = null;
       this.#expandedAbilityCategoryKeys.clear();
@@ -733,7 +852,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const actor = this.actor;
+    const crew = this.crewContext;
+    if (crew) this.#activeCrewPassengerId = crew.passenger.id;
+    const actor = crew?.actor ?? this.actor;
+    const meterActor = crew && this.#limbDisplayLayer === "crew" ? actor : this.actor;
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const gmControls = game.user?.isGM ? {
       selectedCount: getSelectedHudActors().length
@@ -741,32 +863,46 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (options.parts?.length === 1 && options.parts[0] === "resources") {
       return {
         ...context,
-        actor,
+        actor: meterActor,
         token: this.#token,
-        resources: prepareResourceEntries(actor),
+        resources: prepareResourceEntries(meterActor),
         meterSections,
         gmControls
       };
     }
-    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+    const race = getCreatureOptions().races.find(entry => entry.id === meterActor.system?.creature?.raceId);
     const requestIndex = createTokenActionHudRequestIndex(actor, {
-      getWeaponSets: getHudWeaponSetsForActor,
+      getWeaponSets: crew ? () => this.#getCrewWeaponSets(crew) : getHudWeaponSetsForActor,
       getInstalledModuleItems: getActorInstalledModuleItems,
-      resolveActiveWeaponSetKey: getActiveHudWeaponSetKey
+      resolveActiveWeaponSetKey: crew ? (_actor, sets) => sets.find(row => row.key === this.#crewWeaponSetKey)?.key
+        ?? getActiveHudWeaponSetKey(actor, sets) : getActiveHudWeaponSetKey
     });
+    const activeCrewWeaponSet = crew && requestIndex.hudWeaponSets.find(set => set.key === requestIndex.activeWeaponSetKey);
+    if (activeCrewWeaponSet?.crewMounted) for (const slot of activeCrewWeaponSet.slots ?? []) {
+      const item = resolveConstructCrewWeaponSetItem(this.actor, actor, activeCrewWeaponSet, slot.item?.id);
+      if (item) requestIndex.actorItemById.set(item.id, item);
+    }
     const { hudWeaponSets, activeWeaponSetKey } = requestIndex;
-    const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey, requestIndex);
+    const selectedWeapon = crew && this.#crewWeaponId && (hudWeaponSets.find(set => set.key === activeWeaponSetKey)?.slots ?? []).some(slot => slot.item?.id === this.#crewWeaponId)
+      ? requestIndex.actorItemById.get(this.#crewWeaponId) : getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey, requestIndex);
     const hudIcons = getTokenActionHudIcons();
     await preloadHudImageAspects(collectHudImageAspectSources(actor, hudWeaponSets, this.#weaponEquipTarget, requestIndex));
     const weaponSets = prepareHudWeaponSets(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons, requestIndex);
     const weaponSet = weaponSets.find(entry => entry.key === activeWeaponSetKey) ?? null;
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
-    const dualWeaponState = prepareDualWeaponHudState(actor, weaponSet, requestIndex);
+    const dualWeaponState = crew ? { active: false, weaponSlots: [] } : prepareDualWeaponHudState(actor, weaponSet, requestIndex);
     if (!dualWeaponState.active) this.#dualWeaponActionSelection = null;
-    const weaponActionRows = dualWeaponState.active
+    let weaponActionRows = dualWeaponState.active
       ? prepareDualWeaponActionRows(actor, dualWeaponState.weaponSlots, hudIcons, this.#dualWeaponActionSelection)
       : prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token, requestIndex);
+    if (crew) weaponActionRows = weaponActionRows.map(row => ({ ...row,
+      actions: row.actions.filter(action => {
+        if ((selectedWeapon?.actor ?? selectedWeapon?.parent)?.uuid === actor.uuid) return crew.personalWeapons.enabled;
+        if (action.isAttackPowerControl || action.isEnergyManageControl || action.isWeaponReplaceControl) return false;
+        return canUserUseConstructWeapon(this.actor, selectedWeapon, game.user, action.key === "reload" ? "reload" : "fire", action.weaponFunctionId,
+          { passengerId: crew.passenger.id });
+      }) })).filter(row => row.actions.length);
     const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons, requestIndex);
     const skills = prepareSkillButtons(actor, hudIcons);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", {
@@ -776,38 +912,57 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       requestIndex
     });
     const abilities = prepareOwnedAbilityButtons(actor, "systems/fallout-maw/assets/System/Abilities/ability-default.webp", requestIndex);
-    const passengers = prepareHudActorContainerPassengers(actor);
-    const systemActions = prepareSystemActionButtons(hudIcons);
-    const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
+    const passengers = hasConstructCrew(this.actor)
+      ? this.#prepareConstructCrewPassengers(hudIcons)
+      : prepareHudActorContainerPassengers(this.actor);
+    const systemActions = prepareSystemActionButtons(hudIcons).filter(action => !crew || action.key !== "boardTransport");
+    const activeActions = crew ? [] : prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const actionGroups = prepareActionGroups(activeActions, systemActions);
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, passengers, hudIcons);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers, {
       expandedAbilityCategoryKeys: this.#expandedAbilityCategoryKeys
     });
-    const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
+    tray.constructCrew = hasConstructCrew(this.actor);
+    tray.crewPassengerActions = tray.constructCrew
+      ? passengers.find(row => row.expanded && row.canInteract) ?? null
+      : null;
+    const displayLimbs = prepareDisplayLimbs(meterActor, this.#limbDisplayLayer === "crew" ? "state" : this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(
-      actor.system?.limbSilhouetteOverride ? (actor.system?.limbSilhouette ?? null) : race?.limbSilhouette,
+      meterActor.system?.limbSilhouetteOverride ? (meterActor.system?.limbSilhouette ?? null) : race?.limbSilhouette,
       displayLimbs
     );
 
     return {
       ...context,
-      actor,
+      actor: meterActor,
       token: this.#token,
       limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(displayLimbs),
       limbSilhouette,
-      limbLayer: prepareLimbLayerContext(this.#limbDisplayLayer),
+      limbLayer: prepareLimbLayerContext(this.#limbDisplayLayer, crew),
       gmControls,
-      resources: prepareResourceEntries(actor),
-      needs: prepareNeedEntries(actor),
+      resources: prepareResourceEntries(meterActor),
+      needs: prepareNeedEntries(meterActor),
       activeTray: this.#activeTray,
       weaponSet,
       weaponSets,
+      showWeaponSetSelector: !crew || weaponSets.length > 1,
       selectedWeapon,
       actions,
       endTurnAction: prepareEndTurnAction(this.#token),
       meterSections,
       tray,
+      constructSystems: getConstructHudSystemControls(this.actor, crew).map(row => ({ id: row.id,
+        label: `${row.active ? "Выключить" : "Включить"}: ${row.name}`, active: row.active,
+        title: `${row.name}: ${row.active ? "работает" : "выключен"}`,
+        img: hudIcons.crewActions?.engine || "systems/fallout-maw/assets/System/TokenActionHud/construct-engine.svg" })),
+      constructTurns: this.actor.type === "construct" && (!crew || crew.seat.functions.includes("rotate"))
+        && canUserControlConstruct(this.actor, game.user, "rotate", { passengerId: crew?.passenger.id ?? "" })
+        ? [-15, 15].map(delta => {
+          const key = delta < 0 ? "rotateLeft" : "rotateRight", label = delta < 0 ? "Влево 15°" : "Вправо 15°";
+          const plan = planConstructRotation(this.#token.document, "hull", getConstructRotationAngle(this.#token.document) + delta);
+          return { delta, label, cost: getConstructRotationPrice(this.#token.document, "hull", getConstructRotationAngle(this.#token.document) + delta),
+            disabled: !plan.powered || !plan.reached, img: hudIcons.crewActions?.[key] || `systems/fallout-maw/assets/System/TokenActionHud/construct-turn-${delta < 0 ? "left" : "right"}.svg` };
+        }) : [],
       fallbackIcon: FALLBACK_ICON
     };
   }
@@ -821,6 +976,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     this.#clearDetachedHudTooltips();
     this.#activateLimbControlClicks();
+    for (const badge of this.element?.querySelectorAll(".fallout-maw-token-hud-crew-exit") ?? []) {
+      badge.addEventListener("pointerdown", event => event.stopPropagation());
+      badge.addEventListener("dragstart", event => event.preventDefault());
+    }
     const silhouette = this.element?.querySelector("[data-limb-popover-root]");
     this.#limbPopover.bind(silhouette, this.element);
     for (const details of this.element?.querySelectorAll("[data-ability-category-key]") ?? []) {
@@ -849,6 +1008,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.element.addEventListener("contextmenu", event => this.#onHudContextMenu(event));
     this.element.addEventListener("click", event => this.#onLimbLayerOptionClick(event));
     this.element.addEventListener("change", event => this.#onMeterValueInputChange(event));
+    this.element.addEventListener("dragstart", event => this.#onCrewPassengerDragStart(event));
+    this.element.addEventListener("dragover", event => this.#onCrewPassengerDragOver(event));
+    this.element.addEventListener("dragleave", event => event.target?.closest?.("[data-crew-seat-drop]")?.classList.remove("crew-drop-target"));
+    this.element.addEventListener("drop", event => { void this.#onCrewPassengerDrop(event); });
     this.element.addEventListener("keydown", event => this.#onMeterValueInputKeyDown(event));
   }
 
@@ -862,6 +1025,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #getMovementResourcePreviewResources(preview) {
+    if (this.crewContext && this.#limbDisplayLayer === "crew") return null;
     if (!preview || preview.actorUuid !== this.actor?.uuid) return null;
     if (preview.tokenId && preview.tokenId !== this.#token?.document?.id) return null;
     const sceneId = this.#token?.document?.parent?.id ?? this.#token?.document?.scene?.id ?? "";
@@ -903,6 +1067,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onSelectHudWeaponSet(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
+    const crew = this.crewContext;
+    if (crew) {
+      const key = String(target.dataset.weaponSet ?? "");
+      const set = this.#getCrewWeaponSets(crew).find(row => row.key === key);
+      if (!set) return undefined;
+      this.#crewWeaponSetKey = key;
+      this.#crewWeaponId = getUniqueHudWeaponSlots(set.slots ?? []).at(0)?.item?.id ?? "";
+      await crew.actor.update({ [`flags.${FALLOUT_MAW.id}.${SELECTED_HUD_WEAPON_SET_FLAG}`]: key,
+        [`flags.${FALLOUT_MAW.id}.${SELECTED_HUD_WEAPON_FLAG}`]: this.#crewWeaponId });
+      this.#activeTray = "";
+      return this.render({ force: true });
+    }
     const actor = this.actor;
     if (!actor?.isOwner) return undefined;
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
@@ -1070,7 +1246,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onSelectHudWeapon(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
-    const actor = this.actor;
+    const actor = this.interactionActor;
     if (!actor?.isOwner) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     const item = actor.items.get(itemId);
@@ -1097,7 +1273,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     const weaponSlotKey = String(target.dataset.weaponSlot ?? "");
     if (!weaponSetKey || !weaponSlotKey) return undefined;
-    await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    await this.interactionActor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
     this.#weaponEquipTarget = { weaponSetKey, weaponSlotKey, replaceItemId: "" };
     this.#activeTray = "weaponEquip";
     this.#dualWeaponActionSelection = null;
@@ -1107,7 +1283,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onReplaceHudWeapon(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
-    const actor = this.actor;
+    const actor = this.interactionActor;
     const itemId = String(target.dataset.itemId ?? "");
     if (isMiddleMouseClick(event)) return actor?.items.get(itemId)?.sheet?.render(true);
     if (event.button !== 0) return undefined;
@@ -1126,7 +1302,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onEquipHudWeapon(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
-    const actor = this.actor;
+    const actor = this.interactionActor;
     const itemId = String(target.dataset.itemId ?? "");
     const item = actor?.items.get(itemId);
     if (!item) return undefined;
@@ -1140,6 +1316,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!result) return undefined;
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, item.id);
+    if (this.crewContext) { this.#crewWeaponSetKey = weaponSetKey; this.#crewWeaponId = item.id; }
     this.#weaponEquipTarget = null;
     this.#activeTray = "weaponActions";
     this.#dualWeaponActionSelection = null;
@@ -1151,12 +1328,26 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     if (!itemId) return undefined;
-    const item = this.actor?.items.get(itemId);
+    const item = this.#resolveHudItem(itemId, { weaponContext: true, weaponSetKey: String(target.dataset.weaponSet ?? "") });
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) {
       return item?.sheet?.render(true);
     }
     if (event.button !== 0) return undefined;
+    if (this.crewContext) {
+      const crew = this.crewContext;
+      const setKey = String(target.dataset.weaponSet ?? this.#crewWeaponSetKey);
+      const set = this.#getCrewWeaponSets(crew).find(row => row.key === setKey);
+      if (!set?.slots?.some(slot => slot.item?.id === item.id)) return undefined;
+      const wasOpen = this.#activeTray === "weaponActions" && this.#crewWeaponId === item.id;
+      this.#crewWeaponId = item.id;
+      this.#crewWeaponSetKey = setKey;
+      await crew.actor.update({ [`flags.${FALLOUT_MAW.id}.${SELECTED_HUD_WEAPON_SET_FLAG}`]: setKey,
+        [`flags.${FALLOUT_MAW.id}.${SELECTED_HUD_WEAPON_FLAG}`]: item.id });
+      this.#activeTray = wasOpen ? "" : "weaponActions";
+      this.#weaponEquipTarget = null;
+      return this.render({ force: true });
+    }
     if (isHudWeaponDisabled(this.actor, item)) {
       notifyHudWeaponDisabled();
       return undefined;
@@ -1180,10 +1371,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actionKey = String(target.dataset.weaponActionKey ?? "");
     const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
     const itemId = String(target.dataset.itemId ?? "");
-    const item = this.actor?.items.get(itemId);
+    const item = this.#resolveHudItem(itemId, { weaponContext: true });
     if (!item || !actionKey) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
+    if (this.crewContext) return this.#useSelectedCrewWeaponAction(item, actionKey, weaponFunctionId);
     if (isActorUnableToAct(this.actor)) {
       ui.notifications.warn(auditFormat("FALLOUTMAW.AuditApps.CombatActionsAreUnavailableWhileUnconsciousOrDead", { v0: (this.actor?.name ?? "") }, "{v0}: невозможно совершать боевые действия без сознания или после смерти."));
       return undefined;
@@ -1252,6 +1444,29 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
+  async #useSelectedCrewWeaponAction(weapon, actionKey, weaponFunctionId) {
+    const crew = this.crewContext;
+    if (!crew?.available || isActorUnableToAct(crew.actor) || isWeaponActionBrokenForHud(weapon, weaponFunctionId)) return undefined;
+    const personal = (weapon.actor ?? weapon.parent)?.uuid === crew.actor.uuid;
+    if (personal) {
+      if (!canUserUseConstructCrewPersonalWeapon(this.actor, weapon, game.user, { passengerId: crew.passenger.id })
+        || isHudWeaponDisabled(crew.actor, weapon)) return undefined;
+      if (actionKey === "reload") return openWeaponReloadDialog({ actor: crew.actor, weapon, weaponFunctionId,
+        application: this, carrierToken: this.token, operatorPassengerId: crew.passenger.id, crewPersonalWeapon: true });
+      if (getWeaponActionBlockState(crew.actor, actionKey).blocked) return undefined;
+      return startWeaponAttack({ token: this.token, weapon, weaponFunctionId, actionKey,
+        operatorActor: crew.actor, operatorPassengerId: crew.passenger.id, crewPersonalWeapon: true,
+        useGmAuthority: true, finishAfterAttack: true });
+    }
+    if (!canUserUseConstructWeapon(this.actor, weapon, game.user, actionKey === "reload" ? "reload" : "fire", weaponFunctionId,
+      { passengerId: crew.passenger.id })) return undefined;
+    if (actionKey === "reload") return openWeaponReloadDialog({ actor: this.actor, weapon, weaponFunctionId,
+      application: this, operatorPassengerId: crew.passenger.id });
+    const { startConstructCrewWeaponAttack } = await import("../canvas/construct-visuals.mjs");
+    return startConstructCrewWeaponAttack({ token: this.token, weapon, weaponFunctionId, actionKey,
+      operatorPassengerId: crew.passenger.id });
+  }
+
   async #handleDualWeaponActionSelection({ item = null, actionKey = "", weaponFunctionId = "" } = {}) {
     if (!item || !actionKey) return undefined;
     const selection = {
@@ -1296,12 +1511,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
-    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    const item = resolveActorItemOrInstalledModule(this.interactionActor, itemId);
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (target.disabled) return undefined;
-    if (isHudWeaponDisabled(this.actor, item)) {
+    if (isHudWeaponDisabled(this.interactionActor, item)) {
       notifyHudWeaponDisabled();
       return undefined;
     }
@@ -1313,13 +1528,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
-    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    const item = resolveActorItemOrInstalledModule(this.interactionActor, itemId);
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (target.disabled) return undefined;
     return openLightSourceEnergyDialog({
-      actor: this.actor,
+      actor: this.interactionActor,
       token: this.token,
       item,
       application: this,
@@ -1331,13 +1546,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
-    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    const item = resolveActorItemOrInstalledModule(this.interactionActor, itemId);
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (target.disabled) return undefined;
     return openEnergyConsumerSourceDialog({
-      actor: this.actor,
+      actor: this.interactionActor,
       token: this.token,
       item,
       application: this,
@@ -1350,12 +1565,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     const conditionId = String(target.dataset.conditionId ?? "");
-    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    const item = resolveActorItemOrInstalledModule(this.interactionActor, itemId);
     if (!item) return undefined;
     if (event.button !== 0) return undefined;
     if (target.disabled) return undefined;
     return openEnergyConsumptionDialog({
-      actor: this.actor,
+      actor: this.interactionActor,
       item,
       conditionId,
       application: this
@@ -1367,11 +1582,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isHudActionBlockedByReactionLock()) return undefined;
     const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
     const itemId = String(target.dataset.itemId ?? "");
-    const item = this.actor?.items.get(itemId);
+    const item = this.interactionActor?.items.get(itemId);
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
-    if (isHudWeaponDisabled(this.actor, item)) {
+    if (isHudWeaponDisabled(this.interactionActor, item)) {
       notifyHudWeaponDisabled();
       return undefined;
     }
@@ -1380,7 +1595,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return undefined;
     }
     const changed = await openWeaponAttackPowerDialog({
-      actor: this.actor,
+      actor: this.interactionActor,
       weapon: item,
       weaponFunctionId,
       application: this
@@ -1394,7 +1609,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const skillKey = target.dataset.skillKey ?? "";
     if (!skillKey) return undefined;
     return requestSkillCheck({
-      actor: this.actor,
+      actor: this.interactionActor,
       skillKey,
       animate: true,
       prompt: true,
@@ -1405,20 +1620,20 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onUseItem(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
-    const item = resolveActorItemOrInstalledModule(this.actor, target.dataset.itemId ?? "");
+    const item = resolveActorItemOrInstalledModule(this.interactionActor, target.dataset.itemId ?? "");
     if (!item) return undefined;
     if (event.button !== 0) return undefined;
     if (!isActiveItem(item)) return undefined;
     if (hasItemFunction(item, ITEM_FUNCTIONS.trap)) {
       return startTrapPlacement({
-        actor: this.actor,
+        actor: this.interactionActor,
         token: this.token,
         item,
         application: this
       });
     }
     return useActiveItem({
-      actor: this.actor,
+      actor: this.interactionActor,
       token: this.token,
       item,
       application: this
@@ -1428,14 +1643,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onUseAbility(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
-    const item = this.actor?.items.get(target.dataset.itemId ?? "");
+    const item = this.interactionActor?.items.get(target.dataset.itemId ?? "");
     if (!item) return undefined;
     if (event.button !== 0) return undefined;
     const functionId = String(target.dataset.abilityFunctionId ?? "");
     const toggleConditionId = String(target.dataset.abilityToggleConditionId ?? "");
     if (toggleConditionId) {
       const toggled = await toggleAbilityCondition({
-        actor: this.actor,
+        actor: this.interactionActor,
         item,
         functionId,
         conditionId: toggleConditionId
@@ -1451,7 +1666,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     try {
       const result = await useAbilityFunctionItem({
-        actor: this.actor,
+        actor: this.interactionActor,
         token: this.token,
         item,
         functionId,
@@ -1490,8 +1705,107 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.render({ force: true });
   }
 
+  #prepareConstructCrewPassengers(hudIcons) {
+    const actor = this.actor;
+    const seats = getConstructCrewSeats(actor);
+    const passengers = getActorContainerFlag(actor).passengers;
+    const canRearrange = canUserRearrangeConstructCrew(actor, game.user);
+    const contexts = getConstructCrewContexts(actor, game.user);
+    const rows = seats.map(seat => ({ seat, passenger: passengers.find(row => row.slotId === seat.slotId && row.slotIndex === seat.slotIndex) }));
+    for (const passenger of passengers) if (!rows.some(row => row.passenger?.id === passenger.id)) rows.push({ seat: null, passenger });
+    return rows.map(({ seat, passenger }) => {
+      const state = getConstructCrewSeatState(actor, seat, { ignoreOccupantStatus: true });
+      const manages = Boolean(passenger && canUserManageConstructPassenger(actor, passenger, game.user));
+      const context = contexts.find(row => row.passenger.id === passenger?.id);
+      const name = context?.actor.name || passenger?.actorName || passenger?.actorUuid || auditLocalize('FALLOUTMAW.ConstructCrew.FreeSeat', 'Свободно');
+      const seatName = seat?.name || auditLocalize('FALLOUTMAW.ConstructCrew.Unassigned', 'Место без назначения');
+      const roleLabel = auditLocalize('FALLOUTMAW.ConstructCrew.Roles.' + (seat?.role ?? 'passenger'), seat?.role ?? 'Пассажир');
+      return { ...(passenger ?? {}), id: passenger?.id ?? '', seatId: seat?.id ?? '',
+        occupied: Boolean(passenger), name, seatName, roleLabel,
+        img: context?.actor.img || passenger?.actorImg || hudIcons.crewActions?.emptySeat || FALLBACK_ICON,
+        title: [seatName, name, roleLabel, state.reason].filter(Boolean).join(' · '),
+        selected: Boolean(context && this.#activeCrewPassengerId === passenger.id),
+        expanded: Boolean(context && this.#crewPassengerId === passenger.id), canInteract: Boolean(context), canExit: manages,
+        draggable: Boolean(canRearrange && passenger && state.available), droppable: Boolean(canRearrange && seat && state.available),
+        reason: state.reason, icons: hudIcons.crewActions ?? {},
+        exitLabel: auditLocalize('FALLOUTMAW.ConstructCrew.Exit', 'Выйти') };
+    });
+  }
+
+  static async #onToggleConstructSystem(event, target) {
+    event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return;
+    const system = getConstructSystems(this.actor).find(row => row.id === target.dataset.systemId);
+    if (!system) return;
+    try { await requestConstructSystemAction(this.actor, system.id, "activate", { active: !system.active, passengerId: this.crewContext?.passenger.id ?? "" }); }
+    catch (error) { ui.notifications.warn(error.message); }
+  }
+
+  static async #onTurnConstructHull(event, target) {
+    event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return;
+    try { await requestConstructCrewControl({ tokenUuid: this.#token.document.uuid, action: "rotate", delta: Number(target.dataset.delta), passengerId: this.crewContext?.passenger.id ?? "" }); }
+    catch (error) { ui.notifications.warn(error.message); }
+  }
+
+  static async #onSelectConstructCrewPassenger(event, target) {
+    event.preventDefault();
+    const passengerId = String(target.dataset.passengerId ?? "");
+    if (!passengerId || event.button !== 0) return undefined;
+    const context = getConstructCrewContext(this.actor, game.user, { passengerId });
+    if (!context) return undefined;
+    selectedConstructCrewPassengers.set(`${game.user.id}:${this.actor.uuid}`, passengerId);
+    if (this.#activeCrewPassengerId !== passengerId) {
+      cancelWeaponAttack();
+      this.#activeCrewPassengerId = passengerId;
+      this.#crewWeaponId = String(context.actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
+      this.#crewWeaponSetKey = String(context.actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG) ?? "");
+      this.#weaponEquipTarget = null;
+      this.#dualWeaponActionSelection = null;
+      this.#clearHudItemTooltip({ force: true });
+    }
+    this.#crewPassengerId = this.#crewPassengerId === passengerId ? "" : passengerId;
+    Hooks.callAll("falloutMawConstructCrewSelection", this.#token);
+    const saved = game.user.getFlag(SYSTEM_ID, SELECTED_CONSTRUCT_CREW_PASSENGERS_FLAG);
+    const remembered = Array.isArray(saved) ? saved : [];
+    if (remembered.find(row => row.actorUuid === this.actor.uuid)?.passengerId !== passengerId)
+      await game.user.setFlag(SYSTEM_ID, SELECTED_CONSTRUCT_CREW_PASSENGERS_FLAG,
+        [...remembered.filter(row => row.actorUuid !== this.actor.uuid), { actorUuid: this.actor.uuid, passengerId }].slice(-64));
+    return this.render({ force: true });
+  }
+
+  static #onSelectConstructCrewWeapon(event, target) {
+    event.preventDefault();
+    const weapon = this.actor?.items?.get(String(target.dataset.itemId ?? ""));
+    if (!weapon) return undefined;
+    if (isMiddleMouseClick(event)) return weapon.sheet?.render(true);
+    this.#crewPassengerId = String(target.dataset.passengerId ?? "");
+    this.#crewWeaponId = this.#crewWeaponId === weapon.id ? "" : weapon.id;
+    return this.render({ force: true });
+  }
+
+  static async #onUseConstructCrewWeaponAction(event, target) {
+    event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
+    const weapon = this.actor?.items?.get(String(target.dataset.itemId ?? ""));
+    const passengerId = String(target.dataset.passengerId ?? "");
+    const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
+    const actionKey = String(target.dataset.weaponActionKey ?? "");
+    if (!weapon || !actionKey) return undefined;
+    if (isMiddleMouseClick(event)) return weapon.sheet?.render(true);
+    const permitted = canUserUseConstructWeapon(this.actor, weapon, game.user,
+      actionKey === "reload" ? "reload" : "fire", weaponFunctionId, { passengerId });
+    if (!permitted) { ui.notifications.warn(auditLocalize("FALLOUTMAW.ConstructCrew.NoOperator", "Нет доступного исполнителя на назначенном месте.")); return undefined; }
+    if (actionKey === "reload") return openWeaponReloadDialog({ actor: this.actor, weapon, weaponFunctionId,
+      application: this, operatorPassengerId: passengerId });
+    const { startConstructCrewWeaponAttack } = await import("../canvas/construct-visuals.mjs");
+    return startConstructCrewWeaponAttack({ token: this.token, weapon, weaponFunctionId, actionKey,
+      operatorPassengerId: passengerId });
+  }
+
   static #onExitActorContainerPassenger(event, target) {
     event.preventDefault();
+    event.stopPropagation();
     const passengerId = String(target.dataset.passengerId ?? "");
     if (!passengerId) return undefined;
     if (event.button === 2) {
@@ -1500,7 +1814,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         passengerId
       });
     }
-    if (isHudActionBlockedByReactionLock() || !this.actor?.isOwner) return undefined;
+    if (isHudActionBlockedByReactionLock()) return undefined;
+    if (!hasConstructCrew(this.actor) && !this.actor?.isOwner) return undefined;
     return startActorContainerPassengerExitPlacement({
       vehicleActor: this.actor,
       passengerId
@@ -1514,23 +1829,23 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps", "boardTransport", "camp"].includes(key)) return undefined;
 
     if (key === "advancement") {
-      if (!this.actor?.isOwner) return undefined;
-      return new AdvancementApplication(this.actor).render(true);
+      if (!this.interactionActor?.isOwner) return undefined;
+      return new AdvancementApplication(this.interactionActor).render(true);
     }
     if (key === "camp") return openCampFromHud(getSelectedHudActors());
-    if (key === "boardTransport") return startActorContainerBoardingMode({ actor: this.actor, token: this.token });
-    if (key === "craft") return openCraftWindow({ actor: this.actor });
+    if (key === "boardTransport") return startActorContainerBoardingMode({ actor: this.interactionActor, token: this.token });
+    if (key === "craft") return openCraftWindow({ actor: this.interactionActor });
     if (key === "stealth") return openStealthWindow(this.token);
-    if (key === "traps") return startTrapInteractionMode({ actor: this.actor, token: this.token });
+    if (key === "traps") return startTrapInteractionMode({ actor: this.interactionActor, token: this.token });
     if (key === "trade") return this.#requestTradeInventory();
     if (key === "search") return this.#openSearchInventory();
-    if (key === "repair") return requestRepairTarget(this.token);
-    return requestMedicineTarget(this.token);
+    if (key === "repair") return requestRepairTarget(this.token, this.interactionActor);
+    return requestMedicineTarget(this.token, this.interactionActor);
   }
 
   async #openSearchInventory() {
     const target = await requestCustomActorTokenSelection({
-      sourceActor: this.actor,
+      sourceActor: this.interactionActor,
       sourceToken: this.token,
       includeSelf: false,
       title: auditLocalize("FALLOUTMAW.AuditApps.Search_841", "Обыск"),
@@ -1543,14 +1858,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     void this.render({ force: true });
     return openSearchInventoryWindow({
-      searcherActor: this.actor,
+      searcherActor: this.interactionActor,
       searchedActor: target.actor
     });
   }
 
   async #requestTradeInventory() {
     const target = await requestCustomActorTokenSelection({
-      sourceActor: this.actor,
+      sourceActor: this.interactionActor,
       sourceToken: this.token,
       includeSelf: false,
       title: auditLocalize("FALLOUTMAW.AuditApps.Trade_836", "Торговля"),
@@ -1563,7 +1878,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     void this.render({ force: true });
     return requestTradeInventoryWindow({
-      traderActor: this.actor,
+      traderActor: this.interactionActor,
       tradeActor: target.actor
     });
   }
@@ -1657,7 +1972,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     event.stopPropagation();
     const action = String(button.dataset.action ?? "");
-    const item = resolveActorItemOrInstalledModule(this.actor, button.dataset.itemId ?? "");
+    const item = this.#resolveHudItem(button.dataset.itemId ?? "", { weaponContext: action === "toggleWeaponActions", weaponSetKey: button.dataset.weaponSet ?? "" });
     if (!item) return;
     if (game.user?.isGM && action !== "toggleWeaponActions") return item.sheet?.render(true);
     if (action !== "toggleWeaponActions") return;
@@ -1674,7 +1989,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #pinHudTooltipFromActionElement(actionElement, event = null) {
     const itemId = String(actionElement?.dataset?.hudTooltipItem ?? actionElement?.dataset?.itemId ?? "");
-    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    const item = this.#resolveHudItem(itemId, { weaponContext: actionElement?.dataset?.action === "toggleWeaponActions", weaponSetKey: actionElement?.dataset?.weaponSet ?? "" });
     if (!item) return;
     this.#clearActionPointCostTooltip();
     if (this.#itemTooltipElement && this.#itemTooltipItemId === item.id && this.#itemTooltipPinned) {
@@ -1690,7 +2005,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#itemTooltipPinned) return;
     const button = this.#getHudTooltipItemElement(event.target);
     if (!button || button.contains(event.relatedTarget)) return;
-    const item = resolveActorItemOrInstalledModule(this.actor, button.dataset.hudTooltipItem ?? "");
+    const item = this.#resolveHudItem(button.dataset.hudTooltipItem ?? "");
     if (!item) return;
 
     this.#cancelHudItemTooltipClose();
@@ -1738,8 +2053,42 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#setLimbDisplayLayer(String(option.dataset.limbLayerOption ?? ""));
   }
 
+  #onCrewPassengerDragStart(event) {
+    const row = event.target?.closest?.("[data-crew-passenger-drag]");
+    if (!row || !this.element?.contains(row) || !canUserRearrangeConstructCrew(this.actor, game.user)) return;
+    const passengerId = String(row.dataset.crewPassengerDrag ?? "");
+    if (!getActorContainerFlag(this.actor).passengers.some(passenger => passenger.id === passengerId)) return;
+    const payload = JSON.stringify({ type: "falloutMawConstructCrew", vehicleActorUuid: this.actor.uuid, passengerId });
+    event.dataTransfer.setData("application/x-fallout-maw-crew", payload);
+    event.dataTransfer.setData("text/plain", payload);
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  #onCrewPassengerDragOver(event) {
+    const row = event.target?.closest?.("[data-crew-seat-drop]");
+    if (!row || !this.element?.contains(row) || !canUserRearrangeConstructCrew(this.actor, game.user)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    row.classList.add("crew-drop-target");
+  }
+
+  async #onCrewPassengerDrop(event) {
+    const row = event.target?.closest?.("[data-crew-seat-drop]");
+    if (!row || !this.element?.contains(row) || !canUserRearrangeConstructCrew(this.actor, game.user)) return;
+    event.preventDefault(); event.stopPropagation();
+    row.classList.remove("crew-drop-target");
+    try {
+      const data = JSON.parse(event.dataTransfer.getData("application/x-fallout-maw-crew") || event.dataTransfer.getData("text/plain") || "null");
+      if (data?.type !== "falloutMawConstructCrew" || data.vehicleActorUuid !== this.actor.uuid) return;
+      const seatId = String(row.dataset.crewSeatDrop ?? "");
+      if (!getConstructCrewSeats(this.actor).some(seat => seat.id === seatId)) return;
+      await requestActorContainerPassengerMove({ vehicleActorUuid: this.actor.uuid, passengerId: String(data.passengerId ?? ""), seatId, swap: true });
+      await this.render({ force: true });
+    } catch (error) { ui.notifications.warn(error.message); }
+  }
+
   #setLimbDisplayLayer(layer) {
-    if (!HUD_LIMB_LAYER_KEYS.includes(layer) || layer === this.#limbDisplayLayer) return;
+    if (!(HUD_LIMB_LAYER_KEYS.includes(layer) || layer === "crew" && this.crewContext) || layer === this.#limbDisplayLayer) return;
     this.#limbDisplayLayer = layer;
     this.#limbPopover.destroy();
     void this.render({ force: true });
@@ -1777,7 +2126,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     event.stopPropagation();
     this.#limbPopover.hide();
-    void openLimbDamageDialog(this.actor, target.dataset.limbKey ?? "");
+    void openLimbDamageDialog(this.#limbDisplayLayer === "crew" ? this.interactionActor : this.actor, target.dataset.limbKey ?? "");
   }
 
   #onMeterValueInputKeyDown(event) {
@@ -1803,7 +2152,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const key = String(input.dataset.key ?? "");
     if (!HUD_METER_SECTION_KEYS.includes(section) || !this.#editableMeterSections[section] || !key) return;
 
-    const actor = this.actor;
+    const actor = this.#limbDisplayLayer === "crew" ? this.interactionActor : this.actor;
     const data = actor?.system?.[section]?.[key];
     if (!actor || !data) return;
 
@@ -1831,7 +2180,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #showHudItemTooltip(item, anchor, { pinned = true, refresh = false } = {}) {
-    const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, item.actor ?? item.parent ?? this.interactionActor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
@@ -1896,10 +2245,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!initialAnchor && !this.#itemTooltipPinned) {
       return this.#clearHudItemTooltip();
     }
-    const item = resolveActorItemOrInstalledModule(this.actor, this.#itemTooltipItemId);
+    const item = this.#resolveHudItem(this.#itemTooltipItemId, { weaponContext: initialAnchor?.dataset?.action === "toggleWeaponActions", weaponSetKey: initialAnchor?.dataset?.weaponSet ?? "" });
     if (!item) return this.#clearHudItemTooltip();
     this.#clearNestedHudItemTooltip({ force: true });
-    const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, item.actor ?? item.parent ?? this.interactionActor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
@@ -2005,7 +2354,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #installHudWeaponModuleFromTooltipChoice(choiceElement) {
     const { weapon, entry, slotIndex } = this.#getHudWeaponModuleSlotContext(choiceElement);
-    const moduleItem = this.actor.items.get(String(choiceElement?.dataset?.tooltipModuleChoice ?? ""));
+    const moduleItem = this.interactionActor.items.get(String(choiceElement?.dataset?.tooltipModuleChoice ?? ""));
     if (!weapon || !moduleItem) return undefined;
     return this.#installHudWeaponModule(weapon, entry, slotIndex, moduleItem);
   }
@@ -2018,7 +2367,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #getHudWeaponModuleSlotContext(slotElement) {
-    const weapon = this.#itemTooltipItemId ? this.actor?.items.get(this.#itemTooltipItemId) : null;
+    const weapon = this.#itemTooltipItemId ? this.interactionActor?.items.get(this.#itemTooltipItemId) : null;
     return { weapon, ...getModuleTooltipSlotContext(weapon, slotElement?.dataset) };
   }
 
@@ -2039,14 +2388,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     let magazinePlan = { overflow: 0, updates: [], creates: [] };
     try {
       if (oldItemData?.system) {
-        returnPlan = planActorInventoryGrant(this.actor, oldItemData, {
+        returnPlan = planActorInventoryGrant(this.interactionActor, oldItemData, {
           quantity: 1,
           merge: false
         });
         if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       }
       if (targetFunction === ITEM_FUNCTIONS.weapon) {
-        magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+        magazinePlan = planWeaponMagazineCapacityTransition(this.interactionActor, entry?.data ?? {}, slots, {
           reservedCreates: returnPlan.creates
         });
       }
@@ -2066,7 +2415,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await this.#moduleTooltipMutation.run(async () => {
       await executeInventoryMutation({
-        actor: this.actor,
+        actor: this.interactionActor,
         updates: [
           weaponUpdate,
           ...returnPlan.updates,
@@ -2093,13 +2442,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     let returnPlan;
     let magazinePlan = { overflow: 0, updates: [], creates: [] };
     try {
-      returnPlan = planActorInventoryGrant(this.actor, itemData, {
+      returnPlan = planActorInventoryGrant(this.interactionActor, itemData, {
         quantity: 1,
         merge: false
       });
       if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       if (targetFunction === ITEM_FUNCTIONS.weapon) {
-        magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+        magazinePlan = planWeaponMagazineCapacityTransition(this.interactionActor, entry?.data ?? {}, slots, {
           reservedCreates: returnPlan.creates
         });
       }
@@ -2114,7 +2463,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await this.#moduleTooltipMutation.run(async () => {
       await executeInventoryMutation({
-        actor: this.actor,
+        actor: this.interactionActor,
         updates: [
           weaponUpdate,
           ...returnPlan.updates,
@@ -2127,9 +2476,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #restoreHudModuleSlotsTab(weaponId = "") {
-    const weapon = this.actor?.items.get(String(weaponId ?? ""));
+    const weapon = this.interactionActor?.items.get(String(weaponId ?? ""));
     if (!weapon) return;
-    this.#itemTooltipWeaponTabIndex = getWeaponTooltipModuleSlotsTabIndex(weapon, this.actor);
+    this.#itemTooltipWeaponTabIndex = getWeaponTooltipModuleSlotsTabIndex(weapon, this.interactionActor);
   }
 
   #pinHudItemTooltip() {
@@ -2548,12 +2897,14 @@ class TokenActionHudScaleSettings extends FalloutMaWFormApplicationV2 {
   }
 }
 
-function prepareLimbLayerContext(activeLayer = "state") {
-  const active = HUD_LIMB_LAYER_KEYS.includes(activeLayer) ? activeLayer : "state";
+function prepareLimbLayerContext(activeLayer = "state", crew = null) {
+  const choices = [...HUD_LIMB_LAYER_CHOICES.filter(layer => HUD_LIMB_LAYER_KEYS.includes(layer.key)),
+    ...(crew ? [{ key: "crew", label: `${auditLocalize("FALLOUTMAW.ConstructCrew.ActorState", "Экипаж")} — ${crew.actor.name}` }] : [])];
+  const active = choices.some(row => row.key === activeLayer) ? activeLayer : "state";
   return {
     key: active,
-    label: HUD_LIMB_LAYER_CHOICES.find(layer => layer.key === active)?.label ?? auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"),
-    choices: HUD_LIMB_LAYER_CHOICES.filter(layer => HUD_LIMB_LAYER_KEYS.includes(layer.key)).map(layer => ({
+    label: choices.find(layer => layer.key === active)?.label ?? auditLocalize("FALLOUTMAW.Item.ConditionValue", "Состояние"),
+    choices: choices.map(layer => ({
       ...layer,
       selected: layer.key === active
     }))
@@ -2701,7 +3052,8 @@ function prepareResourceEntries(actor) {
     }))
     .map(entry => decorateActionPointHudEntry(actor, entry))
     .map(entry => decorateOneTimeResourceDisplay(actor, entry))
-    .map(entry => addLimitedResourceDisplay(entry, limited[entry.key]));
+    .map(entry => addLimitedResourceDisplay(entry, limited[entry.key]))
+    .map(entry => decorateConstructResourceAvailability(actor, entry));
 }
 
 function prepareNeedEntries(actor) {
@@ -4332,10 +4684,12 @@ function formatNumberForHud(value) {
   return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/\.?0+$/, "");
 }
 
-async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null } = {}) {
-  if (!actor?.isOwner || !weapon) return undefined;
+async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null, operatorPassengerId = "", carrierToken = null, crewPersonalWeapon = false } = {}) {
+  if (!weapon || (hasConstructCrew(actor)
+    ? !canUserUseConstructWeapon(actor, weapon, game.user, "reload", weaponFunctionId, { passengerId: operatorPassengerId })
+    : !actor?.isOwner)) return undefined;
   const weaponId = weapon.id;
-  const dialogKey = getReloadDialogKey(actor, weaponId, weaponFunctionId);
+  const dialogKey = `${getReloadDialogKey(actor, weaponId, weaponFunctionId)}|${operatorPassengerId}`;
   const existingDialog = openReloadDialogs.get(dialogKey);
   if (existingDialog) {
     updateReloadDialogState(existingDialog, actor, weaponId, weaponFunctionId);
@@ -4357,12 +4711,15 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
   const runReloadStep = async (dialog, action, sourceUuid) => {
     const freshWeapon = actor.items.get(weaponId);
     if (!freshWeapon) return;
-    if (!hasRequiredWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId)) return;
+    const operator = hasConstructCrew(actor)
+      ? await resolveConstructWeaponOperatorActor(actor, freshWeapon, game.user, "reload", weaponFunctionId, { passengerId: operatorPassengerId }) : actor;
+    if (!operator || !hasRequiredWeaponReloadActionPoints(operator, freshWeapon, weaponFunctionId)) return;
     try {
       await requestWeaponReloadOperation({
         actor,
         weapon: freshWeapon,
         weaponFunctionId,
+        operatorPassengerId, carrierToken, crewPersonalWeapon,
         action,
         sourceUuid
       });
@@ -4390,11 +4747,14 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
     if (!availableSources.some(item => item.uuid === nextSourceUuid)) return;
     try {
       if (rounds > 0 && currentSourceUuid && nextSourceUuid !== currentSourceUuid) {
-        if (!hasRequiredWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId)) return;
+        const operator = hasConstructCrew(actor)
+          ? await resolveConstructWeaponOperatorActor(actor, freshWeapon, game.user, "reload", weaponFunctionId, { passengerId: operatorPassengerId }) : actor;
+        if (!operator || !hasRequiredWeaponReloadActionPoints(operator, freshWeapon, weaponFunctionId)) return;
         await requestWeaponReloadOperation({
           actor,
           weapon: freshWeapon,
           weaponFunctionId,
+          operatorPassengerId, carrierToken, crewPersonalWeapon,
           action: "extract",
           sourceUuid: currentSourceUuid
         });
@@ -4405,6 +4765,7 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
         actor,
         weapon: currentWeapon,
         weaponFunctionId,
+        operatorPassengerId, carrierToken, crewPersonalWeapon,
         action: "select",
         sourceUuid: nextSourceUuid
       });
@@ -4537,12 +4898,19 @@ function bindReloadDialogLiveUpdates(dialog, actor, weaponId, weaponFunctionId) 
   }, { once: true });
 }
 
-async function requestWeaponReloadOperation({ actor = null, weapon = null, weaponFunctionId = "", action = "", sourceUuid = "" } = {}) {
-  if (!actor?.isOwner || !weapon) return undefined;
+export async function requestWeaponReloadOperation({ actor = null, weapon = null, weaponFunctionId = "", action = "", sourceUuid = "", operatorPassengerId = "", carrierToken = null, crewPersonalWeapon = false } = {}) {
+  if (crewPersonalWeapon && !canUserUseConstructCrewPersonalWeapon(carrierToken?.actor ?? carrierToken?.document?.actor, weapon, game.user,
+    { passengerId: operatorPassengerId })) return undefined;
+  if (!weapon || (hasConstructCrew(actor)
+    ? !canUserUseConstructWeapon(actor, weapon, game.user, "reload", weaponFunctionId, { passengerId: operatorPassengerId })
+    : !actor?.isOwner)) return undefined;
   const payload = {
     actorUuid: actor.uuid,
     weaponId: weapon.id,
     weaponFunctionId: String(weaponFunctionId ?? ""),
+    operatorPassengerId: String(operatorPassengerId ?? ""),
+    crewPersonalWeapon: crewPersonalWeapon === true,
+    carrierTokenUuid: String(carrierToken?.document?.uuid ?? carrierToken?.uuid ?? ""),
     action: String(action ?? ""),
     sourceUuid: String(sourceUuid ?? "")
   };
@@ -4597,13 +4965,30 @@ async function performEndCombatTurnOperation({ combatId = "", actorUuid = "", co
   return true;
 }
 
-async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", weaponFunctionId = "", action = "", sourceUuid = "" } = {}, requesterUserId = "") {
+async function performWeaponReloadOperation(payload = {}, requesterUserId = "") {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  if (hasConstructCrew(actor) || payload.crewPersonalWeapon === true) return queueActorContainerOperation(() => performAuthorizedWeaponReloadOperation(payload, requesterUserId));
+  return performAuthorizedWeaponReloadOperation(payload, requesterUserId);
+}
+
+async function performAuthorizedWeaponReloadOperation({ actorUuid = "", weaponId = "", weaponFunctionId = "", action = "", sourceUuid = "", operatorPassengerId = "", crewPersonalWeapon = false, carrierTokenUuid = "" } = {}, requesterUserId = "") {
   const actor = await fromUuid(actorUuid);
   if (!actor) throw new Error("Actor not found.");
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (!requester || !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
+  const weapon = actor.items?.get(weaponId);
+  if (crewPersonalWeapon === true) {
+    const carrier = await fromUuid(String(carrierTokenUuid));
+    if (carrier?.documentName !== "Token" || !canUserUseConstructCrewPersonalWeapon(carrier.actor, weapon, requester,
+      { passengerId: operatorPassengerId })) throw new Error("Личное оружие недоступно на выбранном месте экипажа.");
+  }
+  if (!requester || !weapon || (hasConstructCrew(actor)
+    ? !canUserUseConstructWeapon(actor, weapon, requester, "reload", weaponFunctionId, { passengerId: operatorPassengerId })
+    : !actor.testUserPermission(requester, "OWNER"))) throw new Error("No weapon reload permission.");
   if (!["insert", "extract", "select"].includes(String(action))) throw new Error("Unknown weapon reload action.");
-  return runWeaponReloadTransaction({ actor, weaponId, weaponFunctionId, spendActionPoints: action !== "select" }, weapon => (
+  const operatorActor = hasConstructCrew(actor)
+    ? await resolveConstructWeaponOperatorActor(actor, weapon, requester, "reload", weaponFunctionId, { passengerId: operatorPassengerId }) : actor;
+  if (!operatorActor || isActorUnableToAct(operatorActor)) throw new Error("No available reload operator.");
+  return runWeaponReloadTransaction({ actor, operatorActor, weaponId, weaponFunctionId, spendActionPoints: action !== "select" }, weapon => (
     performLockedWeaponReloadOperation(actor, weapon, weaponFunctionId, action, sourceUuid)
   ));
 }
@@ -4620,6 +5005,9 @@ async function performLockedWeaponReloadOperation(actor, weapon, weaponFunctionI
     const selectedSource = availableSources.find(item => item.uuid === sourceUuid);
     if (!selectedSource || selectedSource.actor || !hasItemFunction(selectedSource, ITEM_FUNCTIONS.damageSource)) {
       throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceEmpty"));
+    }
+    if (!canSelectWeaponMagazineSource(weaponData, selectedSource.uuid)) {
+      throw new Error(auditLocalize("FALLOUTMAW.Item.WeaponReloadExtractBeforeSelect", "Сначала извлеките боеприпасы из магазина, затем выберите другой источник."));
     }
     return executeInventoryMutation({
       actor,
@@ -5139,7 +5527,7 @@ function layoutTokenActionHud(element) {
 
 function balanceTokenActionHudPopup(popup, availableWidth) {
   if (!popup || popup.classList.contains("weapon-actions") || popup.classList.contains("weapon-sets")) return;
-  const itemCount = popup.querySelectorAll(":scope > button").length;
+  const itemCount = popup.querySelectorAll(":scope > button, :scope > .fallout-maw-token-hud-crew-list > .fallout-maw-token-hud-crew-seat").length;
   if (itemCount <= 0) {
     popup.style.removeProperty("--fallout-maw-token-hud-balanced-columns");
     return;

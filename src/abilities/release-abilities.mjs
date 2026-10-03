@@ -1,3 +1,4 @@
+import { chooseActorTargetRecipient } from "../apps/actor-target-choice.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getActorFixedAbilityFunctionEntry, getAbilityFixedFunctionState, getAbilityFixedFunctionStateKey } from "./runtime-state.mjs";
 import { ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY } from "../settings/abilities.mjs";
@@ -73,7 +74,10 @@ export async function useReleaseAbility(actor, item, fn, { targetActor = null } 
   }
   if (fn.fixedKey === "equipmentLimit") {
     const selected = targetActor ? [] : Array.from(game.user?.targets ?? []).filter(t => t.actor);
-    const target = targetActor ?? selected[0]?.actor ?? actor;
+    const recipient = !targetActor && selected.length === 1 ? await chooseActorTargetRecipient(selected[0], { title: item.name, sourceActorUuid: actor.uuid,
+      getReason: ({ actor: candidate }) => ["self", "ally"].includes(getAuraRelation(actor, candidate)) ? "" : game.i18n.localize("FALLOUTMAW.AuditRuntime.R0628") }) : null;
+    if (!targetActor && selected.length === 1 && !recipient) return false;
+    const target = targetActor ?? recipient?.actor ?? actor;
     if (selected.length > 1 || !["self", "ally"].includes(getAuraRelation(actor, target))) {
       ui.notifications.warn("Выберите одного союзника или снимите выделение цели для применения на себя."); return false;
     }

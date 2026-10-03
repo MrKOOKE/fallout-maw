@@ -4,6 +4,8 @@ import { useReleaseAbility, registerReleaseAbilityRuntime } from "./release-abil
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { findActorPhysicalToken, isActorAtPhysicalToken, getActorTokenRecipients } from "../utils/actor-target-context.mjs";
+import { chooseActorTargetRecipient } from "../apps/actor-target-choice.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -418,7 +420,8 @@ import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import {
   requestCustomActorTokenSelection,
-  requestCustomTokenSelection
+  requestCustomTokenSelection,
+  requestCustomActorRecipientsSelection
 } from "../canvas/custom-token-selection.mjs";
 import { createRightClickPanGuard } from "../canvas/right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
@@ -3249,7 +3252,7 @@ async function useCommandBasics(actor, abilityItem, abilityFunction) {
       actorUuid: actor.uuid,
       abilityItemId: abilityItem.id,
       abilityFunctionId: abilityFunction.id,
-      targetActorUuids: selection.map(entry => entry.token?.actor?.uuid).filter(Boolean),
+      targetActorUuids: selection.map(entry => entry.actor?.uuid).filter(Boolean),
       dodgeBonus,
       durationSeconds: settings.dodgeDurationSeconds,
       senderUserId: game.user?.id ?? ""
@@ -3334,14 +3337,13 @@ async function requestCommandBasicsChoice({ abilityName = auditLocalize("FALLOUT
 function selectCommandBasicsTargets({ commander = null, command = "", limit = 1, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0122", "Основы командования") } = {}) {
   const collectRows = () => collectCommandBasicsTargetRows(commander, command);
   const sourceToken = getActorSceneToken(commander);
-  return requestCustomTokenSelection({
-    rows: collectRows(),
+  return requestCustomActorRecipientsSelection({
+    collectRows, sourceActorUuid: commander?.uuid ?? "",
     limit,
     title: abilityName,
     noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0205", { p0: (abilityName) }, "{p0}: нет подходящих исполнителей."),
     instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0206", { p0: (abilityName), p1: (limit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет."),
     sourceToken,
-    refreshRows: collectRows
   });
 }
 
@@ -4415,7 +4417,7 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     const seen = new Set();
     const targets = rows
       .filter(row => row.selectable)
-      .map(row => ({ actor: row.token.actor, token: row.token }))
+      .map(row => ({ actor: row.actor, token: row.token }))
       .filter(row => {
         const actorUuid = String(row.actor?.uuid ?? "").trim();
         if (!actorUuid || seen.has(actorUuid)) return false;
@@ -4428,25 +4430,14 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     return targets;
   }
   const targetLimit = evaluateActiveApplicationTargetLimit(settings, actor);
-  const selection = await requestCustomTokenSelection({
-    rows,
+  return requestCustomActorRecipientsSelection({
+    collectRows, sourceActorUuid: actor.uuid,
     limit: targetLimit,
     title: getAbilityDisplayName(abilityItem),
     noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0211", { p0: (getAbilityDisplayName(abilityItem)) }, "{p0}: нет подходящих целей."),
     instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0206", { p0: (getAbilityDisplayName(abilityItem)), p1: (targetLimit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет."),
     sourceToken: sourcePlaceable,
-    refreshRows: collectRows,
-    getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? row?.actorUuid ?? "")
   });
-  const seen = new Set();
-  return selection
-    .map(row => ({ actor: row.token.actor, token: row.token }))
-    .filter(row => {
-      const actorUuid = String(row.actor?.uuid ?? "").trim();
-      if (!actorUuid || seen.has(actorUuid)) return false;
-      seen.add(actorUuid);
-      return true;
-    });
 }
 
 function evaluateActiveApplicationTargetLimit(settings = {}, actor = null) {
@@ -4470,9 +4461,9 @@ function collectActiveApplicationTargetRows(sourceActor, abilityFunction, settin
   const sourcePlaceable = sourceToken?.object ?? sourceToken ?? null;
   return (canvas?.tokens?.placeables ?? [])
     .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
-    .map(token => {
-      const isSelf = token.actor.uuid === sourceActor?.uuid;
-      const relation = getActiveApplicationTargetRelation(sourceActor, token.actor);
+    .flatMap(token => getActorTokenRecipients(token).map(recipient => {
+      const isSelf = recipient.actor.uuid === sourceActor?.uuid;
+      const relation = getActiveApplicationTargetRelation(sourceActor, recipient.actor);
       const relationAllowed = accepted.has(relation);
       const selfAllowed = !settings.excludeSelf || !isSelf;
       const distanceAllowed = radiusMeters === null
@@ -4481,7 +4472,7 @@ function collectActiveApplicationTargetRows(sourceActor, abilityFunction, settin
       const lineOfSightAllowed = !settings.wallsBlock
         || isSelf
         || (Boolean(sourcePlaceable) && hasActiveApplicationLineOfSight(sourcePlaceable, token));
-      const executorAvailability = getAbilityTargetExecutorAvailability(token.actor, abilityFunction, token);
+      const executorAvailability = getAbilityTargetExecutorAvailability(recipient.actor, abilityFunction, token);
       const selectable = relationAllowed
         && selfAllowed
         && distanceAllowed
@@ -4495,11 +4486,11 @@ function collectActiveApplicationTargetRows(sourceActor, abilityFunction, settin
       else if (!executorAvailability.available) reason = executorAvailability.reason;
       return {
         token,
-        actorUuid: token.actor.uuid,
+        ...recipient,
         selectable,
         reason
       };
-    });
+    }));
 }
 
 function getActiveApplicationTargetRelation(sourceActor, targetActor) {
@@ -4509,7 +4500,7 @@ function getActiveApplicationTargetRelation(sourceActor, targetActor) {
 }
 
 function getPrimaryActorToken(actor) {
-  return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? null;
+  return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? findActorPhysicalToken(actor);
 }
 
 function activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets = []) {
@@ -4564,6 +4555,7 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
     costFingerprints: Object.fromEntries(Object.entries(options?.costFingerprints ?? {})
       .map(([actorUuid, fingerprint]) => [String(actorUuid), String(fingerprint)])),
     targetTokenUuids,
+    targetRecipients: targets.map(target => ({ actorUuid: target.actor.uuid, tokenUuid: (target.token?.document ?? target.token)?.uuid })),
     selectedChangeIds: (options?.selectedChanges ?? [])
       .map(change => String(change?.id ?? "").trim())
       .filter(Boolean)
@@ -5123,17 +5115,18 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     || !abilityItem
     || !abilityFunction
   ) return false;
-  if (sourceTokenDocument.actor.uuid !== sourceActor.uuid) return false;
+  if (!isActorAtPhysicalToken(sourceActor, sourceTokenDocument)) return false;
   if (!sender || (!sender.isGM && !sourceActor.testUserPermission(sender, "OWNER"))) return false;
 
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
-  const requestedTokenUuids = Array.from(new Set((payload?.targetTokenUuids ?? [])
+  const requestedRecipients = Array.isArray(payload.targetRecipients) ? payload.targetRecipients : null;
+  const requestedTokenUuids = Array.from(new Set((requestedRecipients ? requestedRecipients.map(recipient => recipient.tokenUuid) : payload?.targetTokenUuids ?? [])
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   if (!requestedTokenUuids.length) return false;
   if (
     settings.targetSelectionMode !== "all"
-    && requestedTokenUuids.length > evaluateActiveApplicationTargetLimit(settings, sourceActor)
+    && (requestedRecipients?.length ?? requestedTokenUuids.length) > evaluateActiveApplicationTargetLimit(settings, sourceActor)
   ) return false;
 
   const targetTokenDocuments = await Promise.all(requestedTokenUuids.map(uuid => fromUuid(uuid)));
@@ -5144,20 +5137,25 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     || tokenDocument.documentName !== "Token"
     || String(tokenDocument.parent?.uuid ?? "") !== sourceSceneUuid
   ))) return false;
+  const targetsByUuid = new Map(targetTokenDocuments.map(token => [token.uuid, token]));
+  const recipientActors = requestedRecipients ? await Promise.all(requestedRecipients.map(recipient => fromUuid(String(recipient.actorUuid ?? "")))) : targetTokenDocuments.map(token => token.actor);
+  const resolvedTargets = recipientActors.map((actor, i) => ({ actor,
+    token: requestedRecipients ? targetsByUuid.get(String(requestedRecipients[i].tokenUuid ?? "")) : targetTokenDocuments[i] }));
+  if (resolvedTargets.some(target => !isActorAtPhysicalToken(target.actor, target.token))) return false;
+  if (new Set(recipientActors.map(actor => actor?.uuid)).size !== resolvedTargets.length) return false;
   if (
     settings.wallsBlock
     && [sourceTokenDocument, ...targetTokenDocuments]
       .some(tokenDocument => !isTokenDocumentIncludedForUserLevel(tokenDocument, game.user))
   ) return false;
-  if (targetTokenDocuments.some(targetTokenDocument => !isActiveApplicationTokenDocumentAllowed({
+  if (resolvedTargets.some(target => !isActiveApplicationTokenDocumentAllowed({
     sourceActor,
     sourceTokenDocument,
-    targetTokenDocument,
+    targetTokenDocument: target.token,
+    targetActor: target.actor,
     settings,
     sender
   }))) return false;
-  if (new Set(targetTokenDocuments.map(tokenDocument => tokenDocument.actor?.uuid).filter(Boolean)).size
-    !== targetTokenDocuments.length) return false;
 
   const available = getSelectableAbilityChanges(abilityFunction.changes ?? []);
   const configuredLimit = resolveLimitedChangeLimit(abilityFunction.conditions ?? [], sourceActor, {
@@ -5193,10 +5191,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     || normalizeActiveApplicationSettings(abilityFunction?.activeSettings).persistent;
   const hasItemMutations = hasActiveApplicationItemMutations(abilityFunction);
   const hasApplicationOperation = createsApplicationEffect || hasItemMutations;
-  const resolvedTargets = targetTokenDocuments.map(tokenDocument => ({
-    token: tokenDocument.object ?? tokenDocument,
-    actor: tokenDocument.actor
-  }));
+  for (const target of resolvedTargets) target.token = target.token.object ?? target.token;
   const createsRuntimeAuraEffect = activeApplicationFunctionHasRuntimeAura(abilityFunction);
   if (createsRuntimeAuraEffect && durationSeconds <= 0) return false;
   if (
@@ -5279,10 +5274,10 @@ function isActiveApplicationTokenDocumentAllowed({
   sourceActor = null,
   sourceTokenDocument = null,
   targetTokenDocument = null,
+  targetActor = targetTokenDocument?.actor,
   settings = {},
   sender = null
 } = {}) {
-  const targetActor = targetTokenDocument?.actor;
   if (!sourceActor || !sourceTokenDocument?.actor || !targetActor) return false;
   const isSelf = targetActor.uuid === sourceActor.uuid;
   if (settings.targetMode !== "others") {
@@ -5464,15 +5459,14 @@ function hasActiveApplicationEffects(actor = null) {
 function collectCommandBasicsTargetRows(commander, command = "") {
   return (canvas.tokens?.placeables ?? [])
     .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
-    .filter(token => token.actor.uuid !== commander?.uuid)
-    .filter(token => isCommandBasicsAlly(commander, token.actor))
-    .map(token => createCommandBasicsTargetRow(commander, token, command));
+    .flatMap(token => getActorTokenRecipients(token)
+      .filter(recipient => recipient.actorUuid !== commander?.uuid && isCommandBasicsAlly(commander, recipient.actor))
+      .map(recipient => createCommandBasicsTargetRow(commander, token, command, recipient.actor)));
 }
 
-function createCommandBasicsTargetRow(commander, token, command = "") {
-  const actor = token?.actor ?? null;
+function createCommandBasicsTargetRow(commander, token, command = "", actor = token?.actor ?? null) {
   const row = {
-    token,
+    token, actor,
     actorUuid: actor?.uuid ?? "",
     selectable: false,
     reason: "",
@@ -5506,7 +5500,7 @@ function createCommandBasicsTargetRow(commander, token, command = "") {
   }
   row.selectable = true;
   row.attack = {
-    token,
+    token, actor,
     weapon: candidate.weapon,
     actionKey,
     weaponFunctionId: candidate.weaponFunctionId
@@ -5631,7 +5625,7 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInter
   const checks = await requestSkillCheckBatch({
     skillKey: settings.targetSkillKey,
     entries: selection.map(entry => ({
-      actor: entry.token?.actor,
+      actor: entry.actor,
       data: {
         difficulty,
         actorToken: entry.token,
@@ -5674,28 +5668,27 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInter
 
 function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = auditLocalize("FALLOUTMAW.AuditRuntime.R0123", "Выбить из колеи") } = {}) {
   const collectRows = () => collectKnockOffBalanceTargetRows(actor);
-  return requestCustomTokenSelection({
-    rows: collectRows(),
+  return requestCustomActorRecipientsSelection({
+    collectRows, sourceActorUuid: actor?.uuid ?? "",
     limit,
     title: abilityName,
     noneWarning: auditFormat("FALLOUTMAW.AuditRuntime.R0211", { p0: (abilityName) }, "{p0}: нет подходящих целей."),
     instructions: auditFormat("FALLOUTMAW.AuditRuntime.R0236", { p0: (abilityName), p1: (limit) }, "{p0}: выберите до {p1} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, Esc/ПКМ отменяет."),
     sourceToken: getActorSceneToken(actor),
-    refreshRows: collectRows
   });
 }
 
 function collectKnockOffBalanceTargetRows(actor) {
   return (canvas.tokens?.placeables ?? [])
     .filter(token => token?.actor && !isPhantomEntity(token) && token.visible !== false && token.renderable !== false)
-    .filter(token => token.actor.uuid !== actor?.uuid)
-    .map(token => createKnockOffBalanceTargetRow(token));
+    .flatMap(token => getActorTokenRecipients(token)
+      .filter(recipient => recipient.actorUuid !== actor?.uuid)
+      .map(recipient => createKnockOffBalanceTargetRow(token, recipient.actor)));
 }
 
-function createKnockOffBalanceTargetRow(token) {
-  const actor = token?.actor ?? null;
+function createKnockOffBalanceTargetRow(token, actor = token?.actor ?? null) {
   const row = {
-    token,
+    token, actor,
     actorUuid: actor?.uuid ?? "",
     selectable: false,
     reason: ""
@@ -5911,12 +5904,13 @@ async function useLook(actor, abilityItem, abilityFunction) {
 
   const selection = await selectLookTarget({ actor, sourceToken, abilityName });
   const targetToken = selection?.[0]?.token ?? null;
-  if (!targetToken?.actor) return false;
-  if (!targetToken.actor.system?.skills?.[settings.targetSkillKey]) {
+  const targetActor = selection?.[0]?.actor ?? targetToken?.actor;
+  if (!targetActor) return false;
+  if (!targetActor.system?.skills?.[settings.targetSkillKey]) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0244", { p0: (abilityName) }, "{p0}: у цели нет навыка проверки."));
     return false;
   }
-  if (!isActorInActiveCombat(targetToken.actor)) {
+  if (!isActorInActiveCombat(targetActor)) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0245", { p0: (abilityName) }, "{p0}: цель не участвует в активном бою."));
     return false;
   }
@@ -5934,7 +5928,7 @@ async function useLook(actor, abilityItem, abilityFunction) {
     context: "look difficulty"
   })));
   const outcome = await requestSkillCheck({
-    actor: targetToken.actor,
+    actor: targetActor,
     skillKey: settings.targetSkillKey,
     animate: false,
     data: {
@@ -5952,7 +5946,7 @@ async function useLook(actor, abilityItem, abilityFunction) {
   }
   const resultKey = String(outcome?.result?.key ?? "");
   if (["success", "criticalSuccess"].includes(resultKey)) {
-    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0247", { p0: (targetToken.actor.name) }, "{p0} устоял."));
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0247", { p0: (targetActor.name) }, "{p0} устоял."));
     return true;
   }
 
@@ -5965,6 +5959,7 @@ async function useLook(actor, abilityItem, abilityFunction) {
     abilityItemId: abilityItem.id,
     abilityFunctionId: abilityFunction.id,
     targetTokenUuid: targetToken.document?.uuid ?? targetToken.uuid,
+    targetActorUuid: targetActor.uuid,
     resourceLoss,
     senderUserId: game.user?.id ?? ""
   });
@@ -5976,7 +5971,7 @@ async function useLook(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    auditFormat("FALLOUTMAW.AuditRuntime.R0249", { p0: (targetToken.actor.name), p1: (resourceLoss), p2: (resourceLoss) }, "{p0} теряет до {p1} ОД и до {p2} ОП.")
+    auditFormat("FALLOUTMAW.AuditRuntime.R0249", { p0: (targetActor.name), p1: (resourceLoss), p2: (resourceLoss) }, "{p0} теряет до {p1} ОД и до {p2} ОП.")
   );
   return true;
 }
@@ -6029,7 +6024,7 @@ async function useShadow(actor, abilityItem, abilityFunction) {
     )
   });
   const targetToken = selection?.token ?? null;
-  const targetActor = targetToken?.actor ?? selection?.actor ?? null;
+  const targetActor = selection?.actor ?? targetToken?.actor ?? null;
   if (!targetToken || !targetActor || !isShadowTargetAllowed(actor, targetActor)) return false;
 
   if (!(await spendEnergy(actor, energyCost))) return false;
@@ -6775,17 +6770,18 @@ async function processLookResourceLossOperation(payload = {}) {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
   const actorToken = await fromUuid(String(payload.actorTokenUuid ?? ""));
   const targetToken = await fromUuid(String(payload.targetTokenUuid ?? ""));
+  const targetActor = payload.targetActorUuid ? await fromUuid(String(payload.targetActorUuid)) : targetToken?.actor;
   const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
   const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
     .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look);
   const sender = game.users?.get(String(payload.senderUserId ?? ""));
   if (!actor || !actorToken || !targetToken?.actor || !abilityItem || !abilityFunction) return false;
   if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
-  if (actorToken.actor?.uuid !== actor.uuid || targetToken.actor.uuid === actor.uuid) return false;
+  if (!isActorAtPhysicalToken(actor, actorToken) || !isActorAtPhysicalToken(targetActor, targetToken) || targetActor.uuid === actor.uuid) return false;
   if (!canTokenPhysicallySeeTarget(actorToken.object ?? actorToken, targetToken.object ?? targetToken)) return false;
 
   const resourceLoss = Math.max(0, toInteger(payload.resourceLoss));
-  await spendActorActionAndMovement(targetToken.actor, resourceLoss);
+  await spendActorActionAndMovement(targetActor, resourceLoss);
   return true;
 }
 
@@ -7304,7 +7300,10 @@ async function useOversight(actor, abilityItem, abilityFunction) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0298", { p0: (abilityName) }, "{p0}: выберите одну цель — участника боя."));
     return false;
   }
-  if (targetToken.actor?.uuid === actor.uuid) {
+  const recipient = await chooseActorTargetRecipient(targetToken, { title: abilityName, sourceActorUuid: actor.uuid, includeSelf: false });
+  if (!recipient) return false;
+  const targetActor = recipient.actor;
+  if (targetActor?.uuid === actor.uuid) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0299", { p0: (abilityName) }, "{p0}: нельзя выбрать себя."));
     return false;
   }
@@ -7312,7 +7311,7 @@ async function useOversight(actor, abilityItem, abilityFunction) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0300", { p0: (abilityName) }, "{p0}: цель не видна."));
     return false;
   }
-  if (findOversightTrackingEffects(targetToken.actor).some(effect => {
+  if (findOversightTrackingEffects(targetActor).some(effect => {
     const data = effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
     return data.sourceActorUuid === actor.uuid;
   })) {
@@ -7335,18 +7334,18 @@ async function useOversight(actor, abilityItem, abilityFunction) {
   const sourceSkillValue = getActorSkillValue(actor, settings.sourceSkillKey);
   const difficulty = settings.difficultyBase + sourceSkillValue;
   const recoveryPenalty = Math.max(0, Math.floor(sourceSkillValue / settings.dodgeRecoveryDivisor));
-  const outcome = await requestOversightStealthCheck(targetToken.actor, settings.targetSkillKey, difficulty, abilityName, {
+  const outcome = await requestOversightStealthCheck(targetActor, settings.targetSkillKey, difficulty, abilityName, {
     actorToken: targetToken,
     targetActor: actor,
     targetToken: sourceToken
   });
   if (isSuccessfulSkillCheck(outcome)) {
-    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0302", { p0: (targetToken.actor.name) }, "{p0} избежал Надзора."));
+    await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0302", { p0: (targetActor.name) }, "{p0} избежал Надзора."));
     return true;
   }
 
   const activationId = foundry.utils.randomID();
-  await createOversightTrackingEffect(targetToken.actor, {
+  await createOversightTrackingEffect(targetActor, {
     activationId,
     combatId: combat.id,
     sourceActorUuid: actor.uuid,
@@ -7363,7 +7362,7 @@ async function useOversight(actor, abilityItem, abilityFunction) {
     resourceThreshold: settings.resourceThreshold,
     accumulatedSpend: 0
   });
-  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0303", { p0: (targetToken.actor.name) }, "{p0} отмечен Надзором."));
+  await createAbilityChatMessage(actor, abilityItem, auditFormat("FALLOUTMAW.AuditRuntime.R0303", { p0: (targetActor.name) }, "{p0} отмечен Надзором."));
   return true;
 }
 
@@ -7588,7 +7587,7 @@ async function collectOversightReactionOffers({ eventKey, context = {}, semantic
     const sourceActor = await fromUuid(String(data.sourceActorUuid ?? ""));
     const sourceToken = await fromUuid(String(data.sourceTokenUuid ?? ""));
     const targetToken = await fromUuid(String(data.targetTokenUuid ?? ""));
-    if (!sourceActor || !sourceToken || !targetToken || targetToken.actor?.uuid !== targetActor.uuid) continue;
+    if (!sourceActor || !sourceToken || !targetToken || !isActorAtPhysicalToken(targetActor, targetToken)) continue;
     const candidates = getOversightAttackCandidates(sourceActor, sourceToken, targetToken);
     if (!candidates.length) continue;
     offers.push({
@@ -8996,7 +8995,9 @@ async function useDisarm(actor, abilityItem, abilityFunction) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0364", { p0: (abilityName) }, "{p0}: выберите одну цель."));
     return false;
   }
-  if (targetToken.actor.uuid === actor.uuid) {
+  const recipient = await chooseActorTargetRecipient(targetToken, { title: abilityName, sourceActorUuid: actor.uuid, includeSelf: false });
+  if (!recipient) return false;
+  if (recipient.actor.uuid === actor.uuid) {
     ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0365", { p0: (abilityName) }, "{p0}: цель не может быть вами."));
     return false;
   }
@@ -9012,6 +9013,7 @@ async function useDisarm(actor, abilityItem, abilityFunction) {
     abilityFunctionId: abilityFunction.id,
     actorTokenUuid: token.document.uuid,
     targetTokenUuid: targetToken.document.uuid,
+    targetActorUuid: recipient.actorUuid,
     senderUserId: game.user?.id ?? ""
   });
 }
@@ -9875,6 +9877,8 @@ async function processDisarmSocketRequest(message = {}) {
 async function processDisarmOperation(payload = {}) {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
   const targetTokenDocument = await fromUuid(String(payload.targetTokenUuid ?? ""));
+  const targetActor = payload.targetActorUuid ? await fromUuid(String(payload.targetActorUuid)) : targetTokenDocument?.actor;
+  if (!isActorAtPhysicalToken(targetActor, targetTokenDocument)) return false;
   const actorTokenDocument = await fromUuid(String(payload.actorTokenUuid ?? ""));
   const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
   const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
@@ -9893,7 +9897,7 @@ async function processDisarmOperation(payload = {}) {
   }
   if (!canSpendCombatActionPoints(actor, settings.activeActionPointCost, { label: auditLocalize("FALLOUTMAW.AuditRuntime.R0389", "обезоруживания") })) return false;
 
-  const sourceWeapon = await promptDisarmSourceWeapon(targetTokenDocument.actor, payload.senderUserId, abilityName);
+  const sourceWeapon = await promptDisarmSourceWeapon(targetActor, payload.senderUserId, abilityName);
   if (!sourceWeapon) return false;
   if (!isDisarmableWeapon(sourceWeapon)) return false;
 
@@ -9907,7 +9911,7 @@ async function processDisarmOperation(payload = {}) {
 
   const success = await rollDisarmCheck({
     actor,
-    targetActor: targetTokenDocument.actor,
+    targetActor: targetActor,
     actorToken: actorTokenDocument.object ?? actorTokenDocument,
     targetToken: targetTokenDocument.object ?? targetTokenDocument,
     difficultyBase: settings.activeDifficultyBase,
@@ -9919,7 +9923,7 @@ async function processDisarmOperation(payload = {}) {
   }
 
   const moved = await moveDisarmedWeapon({
-    sourceActor: targetTokenDocument.actor,
+    sourceActor: targetActor,
     targetActor: actor,
     sourceWeapon,
     targetToken: actorTokenDocument,
@@ -9930,7 +9934,7 @@ async function processDisarmOperation(payload = {}) {
     actor,
     abilityItem,
     moved
-      ? auditFormat("FALLOUTMAW.AuditRuntime.R0387", { p0: (actor.name), p1: (sourceWeapon.name), p2: (targetTokenDocument.actor.name) }, "{p0} отнял {p1} у {p2}.")
+      ? auditFormat("FALLOUTMAW.AuditRuntime.R0387", { p0: (actor.name), p1: (sourceWeapon.name), p2: (targetActor.name) }, "{p0} отнял {p1} у {p2}.")
       : auditFormat("FALLOUTMAW.AuditRuntime.R0388", { p0: (actor.name), p1: (sourceWeapon.name) }, "{p0} не смог разместить {p1}.")
   );
   return true;
@@ -10360,7 +10364,7 @@ function getActorSkillValue(actor, skillKey = "") {
 function getActorSceneToken(actor) {
   return canvas.tokens?.controlled?.find(token => token?.actor?.uuid === actor?.uuid)
     ?? canvas.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid)
-    ?? null;
+    ?? findActorPhysicalToken(actor);
 }
 
 function getSingleUserTarget() {
@@ -14889,12 +14893,14 @@ async function applyDeusExMachinaDisintegrate(actor, abilityItem, abilityFunctio
     return false;
   }
   const targetToken = targets[0];
+  const recipient = await chooseActorTargetRecipient(targetToken, { title: getAbilityDisplayName(abilityItem), sourceActorUuid: actor.uuid });
+  if (!recipient) return false;
   const applied = await requestDeusExMachinaDisintegrateOperation({
     actorUuid: actor?.uuid ?? "",
     abilityItemId: abilityItem?.id ?? "",
     abilityFunctionId: abilityFunction?.id ?? "",
     targetTokenUuid: targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
-    targetActorUuid: targetToken?.actor?.uuid ?? "",
+    targetActorUuid: recipient.actorUuid,
     senderUserId: game.user?.id ?? ""
   });
   if (!applied) {
@@ -14948,7 +14954,8 @@ async function processDeusExMachinaDisintegrateOperation(payload = {}) {
   const targetTokenUuid = String(payload.targetTokenUuid ?? "").trim();
   const targetActorUuid = String(payload.targetActorUuid ?? "").trim();
   const targetTokenDocument = targetTokenUuid ? await fromUuid(targetTokenUuid) : null;
-  const targetActor = targetTokenDocument?.actor ?? (targetActorUuid ? await fromUuid(targetActorUuid) : null);
+  const targetActor = targetActorUuid ? await fromUuid(targetActorUuid) : targetTokenDocument?.actor;
+  if (!isActorAtPhysicalToken(targetActor, targetTokenDocument)) return false;
   const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
   const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
     .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina);

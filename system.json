@@ -21,6 +21,10 @@
   "styles": [
     "calendar/styles/calendar.css",
     "styles/fallout-maw.css",
+    "styles/construct-visual-editor.css",
+    "styles/construct-crew-hud.css",
+    "styles/construct-interior-aim.css",
+    "styles/construct-systems.css",
     "styles/combat-carousel.css",
     "simple-quest/styles/module.css"
   ],

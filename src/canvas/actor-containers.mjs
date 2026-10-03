@@ -12,7 +12,17 @@ import {
 } from "../utils/actor-containers.mjs";
 import { BATCH_EXPECTED_IDS_OPTION } from "../utils/document-batch-integrity.mjs";
 import { prepareActorContainerPassengerRebindings } from "../utils/actor-container-passengers.mjs";
+import {
+  canUserManageConstructPassenger,
+  canUserRearrangeConstructCrew,
+  findAvailableConstructCrewSeat,
+  getConstructCrewSeats,
+  hasConstructCrew,
+  moveConstructCrewPassengerData,
+  resolvePassengerActorSync
+} from "../utils/construct-crew.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
+import { getTokenSelectionShape, isPointInTokenSelectionShape } from "./token-selection-shape.mjs";
 import {
   cancelActiveCanvasTargetSelection,
   startCanvasTargetSelectionSession
@@ -70,6 +80,7 @@ export function registerActorContainerHooks() {
       flags.refreshPosition
       || flags.refreshSize
       || flags.refreshShape
+      || flags.refreshRotation
       || flags.refreshVisibility
       || flags.refreshState
     )) return;
@@ -107,6 +118,16 @@ export function requestActorContainerPassengerExit(payload = {}) {
 
 export function requestActorContainerPassengerRecovery(payload = {}) {
   return requestActorContainerSocket("recoverPassenger", payload);
+}
+
+export function requestActorContainerPassengerMove(payload = {}) {
+  return requestActorContainerSocket("movePassenger", payload);
+}
+
+export function queueActorContainerOperation(operation) {
+  const task = actorContainerRequestQueue.then(operation);
+  actorContainerRequestQueue = task.catch(() => {});
+  return task;
 }
 
 export function startActorContainerBoardingMode({ actor = null, token = null } = {}) {
@@ -170,7 +191,8 @@ export function startActorContainerBoardingMode({ actor = null, token = null } =
 export function startActorContainerPassengerExitPlacement({ vehicleActor = null, passengerId = "" } = {}) {
   cancelActiveCanvasTargetSelection({ reason: "superseded" });
   const passenger = getActorContainerFlag(vehicleActor).passengers.find(entry => entry.id === passengerId);
-  if (!vehicleActor?.isOwner || !passenger) return false;
+  if (!passenger || (hasConstructCrew(vehicleActor)
+    ? !canUserManageConstructPassenger(vehicleActor, passenger, game.user) : !vehicleActor?.isOwner)) return false;
   if (!canvas?.ready || !canvas.scene) {
     ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0600", "Сцена не готова для выхода из транспорта."));
     return false;
@@ -232,7 +254,13 @@ export function actorHasHudActorContainerPassengers(actor = null) {
 }
 
 export async function openActorContainerPassengerSheet({ vehicleActor = null, passengerId = "" } = {}) {
-  const actor = await resolveActorContainerPassengerActor(vehicleActor, passengerId);
+  let crewActor = null;
+  if (hasConstructCrew(vehicleActor)) {
+    const passenger = getActorContainerFlag(vehicleActor).passengers.find(row => row.id === passengerId);
+    if (!canUserManageConstructPassenger(vehicleActor, passenger, game.user)) return false;
+    crewActor = resolvePassengerActorSync(passenger);
+  }
+  const actor = crewActor ?? await resolveActorContainerPassengerActor(vehicleActor, passengerId);
   if (!actor) {
     ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0603", "Не удалось найти актера пассажира."));
     return false;
@@ -262,6 +290,11 @@ async function onBoardingPointerDown(event) {
   };
   cancelActorContainerBoardingMode({ mode, cancelled: false });
   try {
+    if (hasConstructCrew(vehicleToken.actor)) {
+      const { chooseConstructCrewBoardingSeat } = await import("../apps/construct-crew-dialogs.mjs");
+      request.seatId = await chooseConstructCrewBoardingSeat(vehicleToken.actor, mode.actor, mode.token);
+      if (!request.seatId) return;
+    }
     await requestActorContainerSocket("boardPassenger", request);
   } catch (error) {
     ui.notifications.warn(error.message);
@@ -524,61 +557,25 @@ function isTokenAvailableForBoarding(token, session) {
   if (!actor || token.visible === false || token.renderable === false) return false;
   if (!passengerActor || !passengerToken || actor.uuid === passengerActor.uuid) return false;
   if (!hasActorContainer(actor)) return false;
-  return Boolean(findFirstAvailableActorContainerSeat(actor, passengerActor, passengerToken));
+  return Boolean(hasConstructCrew(actor)
+    ? findAvailableConstructCrewSeat(actor, passengerActor, passengerToken)
+    : findFirstAvailableActorContainerSeat(actor, passengerActor, passengerToken));
 }
 
 function getActorContainerTokenAtPoint(point, session) {
   return (canvas.tokens?.placeables ?? [])
     .slice()
     .reverse()
-    .find(token => isTokenAvailableForBoarding(token, session) && pointInToken(point, token)) ?? null;
-}
-
-function pointInToken(point, token) {
-  const rect = getTokenRect(token);
-  return (
-    point.x >= rect.x
-    && point.x <= rect.x + rect.width
-    && point.y >= rect.y
-    && point.y <= rect.y + rect.height
-  );
+    .find(token => isTokenAvailableForBoarding(token, session) && isPointInTokenSelectionShape(point, token)) ?? null;
 }
 
 function drawTokenOutline(layer, token, color) {
-  const rect = getTokenRect(token);
+  const shape = getTokenSelectionShape(token);
   const width = Math.max(2, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
   layer.lineStyle(width, color, 0.95);
   layer.beginFill(color, 0.12);
-  layer.drawRect(rect.x, rect.y, rect.width, rect.height);
+  layer.drawPolygon(shape.points.flatMap(point => [shape.x + point.x, shape.y + point.y]));
   layer.endFill();
-}
-
-function getTokenRect(token) {
-  const bounds = token?.bounds;
-  if (
-    Number.isFinite(Number(bounds?.x))
-    && Number.isFinite(Number(bounds?.y))
-    && Number.isFinite(Number(bounds?.width))
-    && Number.isFinite(Number(bounds?.height))
-  ) {
-    return {
-      x: Number(bounds.x),
-      y: Number(bounds.y),
-      width: Math.max(1, Number(bounds.width)),
-      height: Math.max(1, Number(bounds.height))
-    };
-  }
-  const document = token?.document ?? token;
-  const size = document?.getSize?.() ?? {
-    width: Math.max(1, Number(document?.width) || 1) * canvas.grid.size,
-    height: Math.max(1, Number(document?.height) || 1) * canvas.grid.size
-  };
-  return {
-    x: Number(document?.x) || 0,
-    y: Number(document?.y) || 0,
-    width: Math.max(1, Number(size.width) || canvas.grid.size),
-    height: Math.max(1, Number(size.height) || canvas.grid.size)
-  };
 }
 
 function getTokenPixelSize(tokenData = {}) {
@@ -649,7 +646,7 @@ function snapSmallSquareTokenCoordinate(value = 0) {
   return coordinate;
 }
 
-async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", passengerTokenId = "", vehicleActorUuid = "" } = {}, requesterUserId = "") {
+async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", passengerTokenId = "", vehicleActorUuid = "", seatId = "" } = {}, requesterUserId = "") {
   const scene = game.scenes?.get(sceneId);
   const passengerActor = await fromUuid(passengerActorUuid);
   const vehicleActor = await fromUuid(vehicleActorUuid);
@@ -660,7 +657,9 @@ async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", pa
   if (!requester?.isGM && !passengerActor.testUserPermission?.(requester, "OWNER")) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0609", "Нет прав на пассажира."));
   if (passengerActor.uuid === vehicleActor.uuid) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0610", "Актер не может сесть сам в себя."));
   if (isActorInActorContainer(passengerActor)) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0611", "Актер уже находится в транспорте."));
-  const seat = findFirstAvailableActorContainerSeat(vehicleActor, passengerActor, passengerToken);
+  const seat = hasConstructCrew(vehicleActor)
+    ? findAvailableConstructCrewSeat(vehicleActor, passengerActor, passengerToken, { seatId })
+    : findFirstAvailableActorContainerSeat(vehicleActor, passengerActor, passengerToken);
   if (!seat) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0612", "В транспорте нет подходящего свободного места."));
 
   const ownershipUpdate = getTemporaryOwnershipUpdate(vehicleActor, passengerActor);
@@ -697,6 +696,8 @@ async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", pa
   operations.push({ action: "delete", documentName: "Token", parent: scene,
     ids: [passengerToken.id], [BATCH_EXPECTED_IDS_OPTION]: [passengerToken.id] });
   await commitActorContainerBatch(operations);
+  Hooks.callAll("falloutMawConstructCrewBoarded", { vehicleActorUuid: vehicleActor.uuid, passengerId: passenger.id,
+    passengerActorUuid: passenger.actorUuid, requesterUserId: requester?.id, seatId: seat.crewSeatId ?? "" });
   return { ok: true, passengerId: passenger.id, actorUuid: passenger.actorUuid };
 }
 
@@ -717,10 +718,12 @@ function createParkedPassengerOperation(actor, vehicleActor, passenger) {
 async function performRecoverPassenger({ vehicleActorUuid = "", passengerId = "" } = {}, requesterUserId = "") {
   const vehicleActor = await fromUuid(vehicleActorUuid);
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (!vehicleActor || (!requester?.isGM && !vehicleActor.testUserPermission?.(requester, "OBSERVER"))) throw new Error("Нет доступа к транспорту пассажира.");
+  if (!vehicleActor) throw new Error("Нет доступа к транспорту пассажира.");
   const passengers = getActorContainerFlag(vehicleActor).passengers;
   const passenger = passengers.find(entry => entry.id === passengerId);
   if (!passenger) throw new Error("Пассажир не найден.");
+  if (!requester?.isGM && !vehicleActor.testUserPermission?.(requester, "OBSERVER")
+    && !canUserManageConstructPassenger(vehicleActor, passenger, requester)) throw new Error("Нет доступа к транспорту пассажира.");
   const current = await fromUuid(passenger.actorUuid);
   if (current) return { actorUuid: current.uuid };
   const scene = game.scenes?.get(passenger.sceneId);
@@ -748,11 +751,12 @@ async function performExitPassenger({ sceneId = "", vehicleActorUuid = "", passe
   const vehicleActor = await fromUuid(vehicleActorUuid);
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
   if (!scene || !vehicleActor) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0613", "Не удалось найти сцену или транспорт."));
-  if (!requester?.isGM && !vehicleActor.testUserPermission?.(requester, "OWNER")) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0614", "Нет прав на транспорт."));
-
   const passengers = getActorContainerFlag(vehicleActor).passengers;
   const passenger = passengers.find(entry => entry.id === passengerId);
   if (!passenger?.tokenData) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0615", "Пассажир не найден."));
+  if (!requester?.isGM && (hasConstructCrew(vehicleActor)
+    ? !canUserManageConstructPassenger(vehicleActor, passenger, requester)
+    : !vehicleActor.testUserPermission?.(requester, "OWNER"))) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R0614", "Нет прав на транспорт."));
 
   const tokenData = foundry.utils.deepClone(passenger.tokenData);
   tokenData._id = tokenData._id && !scene.tokens.has(tokenData._id) ? tokenData._id : foundry.utils.randomID();
@@ -1006,16 +1010,27 @@ async function handleActorContainerSocketMessage(message = {}, senderUserId = ""
 }
 
 function queueActorContainerSocketRequest(action, payload = {}, requesterUserId = "") {
-  const task = actorContainerRequestQueue.then(() => handleActorContainerSocketRequest(action, payload, requesterUserId));
-  actorContainerRequestQueue = task.catch(() => {});
-  return task;
+  return queueActorContainerOperation(() => handleActorContainerSocketRequest(action, payload, requesterUserId));
 }
 
 async function handleActorContainerSocketRequest(action, payload = {}, requesterUserId = "") {
   if (action === "boardPassenger") return performBoardPassenger(payload, requesterUserId);
   if (action === "exitPassenger") return performExitPassenger(payload, requesterUserId);
   if (action === "recoverPassenger") return performRecoverPassenger(payload, requesterUserId);
+  if (action === "movePassenger") return performMovePassenger(payload, requesterUserId);
   return undefined;
+}
+
+async function performMovePassenger({ vehicleActorUuid = "", passengerId = "", seatId = "", swap = false } = {}, requesterUserId = "") {
+  const actor = await fromUuid(vehicleActorUuid);
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  const passengers = getActorContainerFlag(actor).passengers;
+  const passenger = passengers.find(entry => entry.id === passengerId);
+  if (!requester?.active || !passenger || !hasConstructCrew(actor) || !canUserRearrangeConstructCrew(actor, requester)) throw new Error("Нет прав на пересадку экипажа этого конструкта.");
+  const updated = moveConstructCrewPassengerData(actor, passengers, passengerId, seatId, { swap: swap === true });
+  if (!updated) throw new Error("Место недоступно, занято или не подходит персонажу.");
+  await actor.update({ [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: updated });
+  return { ok: true, passengerId, seatId, swapped: swap === true };
 }
 
 function getActorByUuid(uuid = "") {
@@ -1030,3 +1045,9 @@ function getResponsibleGM() {
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
 }
+
+export const ACTOR_CONTAINER_CREW_TESTING = Object.freeze({
+  board: performBoardPassenger,
+  transfer: performMovePassenger,
+  handleSocketRequest: handleActorContainerSocketRequest
+});

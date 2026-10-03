@@ -1,5 +1,7 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { recoverInventoryConsumption } from "../inventory/consumption-receipt.mjs";
+import { chooseActorTargetRecipient } from "../apps/actor-target-choice.mjs";
+import { isActorAtPhysicalToken, findActorPhysicalToken } from "../utils/actor-target-context.mjs";
 ﻿import { isTargetInFirstAidRange, useFirstAidItem } from "./first-aid.mjs";
 import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
@@ -115,7 +117,7 @@ export async function useActiveItem({
         ? { actor: targetActor, token: targetToken?.document ?? targetToken ?? null }
         : (isFirstAid
           ? await requestFirstAidItemTarget(sourceActor, sourceToken, freshItem)
-          : resolveActiveItemTarget(sourceActor, sourceToken));
+          : await resolveActiveItemTarget(sourceActor, sourceToken, freshItem));
     } catch (error) {
       return executeActiveItemUse(scope, {
         occurrenceId: useOccurrenceId,
@@ -315,6 +317,12 @@ function createSystemEventDocumentOptions(chainRef = null) {
 
 async function requestFirstAidItemTarget(sourceActor = null, sourceToken = null, item = null) {
   const firstAid = getFirstAidFunction(item);
+  const getReason = ({ token }) => isTargetInFirstAidRange(sourceToken, token, firstAid, { warn: false })
+    ? "" : auditLocalize("FALLOUTMAW.AuditRuntime.R1114", "Цель слишком далеко.");
+  const target = Array.from(game.user?.targets ?? []).find(token => token?.actor);
+  if (target) return chooseActorTargetRecipient(target, {
+    title: item.name, sourceActorUuid: sourceActor.uuid, getReason
+  });
   const selected = await requestCustomActorTokenSelection({
     sourceActor,
     sourceToken,
@@ -322,10 +330,7 @@ async function requestFirstAidItemTarget(sourceActor = null, sourceToken = null,
     title: auditLocalize("FALLOUTMAW.AuditRuntime.R0523", "Первая помощь"),
     noneWarning: auditLocalize("FALLOUTMAW.AuditRuntime.R1112", "Нет подходящих целей для первой помощи."),
     instructions: auditLocalize("FALLOUTMAW.AuditRuntime.R1113", "Первая помощь: выберите цель. Esc/ПКМ отменяет."),
-    getReason: ({ token }) => {
-      if (isTargetInFirstAidRange(sourceToken, token, firstAid, { warn: false })) return "";
-      return auditLocalize("FALLOUTMAW.AuditRuntime.R1114", "Цель слишком далеко.");
-    }
+    getReason
   });
   if (!selected?.actor) return { actor: null, token: null };
   return {
@@ -334,21 +339,20 @@ async function requestFirstAidItemTarget(sourceActor = null, sourceToken = null,
   };
 }
 
-function resolveActiveItemTarget(actor = null, sourceToken = null) {
+async function resolveActiveItemTarget(actor = null, sourceToken = null, item = null) {
   const targetToken = Array.from(game.user?.targets ?? [])
     .find(target => target?.actor) ?? null;
-  return {
-    token: targetToken ?? sourceToken,
-    actor: targetToken?.actor ?? actor
-  };
+  if (targetToken) return chooseActorTargetRecipient(targetToken, { title: item?.name,
+    sourceActorUuid: actor?.uuid ?? "" });
+  return { token: sourceToken, actor };
 }
 
 function resolveActorToken(actor = null, token = null) {
   const tokenDocument = token?.document ?? token ?? null;
-  if (tokenDocument?.actor?.uuid === actor?.uuid) return tokenDocument;
+  if (isActorAtPhysicalToken(actor, tokenDocument)) return tokenDocument;
   return (canvas?.tokens?.controlled ?? [])
     .map(controlled => controlled?.document ?? controlled)
-    .find(document => document?.actor?.uuid === actor?.uuid) ?? findActorTokenDocument(actor);
+    .find(document => isActorAtPhysicalToken(actor, document)) ?? findActorTokenDocument(actor);
 }
 
 function findActorTokenDocument(actor = null) {
@@ -357,5 +361,5 @@ function findActorTokenDocument(actor = null) {
     const document = token?.document ?? token;
     if (document?.actor?.uuid === actor.uuid) return document;
   }
-  return null;
+  return findActorPhysicalToken(actor)?.document ?? null;
 }

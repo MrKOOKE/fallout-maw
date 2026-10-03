@@ -1,9 +1,15 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { AimActivationPreview, notifyAimActivationRequired } from "../canvas/aim-activation-preview.mjs";
+
 import { getReleaseCombatBonus, getWatcherAttackBonus } from "../abilities/release-abilities.mjs";
 import { captureSceneCreationPoint, getSceneCreationLevelId } from "../canvas/creation-levels.mjs";
 import { finalizeAttackActionPointCost } from "../utils/action-point-cost-limits.mjs";
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { ConstructInteriorAimPanel } from "../apps/construct-interior-aim-panel.mjs";
+import { getConstructExteriorSlotIds } from "../utils/construct-interior.mjs";
+import { getConstructCompartmentContents } from "../utils/construct-interior.mjs";
+import { normalizeConstructInteriorTarget, resolveConstructInteriorTarget } from "../utils/construct-interior-targets.mjs";
 import { mergeSkillCheckResultPolicies } from "../rolls/skill-check-result-policy.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import { isPhantomEntity } from "../abilities/phantom-entity.mjs";
@@ -13,7 +19,8 @@ import {
   playWeaponAttackAnimations,
   playWeaponExplosionAnimation
 } from "./attack-animations.mjs";
-import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, getDamageCostModifierState, isLimbUsable, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation, serializeDamageCycleSocketResults } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplicationsBatch, estimateConstructInteriorAttackGroup, getDamageCostModifierState, isLimbUsable, isCriticalLimb, isLimbDestroyed, requestDamageApplications, runDamageHubOperation, serializeDamageCycleSocketResults } from "./damage-hub.mjs";
+import { carryConstructDamageRequests, getConstructContinuationDamageAmount } from "../utils/construct-damage-continuation.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier, getActorDodgeTotal } from "./dodge-resource.mjs";
 import {
   createPelletImpactProjectiles,
@@ -80,6 +87,7 @@ import {
   spendStrictActionPointsWithReceipt
 } from "./reaction-resources.mjs";
 import { applyAttackActionPointMovementLoss } from "./attack-action-point-movement-loss.mjs";
+import { getWeaponResourcePayer, groupWeaponActorResourceCosts, payWeaponActorResourceGroups } from "./weapon-resource-payers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getWeaponProficiencyInfluenceBonus as getWeaponProficiencyInfluenceBonusForData } from "../utils/weapon-proficiencies.mjs";
 import { normalizeRegionSpecialProperties, resolveRegionSpecialProperties } from "../utils/region-special-properties.mjs";
@@ -93,6 +101,7 @@ import {
   normalizeAttackDistanceContext
 } from "../utils/attack-distance.mjs";
 import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
+import { getAttackOriginDistanceMeters, getAttackTrajectoryAngleThroughPoint, isPointForwardOfAttackOrigin } from "../utils/attack-origin-geometry.mjs";
 import {
   applyWeaponEffectiveRangeBonuses,
   resolveBaseWeaponEffectiveRange
@@ -184,6 +193,16 @@ import {
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { energySourceMatchesConsumer, getActiveEnergySourceItem, getEnergySourceReserveState } from "../items/light-source.mjs";
 import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/construct-parts.mjs";
+import { canUserUseConstructWeapon, getConstructWeaponExecutor, resolveConstructWeaponOperatorActor } from "../utils/construct-weapon-operator.mjs";
+import { isConstructPersonalWeapon, getConstructPersonalWeaponSeat, getConstructFiringPortWorldTransform } from "../canvas/construct-firing-ports.mjs";
+import { constrainConstructFiringPortRangeProfile } from "../utils/construct-firing-port-model.mjs";
+import { getAttackConeAngles, clipAttackConeToSector, getAttackConeSampleOffset,
+  getAttackConeSampleOffsets, isAttackConeOffsetAllowed } from "../utils/attack-cone-geometry.mjs";
+import {
+  updateConstructWeaponAimPreview, clearConstructWeaponAimPreview,
+  getConstructWeaponAimOrigin, getConstructWeaponAimPoint, getConstructWeaponAimSector, prepareConstructWeaponAttackExecution
+} from "../canvas/construct-visuals.mjs";
+import { ConstructAimLimitsPreview } from "../canvas/construct-aim-limits.mjs";
 import {
   canTokenPhysicallySeeTarget,
   testObserverVisibilityBatch
@@ -200,6 +219,7 @@ import {
   startCanvasTargetSelectionSession
 } from "../canvas/target-selection-lifecycle.mjs";
 import { createLatestFrameScheduler } from "../canvas/latest-frame-scheduler.mjs";
+import { AimActivationGate, getAimActivationSector } from "../utils/aim-activation-gate.mjs";
 import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
@@ -938,10 +958,16 @@ export function startWeaponAttack({
   ignoreReactionLock = false,
   finishAfterAttack = false,
   suppressGenericEventReactions = false,
-  useGmAuthority = false
+  useGmAuthority = false,
+  operatorPassengerId = ""
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return undefined;
   if (!token?.actor || !weapon || !isAttackSource(weapon, weaponFunctionId)) return undefined;
+  const executor = getConstructWeaponExecutor(token.actor, weapon, game.user, "fire", weaponFunctionId, { operatorPassengerId });
+  if (!executor || isActorUnableToAct(executor.actor)) {
+    ui.notifications?.warn?.("Оружию нужен занятый и работоспособный пост стрелка с правом стрельбы.");
+    return undefined;
+  }
   if (
     useGmAuthority
     && !game.user?.isGM
@@ -954,7 +980,7 @@ export function startWeaponAttack({
   if (isActorUnableToAct(token.actor)) return undefined;
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return undefined;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
-  if (isWeaponActionBlocked(token.actor, actionKey)) return undefined;
+  if (isWeaponActionBlocked(token.actor, actionKey) || isWeaponActionBlocked(executor.actor, actionKey)) return undefined;
   if (isWeaponPlacementDisabled(token.actor, weapon)) return undefined;
   if (activeAttack && !cancelWeaponAttack({ ignoreReactionLock })) return undefined;
   const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
@@ -971,7 +997,9 @@ export function startWeaponAttack({
     ignoreReactionLock,
     finishAfterAttack,
     suppressGenericEventReactions,
-    useGmAuthority
+    useGmAuthority,
+    operatorPassengerId: executor.passenger?.id ?? operatorPassengerId,
+    operatorActor: executor.actor
   });
   if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) return undefined;
   activeAttack = controller;
@@ -1004,6 +1032,12 @@ export const ORDINARY_WEAPON_ATTACK_TESTING = Object.freeze({
 
 export const ATTACK_TARGETING_TESTING = Object.freeze({
   unaimedAttackDisadvantageCount: UNAIMED_ATTACK_DISADVANTAGE_COUNT,
+  getAttackGeometry,
+  getWeaponAttackOrigin,
+  getWeaponAttackDistanceMeters,
+  buildTrajectoryThroughPoint,
+  hasLineOfSight,
+  getWallClippedEndpoint,
   getAttackGeometryCandidateBounds,
   getCanvasTokenCandidates,
   getTokenElevationRange,
@@ -2459,7 +2493,7 @@ class CommandedWeaponAttackController {
 
   refreshEntry(entry, pointer) {
     if (!entry?.token?.actor || !entry.weapon || !pointer) return;
-    const origin = getTokenAimPoint(entry.token);
+    const origin = getWeaponAttackOrigin(entry.token, entry.weapon, entry.weaponFunctionId);
     let geometry = getAttackGeometry(
       entry.weapon,
       entry.actionKey,
@@ -2749,11 +2783,13 @@ function serializeOrdinaryAttackSelection(selection = {}) {
     weaponUuid: selection.weapon?.uuid ?? selection.weaponUuid ?? "",
     actionKey: String(selection.actionKey ?? ""),
     weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+    operatorPassengerId: String(selection.operatorPassengerId ?? ""),
     pointer: selection.pointer,
     geometry: selection.geometry,
     lockedGeometry: selection.lockedGeometry ?? selection.geometry,
     targetUuid: String(selection.targetUuid ?? ""),
     selectedLimbKey: String(selection.selectedLimbKey ?? ""),
+    selectedInteriorTarget: normalizeConstructInteriorTarget(selection.selectedInteriorTarget),
     directionKey: String(selection.directionKey ?? ""),
     selectedStrength: Math.max(1, toInteger(selection.selectedStrength) || 1),
     mode: String(selection.mode ?? "current"),
@@ -2827,6 +2863,7 @@ async function handleOrdinaryWeaponAttackTicketQuery(data = {}, {
   ) return { ok: false, reason: "authorityRejected" };
 
   const selection = serializeOrdinaryAttackSelection(data?.selection ?? {});
+
   if (
     !selection.operationId
     || !selection.previewAttackId
@@ -3135,6 +3172,7 @@ async function handleOrdinaryWeaponAttackSocketRequest(payload = {}, socketSende
 
 function enqueueOrdinaryAttackActorOperation(tokenUuid = "", operation) {
   const key = String(tokenUuid ?? "").trim();
+
   const previous = ordinaryAttackActorQueues.get(key) ?? Promise.resolve();
   const next = previous
     .catch(() => undefined)
@@ -3225,10 +3263,13 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
     if (!isAttackSceneClient([tokenDocument], { requirePlaceables: true })) {
       return { ok: false, executed: false, reason: "gmSceneUnavailable" };
     }
-    if (!sender.isGM && !token.actor.testUserPermission?.(sender, "OWNER")) {
+    if (!canUserUseConstructWeapon(token.actor, weapon, sender, "fire", selection.weaponFunctionId, { operatorPassengerId: selection.operatorPassengerId })) {
       return { ok: false, executed: false, reason: "notOwner" };
     }
-    if (weapon.parent?.uuid !== token.actor.uuid) {
+    const operatorActor = await resolveConstructWeaponOperatorActor(token.actor, weapon, sender, "fire", selection.weaponFunctionId, { operatorPassengerId: selection.operatorPassengerId });
+    if (!operatorActor || isActorUnableToAct(operatorActor)) return { ok: false, executed: false, reason: "operatorUnavailable" };
+    if (getWeaponActionBlockState(operatorActor, selection.actionKey).blocked) return { ok: false, executed: false, reason: "blockedAction" };
+    if (weapon.parent?.uuid !== token.actor.uuid && weapon.parent?.uuid !== operatorActor.uuid) {
       return { ok: false, executed: false, reason: "wrongWeaponOwner" };
     }
     if (!isAttackSource(weapon, selection.weaponFunctionId)) {
@@ -3282,7 +3323,8 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
       chatMessageAuthorId: sender.id,
       autoCoverAttackId: selection.previewAttackId,
       ownsAttackAutoCoverLifecycle: false,
-      finishAfterAttack: true
+      finishAfterAttack: true,
+      operatorActor, operatorPassengerId: selection.operatorPassengerId, operatorUserId: sender.id
     });
     try {
       if (!(await validateCommandedAttackSelectionGeometry(selection, token, weapon, {
@@ -3293,6 +3335,7 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
         return { ok: false, executed: false, reason: "invalidGeometry" };
       }
 
+
       const result = await executeCapturedWeaponAttack({
         ...selection,
         token,
@@ -3301,6 +3344,7 @@ async function executeOrdinaryWeaponAttackSelection(selection, sender) {
         controller,
         returnAuthorityMetadata: true
       });
+
       return {
         ok: Boolean(result?.executed),
         executed: Boolean(result?.executed),
@@ -3882,12 +3926,20 @@ async function validateCommandedAttackSelectionGeometry(selection = {}, token = 
 
     if (actionKey === "aimedShot") {
       return controller.isAimedTargetInEffectiveRange(selectedTarget)
-        && Boolean(resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? "")));
+        && (!selection.selectedInteriorTarget || Boolean(resolveConstructInteriorTarget(selectedTarget?.actor, selection.selectedInteriorTarget)))
+        && (!selection.selectedInteriorTarget || String(selection.selectedLimbKey) === `constructPart:${selection.selectedInteriorTarget.shellSlotId}`)
+        && Boolean(resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? ""), { interiorTarget: selection.selectedInteriorTarget }));
     }
     if (MELEE_ACTION_KEYS.has(actionKey)) {
       if (
         actionKey === "aimedMeleeAttack"
-        && !resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? ""))
+        && selection.selectedInteriorTarget
+        && (!resolveConstructInteriorTarget(selectedTarget?.actor, selection.selectedInteriorTarget)
+          || String(selection.selectedLimbKey) !== `constructPart:${selection.selectedInteriorTarget.shellSlotId}`)
+      ) return false;
+      if (
+        actionKey === "aimedMeleeAttack"
+        && !resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? ""), { interiorTarget: selection.selectedInteriorTarget })
       ) return false;
       return true;
     }
@@ -3983,6 +4035,7 @@ async function executeCapturedWeaponAttack(selection = {}, {
     ? (selection.lockedGeometry ?? serializeGeometry(controller.geometry))
     : serializeGeometry(controller.geometry);
   controller.selectedLimbKey = String(selection.selectedLimbKey ?? "");
+  controller.selectedInteriorTarget = normalizeConstructInteriorTarget(selection.selectedInteriorTarget);
 
   const targetDocument = selection.targetUuid ? await fromUuid(selection.targetUuid) : null;
   const selectedTarget = targetDocument?.object ?? targetDocument ?? null;
@@ -4232,7 +4285,7 @@ function isAimedAttackGeometryTargetReachable({
   const attacker = attackerToken?.object ?? attackerToken;
   const target = targetToken?.object ?? targetToken;
   if (!attacker?.actor || !target?.actor || !weapon || !isAttackTargetVisible(target, null, attacker)) return false;
-  const origin = getTokenAimPoint(attacker);
+  const origin = getWeaponAttackOrigin(attacker, weapon, weaponFunctionId);
   const targetPoint = getTokenAimPoint(target);
   const geometry = getAttackGeometry(
     weapon,
@@ -4248,7 +4301,9 @@ function isAimedAttackGeometryTargetReachable({
   if (!aimPoint) return false;
   geometry.aimPoint = selectAttackGeometryAimPoint(attacker, target, geometry) ?? aimPoint;
   if (!getAimedElevationTargets(attacker, geometry, [target]).includes(target)) return false;
-  return canTokenPhysicallySeeTarget(attacker, target);
+  return getConstructWeaponAimOrigin(attacker, weapon, weaponFunctionId)
+    ? true
+    : canTokenPhysicallySeeTarget(attacker, target);
 }
 
 export async function startConstrainedAimedAttackSelection({
@@ -4580,6 +4635,7 @@ export function buildWeaponExplosionDamageRequests({
 
 export function isWeaponPlacementDisabled(actor, weapon) {
   if (!actor || !weapon) return false;
+  actor = getWeaponOwnerActor(weapon) ?? actor;
   const placement = weapon.system?.placement ?? {};
   if (placement.mode !== "weapon" || isContainerWeaponSetKey(placement.weaponSet)) return false;
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
@@ -4594,6 +4650,11 @@ export class WeaponAttackController {
     this.weapon = weapon;
     this.actionKey = actionKey;
     this.weaponFunctionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
+    this.operatorPassengerId = String(options.operatorPassengerId ?? "");
+    this.operatorUserId = String(options.operatorUserId || game.user?.id || "");
+    this.operatorActor = options.operatorActor
+      ?? getConstructWeaponExecutor(token?.actor, weapon, game.user, "fire", this.weaponFunctionId, { operatorPassengerId: this.operatorPassengerId })?.actor
+      ?? token?.actor;
     this.stealthAttack = isActorStealthed(this.token?.actor);
     this.attackId = String(options.attackId ?? "").trim() || foundry.utils.randomID();
     // One controller can execute several attacks while its preview stays open.
@@ -4601,6 +4662,7 @@ export class WeaponAttackController {
     this.previewAttackId = this.attackId;
     this.chanceOperationId = String(options.chanceOperationId ?? "").trim() || this.attackId;
     this.rangeProfile = getWeaponRangeProfile(weapon, actionKey, token, this.weaponFunctionId, {
+      operatorActor: this.operatorActor,
       weaponAttackId: this.attackId,
       chanceOperationId: this.chanceOperationId
     });
@@ -4655,9 +4717,13 @@ export class WeaponAttackController {
     this.targetMarkers = new PIXI.Graphics();
     this.focusedTargetMarker = new PIXI.Graphics();
     this.container.addChild(this.shape, this.meleeDirectionPreview, this.targetMarkers, this.focusedTargetMarker);
+    this.constructAimLimits = new ConstructAimLimitsPreview();
     this.targets = [];
     this.geometry = null;
     this.pointer = null;
+    this.aimActivation = new AimActivationGate(() => this.headlessExecution || this.constrainedTarget
+      || isWhirlwindAttackModifier(this.attackModifier) ? null : getAimActivationSector(this));
+    this.aimActivationPreview = new AimActivationPreview();
     this.processing = false;
     this.destroyed = false;
     this.finishRequested = false;
@@ -4675,8 +4741,8 @@ export class WeaponAttackController {
     this.aimedShot = isAimedShotAction(weapon, actionKey, this.weaponFunctionId);
     this.ignoreAimedObstructions = this.aimedShot
       && (
-        hasActorFixedAbilityFunction(this.token?.actor, ABILITY_FIXED_FUNCTION_KEYS.hawkEye)
-        || hasActorFixedAbilityFunction(this.token?.actor, ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing)
+        hasActorFixedAbilityFunction(this.operatorActor, ABILITY_FIXED_FUNCTION_KEYS.hawkEye)
+        || hasActorFixedAbilityFunction(this.operatorActor, ABILITY_FIXED_FUNCTION_KEYS.hawkEyePiercing)
       );
     this.targetedAction = this.attackModifier?.targetedAction ?? (this.aimedShot || this.meleeAction);
     this.requiresLimbSelection = this.attackModifier?.requiresLimbSelection ?? (this.aimedShot || actionKey === "aimedMeleeAttack");
@@ -4738,7 +4804,8 @@ export class WeaponAttackController {
       cancel: event => this.onCancel(event),
       pointerDown: event => this.onPointerDown(event),
       tick: () => this.onTick(),
-      itemUpdate: (item, changes, options) => this.onItemUpdate(item, changes, options)
+      itemUpdate: (item, changes, options) => this.onItemUpdate(item, changes, options),
+      keyDown: event => this.onKeyDown(event)
     };
     if (
       this.meleeAction
@@ -4751,11 +4818,16 @@ export class WeaponAttackController {
 
   activate() {
     if (this.destroyed) return false;
+    this.pointer = this.aimActivation.initialize(this.pointer);
     this.attachPreview();
     this.syncWeaponNoisePreview();
     if (isWhirlwindAttackModifier(this.attackModifier)) this.pointer = getTokenAimPoint(this.token);
     if (!this.startTargetSelectionLifecycle()) return false;
     this.attachInteractiveHandlers();
+    if (this.aimActivation.waiting) {
+      notifyAimActivationRequired(this.aimActivation);
+      this.refresh();
+    }
     return true;
   }
 
@@ -4858,6 +4930,7 @@ export class WeaponAttackController {
     this.interactiveHandlersAttached = true;
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
+    document.addEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app.ticker.add(this.events.tick);
     Hooks.on("updateItem", this.events.itemUpdate);
     const canvasView = canvas.app?.view ?? null;
@@ -4871,6 +4944,7 @@ export class WeaponAttackController {
     this.interactiveHandlersAttached = false;
     canvas.stage.off("mousemove", this.events.move);
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
+    document.removeEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
     Hooks.off("updateItem", this.events.itemUpdate);
     const canvasView = canvas.app?.view ?? null;
@@ -4921,6 +4995,9 @@ export class WeaponAttackController {
   }
 
   attachPreview() {
+    this.constructAimLimits.attach(this);
+    this.constructAimLimits.update(this);
+    this.aimActivationPreview.update(this.aimActivation, this.container, { visible: !this.previewSuppressed });
     if (this.container.parent) return;
     this.container.eventMode = "none";
     getCombatVisualizationLayer().addChild(this.container);
@@ -4943,11 +5020,11 @@ export class WeaponAttackController {
         chainRef: this.chainRef
       });
     const actionPointCostApplied = this.reportedActionPointCostApplied ?? (
-      !this.skipActionPointCost && isCombatActionPointSpendingActive(this.token?.actor)
+      !this.skipActionPointCost && isCombatActionPointSpendingActive(this.operatorActor)
     );
     const actionPointCost = this.reportedActionPointCost ?? (
       actionPointCostApplied
-        ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+        ? getWeaponActionPointCost(this.operatorActor, this.weapon, this.actionKey, this.weaponFunctionId, {
           ...this.createWeaponAttackSkillCheckContext(this.selectedTarget),
           chanceOperationId: this.chanceOperationId
         })
@@ -5002,7 +5079,7 @@ export class WeaponAttackController {
   }
 
   syncWeaponNoisePreview() {
-    if (this.destroyed || this.processing || this.previewSuppressed) return false;
+    if (this.destroyed || this.processing || this.previewSuppressed || this.aimActivation.waiting) return false;
     this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
     setWeaponNoisePreview(this.token, this.weaponNoisePreviewSourceId, this.weaponNoiseLevel);
     return true;
@@ -5091,14 +5168,14 @@ export class WeaponAttackController {
       ? this.getRangeProfileForTarget(targetToken, resolvedWeaponData)
       : this.rangeProfile;
     return normalizeAttackDistanceContext({
-      attackDistanceMeters: targetToken ? getTokenDistanceMeters(this.token, targetToken) : null,
+      attackDistanceMeters: targetToken ? getWeaponAttackDistanceMeters(this.token, targetToken, this.weapon, this.weaponFunctionId, { attackOrigin: this.getAttackOrigin() }) : null,
       effectiveRange: rangeProfile?.effectiveRange
     });
   }
 
   getRangeProfileForTarget(targetToken = null, weaponData = null) {
     if (!targetToken?.actor) return this.rangeProfile;
-    const attackDistanceMeters = getTokenDistanceMeters(this.token, targetToken);
+    const attackDistanceMeters = getWeaponAttackDistanceMeters(this.token, targetToken, this.weapon, this.weaponFunctionId, { attackOrigin: this.getAttackOrigin() });
     return this.getRangeProfileForDistance(attackDistanceMeters, { targetToken, weaponData });
   }
 
@@ -5114,6 +5191,7 @@ export class WeaponAttackController {
       this.token,
       this.weaponFunctionId,
       {
+      operatorActor: this.operatorActor,
         targetToken,
         targetActor: targetToken?.actor ?? null,
         weaponData: weaponData ?? getWeaponAttackData(this.weapon, this.weaponFunctionId),
@@ -5145,6 +5223,8 @@ export class WeaponAttackController {
       weaponFunctionId: this.weaponFunctionId,
       rangeProfile,
       context: {
+        operatorActor: this.operatorActor,
+        attackOrigin: this.getAttackOrigin(),
         weaponData,
         attackModifier: this.attackModifier,
         weaponActionModifierState: this.getWeaponActionModifierState(),
@@ -5186,6 +5266,8 @@ export class WeaponAttackController {
     return {
       actorToken: this.token,
       targetToken,
+      operatorActor: this.operatorActor,
+      weaponOwnerActor: this.weapon?.actor ?? this.weapon?.parent ?? this.token.actor,
       ...this.createWeaponAttackDistanceContext(targetToken, weaponData),
       chainRef: this.chainRef,
       damageHubOperationRef: this.damageHubOperationRef,
@@ -5248,6 +5330,11 @@ export class WeaponAttackController {
         weaponAttackDamage: true,
         attackerActorUuid: request?.source?.attackerActorUuid ?? this.token?.actor?.uuid ?? "",
         attackerTokenUuid: request?.source?.attackerTokenUuid ?? this.token?.document?.uuid ?? "",
+        attackerOrigin: this.getAttackOrigin(),
+        targetTokenUuid: request?.source?.targetTokenUuid ?? canvas.tokens?.placeables?.find(target => target.actor?.uuid === (request.actor?.uuid ?? request.actorUuid))?.document?.uuid ?? "",
+        ...(this.selectedInteriorTarget && (request.actor?.uuid ?? request.actorUuid) === this.selectedTarget?.actor?.uuid
+          && request.limbKey === `constructPart:${this.selectedInteriorTarget.shellSlotId}`
+          ? { constructInteriorTarget: normalizeConstructInteriorTarget(this.selectedInteriorTarget) } : {}),
         weaponUuid: request?.source?.weaponUuid ?? this.weapon?.uuid ?? "",
         actionKey: request?.source?.actionKey ?? this.actionKey,
         chainRef: request?.source?.chainRef ?? this.chainRef,
@@ -5264,9 +5351,64 @@ export class WeaponAttackController {
     return sourceRequests;
   }
 
+  async getConstructInteriorContinuation(requests, actor) {
+    const carriesInteriorPacket = requests.some(request => Number.isFinite(Number(request.source?.constructInteriorBaseAmount)));
+    if (actor?.type !== "construct" && !carriesInteriorPacket) return null;
+    const packets = new Map();
+    // Assign missing identity to the actual request so prediction and damage
+    // application select the same internal contact. Each fallback is separate.
+    for (const request of requests) {
+      const key = String(request.source?.damagePacketId ?? "").trim()
+        || String(request.source?.conditionWearPacketId ?? "").trim() || foundry.utils.randomID();
+      request.source = { ...request.source, damagePacketId: key,
+        conditionWearPacketId: String(request.source?.conditionWearPacketId ?? "").trim() || key };
+    }
+    for (const request of this.stampAttackDamageSources(requests)) {
+      const key = request.source.damagePacketId;
+      if (!packets.has(key)) packets.set(key, []);
+      packets.get(key).push(request);
+    }
+    const results = [];
+    for (const packet of packets.values()) {
+      if (packet.every(request => request.scope === "itemCondition")) continue;
+      const result = await estimateConstructInteriorAttackGroup(packet, { actor });
+      if (result) { results.push(result.constructInteriorContinuation); continue; }
+      // Once a projectile has left a compartment, preserve it through normal
+      // external actors using their unchanged native armor and threshold.
+      const estimate = estimateDamageApplicationsBatch(actor, packet);
+      const step = Math.max(0, ...packet.map(request => Number(request.source?.penetrationStep) || 0));
+      const allowed = step < getDamageRequestGroupPenetrationPower(packet)
+        && doesDamageRequestGroupPenetratePart(packet, actor, { type: "limb", limbKey: getSingleDamageRequestLimbKey(packet) });
+      const components = allowed ? packet.flatMap((request, index) => {
+        const application = estimate.damageApplications.find(entry => entry.source === request.source
+          && entry.damageTypeKey === request.damageTypeKey)
+          ?? estimate.damageApplications[index];
+        const base = Math.max(0, Number(request.source.constructInteriorBaseAmount ?? request.amount) || 0);
+        const amount = Math.max(0, Math.round((application?.amountAfterBarrier || 0) - base * .1));
+        return amount ? [{ amount, damageTypeKey: request.damageTypeKey, damageEventIndex: request.damageEventIndex,
+          source: { ...request.source, constructInteriorBaseAmount: base,
+            constructInteriorPacketIndex: request.source.constructInteriorPacketIndex ?? index,
+            penetrationPower: Math.max(0, Number(application?.penetrationRemainder) || 0) + step,
+            penetrationStep: step + 1 } }] : [];
+      }) : [];
+      results.push({ allowed: components.length > 0, amount: components.reduce((sum, component) => sum + component.amount, 0),
+        penetrationStep: step + 1, penetrationPower: components.length
+          ? Math.min(...components.map(component => component.source.penetrationPower)) : 0, components });
+    }
+    if (!results.length) return null;
+    const passed = results.filter(result => result?.allowed && result.amount > 0);
+    return { allowed: passed.length > 0, amount: passed.reduce((sum, result) => sum + result.amount, 0),
+      penetrationStep: passed.length ? Math.max(...passed.map(result => result.penetrationStep)) : 0,
+      // Different projectiles keep their own budget in component.source.
+      penetrationPower: passed.length ? Math.max(...passed.map(result => result.penetrationPower)) : 0,
+      components: passed.flatMap(result => result.components ?? []).filter(component => component.amount > 0) };
+  }
+
   createWeaponActionModifierContext(extra = {}) {
     return {
-      actor: this.token?.actor ?? null,
+      actor: isConstructPersonalWeapon(this.token, this.weapon) ? this.operatorActor : this.token?.actor ?? null,
+      operatorActor: this.operatorActor,
+      weaponOwnerActor: this.weapon?.actor ?? this.weapon?.parent ?? this.token?.actor ?? null,
       actorToken: this.token,
       token: this.token,
       weapon: this.weapon,
@@ -5309,7 +5451,7 @@ export class WeaponAttackController {
       previewContext
     );
     if (direction) {
-      return getDirectedAttackHitChance(this.token.actor, this.weapon, target.actor, {
+      return getDirectedAttackHitChance(this.operatorActor, this.weapon, target.actor, {
         actionKey: this.actionKey,
         mode: direction.mode,
         limbKey,
@@ -5329,7 +5471,7 @@ export class WeaponAttackController {
         ? 0
         : getAimedTargetBlockers(this.token, target, trajectory, this.targetTokenUuidAllowlist).length;
       return getAimedAttackHitChance(
-        this.token.actor,
+        this.operatorActor,
         this.weapon,
         target.actor,
         resolvedLimbKey,
@@ -5344,7 +5486,7 @@ export class WeaponAttackController {
         }
       );
     }
-    return getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
+    return getGeneralAttackHitChance(this.operatorActor, this.weapon, target.actor, {
       difficultyBonus: rangeDifficultyBonus
         + this.getAttackModifierDifficultyBonus()
         + getBurstShotDifficultyBonus(
@@ -5352,7 +5494,7 @@ export class WeaponAttackController {
           this.actionKey,
           0,
           this.weaponFunctionId,
-          this.token.actor,
+          this.operatorActor,
           previewContext
         ),
       actionKey: this.actionKey,
@@ -5652,26 +5794,26 @@ export class WeaponAttackController {
     }));
   }
 
-  async resolveTargetReactions(target) {
+  async resolveTargetReactions(target, { targetActor = target?.actor } = {}) {
     if (this.interruptForIncapacitation()) return true;
     if (isPhantomEntity(target)) return false;
-    if (this.attackCanceledByReaction || !target?.actor || !this.token?.actor || !this.weapon) return false;
-    if (target.actor.statuses?.has?.("unconscious")) {
-      this.preExistingUnconsciousTargetActorUuids.add(String(target.actor.uuid ?? "").trim());
+    if (this.attackCanceledByReaction || !targetActor || !this.token?.actor || !this.weapon) return false;
+    if (targetActor.statuses?.has?.("unconscious")) {
+      this.preExistingUnconsciousTargetActorUuids.add(String(targetActor.uuid ?? "").trim());
     }
-    const targetKey = String(target.actor.uuid ?? target.document?.uuid ?? target.id ?? "");
+    const targetKey = String(targetActor.uuid ?? target.document?.uuid ?? target.id ?? "");
     if (!targetKey) return false;
     const reactionKey = `${this.attackId}:${targetKey}`;
     if (this.reactionTargetKeys.has(reactionKey)) return false;
     this.reactionTargetKeys.add(reactionKey);
-    if (target.actor.uuid) this.attackedTargetActorUuids.add(target.actor.uuid);
+    if (targetActor.uuid) this.attackedTargetActorUuids.add(targetActor.uuid);
     if (target.document?.uuid) this.attackedTargetTokenUuids.add(target.document.uuid);
     const attackDistanceContext = this.createWeaponAttackReactionContext(target);
     const result = await this.requestReaction(REACTION_EVENT_KEYS.weaponAttackTargeted, {
       attackId: this.attackId,
       attackerActorUuid: this.token.actor.uuid,
       attackerTokenUuid: this.token.document?.uuid ?? "",
-      targetActorUuid: target.actor.uuid,
+      targetActorUuid: targetActor.uuid,
       targetTokenUuid: target.document?.uuid ?? "",
       weaponUuid: this.weapon.uuid,
       actionKey: this.actionKey,
@@ -5679,7 +5821,7 @@ export class WeaponAttackController {
       suppressGuardianAngelReaction: Boolean(this.attackModifier?.suppressGuardianAngelReaction),
       ...attackDistanceContext,
       title: auditLocalize("FALLOUTMAW.AuditRuntime.R0839", "Реакция на атаку"),
-      message: auditFormat("FALLOUTMAW.AuditRuntime.R0840", { p0: (this.token.actor.name), p1: (target.actor.name), p2: (this.weapon.name) }, "{p0} атакует {p1}: {p2}.")
+      message: auditFormat("FALLOUTMAW.AuditRuntime.R0840", { p0: (this.token.actor.name), p1: (targetActor.name), p2: (this.weapon.name) }, "{p0} атакует {p1}: {p2}.")
     });
     if (result?.disadvantageCount) {
       const modifierState = this.getWeaponActionModifierState();
@@ -5717,6 +5859,7 @@ export class WeaponAttackController {
 
   suppressPreview() {
     this.previewSuppressed = true;
+    this.constructAimLimits.clear();
     this.clearWeaponNoisePreview();
     this.shape.clear();
     this.meleeDirectionPreview.clear();
@@ -5741,16 +5884,20 @@ export class WeaponAttackController {
 
   canContinueAfterProcessing() {
     const actor = this.token?.actor ?? null;
-    const weapon = actor?.items?.get?.(this.weapon?.id) ?? null;
-    if (!actor || !weapon || isActorUnableToAct(actor)) return false;
+    const weapon = (getWeaponOwnerActor(this.weapon) ?? actor)?.items?.get?.(this.weapon?.id) ?? null;
+    if (!actor || !weapon || isActorUnableToAct(actor) || isActorUnableToAct(this.operatorActor)) return false;
+    const operatorUser = game.users?.get?.(this.operatorUserId) ?? game.user;
+    if (!canUserUseConstructWeapon(actor, weapon, operatorUser, "fire", this.weaponFunctionId, { operatorPassengerId: this.operatorPassengerId })) return false;
     if (!isAttackSource(weapon, this.weaponFunctionId)) return false;
     if (!getWeaponAttackData(weapon, this.weaponFunctionId)?.enabled) return false;
     if (!hasWeaponAction(weapon, this.actionKey, this.weaponFunctionId)) return false;
     if (getWeaponActionBlockState(actor, this.actionKey).blocked) return false;
+    if (getWeaponActionBlockState(this.operatorActor, this.actionKey).blocked) return false;
     if (isWeaponPlacementDisabled(actor, weapon)) return false;
 
     this.weapon = weapon;
     this.rangeProfile = getWeaponRangeProfile(weapon, this.actionKey, this.token, this.weaponFunctionId, {
+      operatorActor: this.operatorActor,
       weaponAttackId: this.attackId,
       chanceOperationId: this.chanceOperationId
     });
@@ -5765,7 +5912,7 @@ export class WeaponAttackController {
     })) return false;
     if (!modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount, silent: true }))) return false;
     if (!this.skipActionPointCost && !canSpendRequiredWeaponActionPoints(
-      actor,
+      this.operatorActor,
       weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -5944,6 +6091,8 @@ export class WeaponAttackController {
     delayedThrownItemData = null,
     actionContext = null
   } = {}) {
+    const operatorActor = this.operatorActor;
+    if (!operatorActor) return false;
     this.spentQuantityItemData = null;
     const resolvedActionContext = actionContext && typeof actionContext === "object"
       ? actionContext
@@ -5951,7 +6100,7 @@ export class WeaponAttackController {
     const externalCost = this.actionPointCostTransaction;
     const externalCostContext = {
       ...resolvedActionContext,
-      actor: this.token.actor,
+      actor: operatorActor,
       actorToken: this.token,
       weapon: this.weapon,
       controller: this,
@@ -5959,9 +6108,9 @@ export class WeaponAttackController {
       chanceOperationId: this.chanceOperationId
     };
     const actionPointCostApplied = (Boolean(externalCost) || !this.skipActionPointCost)
-      && isCombatActionPointSpendingActive(this.token.actor);
+      && isCombatActionPointSpendingActive(this.operatorActor);
     const actionPointCost = actionPointCostApplied && !externalCost
-      ? getWeaponActionPointCost(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+      ? getWeaponActionPointCost(this.operatorActor, this.weapon, this.actionKey, this.weaponFunctionId, {
         ...resolvedActionContext,
         chanceOperationId: this.chanceOperationId
       })
@@ -5975,7 +6124,7 @@ export class WeaponAttackController {
     if (
       actionPointCostApplied
       && !canSpendCombinedWeaponActionPointCosts(
-        this.token.actor,
+        operatorActor,
         actionPointCost,
         actorResourceActionPointCost,
         { notify: true, label: auditLocalize("FALLOUTMAW.AuditRuntime.R0808", "действия") }
@@ -5995,7 +6144,7 @@ export class WeaponAttackController {
       actionPointSpendStarted = true;
       if (externalCost) {
         externalActionPointLifecycle = await commitWeaponActionPointSpend(
-          this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+          operatorActor, this.weapon, this.actionKey, this.weaponFunctionId, {
             emitActionResolved: !this.attackCanceledByReaction,
             spendActionPoints: false,
             actionPointCostApplied: this.reportedActionPointCostApplied,
@@ -6015,7 +6164,7 @@ export class WeaponAttackController {
         return committedActionPointSpend;
       }
       committedActionPointSpend = await commitWeaponActionPointSpend(
-        this.token.actor,
+        operatorActor,
         this.weapon,
         this.actionKey,
         this.weaponFunctionId,
@@ -6035,7 +6184,7 @@ export class WeaponAttackController {
     };
     const rollbackActionPointSpend = async committed => {
       if (externalCost) await externalCost.rollback(committed, externalCostContext);
-      else await rollbackCommittedWeaponActionPointSpend(this.token.actor, committed);
+      else await rollbackCommittedWeaponActionPointSpend(operatorActor, committed);
       committedActionPointSpend = null;
     };
     const weaponAttempted = this.shouldSpendWeaponResourcesForAttempt();
@@ -6098,6 +6247,7 @@ export class WeaponAttackController {
           throw new Error("Weapon action modifier state could not be committed after resource spending.");
         }
         committedActorResourceCosts = resourcesSpent.actorCosts ?? [];
+
       } catch (error) {
         await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
         throw error;
@@ -6112,7 +6262,8 @@ export class WeaponAttackController {
         : 0
     ) + getPaidActorResourceAmount(committedActorResourceCosts, "actionPoints");
     if (spentAttackActionPoints > 0) {
-      await applyAttackActionPointMovementLoss(this.token.actor, spentAttackActionPoints, {
+
+      await applyAttackActionPointMovementLoss(operatorActor, spentAttackActionPoints, {
         ...resolvedActionContext,
         actorToken: this.token,
         weapon: this.weapon,
@@ -6126,22 +6277,25 @@ export class WeaponAttackController {
         source: "weaponAttack"
       });
     }
+
     let spentActionPointCost;
     if (externalCost) {
       await externalCost.finalize?.(committedActionPointSpend, externalCostContext);
       await finalizeCommittedWeaponActionPointSpend(
-        this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, externalActionPointLifecycle
+        operatorActor, this.weapon, this.actionKey, this.weaponFunctionId, externalActionPointLifecycle
       );
       spentActionPointCost = Math.max(0, toInteger(committedActionPointSpend?.spent));
     } else {
+
       spentActionPointCost = await finalizeCommittedWeaponActionPointSpend(
-        this.token.actor,
+        operatorActor,
         this.weapon,
         this.actionKey,
         this.weaponFunctionId,
         committedActionPointSpend
       );
     }
+
     this.actionPointSpendReceipt = committedActionPointSpend?.receipt ?? null;
     this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
     this.attackCostsCommitted = weaponAttempted;
@@ -6232,7 +6386,7 @@ export class WeaponAttackController {
     const actionContext = this.createWeaponActionContext({ targetToken });
     if (!this.hasRequiredWeaponResources(1)) return false;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -6282,6 +6436,9 @@ export class WeaponAttackController {
     this.finishTargetSelection();
     liveWeaponAttackTargetControllers.delete(this);
     this.destroyed = true;
+    clearConstructWeaponAimPreview(this);
+    this.constructAimLimits.destroy();
+    this.aimActivationPreview.destroy();
     this.previewFrameScheduler.destroy();
     this.clearWeaponNoisePreview();
     void this.abortSkillCheckCollectors();
@@ -6331,10 +6488,20 @@ export class WeaponAttackController {
   }
 
   getAttackOrigin() {
-    return this.originOverride ?? getTokenAimPoint(this.token);
+    return this.originOverride ?? getWeaponAttackOrigin(this.token, this.weapon, this.weaponFunctionId);
   }
 
   async runBeforeExecute() {
+    const operatorUser = game.users?.get?.(this.operatorUserId) ?? game.user;
+    const executor = getConstructWeaponExecutor(this.token.actor, this.weapon, operatorUser, "fire", this.weaponFunctionId, { operatorPassengerId: this.operatorPassengerId });
+    if (!executor || isActorUnableToAct(executor.actor)) {
+      ui.notifications?.warn?.("Пост стрелка недоступен: нужен действующий оператор с правом стрельбы.");
+      return false;
+    }
+    this.operatorActor = executor.actor;
+    if (getWeaponActionBlockState(this.operatorActor, this.actionKey).blocked) return false;
+    if (await prepareConstructWeaponAttackExecution(this) === false) return false;
+    if (getConstructWeaponAimOrigin(this.token, this.weapon, this.weaponFunctionId) && !this.rebuildGeometryAndTargets()) return false;
     if (this.beforeExecuteCompleted) return true;
     if (!this.onBeforeExecute) {
       this.beforeExecuteCompleted = true;
@@ -6461,7 +6628,8 @@ export class WeaponAttackController {
       this.refreshAimedLimbMenu();
       return;
     }
-    this.pointer = event.data.getLocalPosition(getCombatVisualizationLayer());
+    if (!this.setAimPointer(event.data.getLocalPosition(getCombatVisualizationLayer()))) return;
+    updateConstructWeaponAimPreview(this);
     this.previewFrameScheduler.request();
   }
 
@@ -6490,6 +6658,7 @@ export class WeaponAttackController {
   }
 
   handleLimbMenuPointerDown(event) {
+    if (this.interiorAimPanel?.handlePointerDown(event)) return true;
     if (!this.limbMenu?.contains(event.target)) return false;
 
     event.preventDefault();
@@ -6520,6 +6689,7 @@ export class WeaponAttackController {
     if (!button || this.aimedMode !== "limb") return true;
     if (button.disabled || button.dataset.destroyed === "true") return true;
     const limbKey = button.dataset.limbKey ?? "";
+    this.selectedInteriorTarget = null;
     if (this.requiresDirectionSelection) {
       this.selectedLimbKey = limbKey;
       this.aimedMode = "direction";
@@ -6528,6 +6698,15 @@ export class WeaponAttackController {
     }
     void this.runInteractiveAttackOperation(() => this.performAimedAttack(limbKey));
     return true;
+  }
+
+  onKeyDown(event) {
+    if (event.key !== "Escape" || !this.targetSelectionSession?.active || this.destroyed
+      || this.processing || this.isInteractionLocked() || this.attackModifier?.preventCancel) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    return cancelWeaponAttack({ ignoreReactionLock: this.ignoreReactionLock });
   }
 
   onCancel(event) {
@@ -6585,11 +6764,23 @@ export class WeaponAttackController {
   }
 
   onTick() {
-    if (isActorUnableToAct(this.token?.actor)) {
+    if (isActorUnableToAct(this.token?.actor) || isActorUnableToAct(this.operatorActor)) {
       this.interruptForIncapacitation();
       return;
     }
     if (this.processing || this.isInteractionLocked()) return;
+    const limitsChanged = this.constructAimLimits.update(this);
+    this.aimActivationPreview.update(this.aimActivation, this.container, { visible: !this.previewSuppressed });
+    if (this.aimActivation.waiting) {
+      const point = this.aimActivation.seedPoint();
+      if (point && (!this.pointer || Math.hypot(point.x - this.pointer.x, point.y - this.pointer.y) > 0.01)) {
+        this.pointer = point;
+        this.previewFrameScheduler.request();
+      }
+      if (limitsChanged || !this.aimActivation.waiting) this.previewFrameScheduler.request();
+      return;
+    }
+    if (updateConstructWeaponAimPreview(this) || limitsChanged) this.previewFrameScheduler.request();
     this.drawFocusedTargetMarkerForPreview(performance.now());
   }
 
@@ -6608,6 +6799,7 @@ export class WeaponAttackController {
     event.stopPropagation?.();
     event.preventDefault?.();
     this.updatePointerFromClientEvent(event);
+    if (this.aimActivation.waiting) return false;
     return this.runInteractiveAttackOperation(() => this.performCurrentAttack());
   }
 
@@ -6616,7 +6808,7 @@ export class WeaponAttackController {
   }
 
   interruptForIncapacitation() {
-    if (!isActorUnableToAct(this.token?.actor)) return false;
+    if (!isActorUnableToAct(this.token?.actor) && !isActorUnableToAct(this.operatorActor)) return false;
     this.attackCanceledByReaction = true;
     this.requestFinish();
     return true;
@@ -6629,11 +6821,13 @@ export class WeaponAttackController {
       weapon: this.weapon,
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
+      operatorPassengerId: this.operatorPassengerId,
       pointer: serializePoint(this.pointer),
       geometry: serializeGeometry(this.geometry),
       lockedGeometry: this.lockedGeometry ?? serializeGeometry(this.geometry),
       targetUuid: this.selectedTarget?.document?.uuid ?? this.selectedTarget?.uuid ?? "",
       selectedLimbKey: this.selectedLimbKey,
+      selectedInteriorTarget: this.selectedInteriorTarget,
       ...data
     };
     if (activeAttack === this) activeAttack = null;
@@ -6685,6 +6879,8 @@ export class WeaponAttackController {
 
   async executeOrdinaryAttackViaGm(data = {}) {
     if (!this.shouldUseOrdinaryGmAuthority() || this.processing) return false;
+    if (await prepareConstructWeaponAttackExecution(this) === false) return false;
+    if (getConstructWeaponAimOrigin(this.token, this.weapon, this.weaponFunctionId) && !this.rebuildGeometryAndTargets()) return false;
     const gm = getOrdinaryAttackSceneGM(this.token);
     if (!gm) {
       ui.notifications.warn(auditLocalize("FALLOUTMAW.AuditRuntime.R0841", "Нет активного GM на сцене и уровне атаки."));
@@ -6696,11 +6892,13 @@ export class WeaponAttackController {
       weapon: this.weapon,
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
+      operatorPassengerId: this.operatorPassengerId,
       pointer: serializePoint(this.pointer),
       geometry: serializeGeometry(this.geometry),
       lockedGeometry: this.lockedGeometry ?? serializeGeometry(this.geometry),
       targetUuid: this.selectedTarget?.document?.uuid ?? this.selectedTarget?.uuid ?? "",
       selectedLimbKey: this.selectedLimbKey,
+      selectedInteriorTarget: this.selectedInteriorTarget,
       operationId: foundry.utils.randomID(),
       previewAttackId: this.previewAttackId || this.attackId,
       ...data
@@ -6751,7 +6949,7 @@ export class WeaponAttackController {
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -6825,6 +7023,7 @@ export class WeaponAttackController {
       if (this.attackCanceledByReaction) break;
     }
 
+
     if (attempted) {
       await this.spendCurrentAttackCosts({
         attackCount: this.getExecutedDuplicateAttackCount(duplicatePlan),
@@ -6855,13 +7054,13 @@ export class WeaponAttackController {
 
     const attacksPerTarget = Math.max(
       1,
-      toInteger(1 + getActorSkillValue(this.token.actor, "athletics") / 80)
+      toInteger(1 + getActorSkillValue(this.operatorActor, "athletics") / 80)
     );
     const plannedAttackCount = targets.length * attacksPerTarget;
     const actionContext = this.createWeaponActionContext();
     if (!this.hasRequiredWeaponResources(plannedAttackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7073,7 +7272,7 @@ export class WeaponAttackController {
     if (!this.hasRequiredWeaponResources(1)) return;
     const actionContext = this.createWeaponActionContext();
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7103,7 +7302,7 @@ export class WeaponAttackController {
   }
 
   getPushDifficulty() {
-    return 50 + getActorSkillValue(this.token.actor, "ath")
+    return 50 + getActorSkillValue(this.operatorActor, "ath")
       + getWeaponPushDifficultyModifier(this.weapon, this.weaponFunctionId);
   }
 
@@ -7112,7 +7311,7 @@ export class WeaponAttackController {
     if (!this.hasRequiredWeaponResources(1)) return;
     const actionContext = this.createWeaponActionContext();
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7205,9 +7404,9 @@ export class WeaponAttackController {
       this.weaponFunctionId,
       attackContext
     );
-    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.operatorActor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
-      actor: this.token.actor,
+      actor: this.operatorActor,
       messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
@@ -7359,7 +7558,7 @@ export class WeaponAttackController {
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return undefined;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7411,7 +7610,7 @@ export class WeaponAttackController {
     const actionContext = this.createWeaponActionContext({ targetToken: null, geometry });
     if (!this.hasRequiredWeaponResources(attackCount)) return false;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7540,7 +7739,7 @@ export class WeaponAttackController {
       return;
     }
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7549,11 +7748,13 @@ export class WeaponAttackController {
       if (this.attackModifier?.preventCancel) this.requestFinish();
       return;
     }
-    const targetSelection = resolveAimedTargetSelection(target.actor, limbKey);
+    const targetSelection = resolveAimedTargetSelection(target.actor, limbKey, { interiorTarget: this.selectedInteriorTarget });
     if (!targetSelection) {
       if (this.attackModifier?.preventCancel) this.requestFinish();
       return;
     }
+    if (this.selectedInteriorTarget && (!resolveConstructInteriorTarget(target.actor, this.selectedInteriorTarget)
+      || limbKey !== `constructPart:${this.selectedInteriorTarget.shellSlotId}`)) return;
     this.selectedLimbKey = limbKey;
     if (this.captureOnly) {
       return this.captureAttackSelection({
@@ -7584,7 +7785,8 @@ export class WeaponAttackController {
     this.removeLimbMenu();
     this.refresh(true);
     if (!this.attackModifier?.suppressCounterSniperReaction) {
-      const reactionResult = await this.requestAimedLimbSelectedReaction(target, limbKey);
+      const aimedInterior = this.selectedInteriorTarget ? resolveConstructInteriorTarget(target.actor, this.selectedInteriorTarget) : null;
+      const reactionResult = await this.requestAimedLimbSelectedReaction(target, aimedInterior?.limbKey ?? limbKey, aimedInterior?.actor ?? target.actor);
       if (
         reactionResult?.handled
         || reactionResult?.status === REACTION_RESULT.success
@@ -7674,14 +7876,14 @@ export class WeaponAttackController {
     this.completeProcessingCycle();
   }
 
-  async requestAimedLimbSelectedReaction(target, limbKey = "") {
+  async requestAimedLimbSelectedReaction(target, limbKey = "", targetActor = target?.actor) {
     if (this.actionKey !== "aimedShot" || isPhantomEntity(target)) return undefined;
     const attackDistanceContext = this.createWeaponAttackReactionContext(target);
     return this.requestReaction(REACTION_EVENT_KEYS.aimedAttackLimbSelected, {
       attackId: this.attackId,
       attackerActorUuid: this.token?.actor?.uuid ?? "",
       attackerTokenUuid: this.token?.document?.uuid ?? "",
-      targetActorUuid: target?.actor?.uuid ?? "",
+      targetActorUuid: targetActor?.uuid ?? "",
       targetTokenUuid: target?.document?.uuid ?? "",
       weaponUuid: this.weapon?.uuid ?? "",
       weaponFunctionId: this.weaponFunctionId,
@@ -7689,7 +7891,7 @@ export class WeaponAttackController {
       limbKey: String(limbKey ?? ""),
       ...attackDistanceContext,
       title: auditLocalize("FALLOUTMAW.AuditRuntime.R0112", "Контр-снайпер"),
-      message: auditFormat("FALLOUTMAW.AuditRuntime.R0844", { p0: (this.token?.actor?.name ?? ""), p1: (target?.actor?.name ?? "") }, "{p0} выбрал часть тела для прицельного выстрела по {p1}.")
+      message: auditFormat("FALLOUTMAW.AuditRuntime.R0844", { p0: (this.token?.actor?.name ?? ""), p1: (targetActor?.name ?? "") }, "{p0} выбрал часть тела для прицельного выстрела по {p1}.")
     });
   }
 
@@ -7749,7 +7951,7 @@ export class WeaponAttackController {
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -7846,6 +8048,9 @@ export class WeaponAttackController {
     ]);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
+    if (getConstructWeaponAimOrigin(this.token, this.weapon, this.weaponFunctionId) && !selectedEntry.hit) {
+      return { damageRequests, trajectory, checkBatch };
+    }
     const subsequentTargets = targets.filter(entry => (
       entry.target !== selectedTarget
       && (!selectedEntry.hit || entry.hit.distance > selectedEntry.hit.distance + 0.5)
@@ -7976,9 +8181,9 @@ export class WeaponAttackController {
       this.weaponFunctionId,
       attackContext
     );
-    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.operatorActor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
-      actor: this.token.actor,
+      actor: this.operatorActor,
       messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
@@ -8100,6 +8305,9 @@ export class WeaponAttackController {
     ]);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
+    if (getConstructWeaponAimOrigin(this.token, this.weapon, this.weaponFunctionId) && !selectedEntry.hit) {
+      return { damageRequests, trajectory, checkBatch };
+    }
     const subsequentTargets = targets.filter(entry => (
       entry.target !== selectedTarget
       && (!selectedEntry.hit || entry.hit.distance > selectedEntry.hit.distance + 0.5)
@@ -8107,6 +8315,8 @@ export class WeaponAttackController {
 
     let penetrationsUsed = 0;
     let lastPenetrationPower = 0;
+    let interiorContinuation = null;
+    let continuationStep = 0;
     let finalAnimationPoint = null;
     let hasSuccessfulHit = false;
 
@@ -8143,19 +8353,25 @@ export class WeaponAttackController {
       damageRequests.push(...firstRequest);
       hasSuccessfulHit = true;
       lastPenetrationPower = getDamageRequestGroupPenetrationPower(firstRequest, selectedPenetrationPower);
-      if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, targetSelection)) penetrationsUsed += 1;
+      interiorContinuation = await this.getConstructInteriorContinuation(firstRequest, selectedTarget.actor);
+      if (interiorContinuation) {
+        penetrationsUsed = continuationStep = interiorContinuation.penetrationStep;
+        lastPenetrationPower = interiorContinuation.penetrationPower;
+      } else if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, targetSelection)) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
       const passthroughStep = hasSuccessfulHit ? penetrationsUsed : 0;
-      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > lastPenetrationPower)) break;
-      const damageAmount = getPenetratedDamageAmount(baseDamage, passthroughStep);
+      if (interiorContinuation && !interiorContinuation.allowed) break;
+      if (hasSuccessfulHit && ((!interiorContinuation && penetrationsUsed <= 0) || penetrationsUsed > lastPenetrationPower)) break;
+      const damageAmount = interiorContinuation ? getConstructContinuationDamageAmount(interiorContinuation, passthroughStep)
+        : getPenetratedDamageAmount(baseDamage, passthroughStep);
       if (damageAmount <= 0) break;
 
       const inheritedLimbKey = this.getWeaponActionModifierState().getOption("inheritAimedLimbOnPath")
         ? targetSelection?.limbKey ?? ""
         : "";
-      const request = inheritedLimbKey
+      let request = inheritedLimbKey
         ? await this.resolveAimedAttackAgainstTarget(entry.target, {
           limbKey: inheritedLimbKey,
           damageAmount,
@@ -8188,10 +8404,21 @@ export class WeaponAttackController {
         continue;
       }
 
+      if (interiorContinuation) request = carryConstructDamageRequests(request, interiorContinuation, {
+        penetrationStep: passthroughStep, targetTokenUuid: entry.target.document?.uuid ?? entry.target.uuid ?? ""
+      });
+
       damageRequests.push(...request);
       hasSuccessfulHit = true;
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
       lastPenetrationPower = getDamageRequestGroupPenetrationPower(request);
+      const nextInterior = await this.getConstructInteriorContinuation(request, entry.target.actor);
+      if (nextInterior) {
+        interiorContinuation = nextInterior;
+        penetrationsUsed = continuationStep = nextInterior.penetrationStep;
+        lastPenetrationPower = nextInterior.penetrationPower;
+        continue;
+      }
       if (penetrationsUsed >= lastPenetrationPower) break;
 
       const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
@@ -8269,14 +8496,18 @@ export class WeaponAttackController {
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     let penetrationsUsed = 0;
     let attempted = true;
+    let interiorContinuation = null;
+    let continuationStep = 0;
     let finalAnimationPoint = null;
     let finalAnimationSegment = null;
     let hasSuccessfulHit = false;
 
     for (const entry of targets) {
-      const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
+      if (interiorContinuation && !interiorContinuation.allowed) break;
+      const damageAmount = interiorContinuation ? getConstructContinuationDamageAmount(interiorContinuation, penetrationsUsed)
+        : getPenetratedDamageAmount(baseDamage, penetrationsUsed);
       if (damageAmount <= 0) break;
-      const request = await this.resolveAttackAgainstTarget(entry.target, {
+      let request = await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
         damageShareIndex,
         damageShareCount,
@@ -8301,11 +8532,21 @@ export class WeaponAttackController {
         continue;
       }
 
+      if (interiorContinuation) request = carryConstructDamageRequests(request, interiorContinuation, {
+        penetrationStep: penetrationsUsed, targetTokenUuid: entry.target.document?.uuid ?? entry.target.uuid ?? ""
+      });
+
       damageRequests.push(...request);
       hasSuccessfulHit = true;
       finalAnimationSegment = entry.segment ?? trajectory;
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, finalAnimationSegment);
       const targetPenetrationPower = getDamageRequestGroupPenetrationPower(request);
+      const nextInterior = await this.getConstructInteriorContinuation(request, entry.target.actor);
+      if (nextInterior) {
+        interiorContinuation = nextInterior;
+        penetrationsUsed = continuationStep = nextInterior.penetrationStep;
+        continue;
+      }
       if (penetrationsUsed >= targetPenetrationPower) break;
 
       const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
@@ -8334,6 +8575,7 @@ export class WeaponAttackController {
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
+
     if (this.usesAbilityTrialResolution()) {
       return this.resolveAbilityTrialAttackAgainstTarget(target, {
         penetrationStep,
@@ -8348,7 +8590,9 @@ export class WeaponAttackController {
       burstAttackIndex: normalizedBurstAttackIndex
     });
     this.dodgeExposure.record(target.actor, attackContext);
-    if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
+    if (!limbKey || isLimbDestroyed(target.actor, limbKey)
+      && !(target.actor.type === "construct" && getConstructExteriorSlotIds(target.actor)
+        .includes(limbKey.slice("constructPart:".length)))) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(
       this.weapon,
       this.token,
@@ -8356,20 +8600,21 @@ export class WeaponAttackController {
       this.weaponFunctionId,
       attackContext
     );
-    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.operatorActor, this.weapon, this.weaponFunctionId);
     const burstDifficultyBonus = getBurstShotDifficultyBonus(
       this.weapon,
       this.actionKey,
       normalizedBurstAttackIndex,
       this.weaponFunctionId,
-      this.token.actor,
+      this.operatorActor,
       {
         ...attackContext,
         targetActor: target.actor
       }
     );
+
     const outcome = await requestSkillCheck({
-      actor: this.token.actor,
+      actor: this.operatorActor,
       messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
@@ -8395,6 +8640,7 @@ export class WeaponAttackController {
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
+
     if (!isSuccessfulAttack(outcome)) {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
@@ -8456,7 +8702,7 @@ export class WeaponAttackController {
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     const actionContext = this.createWeaponActionContext({ targetToken: null, geometry: this.geometry });
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       this.actionKey,
       this.weaponFunctionId,
@@ -8500,7 +8746,7 @@ export class WeaponAttackController {
           this.actionKey,
           attackIndex,
           this.weaponFunctionId,
-          this.token.actor,
+          this.operatorActor,
           blastAttackContext
         )
       });
@@ -8547,13 +8793,13 @@ export class WeaponAttackController {
     const delayedDamageContext = delayedExplosion ? this.createWeaponDamageContext(actionContext) : null;
     const delayedActionPointCostApplied = delayedExplosion && (
       this.reportedActionPointCostApplied ?? (
-        !this.skipActionPointCost && isCombatActionPointSpendingActive(this.token.actor)
+        !this.skipActionPointCost && isCombatActionPointSpendingActive(this.operatorActor)
       )
     );
     const delayedActionPointCost = delayedExplosion
       ? (this.reportedActionPointCost ?? (
         delayedActionPointCostApplied
-          ? getWeaponActionPointCost(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+          ? getWeaponActionPointCost(this.operatorActor, this.weapon, this.actionKey, this.weaponFunctionId, {
             ...actionContext,
             chanceOperationId: this.chanceOperationId
           })
@@ -8707,12 +8953,12 @@ export class WeaponAttackController {
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
       weaponData,
       attackDistanceMeters,
-      this.token?.actor ?? null,
+      this.operatorActor,
       attackContext
     );
-    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.operatorActor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
-      actor: this.token.actor,
+      actor: this.operatorActor,
       messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
@@ -8733,6 +8979,7 @@ export class WeaponAttackController {
     this.recordCriticalFailureConsequences(outcome);
     const center = computeVolleyBlastCenter({
       attackerToken: this.token,
+      attackOrigin: geometry.origin,
       intendedCenter: geometry.end,
       radiusPixels: geometry.radiusPixels,
       outcome
@@ -8871,10 +9118,14 @@ export class WeaponAttackController {
         penetrationStep
       });
     }
-    if (await this.resolveTargetReactions(target)) return null;
-    const attackContext = this.createWeaponAttackSkillCheckContext(target);
-    this.dodgeExposure.record(target.actor, attackContext);
-    if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
+    const interiorAim = target === this.selectedTarget && this.selectedInteriorTarget
+      ? resolveConstructInteriorTarget(target.actor, this.selectedInteriorTarget) : null;
+    const aimActor = interiorAim?.actor ?? target.actor;
+    const aimLimbKey = interiorAim?.limbKey ?? limbKey;
+    if (await this.resolveTargetReactions(target, { targetActor: aimActor })) return null;
+    const attackContext = this.createWeaponAttackSkillCheckContext(target, { targetActor: aimActor });
+    this.dodgeExposure.record(aimActor, attackContext);
+    if (!limbKey || !interiorAim && isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(
       this.weapon,
       this.token,
@@ -8882,15 +9133,15 @@ export class WeaponAttackController {
       this.weaponFunctionId,
       attackContext
     );
-    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.operatorActor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
-      actor: this.token.actor,
+      actor: this.operatorActor,
       messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(
-          target.actor,
-          limbKey,
+          aimActor,
+          aimLimbKey,
           difficultyBonus
             + rangeDifficultyBonus
             + requirementDifficultyBonus
@@ -8996,9 +9247,9 @@ export class WeaponAttackController {
       this.weaponFunctionId,
       attackContext
     );
-    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.operatorActor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
-      actor: this.token.actor,
+      actor: this.operatorActor,
       messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
@@ -9124,6 +9375,8 @@ export class WeaponAttackController {
 
   refresh(forceBroadcast = false, { skipBurstDistribution = false } = {}) {
     if (this.destroyed) return;
+    this.constructAimLimits.update(this);
+    this.aimActivationPreview.update(this.aimActivation, this.container, { visible: !this.previewSuppressed });
     if (this.headlessExecution) {
       if (!this.pointer && !this.lockedGeometry && !isWhirlwindAttackModifier(this.attackModifier)) {
         this.targets = [];
@@ -9146,6 +9399,16 @@ export class WeaponAttackController {
     }
     this.shape.clear();
     this.meleeDirectionPreview.clear();
+    if (this.aimActivation.waiting) {
+      this.pointer = this.aimActivation.seedPoint() ?? this.pointer;
+      this.geometry = this.getAttackGeometry(this.getAttackOrigin());
+      this.targets = [];
+      this.clearTargetMarkers();
+      this.removeLimbMenu();
+      this.removeChanceMenu();
+      if (this.geometry) drawAttackShape(this.shape, this.geometry, { locked: false, hasTargets: false });
+      return;
+    }
     if (!this.pointer && !this.lockedGeometry && !isWhirlwindAttackModifier(this.attackModifier)) {
       this.syncAttackAutoCover([]);
       this.clearTargetMarkers();
@@ -9196,7 +9459,10 @@ export class WeaponAttackController {
 
   rebuildGeometryAndTargets() {
     const origin = this.getAttackOrigin();
-    this.geometry = this.pushStrengthMaximum > 0
+    const anchoredWeapon = Boolean(getConstructWeaponAimOrigin(this.token, this.weapon, this.weaponFunctionId));
+    this.geometry = anchoredWeapon
+      ? this.getAttackGeometry(origin)
+      : this.pushStrengthMaximum > 0
       ? deserializeGeometry(this.lockedGeometry)
       : this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
       ? deserializeGeometry(this.lockedGeometry)
@@ -9212,8 +9478,12 @@ export class WeaponAttackController {
       const maximumConeDegrees = Number(ricochet.maximumConeDegrees);
       if (Number.isFinite(maximumConeDegrees) && maximumConeDegrees > 0) {
         const maximumHalfAngle = Math.min(Math.PI, maximumConeDegrees * Math.PI / 360);
-        if (Number(this.geometry.halfAngle) > maximumHalfAngle) {
-          this.geometry.halfAngle = maximumHalfAngle;
+        const coneAngles = getAttackConeAngles(this.geometry);
+        if (coneAngles.halfAngle > maximumHalfAngle) {
+          Object.assign(this.geometry, getAttackConeAngles({
+            leftHalfAngle: Math.min(coneAngles.leftHalfAngle, maximumHalfAngle),
+            rightHalfAngle: Math.min(coneAngles.rightHalfAngle, maximumHalfAngle)
+          }));
           this.geometry.shapePoints = buildClippedConePoints(this.token, this.geometry);
         }
       }
@@ -9256,6 +9526,7 @@ export class WeaponAttackController {
     } else if (this.geometry.aimPoint) {
       this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
     }
+    if (anchoredWeapon && this.lockedGeometry) this.lockedGeometry = serializeGeometry(this.geometry);
     return true;
   }
 
@@ -9475,9 +9746,20 @@ export class WeaponAttackController {
     );
   }
 
+  setAimPointer(point) {
+    const waiting = this.aimActivation.waiting;
+    if (!this.aimActivation.accept(point)) return false;
+    this.pointer = point;
+    if (waiting) {
+      this.aimActivationPreview.clear();
+      this.syncWeaponNoisePreview();
+    }
+    return true;
+  }
+
   updatePointerFromClientEvent(event) {
     if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return;
-    this.pointer = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+    if (!this.setAimPointer(canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY }))) return;
     if (
       !this.processing
       && this.pushStrengthMaximum <= 0
@@ -9490,6 +9772,7 @@ export class WeaponAttackController {
 
   unlockAimedTarget() {
     this.aimedMode = "aim";
+    this.selectedInteriorTarget = null;
     this.selectedTarget = null;
     this.hoveredLimbKey = "";
     this.selectedLimbKey = "";
@@ -9545,7 +9828,7 @@ export class WeaponAttackController {
     const buttons = rows.map(row => {
       const unavailable = row.destroyed || rangeBlocked;
       return `
-        <button type="button" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${[
+        <button type="button" data-interior-inspectable="${row.inspectable === true}" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${[
           row.key === this.hoveredLimbKey ? "hover" : "",
           row.destroyed ? "destroyed" : "",
           rangeBlocked ? "range-unavailable" : ""
@@ -9638,7 +9921,7 @@ export class WeaponAttackController {
     }
     if (!this.chanceMenu) this.createChanceMenu();
     const previewContext = this.createWeaponAttackSkillCheckContext(target);
-    const chance = getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
+    const chance = getGeneralAttackHitChance(this.operatorActor, this.weapon, target.actor, {
       difficultyBonus: getEffectiveRangeDifficultyBonus(
         this.weapon,
         this.token,
@@ -9692,7 +9975,7 @@ export class WeaponAttackController {
       });
       return [{
         label: game.i18n.localize("FALLOUTMAW.Item.AttackChanceArea"),
-        chance: getVolleyAreaHitChance(this.token.actor, this.weapon, this.geometry, {
+        chance: getVolleyAreaHitChance(this.operatorActor, this.weapon, this.geometry, {
           actionKey: this.actionKey,
           weaponFunctionId: this.weaponFunctionId,
           difficultyBonus: getBurstShotDifficultyBonus(
@@ -9700,7 +9983,7 @@ export class WeaponAttackController {
             this.actionKey,
             0,
             this.weaponFunctionId,
-            this.token.actor,
+            this.operatorActor,
             previewContext
           ),
           context: previewContext
@@ -9717,7 +10000,7 @@ export class WeaponAttackController {
     const previewContext = this.createWeaponAttackSkillCheckContext(target);
     return [{
       label: String(target.name ?? target.actor?.name ?? game.i18n.localize("FALLOUTMAW.Item.AttackChanceHit")),
-      chance: getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
+      chance: getGeneralAttackHitChance(this.operatorActor, this.weapon, target.actor, {
         difficultyBonus: getEffectiveRangeDifficultyBonus(
           this.weapon,
           this.token,
@@ -9770,9 +10053,13 @@ export class WeaponAttackController {
       const directionButton = event.target?.closest?.("[data-attack-direction]");
       const strengthButton = event.target?.closest?.("[data-push-strength]");
       const activeButton = button ?? directionButton ?? strengthButton;
-      if (!activeButton || activeButton.disabled) return;
+      if (!activeButton || activeButton.disabled && activeButton.dataset.interiorInspectable !== "true") return;
       this.hoveredLimbKey = activeButton.dataset.limbKey ?? activeButton.dataset.attackDirection ?? activeButton.dataset.pushStrength ?? "";
       this.updateLimbMenuHover();
+      if (button && this.selectedTarget?.actor?.type === "construct" && button.dataset.limbKey?.startsWith("constructPart:")) {
+        this.interiorAimPanel ??= new ConstructInteriorAimPanel(this);
+        this.interiorAimPanel.show(this.selectedTarget.actor, button.dataset.limbKey.slice("constructPart:".length));
+      } else this.interiorAimPanel?.hide();
     });
     this.limbMenu.addEventListener("pointerout", event => {
       if (this.limbMenu?.contains(event.relatedTarget)) return;
@@ -9813,6 +10100,7 @@ export class WeaponAttackController {
 
   removeLimbMenu() {
     this.aimedLimbMenuCache = null;
+    this.interiorAimPanel?.hide();
     this.limbMenu?.remove();
     this.limbMenu = null;
   }
@@ -9829,6 +10117,7 @@ export class WeaponAttackController {
     const top = Math.max(margin, Math.min(window.innerHeight - rect.height - margin, (topLeft.y + bottomRight.y - rect.height) / 2));
     this.limbMenu.style.left = `${Math.round(left)}px`;
     this.limbMenu.style.top = `${Math.round(top)}px`;
+    this.interiorAimPanel?.position();
   }
 
   positionPushStrengthMenu() {
@@ -9847,11 +10136,17 @@ export class WeaponAttackController {
     const context = menuContext ?? this.getAimedLimbMenuContext(target);
     const limbRows = Object.entries(target.actor?.system?.limbs ?? {})
       .filter(([_key, limb]) => limb && typeof limb === "object")
+      .filter(([key]) => target.actor?.type !== "construct" || !key.startsWith("constructPart:")
+        || getConstructExteriorSlotIds(target.actor).includes(key.slice("constructPart:".length)))
       .map(([key, limb]) => ({
         key,
         limbKey: key,
         label: String(limb.label ?? key),
-        destroyed: isLimbDestroyed(target.actor, key)
+        destroyed: isLimbDestroyed(target.actor, key),
+        inspectable: key.startsWith("constructPart:") && (() => {
+          const contents = getConstructCompartmentContents(target.actor, key.slice("constructPart:".length));
+          return contents.parts.length > 0 || contents.passengers.length > 0;
+        })()
       }));
     const weaponRows = this.aimedShot
       ? getHeldWeaponAimTargets(target.actor).map(entry => ({
@@ -9865,7 +10160,7 @@ export class WeaponAttackController {
     const { blockerBonus, chanceOptions } = context;
     // One attacker+target contextual resolve for the whole menu (Foundry attack-config style).
     const chanceBasis = buildAimedAttackChanceBasis(
-      this.token.actor,
+      this.operatorActor,
       this.weapon,
       target.actor,
       this.weaponFunctionId,
@@ -9878,6 +10173,15 @@ export class WeaponAttackController {
         ? 0
         : getAimedAttackHitChanceFromBasis(chanceBasis, row.limbKey, blockerBonus, chanceOptions)
     }));
+  }
+
+  getConstructInteriorAimChance(actor, limbKey) {
+    const target = this.selectedTarget;
+    if (!target?.actor || !actor || isLimbDestroyed(actor, limbKey)) return 0;
+    const context = this.getAimedLimbMenuContext(target);
+    const basis = buildAimedAttackChanceBasis(this.operatorActor, this.weapon, actor, this.weaponFunctionId,
+      this.actionKey, { ...context.previewContext, targetActor: actor });
+    return getAimedAttackHitChanceFromBasis(basis, limbKey, context.blockerBonus, context.chanceOptions);
   }
 
   prepareAttackDirectionRows(target) {
@@ -9894,7 +10198,7 @@ export class WeaponAttackController {
       key: direction.key,
       label: direction.label,
       direction: true,
-      chance: getDirectedAttackHitChance(this.token.actor, this.weapon, target.actor, {
+      chance: getDirectedAttackHitChance(this.operatorActor, this.weapon, target.actor, {
         actionKey: this.actionKey,
         mode: direction.mode,
         limbKey,
@@ -10412,6 +10716,7 @@ async function requestApplyPreparedWeaponDamageBatch(damageRequests = [], region
   const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
     .filter(region => region?.sceneId);
   if (!serializableDamageRequests.length && !regions.length) return { damage: [], regions: [] };
+
   if (game.user?.isGM) {
     return applyPreparedWeaponDamageBatch(serializableDamageRequests, regions, {
       senderUserId: game.user.id
@@ -10484,6 +10789,7 @@ async function applyPreparedWeaponDamageBatch(damageRequests = [], regionRequest
   const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
   const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
     .filter(region => region?.sceneId);
+
   return withWeaponDamagePreparedEvents(serializableDamageRequests, async prepared => {
     notifyWeaponAttackDamageResolved(prepared, { senderUserId });
     if (regions.length) return applyPreparedDamageAndVolleyRegions(prepared, regions);
@@ -11357,7 +11663,8 @@ function serializeGeometry(geometry) {
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
     rangeBonusMeters: Number(geometry.rangeBonusMeters) || 0,
-    halfAngle: Number(geometry.halfAngle) || 0,
+    forwardOnly: Boolean(geometry.forwardOnly),
+    ...getAttackConeAngles(geometry),
     radiusPixels: Number(geometry.radiusPixels) || 0,
     aimPoint: geometry.aimPoint ? serializePoint(geometry.aimPoint) : null,
     shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(serializePoint) : [],
@@ -11376,7 +11683,8 @@ function deserializeGeometry(geometry) {
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
     rangeBonusMeters: Number(geometry.rangeBonusMeters) || 0,
-    halfAngle: Number(geometry.halfAngle) || 0,
+    forwardOnly: Boolean(geometry.forwardOnly),
+    ...getAttackConeAngles(geometry),
     radiusPixels: Number(geometry.radiusPixels) || 0,
     aimPoint: geometry.aimPoint ? deserializePoint(geometry.aimPoint) : null,
     shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(deserializePoint) : [],
@@ -11496,6 +11804,8 @@ function isMajorBurstPreviewGeometryShift(previous, current) {
     (Number(current.distance) || gridSize) * BURST_PREVIEW_FORCE_ANGLE_DELTA
   );
   return angleDelta >= BURST_PREVIEW_FORCE_ANGLE_DELTA
+    || Math.abs(getAttackConeAngles(current).leftHalfAngle - getAttackConeAngles(previous).leftHalfAngle) >= BURST_PREVIEW_FORCE_ANGLE_DELTA
+    || Math.abs(getAttackConeAngles(current).rightHalfAngle - getAttackConeAngles(previous).rightHalfAngle) >= BURST_PREVIEW_FORCE_ANGLE_DELTA
     || distanceDelta >= distanceThreshold
     || !isSamePoint(current.origin, previous.origin)
     || Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) > BURST_PREVIEW_FORCE_DISTANCE_DELTA;
@@ -11525,11 +11835,14 @@ function isSamePreviewState(current, previous) {
 function isSameGeometry(current, previous) {
   if (!current || !previous) return false;
   return String(current.type ?? "") === String(previous.type ?? "")
+    && Boolean(current.forwardOnly) === Boolean(previous.forwardOnly)
     && isSamePoint(current.origin, previous.origin)
     && isSamePoint(current.end, previous.end)
     && Math.abs((Number(current.angle) || 0) - (Number(previous.angle) || 0)) <= PREVIEW_ANGLE_EPSILON
     && Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) <= PREVIEW_POSITION_EPSILON
     && Math.abs((Number(current.halfAngle) || 0) - (Number(previous.halfAngle) || 0)) <= PREVIEW_ANGLE_EPSILON
+    && Math.abs(getAttackConeAngles(current).leftHalfAngle - getAttackConeAngles(previous).leftHalfAngle) <= PREVIEW_ANGLE_EPSILON
+    && Math.abs(getAttackConeAngles(current).rightHalfAngle - getAttackConeAngles(previous).rightHalfAngle) <= PREVIEW_ANGLE_EPSILON
     && Math.abs((Number(current.radiusPixels) || 0) - (Number(previous.radiusPixels) || 0)) <= PREVIEW_POSITION_EPSILON
     && isSameNullablePoint(current.aimPoint, previous.aimPoint)
     && isSamePointList(current.shapePoints, previous.shapePoints);
@@ -11653,13 +11966,15 @@ export function hasRequiredWeaponResources(
   {
     modifierState = null,
     additionalActorResourceCosts = [],
-    skipBaseCosts = false
+    skipBaseCosts = false,
+    operatorActor = null
   } = {}
 ) {
   const missing = getMissingWeaponResourceCost(weapon, multiplier, weaponFunctionId, {
     modifierState,
     additionalActorResourceCosts,
-    skipBaseCosts
+    skipBaseCosts,
+    operatorActor
   });
   if (!missing) return true;
   ui.notifications.warn(auditFormat("FALLOUTMAW.AuditRuntime.R0855", { p0: (weapon?.name ?? ""), p1: (missing.label), p2: (missing.current), p3: (missing.required) }, "{p0}: не хватает {p1} ({p2} / {p3})."));
@@ -11673,7 +11988,8 @@ export function getMissingWeaponResourceCost(
   {
     modifierState = null,
     additionalActorResourceCosts = [],
-    skipBaseCosts = false
+    skipBaseCosts = false,
+    operatorActor = null
   } = {}
 ) {
   const baseWeaponData = getWeaponAttackData(weapon, weaponFunctionId);
@@ -11684,7 +12000,8 @@ export function getMissingWeaponResourceCost(
     WEAPON_SPECIAL_PROPERTIES.impactConditionWear
   );
   const actor = getWeaponOwnerActor(weapon);
-  const actorResourceTotals = getWeaponActorResourceCostTotals(weapon, { costs });
+  const performer = operatorActor ?? modifierState?.context?.operatorActor ?? null;
+  const actorResourceTotals = getWeaponActorResourceCostTotals(weapon, { costs, operatorActor: performer });
   const modifierEnergyCost = Math.max(
     0,
     toInteger(modifierState?.getEnergyCost?.({ attackCount: Math.max(1, toInteger(multiplier)) }))
@@ -11696,7 +12013,7 @@ export function getMissingWeaponResourceCost(
     );
   }
   for (const cost of normalizeAdditionalActorResourceCosts(additionalActorResourceCosts)) {
-    if (!isCombatResourceCostActive(actor, cost.resourceKey)) continue;
+    if (!isCombatResourceCostActive(getWeaponResourcePayer(actor, performer, cost.resourceKey), cost.resourceKey)) continue;
     actorResourceTotals.set(
       cost.resourceKey,
       (actorResourceTotals.get(cost.resourceKey) ?? 0) + cost.amount
@@ -11704,7 +12021,7 @@ export function getMissingWeaponResourceCost(
   }
   for (const [resourceKey, required] of actorResourceTotals) {
     if (required <= 0) continue;
-    const current = getActorAttackResourceAvailable(actor, resourceKey);
+    const current = getActorAttackResourceAvailable(getWeaponResourcePayer(actor, performer, resourceKey), resourceKey);
     if (current < required) {
       return {
         type: "actorResource",
@@ -11760,12 +12077,16 @@ export function getMissingWeaponResourceCost(
   return null;
 }
 
-function evaluateWeaponActorResourceCostAmount(weapon = null, cost = {}) {
-  return Math.max(0, Math.trunc(evaluateWeaponFormula(weapon, cost?.formula ?? cost?.amount, {
+function evaluateWeaponActorResourceCostAmount(weapon = null, cost = {}, payerActor = null) {
+  const options = {
     fallback: 0,
     minimum: 0,
     context: `${weapon?.name ?? "weapon"} actor resource cost`
-  }) || 0));
+  };
+  const formula = cost?.formula ?? cost?.amount;
+  const evaluated = payerActor && payerActor !== getWeaponOwnerActor(weapon)
+    ? evaluateActorFormula(formula, payerActor, options) : evaluateWeaponFormula(weapon, formula, options);
+  return Math.max(0, Math.trunc(evaluated || 0));
 }
 
 function getWeaponActorResourceCostTotals(
@@ -11773,7 +12094,8 @@ function getWeaponActorResourceCostTotals(
   {
     costs = null,
     modifierState = null,
-    weaponFunctionId = ""
+    weaponFunctionId = "",
+    operatorActor = null
   } = {}
 ) {
   const actor = getWeaponOwnerActor(weapon);
@@ -11781,11 +12103,13 @@ function getWeaponActorResourceCostTotals(
     ? costs
     : getWeaponResourceCosts(getWeaponAttackData(weapon, weaponFunctionId), { modifierState });
   const totals = new Map();
+  const performer = operatorActor ?? modifierState?.context?.operatorActor ?? null;
   for (const cost of preparedCosts) {
     if (String(cost?.type ?? "") !== "actorResource") continue;
     const resourceKey = String(cost?.resourceKey ?? "").trim();
-    if (!resourceKey || !isCombatResourceCostActive(actor, resourceKey)) continue;
-    const amount = evaluateWeaponActorResourceCostAmount(weapon, cost);
+    const payer = getWeaponResourcePayer(actor, performer, resourceKey);
+    if (!resourceKey || !isCombatResourceCostActive(payer, resourceKey)) continue;
+    const amount = evaluateWeaponActorResourceCostAmount(weapon, cost, payer);
     totals.set(resourceKey, (totals.get(resourceKey) ?? 0) + amount);
   }
   return totals;
@@ -12088,6 +12412,7 @@ async function spendWeaponResources(
     modifierState = null,
     chainRef = null,
     skipBaseCosts = false,
+    operatorActor = null,
     beforeItemCommit = null,
     rollbackBeforeItemCommit = null
   } = {}
@@ -12097,7 +12422,8 @@ async function spendWeaponResources(
     throw new TypeError("Weapon resource spending requires an Actor-owned Item.");
   }
 
-  return weaponResourceActorLock.run(actor, null, async () => {
+  const performer = operatorActor ?? modifierState?.context?.operatorActor ?? actor;
+  return weaponResourceActorLock.runMany([actor, performer], chainRef, async () => {
     const currentWeapon = actor.items?.get?.(weapon.id);
     if (!currentWeapon) return false;
 
@@ -12249,31 +12575,18 @@ async function spendWeaponResources(
       functionId: String(weaponFunctionId ?? ""),
       chainRef
     };
-    const quote = await quoteActorResourceCosts({
-      actor,
-      costRows: actorCostRows,
-      context: costContext
+    const payment = await payWeaponActorResourceGroups({
+      groups: groupWeaponActorResourceCosts(actor, performer, actorCostRows),
+      context: costContext,
+      quote: quoteActorResourceCosts,
+      pay: payActorResourceCosts,
+      commit: commitRemainingCosts
     });
-    if (!quote?.ok) {
-      notifyAbilityTriggerCostFailure(quote);
+    if (!payment.ok) {
+      notifyAbilityTriggerCostFailure(payment.failure);
       return false;
     }
-    const payment = await payActorResourceCosts({
-      actor,
-      costRows: actorCostRows,
-      expectedFingerprint: quote.fingerprint,
-      context: {
-        ...costContext,
-        afterVectorSpend: commitRemainingCosts
-      }
-    });
-    if (!payment?.ok) {
-      notifyAbilityTriggerCostFailure(payment);
-      return false;
-    }
-    return {
-      actorCosts: payment.execution?.spendReceipt?.costs ?? []
-    };
+    return { actorCosts: payment.actorCosts };
   });
 }
 
@@ -12493,11 +12806,13 @@ export function canPerformWeaponActionAgainstToken({
   if (!isAttackSource(weapon, weaponFunctionId) || !hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
   if (isWeaponActionBlocked(attacker.actor, actionKey) || isWeaponPlacementDisabled(attacker.actor, weapon)) return false;
   if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return false;
-  const origin = getTokenAimPoint(attacker);
+  const origin = getWeaponAttackOrigin(attacker, weapon, weaponFunctionId);
   const targetPoint = getTokenAimPoint(target);
   const geometry = getAttackGeometry(weapon, actionKey, attacker, origin, targetPoint, weaponFunctionId);
   if (!geometry || !getPotentialTargets(attacker, geometry).includes(target)) return false;
-  return canTokenPhysicallySeeTarget(attacker, target);
+  return getConstructWeaponAimOrigin(attacker, weapon, weaponFunctionId)
+    ? getVisibleTokenAttackPoints(attacker, target, geometry).length > 0
+    : canTokenPhysicallySeeTarget(attacker, target);
 }
 
 function getWeaponEnergyResourceState(weapon = null, weaponFunctionId = "") {
@@ -12595,30 +12910,38 @@ function getAttackLandingPoint(trajectories = [], fallback = null) {
 
 function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, weaponFunctionId = "", rangeProfile = null) {
   if (!origin || !pointer) return null;
+  const mechanicalPointer = getConstructWeaponAimPoint(attackerToken, weapon, pointer, weaponFunctionId);
+  if (!mechanicalPointer) return null;
+  const forwardOnly = Boolean(getConstructWeaponAimOrigin(attackerToken, weapon, weaponFunctionId)) && mechanicalPointer !== pointer;
+  pointer = mechanicalPointer;
   const resolvedRangeProfile = rangeProfile
     ?? getWeaponRangeProfile(weapon, actionKey, attackerToken, weaponFunctionId);
   if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) {
-    return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId, resolvedRangeProfile);
+    return { ...getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId, resolvedRangeProfile), forwardOnly };
   }
 
-  const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
-  const maxDistancePixels = metersToPixels(getSizeScaledActionMaxRangeMeters(attackerToken, resolvedRangeProfile));
+  const rangeBonusMeters = getWeaponAttackRangeBonusMeters(attackerToken, weapon, weaponFunctionId);
+  const maxDistancePixels = metersToPixels(getSizeScaledActionMaxRangeMeters(attackerToken, resolvedRangeProfile, weapon, weaponFunctionId));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
-  const angle = Math.atan2(dy, dx);
+  const requestedAngle = Math.atan2(dy, dx);
   const distance = Math.max(1, maxDistancePixels);
-  const halfAngle = getActionAttackConeRadians(weapon, actionKey, weaponFunctionId) / 2;
+  const configuredHalfAngle = getActionAttackConeRadians(weapon, actionKey, weaponFunctionId) / 2;
+  const halfAngle = forwardOnly ? Math.min(configuredHalfAngle, (Math.PI / 2) - GEOMETRY_EPSILON) : configuredHalfAngle;
+  const coneAngles = clipAttackConeToSector({ angle: requestedAngle, halfAngle },
+    getConstructWeaponAimSector(attackerToken, weapon, weaponFunctionId));
+  const angle = coneAngles.angle;
   const end = getWallClippedEndpoint(attackerToken, origin, angle, distance).point;
-  const shapePoints = buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle });
-  return { origin, angle, distance, rangeBonusMeters, halfAngle, end, shapePoints };
+  const shapePoints = buildClippedConePoints(attackerToken, { origin, distance, ...coneAngles });
+  return { origin, distance, rangeBonusMeters, ...coneAngles, end, shapePoints, forwardOnly };
 }
 
 function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, weaponFunctionId = "", rangeProfile = null) {
   if (!origin) return null;
   const resolvedRangeProfile = rangeProfile
     ?? getWeaponRangeProfile(weapon, actionKey, attackerToken, weaponFunctionId);
-  const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
-  const distance = Math.max(1, metersToPixels(getSizeScaledActionMaxRangeMeters(attackerToken, resolvedRangeProfile)));
+  const rangeBonusMeters = getWeaponAttackRangeBonusMeters(attackerToken, weapon, weaponFunctionId);
+  const distance = Math.max(1, metersToPixels(getSizeScaledActionMaxRangeMeters(attackerToken, resolvedRangeProfile, weapon, weaponFunctionId)));
   const angle = 0;
   const halfAngle = Math.PI;
   const end = {
@@ -12633,7 +12956,7 @@ function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, wea
 function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "", rangeProfile = null) {
   const resolvedRangeProfile = rangeProfile
     ?? getWeaponRangeProfile(weapon, VOLLEY_ACTION_KEY, attackerToken, weaponFunctionId);
-  const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
+  const rangeBonusMeters = getWeaponAttackRangeBonusMeters(attackerToken, weapon, weaponFunctionId);
   const maxRangeMeters = resolvedRangeProfile.maxRangeUnlimited
     ? 0
     : Math.max(0, resolvedRangeProfile.maxRangeMeters + rangeBonusMeters);
@@ -12691,12 +13014,12 @@ function getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId = "") {
   });
 }
 
-function getSizeScaledActionMaxRangeMeters(attackerToken = null, rangeProfile = null) {
-  return Math.max(0, Number(rangeProfile?.maxRangeMeters) || 0) + getTokenAttackRangeBonusMeters(attackerToken);
+function getSizeScaledActionMaxRangeMeters(attackerToken = null, rangeProfile = null, weapon = null, weaponFunctionId = "") {
+  return Math.max(0, Number(rangeProfile?.maxRangeMeters) || 0) + getWeaponAttackRangeBonusMeters(attackerToken, weapon, weaponFunctionId);
 }
 
 function getWeaponRangeProfile(weapon, actionKey, attackerToken = null, weaponFunctionId = "", context = {}) {
-  const actor = attackerToken?.actor ?? getWeaponOwnerActor(weapon);
+  const actor = context?.operatorActor ?? attackerToken?.actor ?? getWeaponOwnerActor(weapon);
   const weaponData = context?.weaponData ?? getWeaponAttackData(weapon, weaponFunctionId);
   const baseEffectiveRange = resolveBaseWeaponEffectiveRange(
     weaponData?.effectiveRange,
@@ -12730,7 +13053,7 @@ function getWeaponRangeProfile(weapon, actionKey, attackerToken = null, weaponFu
   const baseMaxRangeMeters = getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId);
   const maxRangeUnlimited = isVolleyAttackAction(weapon, actionKey, weaponFunctionId)
     && baseMaxRangeMeters <= 0;
-  return {
+  const profile = {
     baseMaxRangeMeters,
     maxRangeMeters: maxRangeUnlimited
       ? 0
@@ -12744,6 +13067,8 @@ function getWeaponRangeProfile(weapon, actionKey, attackerToken = null, weaponFu
     }),
     modifiers
   };
+  const seat = getConstructPersonalWeaponSeat(attackerToken, weapon);
+  return constrainConstructFiringPortRangeProfile(profile, seat && getConstructFiringPortWorldTransform(attackerToken, seat));
 }
 
 function getWeaponRangeModifierValues(actor, context = {}) {
@@ -12782,8 +13107,8 @@ function getAimedTargetRangeSelectionState({
   rangeProfile = null,
   context = {}
 } = {}) {
-  const actor = attackerToken?.actor ?? getWeaponOwnerActor(weapon);
-  const attackDistanceMeters = getTokenDistanceMeters(attackerToken, targetToken);
+  const actor = context?.operatorActor ?? attackerToken?.actor ?? getWeaponOwnerActor(weapon);
+  const attackDistanceMeters = getWeaponAttackDistanceMeters(attackerToken, targetToken, weapon, weaponFunctionId, context);
   const resolvedProfile = rangeProfile ?? getWeaponRangeProfile(
     weapon,
     actionKey,
@@ -12906,12 +13231,11 @@ function drawRicochetRayOutline(graphics, trajectory = {}) {
   for (const segment of segments) graphics.lineTo(segment.end.x, segment.end.y);
 }
 
-function buildConePoints({ origin, angle, distance, halfAngle }) {
-  if (halfAngle <= 0) return [];
+function buildConePoints(geometry) {
+  const { origin, angle, distance } = geometry;
+  if (getAttackConeAngles(geometry).width <= 0) return [];
   const points = [origin.x, origin.y];
-  const segments = 24;
-  for (let index = 0; index <= segments; index += 1) {
-    const step = -halfAngle + ((halfAngle * 2 * index) / segments);
+  for (const step of getAttackConeSampleOffsets(geometry)) {
     points.push(
       origin.x + (Math.cos(angle + step) * distance),
       origin.y + (Math.sin(angle + step) * distance)
@@ -12920,12 +13244,11 @@ function buildConePoints({ origin, angle, distance, halfAngle }) {
   return points;
 }
 
-function buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle }) {
-  if (halfAngle <= 0) return [];
+function buildClippedConePoints(attackerToken, geometry) {
+  const { origin, angle, distance } = geometry;
+  if (getAttackConeAngles(geometry).width <= 0) return [];
   const points = [origin];
-  const segments = 24;
-  for (let index = 0; index <= segments; index += 1) {
-    const step = -halfAngle + ((halfAngle * 2 * index) / segments);
+  for (const step of getAttackConeSampleOffsets(geometry)) {
     points.push(getWallClippedEndpoint(attackerToken, origin, angle + step, distance).point);
   }
   return points;
@@ -13272,7 +13595,8 @@ function hasLineOfSight(attackerToken, destination, origin) {
 function getWallClippedEndpoint(attackerToken, origin, angle, distance, targetElevation = null) {
   const maxDistance = Math.max(1, Number(distance) || 1);
   const originElevation = Number(origin.elevation) || 0;
-  const destinationElevation = Number.isFinite(Number(targetElevation)) ? Number(targetElevation) : originElevation;
+  const destinationElevation = targetElevation != null && Number.isFinite(Number(targetElevation))
+    ? Number(targetElevation) : originElevation;
   const destination = {
     x: origin.x + (Math.cos(angle) * maxDistance),
     y: origin.y + (Math.sin(angle) * maxDistance),
@@ -13283,18 +13607,19 @@ function getWallClippedEndpoint(attackerToken, origin, angle, distance, targetEl
     type: "sight",
     mode: "closest"
   });
-  const point = collision
-    ? {
-      x: Number(collision.x) || destination.x,
-      y: Number(collision.y) || destination.y,
-      elevation: Number.isFinite(Number(collision.elevation))
-        ? Number(collision.elevation)
-        : getPointElevationAtDistance(originElevation, destinationElevation, Math.hypot((Number(collision.x) || destination.x) - origin.x, (Number(collision.y) || destination.y) - origin.y), maxDistance)
-    }
-    : destination;
+  const point = collision ? {
+    x: collision.x != null && Number.isFinite(Number(collision.x)) ? Number(collision.x) : destination.x,
+    y: collision.y != null && Number.isFinite(Number(collision.y)) ? Number(collision.y) : destination.y
+  } : destination;
+  const clippedDistance = Math.hypot(point.x - origin.x, point.y - origin.y);
+  if (collision) {
+    point.elevation = collision.elevation != null && Number.isFinite(Number(collision.elevation))
+      ? Number(collision.elevation)
+      : getPointElevationAtDistance(originElevation, destinationElevation, clippedDistance, maxDistance);
+  }
   return {
     point,
-    distance: Math.max(1, Math.hypot(point.x - origin.x, point.y - origin.y))
+    distance: clippedDistance
   };
 }
 
@@ -13583,7 +13908,7 @@ function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
 }
 
 function buildTrajectoryThroughPoint(attackerToken, geometry, point) {
-  const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
+  const angle = getAttackTrajectoryAngleThroughPoint(geometry, point);
   const pointDistance = Math.max(1, Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
   const originElevation = Number(geometry.origin?.elevation) || 0;
   const elevationSlope = (Number(point.elevation ?? originElevation) - originElevation) / pointDistance;
@@ -13601,9 +13926,7 @@ function getRandomBurstMissGeometry(attackerToken, geometry) {
 }
 
 function buildRandomTrajectory(attackerToken, geometry) {
-  const spread = geometry.halfAngle > 0
-    ? -geometry.halfAngle + (Math.random() * geometry.halfAngle * 2)
-    : 0;
+  const spread = getAttackConeSampleOffset(geometry, Math.random());
   return buildTrajectoryByAngle(attackerToken, geometry, geometry.angle + spread, Number(geometry.elevationSlope) || 0);
 }
 
@@ -13618,6 +13941,7 @@ function buildTrajectoryByAngle(attackerToken, geometry, angle, elevationSlope =
   const endElevation = getPointElevationAtDistance(originElevation, targetElevation, distance, Math.max(1, Number(geometry.distance) || 1));
   return {
     origin: geometry.origin,
+    forwardOnly: Boolean(geometry.forwardOnly),
     angle,
     distance,
     halfAngle: 0,
@@ -13690,11 +14014,10 @@ function buildRicochetTrajectory(attackerToken, geometry, initialAngle, elevatio
 
 function buildRicochetCone(attackerToken, geometry, rayCount = 25) {
   const amount = Math.max(2, toInteger(rayCount));
-  const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
   const rays = [];
   for (let index = 0; index < amount; index += 1) {
     const ratio = amount <= 1 ? 0.5 : index / (amount - 1);
-    const angle = geometry.angle - halfAngle + ((halfAngle * 2) * ratio);
+    const angle = geometry.angle + getAttackConeSampleOffset(geometry, ratio);
     rays.push(buildRicochetTrajectory(
       attackerToken,
       geometry,
@@ -13835,11 +14158,10 @@ function findRicochetTrajectoryForTarget(
 ) {
   if (!attackerToken || !target || !geometry?.ricochet) return null;
   const amount = Math.max(3, toInteger(sampleCount));
-  const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
   let best = null;
   for (let index = 0; index < amount; index += 1) {
     const ratio = index / (amount - 1);
-    const angle = geometry.angle - halfAngle + ((halfAngle * 2) * ratio);
+    const angle = geometry.angle + getAttackConeSampleOffset(geometry, ratio);
     const trajectory = buildRicochetTrajectory(
       attackerToken,
       geometry,
@@ -14092,7 +14414,7 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 }
 
 function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
-  const actor = getWeaponOwnerActor(weapon);
+  const actor = getWeaponPerformanceActor(weapon, context);
   const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
   const formulaDamage = getWeaponDamagePercentBase(weapon, weaponFunctionId);
   const contextualDamage = getContextualCombatValues(actor, ["damageFlat", "damagePercent"], context);
@@ -14101,7 +14423,7 @@ function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
   const skillDamageBonuses = getWeaponSkillDamageBonuses(actor, skillKey);
   const attackPowerDamagePercent = toInteger(weaponData?.attackPowerDamagePercent);
   const damagePercent = attackPowerDamagePercent
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage", actor)
     + contextualDamage.damagePercent
     + skillDamageBonuses.percent
     + getWeaponAttackModifierDamagePercentModifier(context?.attackModifier);
@@ -14394,8 +14716,8 @@ function getVolleyRegionColor(damageEntries = []) {
   return damageTypes.find(type => type.key === dominant?.damageTypeKey)?.color ?? "#dd8431";
 }
 
-function computeVolleyBlastCenter({ attackerToken = null, intendedCenter = null, radiusPixels = 0, outcome = null } = {}) {
-  const origin = getTokenAimPoint(attackerToken);
+function computeVolleyBlastCenter({ attackerToken = null, attackOrigin = null, intendedCenter = null, radiusPixels = 0, outcome = null } = {}) {
+  const origin = attackOrigin ?? getTokenAimPoint(attackerToken);
   if (!origin) return serializePoint(intendedCenter);
   const target = serializePoint(intendedCenter);
   const radius = Math.max(1, Number(radiusPixels) || 1);
@@ -14591,6 +14913,8 @@ function buildWeaponDamageRequests(weapon, {
   const weaponData = modifierState?.getWeaponData?.(baseWeaponData) ?? baseWeaponData;
   const distanceContext = getWeaponDamageDistanceContext({
     source,
+    weapon,
+    weaponFunctionId,
     weaponData,
     attackerActor,
     attackerToken,
@@ -14670,6 +14994,8 @@ function buildWeaponConditionDamageRequests(weapon, {
   const weaponData = modifierState?.getWeaponData?.(baseWeaponData) ?? baseWeaponData;
   const distanceContext = getWeaponDamageDistanceContext({
     source,
+    weapon,
+    weaponFunctionId,
     weaponData,
     attackerActor,
     attackerToken,
@@ -14727,6 +15053,8 @@ function buildWeaponConditionDamageRequests(weapon, {
 
 function getWeaponDamageDistanceContext({
   source = {},
+  weapon = null,
+  weaponFunctionId = "",
   weaponData = null,
   attackerActor = null,
   attackerToken = null,
@@ -14734,7 +15062,7 @@ function getWeaponDamageDistanceContext({
 } = {}) {
   const supplied = normalizeAttackDistanceContext(source);
   const directDistance = attackerToken && targetToken
-    ? getTokenDistanceMeters(attackerToken, targetToken)
+    ? getWeaponAttackDistanceMeters(attackerToken, targetToken, weapon, weaponFunctionId, source)
     : null;
   const attackDistanceMeters = supplied.attackDistanceMeters !== null
     ? supplied.attackDistanceMeters
@@ -14833,13 +15161,13 @@ function getSingleDamageRequestLimbKey(requests = []) {
 }
 
 function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "", context = {}) {
-  const actor = getWeaponOwnerActor(weapon);
+  const actor = getWeaponPerformanceActor(weapon, context);
   const stealth = getStealthAttackModifiers(actor);
   const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
     minimum: -Infinity,
     context: "critical chance"
   })
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance", actor)
     + getContextualCombatValue(actor, "criticalChance", context)
     + getWeaponAttackModifierCriticalChanceModifier(context?.attackModifier)
     + stealth.criticalChanceBonus
@@ -14856,7 +15184,7 @@ function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "",
 }
 
 function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "", explicitContext = {}) {
-  const actor = getWeaponOwnerActor(weapon);
+  const actor = getWeaponPerformanceActor(weapon, explicitContext);
   const stealth = getStealthAttackModifiers(actor);
   const criticalSuccess = isCriticalSuccessAttack(outcome);
   const context = {
@@ -14870,7 +15198,7 @@ function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "", expli
       minimum: 0,
       context: "critical damage percent"
     })
-      + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage")
+      + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage", actor)
       + getContextualCombatValue(actor, "criticalDamagePercent", context)
       + stealth.criticalDamageBonusPercent)
     : 100;
@@ -14989,11 +15317,11 @@ function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponF
     && context?.attackDistanceMeters !== ""
     && Number.isFinite(contextualDistance)
     ? Math.max(0, contextualDistance)
-    : getTokenDistanceMeters(attackerToken, target);
+    : getWeaponAttackDistanceMeters(attackerToken, target, weapon, weaponFunctionId, context);
   return getEffectiveRangeDifficultyBonusForDistance(
     weaponData,
     distanceMeters,
-    attackerToken?.actor ?? null,
+    context?.operatorActor ?? attackerToken?.actor ?? null,
     {
       ...context,
       actorToken: context?.actorToken ?? attackerToken,
@@ -15030,7 +15358,7 @@ function getPostureAttackEdgeModifiers({
 
 function getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, actionKey = "", weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const distance = getTokenDistanceMeters(attackerToken, targetToken);
+  const distance = getWeaponAttackDistanceMeters(attackerToken, targetToken, weapon, weaponFunctionId);
   if (!Number.isFinite(distance)) return "";
   const range = getWeaponRangeProfile(weapon, actionKey, attackerToken, weaponFunctionId, {
     targetToken,
@@ -15145,13 +15473,13 @@ function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId
 }
 
 function getWeaponAccuracyModifier(weapon, weaponFunctionId = "", context = {}) {
-  const actor = getWeaponOwnerActor(weapon);
+  const actor = getWeaponPerformanceActor(weapon, context);
   const stealth = getStealthAttackModifiers(actor);
   return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus, {
     minimum: -Infinity,
     context: "weapon accuracy"
   })
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy", actor)
     + getContextualCombatValue(actor, "accuracy", context)
     + stealth.accuracyBonus
     - getWeaponConditionAccuracyPenalty(weapon);
@@ -15185,14 +15513,36 @@ function resolveSkillKey(actor, skillKey = "") {
   return setting?.key ?? alias;
 }
 
-function getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId = "", influenceKey = "") {
-  const actor = getWeaponOwnerActor(weapon);
+function getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId = "", influenceKey = "", actor = getWeaponOwnerActor(weapon)) {
   if (!actor) return 0;
   return getWeaponProficiencyInfluenceBonusForData(
     actor,
     getWeaponAttackData(weapon, weaponFunctionId),
     influenceKey
   );
+}
+
+function getWeaponPerformanceActor(weapon, context = {}) {
+  return context?.operatorActor ?? context?.controller?.operatorActor ?? getWeaponOwnerActor(weapon);
+}
+
+function getWeaponAttackOrigin(token, weapon, weaponFunctionId = "") {
+  const bodyOrigin = getTokenAimPoint(token);
+  const muzzle = getConstructWeaponAimOrigin(token, weapon, weaponFunctionId);
+  return muzzle ? { ...bodyOrigin, ...muzzle, elevation: muzzle.elevation ?? bodyOrigin?.elevation ?? 0 } : bodyOrigin;
+}
+
+function getWeaponAttackRangeBonusMeters(token, weapon, weaponFunctionId = "") {
+  return getConstructWeaponAimOrigin(token, weapon, weaponFunctionId) ? 0 : getTokenAttackRangeBonusMeters(token);
+}
+
+function getWeaponAttackDistanceMeters(attackerToken, targetToken, weapon, weaponFunctionId = "", context = {}) {
+  const origin = context?.attackOrigin ?? context?.geometry?.origin ?? getWeaponAttackOrigin(attackerToken, weapon, weaponFunctionId);
+  const target = getTokenAimPoint(targetToken);
+  return getAttackOriginDistanceMeters(origin, target, {
+    pixelsPerMeter: metersToPixels(1),
+    rangeBonusMeters: getWeaponAttackRangeBonusMeters(attackerToken, weapon, weaponFunctionId)
+  });
 }
 
 function getWeaponOwnerActor(weapon) {
@@ -15246,13 +15596,13 @@ function addFormulaTexts(left, right) {
 }
 
 function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "", context = {}) {
-  const actor = getWeaponOwnerActor(weapon);
+  const actor = getWeaponPerformanceActor(weapon, context);
   const stealth = getStealthAttackModifiers(actor);
   const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
     minimum: -Infinity,
     context: "critical chance"
   })
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance", actor)
     + getContextualCombatValue(actor, "criticalChance", context)
     + evaluateWeaponFormula(weapon, getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier, {
       minimum: -Infinity,
@@ -15468,7 +15818,7 @@ function buildBurstDistributionShots(
   const shotGeometry = getRandomBurstMissGeometry(attackerToken, geometry);
   return Array.from({ length: sampleCount }, (_value, index) => {
     const offset = getEvenBurstSampleOffset(index, sampleCount);
-    const angle = (Number(geometry?.angle) || 0) + ((Number(geometry?.halfAngle) || 0) * offset);
+    const angle = (Number(geometry?.angle) || 0) + getAttackConeSampleOffset(geometry, (offset + 1) / 2);
     const trajectory = buildTrajectoryByAngle(attackerToken, shotGeometry, angle, Number(shotGeometry?.elevationSlope) || 0);
     const hit = getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist).at(0) ?? null;
     return {
@@ -15534,8 +15884,8 @@ function getBurstTargetHitDistribution(
 
 function getBurstTargetAxisProfile(target, geometry, sampleCount = 1) {
   if (!geometry?.origin || geometry.type === VOLLEY_ACTION_KEY || !target) return 0;
-  const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
-  if (halfAngle <= GEOMETRY_EPSILON) return null;
+  const coneAngles = getAttackConeAngles(geometry);
+  if (coneAngles.width <= GEOMETRY_EPSILON) return null;
   const polygon = getTokenWorldPolygon(target);
   const points = getPolygonPointObjects(polygon);
   if (points.length < 3) return null;
@@ -15551,6 +15901,10 @@ function getBurstTargetAxisProfile(target, geometry, sampleCount = 1) {
 
   const closest = getClosestBurstAxisPolygonPoint(axis, points);
   if (!closest) return null;
+  const targetOffset = normalizeAngle(Math.atan2(closest.tokenPoint.y - geometry.origin.y,
+    closest.tokenPoint.x - geometry.origin.x) - (Number(geometry.angle) || 0));
+  if (!isAttackConeOffsetAllowed(targetOffset, geometry, GEOMETRY_EPSILON)) return null;
+  const halfAngle = targetOffset < 0 ? coneAngles.leftHalfAngle : coneAngles.rightHalfAngle;
   const projectedDistance = clamp(getProjectedDistanceOnSegment(axis.origin, axis.end, closest.axisPoint), 1, axis.distance);
   const halfWidth = Math.tan(halfAngle) * projectedDistance;
   if (halfWidth <= GEOMETRY_EPSILON) return null;
@@ -15821,7 +16175,7 @@ function formatBurstBulletRange(range = {}) {
 }
 
 function buildSwingDirectionPreviewPoints(selectedTarget, directionKey = "", geometry = null) {
-  if (!selectedTarget || !geometry || geometry.halfAngle <= 0) return [];
+  if (!selectedTarget || !geometry || getAttackConeAngles(geometry).width <= 0) return [];
   const attackPoints = getAttackPolygonPoints(geometry);
   if (!Array.isArray(attackPoints) || attackPoints.length < 3) return [];
 
@@ -16005,12 +16359,14 @@ function buildVolleyAnimationTrajectory(geometry) {
 function buildConeAnimationTrajectory(geometry) {
   if (!geometry?.origin) return null;
   const distance = Math.max(1, Number(geometry.distance) || 1);
-  const angle = Number.isFinite(Number(geometry.angle)) ? Number(geometry.angle) : 0;
+  const coneAngles = getAttackConeAngles(geometry);
+  const angle = (Number.isFinite(Number(geometry.angle)) ? Number(geometry.angle) : 0)
+    + (coneAngles.rightHalfAngle - coneAngles.leftHalfAngle) / 2;
   return {
     origin: geometry.origin,
     angle,
     distance,
-    halfAngle: Math.max(0, Number(geometry.halfAngle) || 0),
+    halfAngle: coneAngles.width / 2,
     end: {
       x: geometry.origin.x + (Math.cos(angle) * distance),
       y: geometry.origin.y + (Math.sin(angle) * distance),
@@ -16140,7 +16496,7 @@ function getTokenTrajectoryHit(token, trajectory) {
 function getTokenAttackContactPoints(token, geometry) {
   if (geometry.type === VOLLEY_ACTION_KEY) return getTokenVolleyContactPoints(token, geometry);
 
-  if (geometry.halfAngle <= 0) {
+  if (getAttackConeAngles(geometry).width <= 0) {
     const points = [];
     const hit = getTokenTrajectoryHit(token, geometry);
     if (hit?.point) addUniquePoint(points, hit.point);
@@ -16170,11 +16526,11 @@ function getTokenAttackCoverPolygon(token, geometry) {
 function getUnclippedAttackAreaPolygon(geometry) {
   const origin = geometry?.origin;
   const distance = Math.max(0, Number(geometry?.distance) || 0);
-  const halfAngle = Math.min(Math.PI, Math.max(0, Number(geometry?.halfAngle) || 0));
-  if (!origin || distance <= GEOMETRY_EPSILON || halfAngle <= GEOMETRY_EPSILON) return null;
+  const coneAngles = getAttackConeAngles(geometry);
+  if (!origin || distance <= GEOMETRY_EPSILON || coneAngles.width <= GEOMETRY_EPSILON) return null;
 
   const values = [];
-  if (halfAngle >= Math.PI - GEOMETRY_EPSILON) {
+  if (coneAngles.width >= Math.PI * 2 - GEOMETRY_EPSILON) {
     const segments = 48;
     for (let index = 0; index < segments; index += 1) {
       const angle = (Math.PI * 2 * index) / segments;
@@ -16182,9 +16538,7 @@ function getUnclippedAttackAreaPolygon(geometry) {
     }
   } else {
     values.push(origin.x, origin.y);
-    const segments = 24;
-    for (let index = 0; index <= segments; index += 1) {
-      const step = -halfAngle + ((halfAngle * 2 * index) / segments);
+    for (const step of getAttackConeSampleOffsets(geometry)) {
       values.push(
         origin.x + (Math.cos((Number(geometry.angle) || 0) + step) * distance),
         origin.y + (Math.sin((Number(geometry.angle) || 0) + step) * distance)
@@ -16269,13 +16623,13 @@ function getTokenVolleyContactPoints(token, geometry) {
 
 function isPointInsideAttackCone(point, geometry) {
   if (!point || !geometry?.origin) return false;
+  if (geometry.forwardOnly && !isPointForwardOfAttackOrigin(point, geometry)) return false;
   const dx = point.x - geometry.origin.x;
   const dy = point.y - geometry.origin.y;
   const distance = Math.hypot(dx, dy);
   if (distance > (Number(geometry.distance) || 0) + GEOMETRY_EPSILON) return false;
   const offset = normalizeAngle(Math.atan2(dy, dx) - geometry.angle);
-  return offset >= -geometry.halfAngle - GEOMETRY_EPSILON
-    && offset <= geometry.halfAngle + GEOMETRY_EPSILON;
+  return isAttackConeOffsetAllowed(offset, geometry, GEOMETRY_EPSILON);
 }
 
 function getTokenShapeBounds(token) {
@@ -16522,11 +16876,9 @@ function getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRang
 
 function getAttackPolygonPoints(geometry) {
   if (Array.isArray(geometry.shapePoints) && geometry.shapePoints.length >= 3) return geometry.shapePoints;
-  if (geometry.halfAngle <= 0) return [];
+  if (getAttackConeAngles(geometry).width <= 0) return [];
   const points = [geometry.origin];
-  const segments = 24;
-  for (let index = 0; index <= segments; index += 1) {
-    const step = -geometry.halfAngle + ((geometry.halfAngle * 2 * index) / segments);
+  for (const step of getAttackConeSampleOffsets(geometry)) {
     points.push({
       x: geometry.origin.x + (Math.cos(geometry.angle + step) * geometry.distance),
       y: geometry.origin.y + (Math.sin(geometry.angle + step) * geometry.distance)
@@ -16947,11 +17299,15 @@ function getAimedWeaponTargetKey(item = null) {
   return `weapon:${String(item?.id ?? "").trim()}`;
 }
 
-function resolveAimedTargetSelection(actor, key = "") {
+function resolveAimedTargetSelection(actor, key = "", { interiorTarget = null } = {}) {
   const value = String(key ?? "").trim();
   if (!value) return null;
   if (!value.startsWith("weapon:")) {
-    return actor?.system?.limbs?.[value] && !isLimbDestroyed(actor, value)
+    if (actor?.type === "construct" && value.startsWith("constructPart:")
+      && !getConstructExteriorSlotIds(actor).includes(value.slice("constructPart:".length))) return null;
+    const validInterior = interiorTarget && value === `constructPart:${interiorTarget.shellSlotId}`
+      && resolveConstructInteriorTarget(actor, interiorTarget);
+    return actor?.system?.limbs?.[value] && (!isLimbDestroyed(actor, value) || validInterior)
       ? { type: "limb", limbKey: value }
       : null;
   }
@@ -17217,7 +17573,7 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
     minimum: -Infinity,
     context: "critical chance"
   })
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance", attackerActor)
     + toInteger(contextual.criticalChance)
     + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
@@ -17231,7 +17587,7 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
       minimum: -Infinity,
       context: "weapon accuracy"
     })
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy", attackerActor)
     + toInteger(contextual.accuracy)
     + stealth.accuracyBonus
     - getWeaponConditionAccuracyPenalty(weapon);
@@ -17579,7 +17935,7 @@ export async function spendWeaponReloadActionPoints(actor, weapon, weaponFunctio
 }
 
 /** Serialize reload planning with weapon spending and compensate AP if its Item mutation fails. */
-export async function runWeaponReloadTransaction({ actor, weaponId, weaponFunctionId = "", spendActionPoints = true }, operation) {
+export async function runWeaponReloadTransaction({ actor, operatorActor = actor, weaponId, weaponFunctionId = "", spendActionPoints = true }, operation) {
   const { result, weapon, committed } = await weaponResourceActorLock.run(actor, null, async () => {
     const weapon = actor.items?.get(weaponId);
     if (!weapon) throw new Error("Weapon not found.");
@@ -17587,14 +17943,14 @@ export async function runWeaponReloadTransaction({ actor, weaponId, weaponFuncti
     let result;
     try {
       if (spendActionPoints) {
-        committed = await commitWeaponActionPointSpend(actor, weapon, "reload", weaponFunctionId);
+        committed = await commitWeaponActionPointSpend(operatorActor, weapon, "reload", weaponFunctionId);
       }
       result = await operation(weapon);
       if (!result) throw new Error("Weapon reload did not commit an inventory mutation.");
     } catch (error) {
       if (committed) {
         try {
-          await rollbackCommittedWeaponActionPointSpend(actor, committed);
+          await rollbackCommittedWeaponActionPointSpend(operatorActor, committed);
         } catch (rollbackError) {
           error.rollbackError ??= rollbackError;
         }
@@ -17603,7 +17959,7 @@ export async function runWeaponReloadTransaction({ actor, weaponId, weaponFuncti
     }
     return { result, weapon, committed };
   });
-  if (committed) await finalizeCommittedWeaponActionPointSpend(actor, weapon, "reload", weaponFunctionId, committed);
+  if (committed) await finalizeCommittedWeaponActionPointSpend(operatorActor, weapon, "reload", weaponFunctionId, committed);
   return result;
 }
 

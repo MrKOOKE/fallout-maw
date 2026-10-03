@@ -44,6 +44,8 @@ export function hasActorContainer(actor = null, { requireSlots = true } = {}) {
 
 export function getActorContainerSeatDefinitions(actor = null) {
   const seats = [];
+  const configuredCrew = actor?.type === "construct"
+    ? actor?.getFlag?.(SYSTEM_ID, "constructVisual")?.seats ?? actor?.flags?.[SYSTEM_ID]?.constructVisual?.seats ?? [] : [];
   for (const item of actor?.items?.contents ?? []) {
     if (item?.type !== "gear") continue;
     if (!hasItemFunction(item, ITEM_FUNCTIONS.actorContainer, { ignoreBroken: true })) continue;
@@ -63,7 +65,9 @@ export function getActorContainerSeatDefinitions(actor = null) {
         slotId: `${item.id}:${baseId}`,
         width,
         height,
-        quantity
+        quantity,
+        crewSlotIndices: (Array.isArray(configuredCrew) ? configuredCrew : []).filter(row => row.slotId === `${item.id}:${baseId}`)
+          .map(row => Math.max(0, toInteger(row.slotIndex)))
       });
     }
   }
@@ -85,6 +89,7 @@ export function findFirstAvailableActorContainerSeat(containerActor = null, pass
     if (size.width > seat.width || size.height > seat.height) continue;
     for (let slotIndex = 0; slotIndex < seat.quantity; slotIndex += 1) {
       const occupants = passengers.filter(passenger => passenger.slotId === seat.slotId && passenger.slotIndex === slotIndex);
+      if (seat.crewSlotIndices?.includes(slotIndex) && occupants.length) continue;
       const placement = findFirstActorPlacement(seat.width, seat.height, size, occupants);
       if (placement) return {
         ...seat,
@@ -150,6 +155,17 @@ export function prepareActorContainerGridContext(seats = [], passengers = []) {
 }
 
 export async function moveActorContainerPassenger(actor = null, passengerId = "", target = {}) {
+  if (actor?.type === "construct") {
+    const { getConstructCrewSeats, hasConstructCrew } = await import("./construct-crew.mjs");
+    if (hasConstructCrew(actor)) {
+      const seat = getConstructCrewSeats(actor).find(row => row.slotId === String(target.slotId ?? "")
+        && row.slotIndex === Math.max(0, toInteger(target.slotIndex)));
+      if (!seat) return false;
+      const { requestActorContainerPassengerMove } = await import("../canvas/actor-containers.mjs");
+      const result = await requestActorContainerPassengerMove({ vehicleActorUuid: actor.uuid, passengerId, seatId: seat.id });
+      return Boolean(result?.ok);
+    }
+  }
   if (!actor?.isOwner) return false;
   const passengers = getActorContainerFlag(actor).passengers;
   const updated = moveActorContainerPassengerData(
@@ -177,6 +193,7 @@ export function moveActorContainerPassengerData(seats = [], passengers = [], pas
   if (!seat || slotIndex >= seat.quantity) return null;
   if ((placement.x + placement.width - 1) > seat.width || (placement.y + placement.height - 1) > seat.height) return null;
   const occupants = passengers.filter(entry => entry.id !== passenger.id && entry.slotId === seat.slotId && entry.slotIndex === slotIndex);
+  if (seat.crewSlotIndices?.includes(slotIndex) && occupants.length) return null;
   if (occupants.some(occupant => actorPlacementsOverlap(placement, occupant))) return null;
   return passengers.map(entry => entry.id === passenger.id
     ? { ...entry, slotId: seat.slotId, slotIndex, x: placement.x, y: placement.y }
@@ -247,7 +264,7 @@ function getActorContainerCandidateActors() {
     seen.add(actor.uuid);
     actors.push(actor);
   }
-  for (const token of canvas?.tokens?.placeables ?? []) {
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
     const actor = token?.actor;
     if (!actor?.uuid || seen.has(actor.uuid)) continue;
     seen.add(actor.uuid);

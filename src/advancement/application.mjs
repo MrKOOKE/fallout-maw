@@ -69,6 +69,7 @@ import {
 } from "../utils/graph-viewport.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 import { calculateLevelHealthBonus, usesIndependentHealthModel } from "../combat/independent-health.mjs";
+import { commitAdvancementReset } from "./reset-commit.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
@@ -691,18 +692,19 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#draft.characteristics = foundry.utils.deepClone(resetData.characteristics);
     this.#draft.proficiencies = this.#getProficiencyValuesFromResourceMap(resetData.proficiencies, getProficiencySettings());
     this.#draft.development = foundry.utils.deepClone(resetData.development);
-    this.#researchPointSessionSpent = 0;
     const abilityItemIds = this.actor.items
       .filter(item => item.type === "ability")
       .map(item => item.id);
-    if (abilityItemIds.length) await this.actor.deleteEmbeddedDocuments("Item", abilityItemIds);
-    if (!(await this.#applyDraftToActor())) return false;
-    await this.actor.setFlag(FALLOUT_MAW.id, ADVANCEMENT_COMMIT_FLAG, {
+    const commitState = {
       level: this.#draft.level,
       characteristics: foundry.utils.deepClone(this.#draft.characteristics),
       proficiencies: foundry.utils.deepClone(this.#draft.proficiencies),
       development: foundry.utils.deepClone(this.#draft.development)
-    });
+    };
+    const committed = await this.#applyDraftToActor({
+      [`flags.${FALLOUT_MAW.id}.${ADVANCEMENT_COMMIT_FLAG}`]: commitState
+    }, { resetAbilityItemIds: abilityItemIds });
+    if (!committed) return false;
     this.#snapshot = foundry.utils.deepClone(this.#draft);
     this.#floor = foundry.utils.deepClone(this.#draft);
     this.#resetSkillUpgradeCostLedger();
@@ -2891,7 +2893,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return true;
   }
 
-  async #applyDraftToActor(updateData = {}) {
+  async #applyDraftToActor(updateData = {}, { resetAbilityItemIds = [] } = {}) {
     window.clearTimeout(this.#repeatCommitTimer);
     this.#repeatCommitTimer = null;
     const actorUpdate = {
@@ -2907,10 +2909,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       })
       .then(async () => {
         try {
-          const updated = await this.actor.update(actorUpdate, {
-            render: false,
-            [ADVANCEMENT_UPDATE_SOURCE_OPTION]: this.id
-          });
+          const updated = resetAbilityItemIds.length
+            ? await commitAdvancementReset(this.actor, actorUpdate, resetAbilityItemIds, this.id)
+            : await this.actor.update(actorUpdate, {
+              render: false,
+              [ADVANCEMENT_UPDATE_SOURCE_OPTION]: this.id
+            });
           if (updated) return updated;
           // A native preUpdate veto returns no document. Discard the attempted
           // investment so closing the window cannot silently apply it later.

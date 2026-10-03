@@ -1,3 +1,4 @@
+import { getConstructResourceSupplyLimit } from "../utils/construct-systems.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getOneTimeResourceValue, runOneTimeResourceMutation, prepareActorResourceSpend } from "./one-time-resources.mjs";
 
@@ -136,7 +137,7 @@ function getActorBlockedEnergy(actor) {
     if (!RESOURCE_BLOCK_KINDS.has(String(data?.kind ?? ""))) continue;
     total += Math.max(0, toInteger(data?.resources?.[ENERGY_RESOURCE_KEY]));
   }
-  return total;
+  return Math.max(total, getConstructResourceSupplyLimit(actor, ENERGY_RESOURCE_KEY));
 }
 
 function createEnergyRestorationResult({

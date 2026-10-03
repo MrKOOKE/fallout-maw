@@ -11,7 +11,9 @@ export function getSelectedItemTransferQuantity(item, quantity = 0, stackIndex =
   const available = usesVirtualInventoryStacks(item)
     ? getItemStackParts(item)[toInteger(stackIndex)]?.quantity ?? 0
     : getItemQuantity(item);
-  const requested = toInteger(quantity);
+  const numericQuantity = Number(quantity);
+  if (!Number.isFinite(numericQuantity) || numericQuantity < 0) return 0;
+  const requested = Math.trunc(numericQuantity);
   return Math.max(0, Math.min(available, requested > 0 ? requested : available));
 }
 

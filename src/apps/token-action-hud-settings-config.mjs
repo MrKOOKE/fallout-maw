@@ -44,6 +44,14 @@ const ACTOR_CONTAINER_ACTION_ICON_ROWS = Object.freeze([
   { section: "activeActions", key: "camp", get label() { return auditLocalize("FALLOUTMAW.Events.Subjects.camp.Label", "Лагерь"); } }
 ]);
 
+const CREW_ACTION_ICON_ROWS = Object.freeze([
+  { key: "engine", labelKey: "FALLOUTMAW.ConstructCrew.Engine", fallback: "Запуск двигателя" },
+  { key: "rotateLeft", labelKey: "FALLOUTMAW.ConstructCrew.RotateLeft", fallback: "Поворот корпуса влево" },
+  { key: "rotateRight", labelKey: "FALLOUTMAW.ConstructCrew.RotateRight", fallback: "Поворот корпуса вправо" },
+  { key: "emptySeat", labelKey: "FALLOUTMAW.ConstructCrew.EmptySeatIcon", fallback: "Иконка свободного места" },
+  { key: "exit", labelKey: "FALLOUTMAW.ConstructCrew.Exit", fallback: "Выйти" }
+]);
+
 const COMBAT_END_ICON_ROWS = Object.freeze([
   { key: "search", get label() { return auditLocalize("FALLOUTMAW.AuditApps.Search_1023", "Обыскать"); } },
   { key: "finish", get label() { return auditLocalize("FALLOUTMAW.AuditApps.FinishOff", "Добить"); } }
@@ -113,8 +121,13 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     return {
       ...(await super._prepareContext(options)),
+      showConstructAimLimits: this.icons.showConstructAimLimits !== false,
       damageIconRows: this.#prepareRootIconRows(),
       mainActionIconRows: this.#prepareIconRows("mainActions", MAIN_ACTION_ICON_ROWS),
+      crewActionIconRows: this.#prepareIconRows("crewActions", CREW_ACTION_ICON_ROWS.map(row => ({
+        ...row,
+        label: auditLocalize(row.labelKey, row.fallback)
+      }))),
       activeActionIconRows: this.#prepareIconRows("activeActions", ACTIVE_ACTION_ICON_ROWS),
       serviceActionIconRows: this.#prepareServiceActionIconRows(),
       combatEndIconRows: this.#prepareIconRows("combatEnd", COMBAT_END_ICON_ROWS),
@@ -199,6 +212,8 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
 
   #readIconsFromForm() {
     const icons = foundry.utils.deepClone(this.icons);
+    const limits = this.form?.querySelector("[data-hud-construct-aim-limits]");
+    if (limits) icons.showConstructAimLimits = limits.checked;
     for (const input of this.form?.querySelectorAll("[data-hud-icon-input]") ?? []) {
       const row = input.closest("[data-hud-icon-section][data-hud-icon-key]");
       if (!row) continue;

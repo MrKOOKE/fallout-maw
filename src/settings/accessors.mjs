@@ -131,6 +131,16 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     lightOff: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-light.webp",
     lightRecharge: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-reload-and-recharge.webp"
   }),
+  crewActions: Object.freeze({
+    engine: "systems/fallout-maw/assets/System/TokenActionHud/construct-engine.svg",
+    emptySeat: "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp",
+    move: "icons/svg/wingfoot.svg",
+    rotateLeft: "systems/fallout-maw/assets/System/TokenActionHud/construct-turn-left.svg",
+    rotateRight: "systems/fallout-maw/assets/System/TokenActionHud/construct-turn-right.svg",
+    aim: "systems/fallout-maw/assets/System/TokenActionHud/weapon-action-aimed-attack.webp",
+    transfer: "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp",
+    exit: "icons/svg/door-exit.svg"
+  }),
   postures: Object.freeze({
     walk: "systems/fallout-maw/assets/System/TokenActionHud/posture-walk-and-passengers.webp",
     crawl: "icons/svg/leg.svg",
@@ -181,12 +191,14 @@ export function normalizeTokenActionHudIcons(value = {}) {
   const defaults = DEFAULT_TOKEN_ACTION_HUD_ICONS;
   return {
     damageReductionIcon: normalizeImageSettingPath(source.damageReductionIcon, defaults.damageReductionIcon),
+    showConstructAimLimits: source.showConstructAimLimits !== false,
     damageBlockedIcon: normalizeImageSettingPath(source.damageBlockedIcon, defaults.damageBlockedIcon),
     dodgeConversionIcon: normalizeImageSettingPath(source.dodgeConversionIcon, defaults.dodgeConversionIcon),
     levelUpIcon: normalizeImageSettingPath(source.levelUpIcon, defaults.levelUpIcon),
     mainActions: normalizeImageSettingMap(source.mainActions, defaults.mainActions),
     activeActions: normalizeImageSettingMap(source.activeActions, defaults.activeActions),
     weaponActions: normalizeImageSettingMap(source.weaponActions, defaults.weaponActions),
+    crewActions: normalizeImageSettingMap(source.crewActions, defaults.crewActions),
     postures: normalizeImageSettingMap(source.postures, defaults.postures),
     combatEnd: normalizeImageSettingMap(source.combatEnd, defaults.combatEnd),
     skillIcons: normalizeImageSettingMap(source.skillIcons, defaults.skillIcons),
@@ -772,6 +784,13 @@ export function getTokenActionHudIcons() {
   } catch (_error) {
     return normalizeTokenActionHudIcons();
   }
+}
+
+/** Read one cached setting without rebuilding HUD icon maps in the aim ticker. */
+export function getConstructAimLimitsEnabled() {
+  try {
+    return game.settings.get(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING)?.showConstructAimLimits !== false;
+  } catch (_error) { return true; }
 }
 
 export function getTokenActionHudExperienceAwardSettings() {

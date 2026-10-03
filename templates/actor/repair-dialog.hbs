@@ -1,4 +1,23 @@
 <div class="fallout-maw-sheet fallout-maw-medicine-body fallout-maw-repair-body">
+  {{#if isConstruct}}
+  <nav class="construct-service-tabs" aria-label="Ремонт и обслуживание">
+    <button type="button" data-action="selectRepairTab" data-tab="repair" class="{{#unless serviceTab}}active{{/unless}}"><i class="fa-solid fa-screwdriver-wrench"></i> Ремонт</button>
+    <button type="button" data-action="selectRepairTab" data-tab="service" class="{{#if serviceTab}}active{{/if}}"><i class="fa-solid fa-gas-pump"></i> Обслуживание</button>
+  </nav>
+  {{/if}}
+  {{#if serviceTab}}
+  <header class="fallout-maw-dialog-toolbar"><h2>{{targetActor.name}}</h2><span>Ресурсы: {{sourceActor.name}}</span></header>
+  <div class="construct-service-systems">
+    {{#each serviceSystems}}
+    <section class="construct-service-system">
+      <header><strong>{{name}}</strong><span>{{label}} · {{value}} / {{max}}</span></header>
+      {{#each recipes}}
+      <div class="construct-service-recipe"><span>{{cost}}</span><strong>+{{restored}}</strong><button type="button" data-action="serviceConstruct" data-system-id="{{systemId}}" data-method-index="{{methodIndex}}" data-resource-index="{{resourceIndex}}" {{#unless usable}}disabled title="{{reason}}"{{/unless}}>Восстановить</button></div>
+      {{else}}<p class="hint">Методы обслуживания пока не назначены.</p>{{/each}}
+    </section>
+    {{else}}<p class="hint">У этого конструкта пока нет систем, которым требуется обслуживание.</p>{{/each}}
+  </div>
+  {{else}}
   <header class="fallout-maw-dialog-toolbar fallout-maw-repair-toolbar">
     <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text0810bb2e8bb3'}} {{targetActor.name}}</h2>
     <button type="button" class="fallout-maw-dialog-primary-action" data-action="repairAll" {{#unless hasRepairableItems}}disabled{{/unless}}>
@@ -73,4 +92,5 @@
     <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Text70e9060d6593'}}</p>
     {{/each}}
   </div>
+  {{/if}}
 </div>

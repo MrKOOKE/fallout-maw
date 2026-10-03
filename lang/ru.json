@@ -20,6 +20,40 @@
     }
   },
   "FALLOUTMAW": {
+    "AimActivationPrompt": "Наведите курсор на зеленую область для разблокировки прицеливания",
+    "ConstructCrew": {
+      "Board": "Сесть",
+      "BoardingTitle": "Посадка: {vehicle}",
+      "BoardingChoice": "Выберите назначение места для {actor}.",
+      "NoAvailableSeat": "В конструкте нет подходящего свободного места экипажа.",
+      "Exit": "Выйти",
+      "Transfer": "Пересесть",
+      "Aim": "Наведение детали",
+      "Move": "Движение конструкта",
+      "RotateLeft": "Поворот корпуса влево",
+      "RotateRight": "Поворот корпуса вправо",
+      "Unassigned": "Место без назначения",
+      "NoOperator": "Нет доступного исполнителя на назначенном месте.",
+      "NoFreeSeat": "Нет свободного места для пересадки.",
+      "ContextSelector": "Место / персонаж",
+      "FreeSeat": "Свободно",
+      "EmptySeatIcon": "Иконка свободного места",
+      "ShowAimLimits": "Границы доступного сектора",
+      "MovementAutoRotate": "Поворот при движении",
+      "MovementAutoRotateInherit": "Общая настройка Foundry",
+      "MovementAutoRotateEnabled": "Включён",
+      "MovementAutoRotateDisabled": "Выключен",
+      "ActorState": "Экипаж",
+      "Roles": {
+        "passenger": "Пассажир",
+        "driver": "Водитель",
+        "gunner": "Стрелок",
+        "loader": "Заряжающий",
+        "custom": "Особое назначение"
+      },
+      "Engine": "Запуск двигателя",
+      "Refuel": "Пополнение запаса"
+    },
     "PersonalGeneratorPresets": {
       "Search": "Поиск пресетов",
       "SearchPlaceholder": "Поиск…",
@@ -2465,6 +2499,7 @@
       },
       "HUD": {
         "Title": "Настройки HUD",
+        "CrewActionsSection": "Экипаж и управление конструктом",
         "Scale": "Масштаб",
         "ActionsActive": "Активные",
         "ActionsService": "Служебные",

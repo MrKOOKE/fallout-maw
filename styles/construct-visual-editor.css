@@ -1,0 +1,87 @@
+.construct-visual-editor { --construct-accent:#ddb76d; --construct-border:#695a43; --construct-muted:#b5ac9d; font-family:Arial,Helvetica,sans-serif; font-size:14px; }
+.construct-visual-editor .construct-visual-motion-settings .construct-visual-check { display:flex; flex-direction:row; align-items:center; justify-content:flex-start; gap:8px; }
+.construct-visual-editor .construct-visual-motion-settings .construct-visual-check input { flex:0 0 auto; width:18px; margin:0; }
+.construct-visual-editor .window-content { padding:16px; overflow:hidden; display:flex; flex-direction:column; gap:0; background:rgba(19,18,21,.97); }
+.construct-visual-editor .construct-visual-editor-body { display:flex; flex-direction:column; min-height:0; height:100%; gap:14px; }
+.construct-visual-editor .construct-visual-editor-layout { display:grid; grid-template-columns:minmax(340px,42%) minmax(0,1fr); gap:18px; min-height:0; flex:1; }
+.construct-visual-editor .window-content :is(h3,h2,p,label,strong,small,input,select,button,summary,span) { font-family:Arial,Helvetica,sans-serif !important; }
+.construct-visual-editor .construct-visual-editor-body :is(h3,h2) { font-size:17px !important; font-weight:600; line-height:1.25; margin:0; color:#ece3d2; border:0; }
+.construct-visual-editor button { font-size:13px; line-height:1.35; min-height:34px; height:auto; padding:7px 10px; border:1px solid var(--construct-border); border-radius:6px; color:#e7dbc6; background:#29252a; box-shadow:none; }
+.construct-visual-editor button:hover { border-color:var(--construct-accent); background:#39302b; }
+.construct-visual-editor :is(button,input,select):focus-visible { outline:2px solid var(--construct-accent); outline-offset:2px; box-shadow:none; }
+.construct-visual-editor :is(input,select) { min-width:0; width:100%; height:35px; font-size:14px; color:#f0e8da; border:1px solid #5c5247; border-radius:5px; background:#302b31; padding:6px 9px; }
+.construct-visual-editor input::placeholder { color:#9b9182; font-size:12px; }
+.construct-visual-editor .hint { color:var(--construct-muted); opacity:1; font-size:12px; line-height:1.45; margin:0; }
+.construct-visual-editor .construct-visual-preview-panel { display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden; }
+.construct-visual-editor .construct-visual-preview-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.construct-visual-editor .construct-visual-preview-heading > div { display:flex; flex-direction:column; gap:4px; }
+.construct-visual-editor .construct-visual-check { display:flex; flex-direction:row; align-items:center; gap:8px; margin:0; font-size:14px; color:#e8dfd0; min-width:0; }
+.construct-visual-editor .construct-visual-check input[type=checkbox] { flex:0 0 17px; width:17px; height:17px; min-height:17px; margin:0; padding:0; accent-color:var(--construct-accent); }
+.construct-visual-editor .construct-visual-check > span { display:block; flex:1; min-width:0; font-size:13px; line-height:1.4; visibility:visible; opacity:1; }
+.construct-visual-editor .construct-visual-enabled { flex:0 0 auto; border:1px solid var(--construct-border); border-radius:20px; padding:6px 10px; background:#302920; }
+.construct-visual-editor .construct-visual-preview-frame { flex:1; min-height:220px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid #665943; border-radius:10px; background:radial-gradient(ellipse at center,#373a33 0%,#252a26 70%); position:relative; }
+.construct-visual-editor [data-visual-preview] { position:relative; flex:0 0 auto; background-image:linear-gradient(#fff1 1px,transparent 1px),linear-gradient(90deg,#fff1 1px,transparent 1px); background-size:10% 10%; overflow:visible; touch-action:none; }
+.construct-visual-editor .construct-visual-preview-base { width:100%; height:100%; object-fit:fill; position:absolute; inset:0; pointer-events:none; border:0; }
+.construct-visual-editor .construct-visual-preview-part { position:absolute; object-fit:fill; pointer-events:none; border:0; max-width:none; }
+.construct-visual-editor button.construct-visual-anchor { position:absolute; z-index:30000; width:19px; height:19px; min-height:19px; padding:0; line-height:16px; transform:translate(-50%,-50%); border-radius:50%; border:1px solid #181b13; background:#a8b787; color:#192111; font-weight:bold; cursor:grab; }
+.construct-visual-editor button.construct-visual-anchor.selected { background:#e7bb5e; color:#211703; outline:2px solid #f9e4b6aa; }
+.construct-visual-editor [data-visual-preview].placing-anchor,.construct-visual-editor [data-visual-preview].aiming { cursor:crosshair; }
+.construct-visual-editor .construct-visual-place-hint { margin:0; color:var(--construct-accent); font-size:13px; line-height:1.35; }
+.construct-visual-editor .construct-visual-aim-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.construct-visual-editor .construct-visual-icon-button { flex:0 0 34px; width:34px; min-height:34px; padding:6px; }
+.construct-visual-editor .construct-visual-icon-button.danger { color:#bfa693; border-color:#66554a; }
+.construct-visual-editor .construct-visual-settings-panel { display:flex; flex-direction:column; min-width:0; min-height:0; border:1px solid var(--construct-border); border-radius:10px; overflow:hidden; background:#211e23; }
+.construct-visual-editor .construct-visual-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0; border-bottom:1px solid var(--construct-border); background:#29232a; }
+.construct-visual-editor .construct-visual-tabs button { border:0; border-radius:0; background:transparent; padding:14px 8px; color:#bdb3a3; min-width:0; display:flex; justify-content:center; align-items:center; gap:7px; white-space:nowrap; }
+.construct-visual-editor .construct-visual-tabs button.active { color:#f2d79e; background:#393027; box-shadow:inset 0 -3px var(--construct-accent); }
+.construct-visual-editor .construct-visual-tabs button span { font-size:11px; padding:1px 5px; border-radius:9px; background:#171519; color:#c4b596; }
+.construct-visual-editor .construct-visual-record-layout { display:grid; grid-template-columns:minmax(150px,30%) minmax(0,1fr); flex:1; min-height:0; min-width:0; }
+.construct-visual-editor .construct-visual-record-list { overflow-y:auto; min-height:0; padding:10px 8px; border-right:1px solid #564a3b; display:flex; flex-direction:column; gap:7px; background:#252127; }
+.construct-visual-editor .construct-visual-add-button { flex:0 0 auto; font-size:12px; background:#332c25; color:#ecd4a8; margin-bottom:4px; }
+.construct-visual-editor .construct-visual-record { flex:0 0 auto; width:100%; min-height:58px; display:flex; align-items:center; gap:9px; padding:9px; text-align:left; background:transparent; border-color:transparent; }
+.construct-visual-editor .construct-visual-record.selected { background:#3b3128; border-color:#a5844e; box-shadow:inset 3px 0 #ddb76d; }
+.construct-visual-editor .construct-visual-record > img { width:31px; height:42px; object-fit:contain; border:0; flex:0 0 31px; background:#191b18; border-radius:4px; }
+.construct-visual-editor .construct-visual-record > i { width:20px; flex:0 0 20px; text-align:center; color:#b3a07b; font-size:15px; }
+.construct-visual-editor .construct-visual-record > span { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.construct-visual-editor .construct-visual-record strong { font-size:12px; font-weight:500; line-height:1.35; color:#e9dfcf; overflow-wrap:anywhere; }
+.construct-visual-editor .construct-visual-record small { font-size:11px; line-height:1.25; color:#b6a58d; }
+.construct-visual-editor .construct-visual-list-empty { padding:8px; }
+.construct-visual-editor .construct-visual-fields { overflow-y:auto; overflow-x:hidden; min-width:0; min-height:0; padding:16px; }
+.construct-visual-editor .construct-visual-inspector { display:flex; flex-direction:column; gap:15px; margin:0; }
+.construct-visual-editor .construct-visual-inspector-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.construct-visual-editor .construct-visual-inspector label:not(.construct-visual-check),.construct-visual-editor .construct-visual-advanced label { display:flex; flex-direction:column; gap:6px; font-size:13px; line-height:1.35; color:#d9cbb5; }
+.construct-visual-editor .construct-visual-art-picker { display:flex; align-items:center; gap:14px; padding:12px; border:1px solid #5d503e; border-radius:7px; background:#29242a; }
+.construct-visual-editor .construct-visual-art-thumbnail { flex:0 0 72px; width:72px; height:94px; border:1px solid #514a3e; border-radius:5px; display:flex; justify-content:center; align-items:center; background:repeating-conic-gradient(#30342f 0% 25%,#282d28 0% 50%) 50%/16px 16px; }
+.construct-visual-editor .construct-visual-art-thumbnail img { width:100%; height:100%; object-fit:contain; border:0; }
+.construct-visual-editor .construct-visual-art-thumbnail i { font-size:26px; color:#8b8170; }
+.construct-visual-editor .construct-visual-art-picker > div:last-child { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.construct-visual-editor .construct-visual-art-picker strong { font-size:13px; line-height:1.35; font-weight:500; }
+.construct-visual-editor .construct-visual-art-picker button { font-size:12px; padding:6px 8px; }
+.construct-visual-editor .construct-visual-two-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.construct-visual-editor .construct-visual-setting-toggle { border-top:1px solid #4e4437; padding-top:14px; }
+.construct-visual-editor .construct-visual-motion-settings { display:flex; flex-direction:column; gap:12px; padding:13px; border:1px solid #65553e; border-radius:7px; background:#2d2724; }
+.construct-visual-editor .construct-visual-advanced { border-top:1px solid #554735; padding-top:12px; }
+.construct-visual-editor .construct-visual-advanced summary { color:#c9b088; cursor:pointer; font-size:13px; line-height:1.4; }
+.construct-visual-editor .construct-visual-advanced[open] { display:flex; flex-direction:column; gap:13px; }
+.construct-visual-editor .construct-visual-background-settings { flex:0 0 auto; }
+.construct-visual-editor .construct-visual-image-field { display:flex; align-items:center; gap:7px; min-width:0; }
+.construct-visual-editor .construct-visual-image-field > input { flex:1; min-width:0; }
+.construct-visual-editor .construct-visual-placement-button { border-color:#a3834e; background:#473822; color:#f0d49d; }
+.construct-visual-editor .construct-visual-function-heading { font-size:13px; color:#d9cbb5; padding-top:3px; }
+.construct-visual-editor .construct-visual-crew-functions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:12px; border:1px solid #5e503d; border-radius:7px; background:#2b2526; }
+.construct-visual-editor .construct-visual-personal-settings { display:flex; flex-direction:column; gap:10px; border:1px solid #65553e; border-radius:7px; padding:12px; background:#2d2724; }
+.construct-visual-editor .construct-visual-personal-settings h3 { font-size:14px !important; }
+.construct-visual-editor .construct-visual-personal-cone { position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:29000; pointer-events:none; }
+.construct-visual-editor .construct-visual-personal-cone :is(path,circle) { fill:#ddb76d22; stroke:#ddb76d; stroke-width:1.5px; }
+.construct-visual-editor .construct-visual-personal-cone .origin { fill:#ffdc89; stroke:#261f17; stroke-width:1px; }
+.construct-visual-editor .construct-visual-location-path { display:flex; align-items:center; gap:8px; color:#e4c78e; font-size:13px; line-height:1.5; padding:10px; border-radius:6px; background:#332a24; overflow-wrap:anywhere; }
+.construct-visual-editor .construct-visual-compartment-contents { display:grid; grid-template-columns:minmax(100px,35%) minmax(0,1fr); gap:10px; margin:0; padding:12px; border:1px solid #554735; border-radius:7px; font-size:13px; line-height:1.45; }
+.construct-visual-editor .construct-visual-compartment-contents dt { color:#baa88b; }
+.construct-visual-editor .construct-visual-compartment-contents dd { margin:0; color:#e8dfd0; overflow-wrap:anywhere; }
+.construct-visual-editor .construct-visual-empty-state { min-height:250px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; padding:30px 12px; color:#cabda8; }
+.construct-visual-editor .construct-visual-empty-state > i { font-size:30px; color:#a58b5e; }
+.construct-visual-editor .construct-visual-empty-state p { font-size:13px; line-height:1.5; margin:0; }
+.construct-visual-editor .form-footer { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:14px; border-top:1px solid #504432; margin:0; padding-top:12px; }
+.construct-visual-editor .form-footer button { flex:0 0 auto; width:auto; min-width:190px; background:#594427; border-color:#c09c5c; color:#fff0d2; }
+@media (max-width:1000px) { .construct-visual-editor .construct-visual-editor-layout { grid-template-columns:minmax(270px,38%) minmax(0,1fr); gap:12px; } .construct-visual-editor .construct-visual-record-layout { grid-template-columns:135px minmax(0,1fr); } .construct-visual-editor .construct-visual-fields { padding:12px; } .construct-visual-editor .construct-visual-tabs button { font-size:12px; gap:4px; padding:12px 4px; } .construct-visual-editor .construct-visual-crew-functions { grid-template-columns:1fr; } }
+

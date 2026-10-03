@@ -1,4 +1,6 @@
 import { localize as auditLocalize, format as auditFormat } from "./utils/i18n.mjs";
+import { registerNotificationDeduplication } from "./utils/notification-deduplication.mjs";
+import { registerAimActivationSectorProvider } from "./utils/aim-activation-gate.mjs";
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
 import { registerTooltipItemDrag } from "./utils/tooltip-item-drag.mjs";
 import { FalloutMaWTileDocument } from "./documents/tile-reset-cache.mjs";
@@ -14,6 +16,15 @@ import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerTrapHooks } from "./canvas/traps.mjs";
 import { registerLightNetworkHooks, registerLightNetworkSocket } from "./canvas/light-networks.mjs";
 import { registerActorContainerHooks, registerActorContainerSocket } from "./canvas/actor-containers.mjs";
+import { registerConstructCrewHooks, registerConstructCrewSocket, configureConstructCrewActions, getSelectedConstructCrewControlContext } from "./canvas/construct-crew.mjs";
+import { registerConstructVisualHooks, performConstructPartRotation, getConstructPartRotations, getConstructWeaponRotationActivationSector } from "./canvas/construct-visuals.mjs";
+import { registerConstructVisualModelCache } from "./utils/construct-visual-model.mjs";
+import { configureConstructFiringPortTransforms } from "./canvas/construct-firing-ports.mjs";
+import { ConstructVisualEditor } from "./apps/construct-visual-editor.mjs";
+import { ConstructSystemsConfig } from "./apps/construct-systems-config.mjs";
+import { registerConstructSystemSocket, requestConstructSystemAction } from "./constructs/system-actions.mjs";
+import { registerConstructSystemSoundHooks } from "./constructs/system-sounds.mjs";
+import { registerConstructCrewCombatHooks } from "./combat/construct-crew-combat.mjs";
 import { registerMovementInterruptionHooks } from "./canvas/movement-interruptions.mjs";
 import { registerCanvasTargetSelectionLifecycleHooks } from "./canvas/target-selection-lifecycle.mjs";
 import {
@@ -245,6 +256,13 @@ Hooks.once("init", () => {
   registerTrapPlacementControlHooks();
   registerLightNetworkHooks();
   registerActorContainerHooks();
+  registerConstructVisualModelCache();
+  configureConstructFiringPortTransforms({ getRotations: getConstructPartRotations });
+  registerConstructVisualHooks({ getSelectedContext: getSelectedConstructCrewControlContext });
+  registerAimActivationSectorProvider("constructRotation", getConstructWeaponRotationActivationSector);
+  registerConstructCrewHooks();
+  registerConstructCrewCombatHooks();
+  registerConstructSystemSoundHooks();
   registerInventoryRepairHooks();
   registerStealthHooks();
   registerGlobalMapSystem();
@@ -259,7 +277,15 @@ Hooks.once("ready", () => {
   // Foundry dispatches ready with Hooks.callAll and does not await callback
   // Promises. Register request handlers before starting any asynchronous
   // maintenance so the live UI never observes a half-registered system.
+  registerNotificationDeduplication();
   initializeEffectTooltips();
+  game.system.api = foundry.utils.mergeObject(game.system.api ?? {}, { constructs: {
+    openVisualEditor: actor => new ConstructVisualEditor(actor).render(true),
+    openSystems: actor => new ConstructSystemsConfig(actor).render(true),
+    systemAction: requestConstructSystemAction,
+    createTankDemo: async options => (await import("./apps/modular-tank-demo.mjs")).createModularTankDemo(options),
+    upgradeTankDemo: async options => (await import("./apps/modular-tank-demo.mjs")).upgradeTankDemo(options)
+  } }, { inplace: false });
   registerTooltipItemDrag();
   initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
@@ -280,8 +306,13 @@ Hooks.once("ready", () => {
   registerTrapHooks();
   registerLightNetworkSocket();
   registerActorContainerSocket();
+  configureConstructCrewActions({
+    aim: ({ tokenDocument, partSlotId, rotation, requester, buyOnly }) => performConstructPartRotation(tokenDocument, { partSlotId, rotation }, { user: requester, buyOnly })
+  });
+  registerConstructCrewSocket();
   registerMedicineSocket();
   registerRepairSocket();
+  registerConstructSystemSocket();
   registerSearchInventorySocket();
   registerHackingSocket();
   registerFirstAidSocket();

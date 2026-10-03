@@ -1,6 +1,12 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { planResourceRecovery } from "../utils/resource-recovery.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { snapshotConstructServiceSystems, prepareConstructServiceRows } from "../utils/construct-service.mjs";
+import { requestConstructSystemAction } from "../constructs/system-actions.mjs";
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
+import { isActorAtPhysicalToken, getActorTargetName } from "../utils/actor-target-context.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
   getCraftingSettings,
@@ -61,8 +67,7 @@ export function registerRepairSocket() {
   game.socket.on(REPAIR_SOCKET, handleRepairSocketMessage);
 }
 
-export async function requestRepairTarget(sourceToken) {
-  const sourceActor = sourceToken?.actor;
+export async function requestRepairTarget(sourceToken, sourceActor = sourceToken?.actor) {
   if (!sourceActor) return undefined;
 
   const action = getSystemActionSettings().find(entry => entry.key === "repair");
@@ -78,7 +83,13 @@ export async function requestRepairTarget(sourceToken) {
   const targetToken = selected?.token ?? null;
   if (!selected?.actor || !targetToken) return undefined;
 
-  const targetContext = await getRepairTargetContext(targetToken, toolKey, sourceActor);
+  return openRepairForTarget({ sourceActor, sourceToken, targetToken, targetActor: selected.actor, toolKey });
+}
+
+export async function openRepairForTarget({ sourceActor, sourceToken, targetToken, targetActor = targetToken?.actor, toolKey = null } = {}) {
+  if (!sourceActor?.isOwner || !isActorAtPhysicalToken(targetActor, targetToken)) return;
+  toolKey ??= getSystemActionSettings().find(entry => entry.key === "repair")?.toolKey ?? "repair";
+  const targetContext = await getRepairTargetContext(targetToken, toolKey, sourceActor, targetActor);
   if (!targetContext) return undefined;
 
   return new RepairDialog({
@@ -100,6 +111,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   #repairInFlight = false;
   #disabledRepairActionStates = null;
   #pendingMassRepair = null;
+  #activeTab = "repair";
 
   constructor({ sourceActor, sourceToken, targetContext, targetToken, toolKey = "repair" } = {}, options = {}) {
     super(options);
@@ -123,7 +135,9 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     actions: {
       startRepair: this.#onStartRepair,
       repairWithInstrument: this.#onRepairWithInstrument,
-      repairAll: this.#onRepairAll
+      repairAll: this.#onRepairAll,
+      selectRepairTab: this.#onSelectTab,
+      serviceConstruct: this.#onServiceConstruct
     }
   };
 
@@ -160,8 +174,35 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       toolLabel: getToolSettings().find(tool => tool.key === this.#toolKey)?.label ?? this.#toolKey,
       items,
       hasRepairableItems: items.length > 0,
+      isConstruct: this.#targetContext?.isConstruct,
+      serviceTab: this.#activeTab === "service",
+      serviceSystems: prepareConstructServiceRows(this.#targetContext?.constructSystems, this.#sourceActor),
       fallbackIcon: "icons/svg/item-bag.svg"
     };
+  }
+
+  static #onSelectTab(event, target) {
+    event.preventDefault(); this.#activeTab = target.dataset.tab === "service" ? "service" : "repair";
+    return this.render({ force: true });
+  }
+
+  static async #onServiceConstruct(event, target) {
+    event.preventDefault(); if (this.#repairInFlight) return;
+    this.#repairInFlight = true; target.disabled = true;
+    try {
+      const targetActor = await fromUuid(this.#targetContext.actorUuid);
+      if (!isActorAtPhysicalToken(targetActor, this.#targetToken)) return;
+      const result = await requestConstructSystemAction(targetActor, target.dataset.systemId, "recover", {
+        service: true, sourceActorUuid: this.#sourceActor.uuid,
+        sourceTokenUuid: getRepairTokenUuid(this.#sourceToken), targetTokenUuid: getRepairTokenUuid(this.#targetToken),
+        methodIndex: Number(target.dataset.methodIndex),
+        resourceIndex: target.dataset.resourceIndex === "" ? null : Number(target.dataset.resourceIndex)
+      });
+      if (result) ui.notifications.info(`Запас пополнен на ${result.restored}.`);
+      this.#targetContext = await getRepairTargetContext(this.#targetToken, this.#toolKey, this.#sourceActor, targetActor);
+    } catch (error) { ui.notifications.warn(error.message); }
+    finally { this.#repairInFlight = false; }
+    return this.render({ force: true });
   }
 
   async _onRender(context, options) {
@@ -249,16 +290,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #isSelfRepair() {
-    if (!this.#sourceActor || !this.#targetContext) return false;
-    if (this.#targetContext.actorUuid === this.#sourceActor.uuid) return true;
-    const sourceDocument = this.#sourceToken?.document;
-    const targetDocument = this.#targetToken?.document;
-    return Boolean(
-      sourceDocument
-      && targetDocument
-      && sourceDocument.id === targetDocument.id
-      && sourceDocument.parent?.id === targetDocument.parent?.id
-    );
+    return Boolean(this.#sourceActor?.uuid && this.#targetContext?.actorUuid === this.#sourceActor.uuid);
   }
 
   #syncWindowTitle() {
@@ -283,8 +315,8 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 }
 
-async function getRepairTargetContext(targetToken, toolKey = "repair", sourceActor = null) {
-  const actor = targetToken?.actor;
+async function getRepairTargetContext(targetToken, toolKey = "repair", sourceActor = null, targetActor = targetToken?.actor) {
+  const actor = targetActor;
   if (!actor) return null;
   if (canUseActorLocally(actor)) return buildTargetContext(actor, targetToken, toolKey);
 
@@ -357,6 +389,18 @@ function prepareRepairableItems(items, instruments, activeItemId, sourceActor = 
   const resolveToolModifiers = createToolWorkflowModifierResolver(sourceActor);
   return items.map(item => {
     const availableInstruments = item.recoveryMethods.flatMap((method, methodIndex) => {
+      if (method.type === "resources") {
+        const choices = method.mode === "all" ? [{ resourceIndex: null, resources: method.resources }]
+          : method.resources.map((row, resourceIndex) => ({ resourceIndex, resources: [row] }));
+        return choices.map(choice => {
+          const plan = planResourceRecovery(sourceActor, method, { current: item.conditionValue, max: item.conditionMax, resourceIndex: choice.resourceIndex });
+          return { id: `resources:${choice.resourceIndex ?? "all"}`, methodIndex,
+            name: choice.resources.map(row => `${resolveWorldItemSync(row.uuid)?.name || "Предмет не найден"} × ${row.quantity}`).join(" + "),
+            img: resolveWorldItemSync(choice.resources[0]?.uuid)?.img || "icons/svg/item-bag.svg", toolClass: "Ресурсы",
+            efficiencyLabel: `+${Math.floor(method.recoveryMode === "amount" ? method.recovery : item.conditionMax * method.recovery / 100)}`,
+            supplyValue: "—", supplyMax: "—", skillRequirement: "—", usable: plan.ok };
+        });
+      }
       const requiredClass = String(method.toolClass ?? "D");
       const threshold = getRepairSkillThreshold(sourceActor, method, item.conditionValue);
       return instruments
@@ -593,9 +637,7 @@ async function runRepairChecks({
   const progressPerCheck = Math.max(1, Math.ceil(maxValue * REPAIR_PROGRESS_STEP_RATIO));
   const missingValue = Math.max(0, maxValue - initialValue);
   const totalChecks = Math.max(1, Math.ceil(missingValue / progressPerCheck));
-  const targetDocument = targetToken?.actor ?? (targetContext?.actorUuid
-    ? await fromUuid(targetContext.actorUuid).catch(() => null)
-    : null);
+  const targetDocument = targetContext?.actorUuid ? await fromUuid(targetContext.actorUuid).catch(() => null) : targetToken?.actor;
   const targetActor = targetDocument?.documentName === "Actor" ? targetDocument : null;
   const toolWorkflowContext = createRepairToolWorkflowContext(instrument, tool, method);
   const toolWorkflowModifiers = resolveToolWorkflowModifiers(sourceActor, toolWorkflowContext);
@@ -918,6 +960,21 @@ async function resolveRepairOnAuthorityOperation({
   const methods = normalizeRecoveryMethods(condition.recoveryMethods, contextToolKey);
   const method = methods[Math.max(0, toInteger(methodIndex))];
   if (!method) throw new Error(auditLocalize("FALLOUTMAW.AuditApps.RepairMethodNotFound", "метод ремонта не найден"));
+  if (method.type === "resources") {
+    const alternative = String(instrumentId).split(":")[1];
+    const plan = planResourceRecovery(sourceActor, method, { current: condition.value, max: condition.max,
+      resourceIndex: alternative === "all" ? null : Number(alternative) });
+    if (!plan.ok) throw new Error(plan.reason);
+    const initialValue = condition.value, finalValue = initialValue + plan.restored;
+    await executeInventoryMutation([
+      { actor: sourceActor, updates: plan.updates, deletes: plan.deletes, expectedItems: sourceActor.items.map(row => row.toObject()) },
+      { actor: targetActor, updates: [{ _id: item.id, "system.functions.condition.value": finalValue }] }
+    ], { reason: "condition-resource-recovery" });
+    return createRepairReceipt({ operationId, targetActor, targetToken }, { status: "committed", method,
+      initialValue, finalValue, maxValue: condition.max,
+      repairedCondition: plan.restored, completed: finalValue >= condition.max,
+      targetContext: buildTargetContext(targetActor, targetToken, contextToolKey), repairItem: snapshotRepairableItem(item, contextToolKey) });
+  }
   const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
   if (
     !instrument
@@ -1431,9 +1488,11 @@ function buildRepairStateSnapshot({ sourceActor, targetActor, itemId, instrument
 function buildTargetContext(actor, token = null, defaultToolKey = "repair") {
   return {
     actorUuid: actor.uuid,
-    name: token?.name ?? actor.name,
+    name: getActorTargetName(actor, token),
     actorName: actor.name,
     tokenName: token?.name ?? "",
+    isConstruct: actor.type === "construct",
+    constructSystems: snapshotConstructServiceSystems(actor),
     items: actor.items
       .filter(item => item.type === "gear" && isConditionDamaged(item))
       .map(item => snapshotRepairableItem(item, defaultToolKey))
@@ -1470,9 +1529,8 @@ function isConditionDamaged(item) {
 
 function normalizeRecoveryMethods(methods = [], defaultToolKey = "repair") {
   const normalized = (Array.isArray(methods) ? methods : [])
-    .filter(method => String(method?.type ?? "tools") === "tools")
-    .map(method => normalizeRecoveryMethod(method, defaultToolKey))
-    .filter(method => method.toolKey);
+    .map(method => method?.type === "resources" ? { ...foundry.utils.deepClone(method), type: "resources" } : normalizeRecoveryMethod(method, defaultToolKey))
+    .filter(method => method.type === "resources" || method.toolKey);
   if (normalized.length) return normalized;
   return [normalizeRecoveryMethod({
     type: "tools",
@@ -1691,7 +1749,7 @@ function assertRepairTokenMatchesActor(token = null, actor = null) {
   if (
     token.documentName !== "Token"
     || !token.actor
-    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+    || !isActorAtPhysicalToken(actor, token)
   ) {
     throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheRepairParticipant", "токен не соответствует участнику ремонта"));
   }
@@ -1729,6 +1787,10 @@ async function postRepairResolutionChat(actor, resolution = {}) {
 }
 
 async function postRepairResultChat(actor, { repairItem, instrument, method, initialValue, finalValue, maxValue, spentCharges, entries, completed, halted = false, reason = "" }) {
+  if (method?.type === "resources") {
+    return postRepairChat(actor, { title: `Ремонт: ${repairItem.name}`, tone: completed ? "success" : "standard",
+      lines: ["Восстановление через расход ресурсов.", `Состояние: ${initialValue}/${maxValue} → ${finalValue}/${maxValue}`] });
+  }
   const rows = entries.map(entry => auditFormat("FALLOUTMAW.AuditApps.CheckConditionSuppliesEffectivenessTotal", { v0: (entry.index), v1: (entry.total), v2: (entry.resultLabel), v3: (entry.condition), v4: (entry.charges), v5: (formatNumber(entry.efficiency)), v6: (entry.currentValue), v7: (maxValue) }, "\n    <li>\n      Проверка {v0}/{v1}: {v2},\n      +{v3} состояния,\n      запас {v4},\n      эффективность {v5}%,\n      итог {v6}/{v7}\n    </li>\n  ")).join("");
   await postRepairChat(actor, {
     title: auditFormat("FALLOUTMAW.AuditApps.Repair", { v0: (repairItem.name) }, "Ремонт: {v0}"),

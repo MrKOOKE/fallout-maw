@@ -1,3 +1,5 @@
+import { constructSystemField } from "./construct-systems.mjs";
+import { prepareConstructSystemBaseData } from "../../utils/construct-systems.mjs";
 import {
   calculateSkillDevelopmentBonuses,
   normalizeActorDevelopment,
@@ -239,6 +241,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       });
     }
     ensureReactionResourceBase(this.resources);
+    prepareConstructSystemBaseData(this.parent);
     prepareActorOrganismDevelopmentLimitBase(this);
   }
 
@@ -482,7 +485,8 @@ export class ConstructDataModel extends BaseActorDataModel {
   static defineSchema() {
     return {
       ...super.defineSchema(),
-      constructPartSlots: new ArrayField(constructPartSlotField(), { required: true, initial: [] })
+      constructPartSlots: new ArrayField(constructPartSlotField(), { required: true, initial: [] }),
+      constructSystems: new ArrayField(constructSystemField(), { required: true, initial: () => [] })
     };
   }
 }

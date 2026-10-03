@@ -6,6 +6,9 @@ import {
   startCanvasTargetSelectionSession
 } from "./target-selection-lifecycle.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
+import { getActorTargetChoices, chooseActorTargetRecipient } from "../apps/actor-target-choice.mjs";
+import { getActorTokenRecipients } from "../utils/actor-target-context.mjs";
+import { getTokenSelectionShape, isPointInTokenSelectionShape } from "./token-selection-shape.mjs";
 
 const TARGET_SELECTION_REFRESH_DELAY_MS = 50;
 const TOKEN_TARGET_PATHS = [
@@ -15,6 +18,10 @@ const TOKEN_TARGET_PATHS = [
   "width",
   "height",
   "depth",
+  "shape",
+  "rotation",
+  "lockRotation",
+  "flags.fallout-maw.tokenHitbox",
   "hidden",
   "actorId",
   "actorLink",
@@ -190,7 +197,8 @@ export function requestCustomTokenSelection({
         return;
       }
       const selectedIndex = selected.indexOf(row.selectionId);
-      if (!allowRepeated && selectedIndex >= 0) selected.splice(selectedIndex, 1);
+      const repeatsAllowed = typeof allowRepeated === "function" ? allowRepeated(row) : allowRepeated;
+      if (!repeatsAllowed && selectedIndex >= 0) selected.splice(selectedIndex, 1);
       else if (selected.length < selectionLimit) selected.push(row.selectionId);
       syncCustomTokenSelectionRowGraphic(
         overlay,
@@ -334,6 +342,7 @@ export function requestCustomTokenSelection({
         flags.refreshPosition
         || flags.refreshSize
         || flags.refreshShape
+        || flags.refreshRotation
         || flags.refreshVisibility
         || flags.refreshState
       ) {
@@ -407,6 +416,40 @@ export function requestCustomTokenSelection({
   });
 }
 
+/** Several Actors may occupy one real token; keep spatial selection and Actor selection distinct. */
+export async function requestCustomActorRecipientsSelection({ collectRows, sourceActorUuid = "", ...options } = {}) {
+  const groupRows = () => {
+    const groups = new Map();
+    for (const row of collectRows()) {
+      const uuid = getTokenDocumentUuid(row.token);
+      const current = groups.get(uuid);
+      if (!current || (!current.selectable && row.selectable)) groups.set(uuid, row);
+    }
+    return [...groups.values()];
+  };
+  const selection = await requestCustomTokenSelection({
+    ...options, rows: groupRows(), refreshRows: groupRows,
+    allowRepeated: row => getActorTokenRecipients(row.token).length > 1,
+    getRowId: row => getTokenDocumentUuid(row.token)
+  });
+  const recipients = [], seen = new Set();
+  for (const row of selection) {
+    const choice = await chooseActorTargetRecipient(row.token, {
+      title: options.title, sourceActorUuid,
+      getReason: ({ actor }) => {
+        if (seen.has(actor.uuid)) return auditLocalize("FALLOUTMAW.AuditRuntime.R0628", "Нужна другая цель.");
+        const candidate = collectRows().find(candidate => getTokenDocumentUuid(candidate.token) === getTokenDocumentUuid(row.token) && candidate.actorUuid === actor.uuid);
+        return candidate?.selectable ? "" : candidate?.reason || auditLocalize("FALLOUTMAW.AuditRuntime.R0624", "Нет подходящих целей.");
+      }
+    });
+    if (!choice) return [];
+    const candidate = collectRows().find(candidate => getTokenDocumentUuid(candidate.token) === getTokenDocumentUuid(row.token) && candidate.actorUuid === choice.actorUuid && candidate.selectable);
+    if (!candidate) return [];
+    seen.add(choice.actorUuid); recipients.push({ ...candidate, ...choice });
+  }
+  return recipients;
+}
+
 export async function requestCustomActorTokenSelection({
   sourceActor = null,
   sourceToken = null,
@@ -460,7 +503,8 @@ export async function requestCustomActorTokenSelection({
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.id ?? row?.actorUuid ?? ""),
     getRowLabel: row => String(row?.token?.name ?? row?.actor?.name ?? auditLocalize("FALLOUTMAW.AuditRuntime.R0190", "Цель"))
   });
-  return selected.at(0) ?? null;
+  const row = selected.at(0);
+  return row ? chooseActorTargetRecipient(row.token, { title, sourceActorUuid, includeSelf, getReason }) : null;
 }
 
 function getCanvasActorSelectionTokens(sourceToken = null) {
@@ -499,11 +543,10 @@ function buildActorSelectionRows(tokens = [], {
     const actorUuid = String(actor?.uuid ?? "");
     const isSelf = Boolean(sourceActorUuid && actorUuid === sourceActorUuid);
     const displayed = Boolean(visibility.get(getTokenDocumentUuid(token)));
+    const choices = getActorTargetChoices(token, { sourceActorUuid, includeSelf, getReason });
     const reason = !actor
       ? auditLocalize("FALLOUTMAW.AuditRuntime.R0627", "У токена нет актера.")
-      : (!includeSelf && isSelf
-        ? auditLocalize("FALLOUTMAW.AuditRuntime.R0628", "Нужна другая цель.")
-        : String(getReason?.({ token, actor, isSelf }) ?? ""));
+      : choices.some(choice => choice.selectable) ? "" : choices[0]?.reason ?? "";
     return {
       token,
       actor,
@@ -639,51 +682,27 @@ function syncCustomTokenSelectionRowGraphic(
 
   graphics.visible = row.displayed !== false;
   if (!graphics.visible) return;
-  const rect = getTokenRect(row.token);
+  const shape = getTokenSelectionShape(row.token);
   const color = row.selectable ? 0x36d06f : 0xd64b4b;
   const lineWidth = selected ? 5 : 3;
   const alpha = selected ? 0.28 : 0.14;
-  const styleSignature = `${rect.width}:${rect.height}:${color}:${lineWidth}:${alpha}`;
+  const styleSignature = `${shape.signature}:${color}:${lineWidth}:${alpha}`;
   if (graphics.falloutMawStyleSignature !== styleSignature) {
     graphics.clear();
     graphics.lineStyle(lineWidth, color, 0.95);
     graphics.beginFill(color, alpha);
-    graphics.drawRect(0, 0, rect.width, rect.height);
+    graphics.drawPolygon(shape.points.flatMap(point => [point.x, point.y]));
     graphics.endFill();
     graphics.falloutMawStyleSignature = styleSignature;
   }
-  graphics.position.set(rect.x, rect.y);
+  graphics.position.set(shape.x, shape.y);
 }
 
 function getCustomTokenSelectionRowAtPoint(rows = [], point = null) {
   return rows
     .slice()
     .reverse()
-    .find(row => row.displayed !== false && isPointInToken(point, row.token)) ?? null;
-}
-
-function isPointInToken(point, token) {
-  const rect = getTokenRect(token);
-  return point
-    && point.x >= rect.x
-    && point.x <= rect.x + rect.width
-    && point.y >= rect.y
-    && point.y <= rect.y + rect.height;
-}
-
-function getTokenRect(token) {
-  const object = getTokenObject(token);
-  const document = object?.document ?? token?.document ?? token;
-  const size = document?.getSize?.() ?? {
-    width: Math.max(1, Number(document?.width) || 1) * canvas.grid.size,
-    height: Math.max(1, Number(document?.height) || 1) * canvas.grid.size
-  };
-  return {
-    x: Number(document?.x ?? object?.x ?? token?.x) || 0,
-    y: Number(document?.y ?? object?.y ?? token?.y) || 0,
-    width: Math.max(1, Number(size.width) || canvas.grid.size),
-    height: Math.max(1, Number(size.height) || canvas.grid.size)
-  };
+    .find(row => row.displayed !== false && isPointInTokenSelectionShape(point, row.token)) ?? null;
 }
 
 function getTokenObject(token = null) {

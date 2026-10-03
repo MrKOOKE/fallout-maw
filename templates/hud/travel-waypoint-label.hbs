@@ -28,6 +28,7 @@
     <span class="total-measurement">{{distance.total}} {{units}}</span>
     {{#if distance.delta}}<span class="delta-measurement">({{distance.delta}})</span>{{/if}}
     {{/if}}
+    {{#if constructRotationCost}}<span class="delta-measurement"><i class="fa-solid fa-rotate"></i> {{constructRotationCost}} ОП</span>{{/if}}
     {{#if (and elevation (not elevation.hidden))}}
     <i class="icon {{elevation.icon}}"></i>
     <span class="total-elevation">{{elevation.total}} {{units}}</span>

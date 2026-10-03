@@ -9,6 +9,9 @@ import {
   publishCombatMovementResourcePreview
 } from "../combat/movement-resources.mjs";
 import { getTravelMovementPreview } from "../global-map/travel-movement.mjs";
+import { prepareFootprintRoute, usesFootprintRouteRotation } from "../utils/token-footprint-route.mjs";
+import { getTokenHitboxGeometry } from "../utils/token-hitbox.mjs";
+import { getConstructRouteRotationCost } from "../constructs/rotation-actions.mjs";
 import {
   ABILITY_ROUTE_BUDGET_MODES,
   getAbilityRoutePreviewBudget,
@@ -24,7 +27,34 @@ export class FalloutMaWTokenRuler extends foundry.canvas.placeables.tokens.Token
     this.#selfPlannedMovement = isSelfPlannedMovement(this.token, rulerData);
     syncAbilityRouteBudgetPreview(this.token, rulerData);
     super.refresh(rulerData);
+    this._refreshFootprintPreview(rulerData);
     syncCombatMovementResourcePreview(this.token, rulerData, this.#selfPlannedMovement);
+  }
+
+  _preparePath(path) {
+    super._preparePath(path);
+    const prepared = prepareFootprintRoute(this.token.document, path);
+    if (prepared !== path) path.forEach((point, i) => {
+      if (prepared[i].rotation !== undefined) point.rotation = prepared[i].rotation;
+      if (prepared[i]._footprintTurnFrom !== undefined) point._footprintTurnFrom = prepared[i]._footprintTurnFrom;
+      if (prepared[i]._footprintTravelRotation !== undefined) point._footprintTravelRotation = prepared[i]._footprintTravelRotation;
+    });
+    let pending = [];
+    for (const point of path) {
+      if (point.stage === "passed") { pending = [point]; continue; }
+      pending.push(point);
+      point._constructRotationCost = getConstructRouteRotationCost(this.token.document, pending);
+    }
+  }
+
+  _refreshFootprintPreview(rulerData) {
+    if (!usesFootprintRouteRotation(this.token.document)) return;
+    const context = this.token.layer._draggedToken?.mouseInteractionManager?.interactionData?.contexts?.[this.token.id];
+    const preview = context?.clonedToken;
+    const path = rulerData?.plannedMovement?.[game.user.id]?.foundPath;
+    if (!preview || !path?.length) return;
+    const rotation = prepareFootprintRoute(this.token.document, path).at(-1)?.rotation;
+    if (rotation !== undefined) preview._animateFootprintPreviewRotation(rotation);
   }
 
   _getWaypointStyle(waypoint) {
@@ -57,7 +87,12 @@ export class FalloutMaWTokenRuler extends foundry.canvas.placeables.tokens.Token
   _getWaypointLabelContext(waypoint, state) {
     const context = super._getWaypointLabelContext(waypoint, state);
     if (!context || waypoint.next) return context;
+    const bounds = getTokenHitboxGeometry(this.token.document, waypoint)?.bounds;
+    if (bounds) context.position.y = waypoint.y + bounds.y + bounds.height + 16 * canvas.dimensions.uiScale;
     context.travel = getTravelMovementPreview(this.token, waypoint);
+    if (waypoint._constructRotationCost) {
+      context.constructRotationCost = waypoint._constructRotationCost;
+    }
     const previewUserId = String(
       waypoint?.userId
       ?? this.token?.document?.movement?.user?.id
@@ -107,6 +142,7 @@ function applyCombatMovementStyle(token, waypoint, style, selfPlannedMovement = 
   if (!state) return style;
 
   const cost = getWaypointCost(token.actor, waypoint);
+  if ((waypoint._constructRotationCost || 0) > state.movement.value) return { ...style, color: MOVEMENT_RULER_COLORS.exhausted };
   if (cost <= state.movement.value) return { ...style, color: MOVEMENT_RULER_COLORS.movement };
   if (cost <= state.total) return { ...style, color: MOVEMENT_RULER_COLORS.action };
   return { ...style, color: MOVEMENT_RULER_COLORS.exhausted };
@@ -125,7 +161,7 @@ function isSelfPlannedMovement(token, rulerData = null) {
 function getWaypointCost(actor, waypoint) {
   const cost = Number(waypoint?.measurement?.cost ?? 0) - getPassedHistoryCost(waypoint);
   if (!Number.isFinite(cost) || cost <= 0) return 0;
-  return applyCombatMovementCostModifier(actor, Math.ceil(cost));
+  return applyCombatMovementCostModifier(actor, Math.ceil(cost)) + (waypoint._constructRotationCost || 0);
 }
 
 function getPassedHistoryCost(waypoint) {
@@ -143,13 +179,13 @@ function syncCombatMovementResourcePreview(token, rulerData, selfPlannedMovement
     return;
   }
 
-  const cost = getSelfPlannedMovementCost(token, rulerData);
+  const summary = getSelfPlannedMovementSummary(token, rulerData), cost = summary.movementCost;
   if (cost <= 0) {
     clearCombatMovementResourcePreview(token.document);
     return;
   }
 
-  publishCombatMovementResourcePreview(token.document, cost);
+  publishCombatMovementResourcePreview(token.document, Math.max(0, cost - (summary.rotationCost || 0)), summary.rotationCost || 0);
 }
 
 function syncAbilityRouteBudgetPreview(token, rulerData = {}) {
@@ -195,10 +231,12 @@ function getSelfPlannedMovementSummary(token, rulerData = {}) {
     : 0;
   const cost = totalCost - historyCost;
   const distance = totalDistance - historyDistance;
+  const rotationCost = getConstructRouteRotationCost(token.document, pending);
   return {
     movementCost: Number.isFinite(cost) && cost > 0
-      ? applyCombatMovementCostModifier(token.actor, Math.ceil(cost))
-      : 0,
+      ? applyCombatMovementCostModifier(token.actor, Math.ceil(cost)) + rotationCost
+      : rotationCost,
+    rotationCost,
     distance: Number.isFinite(distance) && distance > 0 ? distance : 0,
     invalid,
     searching

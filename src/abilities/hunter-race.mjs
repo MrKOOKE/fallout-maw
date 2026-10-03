@@ -43,7 +43,7 @@ export async function selectHunterRaceTarget({
     getReason: ({ actor: targetActor }) => getHunterRaceTargetRejectionReason(actor, targetActor)
   });
   const targetToken = selection?.token ?? null;
-  const targetActor = targetToken?.actor ?? selection?.actor ?? null;
+  const targetActor = selection?.actor ?? targetToken?.actor ?? null;
   return getHunterRaceTargetRejectionReason(actor, targetActor)
     ? null
     : { actor: targetActor, token: targetToken };

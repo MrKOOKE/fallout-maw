@@ -249,7 +249,9 @@ async function playAttackAnimationGroup(payload = {}) {
   for (let index = 0; index < soundGroups.length; index += 1) {
     if (index > 0 && delayMs > 0) await sleep(delayMs);
     if (!isCombatCanvasContextCurrent(payload)) break;
-    promises.push(playAttackSound(payload.soundPath, payload.soundVolume));
+    // Audio may wait for this client's first gesture. It accompanies the shot
+    // independently of the visual timeline and authoritative damage workflow.
+    void playAttackSound(payload.soundPath, payload.soundVolume);
     const groupEntries = entriesByGroup.get(soundGroups[index]) ?? [];
     const chains = new Map();
     for (const entry of groupEntries) {
@@ -295,7 +297,8 @@ function normalizeAttackSoundVolume(value) {
 
 async function playExplosionAnimation(payload = {}) {
   if (!isCombatCanvasContextCurrent(payload)) return;
-  const promises = [playAttackSound(payload.soundPath)];
+  void playAttackSound(payload.soundPath);
+  const promises = [];
   if (payload.file) promises.push(playSingleExplosionAnimation(payload));
   await Promise.all(promises);
 }

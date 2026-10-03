@@ -1,4 +1,5 @@
 import { localize as auditLocalize } from "../../utils/i18n.mjs";
+import { resourceRecoveryMethodField, constructSystemContributionField } from "./construct-systems.mjs";
 import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
 import { getPreviewItemValidationOptions } from "../../documents/token-clone-initialization.mjs";
 import { MODULE_ACTION_LABELS, getModuleActionNumericFields } from "../../utils/weapon-module-actions.mjs";
@@ -793,17 +794,8 @@ function conditionFunctionField(options = {}) {
     value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     weakeningThreshold: new NumberField({ required: true, integer: true, min: 1, initial: DEFAULT_CONDITION_WEAKENING_THRESHOLD }),
-    recoveryMethods: new ArrayField(conditionRecoveryMethodField(), { required: true, initial: [] })
+    recoveryMethods: new ArrayField(resourceRecoveryMethodField(), { required: true, initial: [] })
   }, options);
-}
-
-function conditionRecoveryMethodField() {
-  return new SchemaField({
-    type: new StringField({ required: true, blank: false, choices: ["tools"], initial: "tools" }),
-    toolKey: new StringField({ required: true, blank: true, initial: "" }),
-    toolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
-    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
-  });
 }
 
 function damageSourceFunctionField(options = {}) {
@@ -916,6 +908,9 @@ function trapDetectionConditionField() {
 function weaponFunctionField({ named = false, fieldOptions = {} } = {}) {
   const schema = {
     enabled: new BooleanField({ required: true, initial: false }),
+    requiresOperator: new BooleanField({ required: true, initial: false }),
+    operatorPartSlotId: new StringField({ required: true, blank: true, initial: "" }),
+    muzzleAnchorId: new StringField({ required: true, blank: true, initial: "" }),
     damageMode: new StringField({ required: true, blank: false, choices: ["manual", "source"], initial: "manual" }),
     damage: new StringField({ required: true, blank: true, initial: "0" }),
     pellets: new StringField({ required: true, blank: true, initial: "1" }),
@@ -1008,6 +1003,7 @@ function moduleFunctionField(options = {}) {
 function constructPartFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
+    systems: new ArrayField(constructSystemContributionField(), { required: true, initial: () => [] }),
     partType: new StringField({ required: true, blank: true, initial: "" }),
     aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0 }),
     aimedDifficultyBonus: new NumberField({ required: true, integer: true, initial: 0 }),

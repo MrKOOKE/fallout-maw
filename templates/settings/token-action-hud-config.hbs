@@ -35,6 +35,24 @@
       </section>
 
       <section>
+        <h3>{{localize "FALLOUTMAW.Settings.HUD.CrewActionsSection"}}</h3>
+        <div class="form-group">
+          <label>{{localize "FALLOUTMAW.ConstructCrew.ShowAimLimits"}}</label>
+          <div class="form-fields"><input type="checkbox" data-hud-construct-aim-limits {{checked showConstructAimLimits}}></div>
+        </div>
+        <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
+          {{#each crewActionIconRows}}
+          <div class="fallout-maw-settings-row" data-hud-icon-section="{{section}}" data-hud-icon-key="{{key}}">
+            <span>{{label}}</span>
+            <img class="fallout-maw-token-action-hud-icon-preview" src="{{img}}" alt="" data-hud-icon-preview>
+            <input type="text" data-hud-icon-input value="{{img}}">
+            <button type="button" data-action="browseHudImage" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-image"></i></button>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+
+      <section>
         <h3>{{localize 'FALLOUTMAW.AuditTemplates.Text4aa707fe22b1'}}</h3>
         <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
           {{#each activeActionIconRows}}

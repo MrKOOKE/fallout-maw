@@ -6036,6 +6036,14 @@
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
+        {{#if isResources}}
+        <div class="fallout-maw-condition-recovery-resource-card" style="grid-column: 2 / -1">
+          <div class="construct-system-two"><label>Расходовать<select name="system.functions.condition.recoveryMethods.{{index}}.mode"><option value="one" {{#unless all}}selected{{/unless}}>Один из ресурсов</option><option value="all" {{#if all}}selected{{/if}}>Весь набор</option></select></label><label>Восстановление<select name="system.functions.condition.recoveryMethods.{{index}}.recoveryMode"><option value="percent" {{#if percent}}selected{{/if}}>Процент максимума</option><option value="amount" {{#unless percent}}selected{{/unless}}>Фиксированное количество</option></select></label></div>
+          <label>Восстановить за указанный расход<input type="number" min="0" name="system.functions.condition.recoveryMethods.{{index}}.recovery" value="{{recovery}}"></label>
+          <div class="construct-resource-drop" data-recovery-resource-drop="{{index}}">{{#each resources}}<div class="construct-resource-row"><img src="{{img}}" alt=""><span>{{name}}</span><input type="number" min="1" name="system.functions.condition.recoveryMethods.{{../index}}.resources.{{resourceIndex}}.quantity" value="{{quantity}}" aria-label="Расход"><button type="button" data-remove-recovery-resource="{{resourceIndex}}" data-method="{{../index}}" title="Удалить ресурс"><i class="fa-solid fa-xmark"></i></button></div>{{/each}}<p class="hint">Перетащите расходуемые предметы</p></div>
+          <button type="button" data-delete-condition-recovery-method="{{index}}"><i class="fa-solid fa-trash"></i> Удалить метод</button>
+        </div>
+        {{else}}
         <select name="system.functions.condition.recoveryMethods.{{index}}.toolKey">
           {{#each toolChoices}}
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -6048,6 +6056,7 @@
         </select>
         <input type="number" name="system.functions.condition.recoveryMethods.{{index}}.difficulty" value="{{difficulty}}" min="0" step="1">
         <button type="button" data-delete-condition-recovery-method="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{/if}}
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.ConditionNoRecoveryMethods"}}</p>
@@ -6062,6 +6071,11 @@
       <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textb27546e4e295'}}</h2>
       <button type="button" data-remove-item-function="constructPart" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
     </div>
+    <details><summary>Подключение к системам конструкта</summary><p class="hint">Двигатель задаёт запас и возможность запуска, ходовая — очки передвижения. Ключ должен совпадать с системой машины.</p>
+      <div class="fallout-maw-part-system-row"><span>Система</span><span>Запас</span><span>ОП</span><span>Запуск</span><span></span></div>
+      {{#each constructSystemContributionRows}}<div class="fallout-maw-part-system-row">{{#if choices}}<select name="system.functions.constructPart.systems.{{index}}.systemId" aria-label="Система">{{#each choices}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select>{{else}}<input type="text" name="system.functions.constructPart.systems.{{index}}.systemId" value="{{systemId}}" aria-label="Ключ системы">{{/if}}<input type="number" min="0" step="1" name="system.functions.constructPart.systems.{{index}}.capacity" value="{{capacity}}" aria-label="Запас энергии"><input type="number" min="0" step="1" name="system.functions.constructPart.systems.{{index}}.movementPoints" value="{{movementPoints}}" aria-label="Очки передвижения"><input type="checkbox" name="system.functions.constructPart.systems.{{index}}.activationProvider" {{checked activationProvider}} aria-label="Обеспечивает запуск"><button type="button" data-remove-part-system="{{index}}" title="Удалить подключение"><i class="fa-solid fa-trash"></i></button></div>{{/each}}
+      <button type="button" data-add-part-system><i class="fa-solid fa-plus"></i> Подключить систему</button>
+    </details>
     <div class="fallout-maw-list-grid three-columns">
       <label>
         <span>{{localize 'FALLOUTMAW.AuditTemplates.Text955f02921584'}}</span>
@@ -7610,6 +7624,29 @@
         {{/if}}
       </div>
     </div>
+    <div class="fallout-maw-list-grid three-columns" data-construct-weapon-operator>
+      <label class="checkbox">
+        <input type="checkbox" name="{{path}}.requiresOperator" {{checked weaponData.requiresOperator}}>
+        <span>Требуется исполнитель</span>
+      </label>
+      <label>
+        <span>Управляемая деталь конструкта</span>
+        <select name="{{path}}.operatorPartSlotId">
+          {{#each operatorPartChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Точка выстрела</span>
+        <select name="{{path}}.muzzleAnchorId">
+          {{#each muzzleAnchorChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+    <p class="fallout-maw-hint">Исполнитель должен занимать исправное место с разрешением на стрельбу или перезарядку этой детали.</p>
     {{#if isNamed}}
     <div class="fallout-maw-list-grid three-columns">
       <label>

@@ -1712,6 +1712,7 @@ function buildPassengerForVehicle(plan, member, scene) {
   const temporaryOwnerUserIds = [];
   const temporaryOwnerLevels = {};
   for (const user of game.users?.contents ?? []) {
+    if (plan.actor?.type === "construct") continue;
     if (user.isGM || !member.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) continue;
     const current = plan.nextOwnership[user.id]
       ?? plan.nextOwnership.default
@@ -2073,12 +2074,12 @@ function validateAssemblyPlacement(model, member, placement) {
     && other.placement?.vehicleTokenId === placement.vehicleTokenId
     && other.placement?.slotId === placement.slotId
     && Number(other.placement?.slotIndex) === placement.slotIndex
-    && rectanglesOverlap(candidate, {
+    && (seat.crewSlotIndices?.includes(placement.slotIndex) || rectanglesOverlap(candidate, {
       x: other.placement.x,
       y: other.placement.y,
       width: other.width,
       height: other.height
-    })
+    }))
   );
   if (collision) throw new Error(auditLocalize("FALLOUTMAW.AuditRuntime.R1054", "Выбранные клетки уже заняты."));
 }

@@ -1,4 +1,5 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
+import { getActorTargetName, isActorAtPhysicalToken } from "../utils/actor-target-context.mjs";
 ﻿import {
   getActorHealingModifierPercent,
   requestDamageApplication,
@@ -674,7 +675,7 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null, {
   sourceToken = null,
   chanceOperationId = ""
 } = {}) {
-  const actor = targetToken?.actor ?? fallbackActor;
+  const actor = fallbackActor ?? targetToken?.actor;
   if (!actor) return null;
   if (canUseActorLocally(actor)) {
     return buildFirstAidTargetContext(actor, targetToken, {
@@ -693,7 +694,7 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null, {
   try {
     const result = await requestFirstAidSocket("getTargetContext", {
       actorUuid: actor.uuid,
-      tokenName: targetToken?.name ?? "",
+      tokenName: getActorTargetName(actor, targetToken),
       targetTokenUuid: getDocumentUuid(targetToken),
       sourceActorUuid: sourceActor?.uuid ?? "",
       sourceTokenUuid: getDocumentUuid(sourceToken),
@@ -715,7 +716,7 @@ function buildFirstAidTargetContext(actor, token = null, {
   const installedProstheses = getInstalledProsthesesByLimb(actor);
   return {
     actorUuid: actor?.uuid ?? "",
-    name: token?.name ?? actor?.name ?? "",
+    name: getActorTargetName(actor, token),
     actorName: actor?.name ?? "",
     tokenName: token?.name ?? "",
     healthMax: Math.max(0, toInteger(actor?.system?.resources?.health?.max)),
@@ -996,6 +997,8 @@ async function handleFirstAidSocketRequest(action, payload = {}) {
       resolveFirstAidUuid(payload.sourceTokenUuid),
       resolveFirstAidUuid(payload.targetTokenUuid)
     ]);
+    if (targetToken && !isActorAtPhysicalToken(actor, targetToken)) return { targetContext: null };
+    if (sourceToken && !isActorAtPhysicalToken(sourceActor, sourceToken)) return { targetContext: null };
     return {
       targetContext: {
         ...buildFirstAidTargetContext(actor, targetToken, {

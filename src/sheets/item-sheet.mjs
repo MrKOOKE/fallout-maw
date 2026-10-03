@@ -1,6 +1,7 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { MODULE_ACTION_LABELS } from "../utils/weapon-module-actions.mjs";
+import { getConstructWeaponOperatorPartChoices, getConstructWeaponMuzzleAnchorChoices } from "../utils/construct-weapon-operator.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { activateAdvancementPureValuesControls } from "../apps/advancement-pure-values-control.mjs";
@@ -665,7 +666,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasEnergyConsumerFunction
     );
     this.#activeWeaponFunctionTab = resolveActiveWeaponFunctionTab(this.#activeWeaponFunctionTab, weaponFunctionSections);
-    for (const section of weaponFunctionSections) section.active = section.tabId === this.#activeWeaponFunctionTab;
+    for (const section of weaponFunctionSections) {
+      section.active = section.tabId === this.#activeWeaponFunctionTab;
+      section.operatorPartChoices = getConstructWeaponOperatorPartChoices(item, section.weaponData?.operatorPartSlotId);
+      section.muzzleAnchorChoices = getConstructWeaponMuzzleAnchorChoices(item, section.weaponData?.muzzleAnchorId);
+    }
     const damageMitigationLimbSetChoices = buildDamageMitigationLimbSetChoices(item, creatureOptions);
     this.#activeMitigationLimbSetId = resolveDamageMitigationEditorLimbSetId(
       this.#activeMitigationLimbSetId,
@@ -767,6 +772,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
       firstAidWithdrawalDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.withdrawalDurationSeconds),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
+      constructSystemContributionRows: (item.system?.functions?.constructPart?.systems ?? []).map((row, index) => ({ ...row, index,
+        choices: (item.actor?.system?.constructSystems ?? []).map(system => ({ id: system.id, name: system.name, selected: system.id === row.systemId })) })),
       constructPartBlockedEffectRows: buildConstructPartBlockedEffectRows(item, damageTypeSettings),
       canAddConstructPartBlockedEffect: canAddConstructPartBlockedEffect(item, damageTypeSettings),
       constructPartWeaponSetRows: buildConstructPartWeaponSetRows(item),
@@ -1475,6 +1482,31 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       zone.addEventListener("drop", event => this.#onWeaponModuleSlotDrop(event));
     });
     this.element?.querySelector("[data-add-condition-recovery-method]")?.addEventListener("click", event => this.#onAddConditionRecoveryMethod(event));
+    this.element?.querySelector("[data-add-part-system]")?.addEventListener("click", async event => {
+      event.preventDefault();
+      const rows = foundry.utils.deepClone(this.item.system?.functions?.constructPart?.systems ?? []);
+      rows.push({ systemId: this.item.actor?.system?.constructSystems?.[0]?.id || "drive", capacity: 0, movementPoints: 0, activationProvider: false });
+      await this.item.update({ "system.functions.constructPart.systems": rows });
+    });
+    for (const button of this.element?.querySelectorAll("[data-remove-part-system]") ?? []) button.addEventListener("click", async event => {
+      event.preventDefault(); const rows = foundry.utils.deepClone(this.item.system.functions.constructPart.systems);
+      rows.splice(Number(button.dataset.removePartSystem), 1); await this.item.update({ "system.functions.constructPart.systems": rows });
+    });
+    for (const zone of this.element?.querySelectorAll("[data-recovery-resource-drop]") ?? []) {
+      zone.addEventListener("dragover", event => { event.preventDefault(); event.dataTransfer.dropEffect = "link"; });
+      zone.addEventListener("drop", async event => {
+        event.preventDefault(); const dropped = await getDroppedWorldItems(event);
+        const methods = foundry.utils.deepClone(this.item.system.functions.condition.recoveryMethods);
+        const method = methods[Number(zone.dataset.recoveryResourceDrop)]; if (!method) return;
+        for (const item of dropped.filter(row => row.type === "gear")) if (!method.resources.some(row => row.uuid === item.uuid)) method.resources.push({ uuid: item.uuid, quantity: 1 });
+        await this.item.update({ "system.functions.condition.recoveryMethods": methods });
+      });
+    }
+    for (const button of this.element?.querySelectorAll("[data-remove-recovery-resource]") ?? []) button.addEventListener("click", async event => {
+      event.preventDefault(); const methods = foundry.utils.deepClone(this.item.system.functions.condition.recoveryMethods);
+      methods[Number(button.dataset.method)]?.resources.splice(Number(button.dataset.removeRecoveryResource), 1);
+      await this.item.update({ "system.functions.condition.recoveryMethods": methods });
+    });
     this.element?.querySelectorAll("[data-delete-condition-recovery-method]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteConditionRecoveryMethod(event));
     });
@@ -14850,7 +14882,7 @@ function normalizeSubmittedItemSubcategory(submitData = {}, item = null) {
 function buildConditionRecoveryMethodRows(item, toolSettings = []) {
   const classChoices = ["D", "C", "B", "A", "S"];
   return (item.system?.functions?.condition?.recoveryMethods ?? []).map((method, index) => {
-    const type = String(method?.type ?? "tools") === "tools" ? "tools" : "tools";
+    const type = method?.type === "resources" ? "resources" : "tools";
     const toolKey = String(method?.toolKey ?? "");
     const toolChoices = toolSettings.map(tool => ({
       value: tool.key,
@@ -14861,14 +14893,18 @@ function buildConditionRecoveryMethodRows(item, toolSettings = []) {
     return {
       index,
       type,
+      isResources: type === "resources", all: method.mode === "all", percent: method.recoveryMode !== "amount",
+      recovery: method.recovery ?? 10,
+      resources: (method.resources ?? []).map((row, resourceIndex) => ({ ...row, resourceIndex,
+        name: resolveWorldItemSync(row.uuid)?.name || "Предмет не найден", img: resolveWorldItemSync(row.uuid)?.img || "icons/svg/item-bag.svg" })),
       toolKey,
       toolClass: String(method?.toolClass ?? "D"),
       difficulty: Math.max(0, toInteger(method?.difficulty)),
       typeChoices: [{
         value: "tools",
         label: game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryMethodTools"),
-        selected: true
-      }],
+        selected: type === "tools"
+      }, { value: "resources", label: "Расход ресурсов", selected: type === "resources" }],
       toolChoices,
       classChoices: classChoices.map(value => ({
         value,

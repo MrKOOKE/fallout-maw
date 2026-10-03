@@ -4,6 +4,8 @@ import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { canDropItemsForActor, commitInventoryWithDroppedItems } from "../items/dropped-items.mjs";
 import { planConstructStructureDepartures } from "./construct-structure-departures.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
+import { ConstructVisualEditor } from "./construct-visual-editor.mjs";
+import { ConstructSystemsConfig } from "./construct-systems-config.mjs";
 import {
   ITEM_FUNCTIONS,
   getConditionFunction,
@@ -89,6 +91,14 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.element?.querySelector("[data-construct-open-systems]")?.addEventListener("click", event => {
+      event.preventDefault();
+      if (this.actor.isOwner) new ConstructSystemsConfig(this.actor).render(true);
+    });
+    this.element?.querySelector("[data-construct-open-visual]")?.addEventListener("click", event => {
+      event.preventDefault();
+      if (this.actor.isOwner) new ConstructVisualEditor(this.actor).render(true);
+    });
     const list = this.element?.querySelector("[data-construct-part-list]");
     list?.addEventListener("dragover", event => this.#onPartListDragOver(event));
     list?.addEventListener("drop", event => this.#onEntryListDrop(event));

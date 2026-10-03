@@ -13,7 +13,7 @@
   <div class="fallout-maw-token-hud-collapsible">
     <div class="fallout-maw-token-hud-collapsible-inner fallout-maw-token-hud-meter-list">
       {{#each resources}}
-      <div class="fallout-maw-token-hud-meter-card{{#if oneTimeResource}} one-time-resource{{/if}}" data-token-hud-resource-card data-resource-key="{{key}}">
+      <div class="fallout-maw-token-hud-meter-card{{#if oneTimeResource}} one-time-resource{{/if}}" data-token-hud-resource-card data-resource-key="{{key}}" {{#if availabilityNote}}title="{{availabilityNote}}"{{/if}}>
         <div class="fallout-maw-token-hud-meter-header">
           <span>{{label}}</span>
           {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-label">{{localize "FALLOUTMAW.Actor.ConsciousnessRecoveryTarget" value=recoveryTarget}}</span>{{/if}}

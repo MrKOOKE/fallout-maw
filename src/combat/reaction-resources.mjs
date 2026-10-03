@@ -1,5 +1,6 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { getActorCombatSubject } from "./combat-membership.mjs";
 import { COMBAT_LIFECYCLE_CONTEXT_OPTION } from "./combat-lifecycle-lease.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
@@ -849,6 +850,7 @@ async function closeActorTurnResources(actor) {
 
 function isActorCurrentCombatant(actor, combat = getActorActiveCombat(actor)) {
   if (!combat?.started || !actor?.uuid) return false;
+  actor = getActorCombatSubject(actor, combat);
   if (isBlockTurnOrderEnabled(combat)) return isActorPendingInActiveBlock(actor, combat);
   return combat.combatant?.actor?.uuid === actor.uuid;
 }

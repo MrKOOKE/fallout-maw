@@ -2,6 +2,12 @@ import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { stripEffectTooltipBonusWords } from "../utils/effect-tooltip-labels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { getTokenRotationSpeedMultiplier } from "../utils/token-movement-auto-rotate.mjs";
+import { getTokenHitboxGeometry, getTokenHitboxWorldBounds } from "../utils/token-hitbox.mjs";
+import { setConstructMotionSound } from "../constructs/system-sounds.mjs";
+import { getFootprintBarEdge, getFootprintBarPath, mapFootprintBarRect } from "../utils/token-footprint-indicators.mjs";
+
+const footprintBarSources = new WeakMap();
 import {
   ATTACK_CRITICAL_FAILURE_DISABLED_EFFECT_KEY,
   evaluateActorEffectChangeBaseNumber,
@@ -186,6 +192,188 @@ function waitForAbilityRoutePathReady(context, timeoutMs = 750) {
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  get bounds() {
+    const bounds = getTokenHitboxWorldBounds(this.document);
+    return bounds ? new PIXI.Rectangle(bounds.x, bounds.y, bounds.width, bounds.height) : super.bounds;
+  }
+
+  getShape() {
+    const geometry = getTokenHitboxGeometry(this.document);
+    return geometry ? new PIXI.Polygon(geometry.points) : super.getShape();
+  }
+
+  _overlapsSelection(rectangle) {
+    if (!getTokenHitboxGeometry(this.document)) return super._overlapsSelection(rectangle);
+    if (!this.shape || !rectangle.intersects(this.bounds)) return false;
+    // The core polygon clip still performs selection; its broad phase must
+    // include the rotated area extending beyond the unrotated native frame.
+    const local = new PIXI.Rectangle(rectangle.x - this.x, rectangle.y - this.y, rectangle.width, rectangle.height);
+    return local.intersectPolygon(this.shape).points.length !== 0;
+  }
+
+  _refreshRotation() {
+    super._refreshRotation();
+    // Foundry prepares document.rotation for each animation frame. Reuse that
+    // frame for four vertices, the native border, pointer hit area and quadtree.
+    const geometry = getTokenHitboxGeometry(this.document);
+    if (!geometry || this._hitboxGeometryKey === geometry.key) return;
+    this._hitboxGeometryKey = geometry.key;
+    this._refreshShape(); this._refreshVisibility(); this._refreshBorder(); this._refreshTarget(); this._updateQuadtree();
+    this._positionHitboxBars(); this._positionHitboxLabels(); this._positionHitboxEffects();
+    canvas.perception.update({ refreshOcclusionMask: true, refreshOcclusionStates: true });
+  }
+
+  _onUpdate(changed, options, userId) {
+    super._onUpdate(changed, options, userId);
+    if (!Object.keys(foundry.utils.flattenObject(changed)).some(key => /^flags\.fallout-maw\.(?:tokenHitbox|-=tokenHitbox)/.test(key))) return;
+    this._hitboxGeometryKey = undefined;
+    this.renderFlags.set({ refreshShape: true, refreshBorder: true, refreshTarget: true, refreshBars: true, refreshNameplate: true, refreshTooltip: true, refreshEffects: true });
+    this._updateQuadtree();
+    canvas.perception.update({ refreshVision: true, refreshOcclusion: true });
+  }
+
+  _drawTargetArrows(options) {
+    const geometry = getTokenHitboxGeometry(this.document);
+    if (!geometry) return super._drawTargetArrows(options);
+    // Native reticule styling and visibility, positioned at the body's corners.
+    const { margin = 0, alpha = 1, size = CONFIG.Canvas.targeting.size, color = this._getBorderColor(),
+      border: { width = 2, color: lineColor = 0 } = {} } = options ?? {};
+    const arrows = this.targetArrows; arrows.clear();
+    if (!this.targeted.has(game.user)) return;
+    const length = size * 100 * canvas.dimensions.uiScale, m = -margin * length;
+    arrows.beginFill(color, alpha).lineStyle({ color: lineColor, alpha, width, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.BEVEL });
+    for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const x = geometry.left + (dx > 0 ? geometry.width : 0) + dx * m;
+      const y = geometry.top + (dy > 0 ? geometry.height : 0) + dy * m;
+      arrows.drawPolygon([geometry.transform(x, y), geometry.transform(x + dx * length, y), geometry.transform(x, y + dy * length)]);
+    }
+  }
+
+  _drawTargetPips() {
+    super._drawTargetPips();
+    const bounds = getTokenHitboxGeometry(this.document)?.bounds;
+    this.targetPips.position.set(bounds ? bounds.x + bounds.width / 2 - this.w / 2 : 0, bounds?.y ?? 0);
+  }
+
+  _refreshNameplate() {
+    super._refreshNameplate();
+    this._positionHitboxLabels();
+  }
+
+  _refreshTooltip() {
+    super._refreshTooltip();
+    this._positionHitboxLabels();
+  }
+
+  _positionHitboxLabels() {
+    const bounds = getTokenHitboxGeometry(this.document)?.bounds ?? { x: 0, y: 0, width: this.w, height: this.h };
+    const offset = CONFIG.Canvas.objectBorderThickness * 0.75 * canvas.dimensions.uiScale;
+    const x = bounds.x + bounds.width / 2;
+    this.nameplate.position.set(x, bounds.y + bounds.height + offset);
+    this.tooltip.position.set(x, bounds.y - offset);
+    this.levelIndicator.position.set(x, this.tooltip.y - (this.tooltip.text ? this.tooltip.height : 0));
+  }
+
+  _positionHitboxBars({ animate = true } = {}) {
+    const geometry = getTokenHitboxGeometry(this.document);
+    if (!geometry || !this.bars) return;
+    const target = getFootprintBarEdge(geometry);
+    const state = this._footprintBarPlacement ??= { edge: target, target };
+    if (animate && state.target !== target) {
+      state.target = target;
+      const end = state.edge + (((target - state.edge + 2) % 4 + 4) % 4) - 2;
+      const animation = foundry.canvas.animation.CanvasAnimation;
+      const name = this._footprintBarAnimationName ??= Symbol("footprint-bars");
+      animation.terminateAnimation(name);
+      void animation.animate([{ parent: state, attribute: "edge", to: end }], {
+        name, duration: 180, easing: animation.easeInOutCosine,
+        ontick: () => { if (!this.destroyed) this._positionHitboxBars({ animate: false }); }
+      });
+    }
+    const height = 8 * (this.document.height >= 2 ? 1.5 : 1) * canvas.dimensions.uiScale;
+    const rotation = this.document.lockRotation ? 0 : this.document.rotation;
+    for (const [i, key] of ["bar1", "bar2"].entries()) {
+      const bar = this.bars[key]; if (!bar) continue;
+      const source = footprintBarSources.get(bar), path = getFootprintBarPath(geometry, rotation, { upper: i !== 0, edgePosition: state.edge });
+      const cacheKey = `${geometry.key}:${state.edge}`;
+      if (!source || !path || source.key === cacheKey) continue;
+      source.key = cacheKey;
+      bar.clear(); bar.scale.set(1, 1); bar.position.set(0, 0);
+      const straight = Math.abs(path.points[0].y - path.points.at(-1).y) < 1e-6 && path.points.length === 2;
+      for (const command of source.commands) {
+        bar.beginFill(command.fill.color, command.fill.alpha).lineStyle(command.line);
+        if (straight) bar.drawShape(command.shape);
+        else {
+          const polygon = mapFootprintBarRect(geometry, path, command.shape, { width: this.w, height });
+          if (polygon.length) bar.drawPolygon(polygon);
+        }
+        bar.endFill();
+      }
+      if (straight) {
+        bar.scale.x = path.length / this.w;
+        bar.position.set(path.points[0].x, path.points[0].y - (i === 0 ? height : 0));
+      }
+    }
+  }
+
+  _positionHitboxEffects() {
+    if (!this.effects) return;
+    const geometry = getTokenHitboxGeometry(this.document);
+    const x = geometry ? this.w / 2 : 0, y = geometry ? this.h / 2 : 0;
+    this.effects.pivot.set(x, y);
+    this.effects.position.set(x, y);
+    this.effects.angle = geometry && !this.document.lockRotation ? this.document.rotation : 0;
+  }
+
+  _getAnimationRotationSpeed(options) {
+    // Core movement turns inject movementSpeed=24, whereas wheel turns use the
+    // regular speed. A configured multiplier must use one baseline for both.
+    const configured = this.document.flags?.[SYSTEM_ID]?.rotationSpeedMultiplier !== undefined;
+    const speed = configured && options.name === this.movementAnimationName
+      ? this._getAnimationMovementSpeed(options) : super._getAnimationRotationSpeed(options);
+    return speed * getTokenRotationSpeedMultiplier(this.document);
+  }
+
+  _animateFootprintPreviewRotation(rotation) {
+    if (!this.isPreview || this._footprintPreviewTargetRotation === rotation) return;
+    this._footprintPreviewTargetRotation = rotation;
+    const animation = foundry.canvas.animation.CanvasAnimation;
+    const name = this._footprintPreviewRotationName ??= Symbol("footprint-preview-rotation");
+    animation.terminateAnimation(name);
+    const from = this.document.rotation, delta = ((rotation - from + 540) % 360) - 180;
+    // A native Token.animate frame restores ALL cached movement fields. The
+    // drag clone's position is prepared by Foundry, so animate only its angle
+    // on Foundry's ticker and leave snapping and translation to the core drag.
+    void animation.animate([{ parent: this.document, attribute: "rotation", to: from + delta }], {
+      // Drag feedback has a short fixed catch-up time, independent of the
+      // vehicle's actual turn speed or its configured rotation multiplier.
+      name, duration: 120,
+      priority: PIXI.UPDATE_PRIORITY.OBJECTS + 1,
+      ontick: () => { if (!this.destroyed) this.renderFlags.set({ refreshRotation: true }); }
+    });
+  }
+
+  _prepareAnimation(from, changes, context, options) {
+    const attributes = super._prepareAnimation(from, changes, context, options);
+    if (this.actor?.type !== "construct" || this.isPreview || !context.duration
+      || !("rotation" in changes) || changes.rotation === from.rotation) return attributes;
+    let started = false;
+    // Follow the native animation lifecycle, including cancellation and chained
+    // turns. Translation and hull rotation share the same track-motion loop.
+    context.onAnimate.push(() => {
+      if (started) return;
+      started = true;
+      this._constructHullTurns = (this._constructHullTurns ?? 0) + 1;
+      setConstructMotionSound(this, "hullRotate", true);
+    });
+    context.postAnimate.push(() => {
+      if (!started) return;
+      this._constructHullTurns = Math.max(0, (this._constructHullTurns ?? 0) - 1);
+      setConstructMotionSound(this, "hullRotate", this._constructHullTurns > 0);
+    });
+    return attributes;
+  }
+
   clone() {
     return withTokenPreviewClone(this.document, () => super.clone());
   }
@@ -537,8 +725,17 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   _drawBar(index, bar, data) {
-    if (HEALTH_BAR_ATTRIBUTES.has(String(data?.attribute ?? ""))) return this._drawHealthBar(index, bar, data);
-    return super._drawBar(index, bar, data);
+    bar.scale.x = 1;
+    if (HEALTH_BAR_ATTRIBUTES.has(String(data?.attribute ?? ""))) this._drawHealthBar(index, bar, data);
+    else super._drawBar(index, bar, data);
+    // Cache the native draw commands on resource refresh. Rotation changes only
+    // their geometry; it never rescans the Actor or recalculates health.
+    const commands = bar.geometry.graphicsData.map(command => ({ shape: command.shape.clone(),
+      fill: command.fillStyle.clone(), line: command.lineStyle.clone() }));
+    if (commands.every(command => Number.isFinite(command.shape.width) && Number.isFinite(command.shape.height)))
+      footprintBarSources.set(bar, { commands });
+    else footprintBarSources.delete(bar);
+    this._positionHitboxBars();
   }
 
   _drawHealthBar(index, bar, data) {
@@ -728,6 +925,11 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   _refreshEffects() {
+    this._refreshNativeEffectsLayout();
+    this._positionHitboxEffects();
+  }
+
+  _refreshNativeEffectsLayout() {
     if (!canvas.grid.isHexagonal && this._displayAllEffects) return super._refreshEffects();
 
     const scale = canvas.dimensions.uiScale;
@@ -801,6 +1003,8 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   destroy(options) {
+    if (this._footprintBarAnimationName) foundry.canvas.animation.CanvasAnimation.terminateAnimation(this._footprintBarAnimationName);
+    if (this._footprintPreviewRotationName) foundry.canvas.animation.CanvasAnimation.terminateAnimation(this._footprintPreviewRotationName);
     destroyTokenPeriodicDamageMask(this);
     effectTooltipController.deactivateForToken(this);
     return super.destroy(options);

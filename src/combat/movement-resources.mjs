@@ -23,6 +23,9 @@ import { ACTION_RESOURCE_KEY } from "./strict-action-points.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "./combat-membership.mjs";
 import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
+import { getConstructMovementEnergyState } from "../utils/construct-systems.mjs";
+import { isTokenMovementTravel } from "../utils/token-movement-kind.mjs";
+import { getConstructRouteRotationCost, getConstructRotationState } from "../constructs/rotation-actions.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export { ACTION_RESOURCE_KEY };
@@ -42,6 +45,7 @@ export const MOVEMENT_RULER_COLORS = Object.freeze({
 
 export function registerCombatMovementHooks() {
   Hooks.on("preMoveToken", preventUnaffordableCombatMovement);
+  Hooks.on("preUpdateToken", preventUnpoweredConstructRotation);
   Hooks.on("moveToken", spendCombatMovementResources);
 }
 
@@ -56,7 +60,9 @@ export function getCombatMovementResourceState(actor) {
   const movementOnce = getOneTimeResourceValue(actor, MOVEMENT_RESOURCE_KEY);
   const movementAvailable = action.ownTurn ? movementValue + movementOnce : 0;
   const limitedMovement = Math.min(movementAvailable, Math.max(0, toInteger(limited[MOVEMENT_RESOURCE_KEY]?.amount)));
-  const limitedAction = action.ownTurn ? Math.max(0, toInteger(action.limited)) : 0;
+  const drive = getConstructMovementEnergyState(actor, { resourceLimits: limited });
+  const actionValue = Math.min(action.value, drive ? Math.max(0, drive.budget - Math.max(0, movementAvailable - limitedMovement)) : Infinity);
+  const limitedAction = (action.ownTurn ? Math.max(0, toInteger(action.limited)) : 0) + Math.max(0, action.value - actionValue);
   return {
     movement: {
       key: MOVEMENT_RESOURCE_KEY,
@@ -73,15 +79,15 @@ export function getCombatMovementResourceState(actor) {
       current: action.current,
       once: action.once,
       limited: limitedAction,
-      value: action.value,
+      value: actionValue,
       max: action.max
     },
-    total: Math.max(0, movementAvailable - limitedMovement) + action.value
+    total: Math.max(0, movementAvailable - limitedMovement) + actionValue
   };
 }
 
-export function publishCombatMovementResourcePreview(tokenDocument, cost = 0) {
-  Hooks.callAll(MOVEMENT_RESOURCE_PREVIEW_HOOK, createCombatMovementResourcePreview(tokenDocument, cost));
+export function publishCombatMovementResourcePreview(tokenDocument, cost = 0, rotationCost = 0) {
+  Hooks.callAll(MOVEMENT_RESOURCE_PREVIEW_HOOK, createCombatMovementResourcePreview(tokenDocument, cost, rotationCost));
 }
 
 export function clearCombatMovementResourcePreview(tokenDocument) {
@@ -93,10 +99,11 @@ export function clearCombatMovementResourcePreview(tokenDocument) {
   });
 }
 
-export function createCombatMovementResourcePreview(tokenDocument, cost = 0) {
+export function createCombatMovementResourcePreview(tokenDocument, cost = 0, rotationCost = 0) {
   const state = getCombatMovementResourceState(tokenDocument?.actor);
   const normalizedCost = Math.max(0, toInteger(cost));
-  const movementSpend = Math.min(normalizedCost, state?.movement?.value ?? 0);
+  const turns = Math.max(0, toInteger(rotationCost));
+  const movementSpend = Math.min(normalizedCost, Math.max(0, (state?.movement?.value ?? 0) - turns));
   const actionSpend = Math.min(Math.max(0, normalizedCost - movementSpend), state?.action?.value ?? 0);
 
   return {
@@ -105,8 +112,9 @@ export function createCombatMovementResourcePreview(tokenDocument, cost = 0) {
     tokenId: tokenDocument?.id ?? "",
     cost: normalizedCost,
     resources: {
-      [MOVEMENT_RESOURCE_KEY]: movementSpend,
-      [state?.action?.key ?? ACTION_RESOURCE_KEY]: actionSpend
+      [MOVEMENT_RESOURCE_KEY]: movementSpend + turns,
+      [state?.action?.key ?? ACTION_RESOURCE_KEY]: actionSpend,
+      ...Object.fromEntries(Array.from(getConstructMovementEnergyState(tokenDocument?.actor)?.costs ?? [], ([key, rate]) => [key, (movementSpend + actionSpend + turns) * rate]))
     }
   };
 }
@@ -325,27 +333,48 @@ export function isGMDebugMovementBypassActive() {
   return Boolean(game.user?.isGM && game.keyboard?.downKeys?.has("AltLeft"));
 }
 
+/** Wheel/keyboard hull turns are direct Token updates, outside preMoveToken. */
+function preventUnpoweredConstructRotation(tokenDocument, changes = {}, operation = {}) {
+  if (tokenDocument.actor?.type !== "construct" || !Object.hasOwn(changes, "rotation")) return true;
+  const from = Number(tokenDocument._source?.rotation ?? tokenDocument.rotation ?? 0);
+  const to = Number(changes.rotation);
+  if (!Number.isFinite(to) || Math.abs(((to - from + 540) % 360 + 360) % 360 - 180) < 1e-6) return true;
+  if (operation.isUndo || (!operation.falloutMawConstructCrewMovement && isGMDebugMovementBypassActive())) return true;
+  if (operation.falloutMawRotationReceipts?.some(row => row.tokenUuid === tokenDocument.uuid)) return true;
+  if (getConstructRotationState(tokenDocument, "hull").powered) return true;
+  ui.notifications.warn("Поворот корпуса недоступен: запустите исправный двигатель и пополните энергию.");
+  return false;
+}
+
 function preventUnaffordableCombatMovement(tokenDocument, movement, operation) {
+  if (!isTokenMovementTravel(movement)) return true;
   if (isGrappleFollowMovement(tokenDocument, operation)) return true;
   if (isAbilityFreeMovement(tokenDocument, operation)) return true;
+  const drive = getConstructMovementEnergyState(tokenDocument.actor, { resourceLimits: getResourceLimitState(tokenDocument.actor).resources });
+  if (movement?.method !== "undo" && drive?.budget === 0 && !isGMDebugMovementBypassActive()) {
+    ui.notifications.warn("Движение недоступно: запустите исправный двигатель и пополните энергию.");
+    return false;
+  }
   if (!isCombatMovementTracked(tokenDocument)) return true;
   if (movement?.method === "undo") return true;
-  if (isGMDebugMovementBypassActive()) return true;
+  if (!operation?.falloutMawConstructCrewMovement && isGMDebugMovementBypassActive()) return true;
 
   const cost = getCombatMovementAffordabilityDelta(tokenDocument.actor, tokenDocument, movement);
-  if (cost <= 0) return true;
+  const rotationCost = getConstructRouteRotationCost(tokenDocument, [...movement.passed.waypoints, ...movement.pending.waypoints], { autoRotate: movement.autoRotate });
+  if (cost + rotationCost <= 0) return true;
 
   const state = getCombatMovementResourceState(tokenDocument.actor);
   if (!state) return true;
-  if (cost <= state.total) return true;
+  if (rotationCost <= state.movement.value && cost + rotationCost <= state.total && cost + rotationCost <= (drive?.budget ?? Infinity)) return true;
 
   ui.notifications.warn(
-    auditFormat("FALLOUTMAW.AuditRuntime.R0780", { p0: (tokenDocument.actor.name), p1: (MOVEMENT_RESOURCE_LABEL()), p2: (ACTION_RESOURCE_LABEL()), p3: (cost), p4: (state.total) }, "{p0}: не хватает {p1}/{p2} для перемещения ({p3} > {p4}).")
+    auditFormat("FALLOUTMAW.AuditRuntime.R0780", { p0: (tokenDocument.actor.name), p1: (MOVEMENT_RESOURCE_LABEL()), p2: (ACTION_RESOURCE_LABEL()), p3: (cost + rotationCost), p4: (state.total) }, "{p0}: не хватает {p1}/{p2} для перемещения ({p3} > {p4}).")
   );
   return false;
 }
 
 async function spendCombatMovementResources(tokenDocument, movement, operation, user) {
+  if (!isTokenMovementTravel(movement)) return;
   if (!user?.isSelf) return;
   if (isGrappleFollowMovement(tokenDocument, operation)) return;
   if (isAbilityFreeMovement(tokenDocument, operation)) return;
@@ -356,7 +385,7 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
       () => restoreLastMovementResourceSpending(tokenDocument)
     );
   }
-  if (isGMDebugMovementBypassActive()) return;
+  if (!operation?.falloutMawConstructCrewMovement && isGMDebugMovementBypassActive()) return;
 
   const actor = tokenDocument.actor;
   const finishSpending = beginCombatResourceSpending(actor);
@@ -371,13 +400,14 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
       const costProfile = getCombatMovementCostProfile(actor, chanceContext);
       const cost = getCombatMovementSpendDelta(actor, tokenDocument, movement, costProfile);
       const rawCost = getMovementSectionCost(movement?.passed);
-      if (!(rawCost > 0)) return;
+      const rotationReceipts = (operation.falloutMawRotationReceipts ?? []).filter(row => row.tokenUuid === tokenDocument.uuid);
+      if (!(rawCost > 0) && !rotationReceipts.length) return;
       const state = getCombatMovementResourceState(actor);
       if (!state || cost > state.total) return;
 
       const movementSpend = Math.min(cost, state.movement.value);
       const actionSpend = cost - movementSpend;
-      if (!movementSpend && !actionSpend) return;
+      if (!movementSpend && !actionSpend && !rotationReceipts.length) return;
 
       const activeUsePreparation = prepareActiveUseOperation({
         kind: "combatMovementCost",
@@ -391,11 +421,20 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
         actionSpend ? prepareActorResourceSpend(actor, state.action.key, actionSpend, { available: state.action.value }) : null
       ].filter(Boolean);
       if (plans.reduce((sum, plan) => sum + plan.amount, 0) !== cost) return null;
-      const resources = { [MOVEMENT_RESOURCE_KEY]: movementSpend, [state.action.key]: actionSpend };
+      const energyPlans = prepareConstructMovementEnergySpend(actor, cost);
+      if (!energyPlans) return null;
+      plans.push(...energyPlans);
+      const resources = Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.amount]));
       const onceResources = Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.onceSpent]));
-      const entry = createMovementResourceSpendingEntry(tokenDocument, movement, resources, {
-        adjustedCost: cost, costProfileKey: costProfile.key, onceResources
+      const paidResources = { ...resources }, paidOnce = { ...onceResources };
+      for (const receipt of rotationReceipts) {
+        for (const [key, amount] of Object.entries(receipt.resources)) paidResources[key] = (paidResources[key] || 0) + amount;
+        for (const [key, amount] of Object.entries(receipt.once)) paidOnce[key] = (paidOnce[key] || 0) + amount;
+      }
+      const entry = createMovementResourceSpendingEntry(tokenDocument, movement, paidResources, {
+        adjustedCost: cost, costProfileKey: costProfile.key, onceResources: paidOnce
       });
+      entry.rotationReceipts = rotationReceipts;
       const updates = Object.assign({}, ...plans.map(plan => plan.updates), {
         [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: [
           ...getMovementResourceSpendingStack(actor), entry
@@ -563,7 +602,16 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
     [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: nextStack
   };
 
-  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]) {
+  // Restore only this hull's allocation; another turret's later payment stays intact.
+  for (const entry of [...restoredEntries].reverse()) for (const receipt of [...(entry.rotationReceipts ?? [])].reverse()) {
+    const key = `${tokenDocument.parent?.id ?? "prototype"}_${tokenDocument.id ?? "prototype"}`;
+    const turnId = actor.getFlag?.("fallout-maw", "constructRotationBudget")?.turnId;
+    if (turnId === receipt.after.turnId) updates[`flags.fallout-maw.constructRotationBudget.tokens.${key}.${receipt.slotId}`] =
+      receipt.before.tokens?.[key]?.[receipt.slotId] ?? { origin: receipt.after.tokens[key][receipt.slotId].origin,
+        last: receipt.after.tokens[key][receipt.slotId].origin, min: null, max: null, turnId };
+  }
+
+  for (const key of new Set([MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY, ...Object.keys(restoredResources)])) {
     const resource = actor.system?.resources?.[key];
     if (!resource) continue;
 
@@ -595,6 +643,14 @@ function resourceUpdatesMatch(actor, updates) {
   });
 }
 
+function prepareConstructMovementEnergySpend(actor, adjustedCost) {
+  const drive = getConstructMovementEnergyState(actor, { resourceLimits: getResourceLimitState(actor).resources });
+  if (!drive) return [];
+  if (adjustedCost > drive.budget) return null;
+  const plans = Array.from(drive.costs, ([key, rate]) => prepareActorResourceSpend(actor, key, adjustedCost * rate));
+  return plans.every(Boolean) ? plans : null;
+}
+
 /** Spend MP first, then current AP/RP, retaining both normal/once splits. */
 export function spendMovementThenActionResourcesWithReceipt(actor, amount = 0, {
   documentOptions = {}, getUpdates = null
@@ -611,9 +667,12 @@ export function spendMovementThenActionResourcesWithReceipt(actor, amount = 0, {
       actionSpent ? prepareActorResourceSpend(actor, state.action.key, actionSpent, { available: state.action.value }) : null
     ].filter(Boolean);
     if (plans.reduce((sum, plan) => sum + plan.amount, 0) !== cost) return null;
+    const energyPlans = prepareConstructMovementEnergySpend(actor, cost);
+    if (!energyPlans) return null;
+    plans.push(...energyPlans);
     const receipt = {
       actorUuid: actor.uuid, spent: cost, movementSpent, actionSpent, actionResourceKey: state.action.key,
-      resources: { [MOVEMENT_RESOURCE_KEY]: movementSpent, [state.action.key]: actionSpent },
+      resources: Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.amount])),
       onceResources: Object.fromEntries(plans.map(plan => [plan.resourceKey, plan.onceSpent]))
     };
     const updates = Object.assign({}, getUpdates?.(receipt) ?? {}, ...plans.map(plan => plan.updates));
@@ -630,7 +689,7 @@ export function refundMovementThenActionResourceReceipt(actor, receipt, { update
     if (!actor?.isOwner || (receipt?.actorUuid && receipt.actorUuid !== actor.uuid)) return 0;
     const changes = { ...(typeof updates === "function" ? updates(receipt) : updates) };
     let restored = 0;
-    for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]) {
+    for (const key of new Set([MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY, ...Object.keys(receipt.resources ?? {})])) {
       const resource = actor.system?.resources?.[key];
       const amount = Math.max(0, toInteger(receipt?.resources?.[key]));
       if (!resource || !amount) continue;

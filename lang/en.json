@@ -20,6 +20,40 @@
     }
   },
   "FALLOUTMAW": {
+    "AimActivationPrompt": "Move the cursor into the green area to unlock aiming",
+    "ConstructCrew": {
+      "Board": "Board",
+      "BoardingTitle": "Board: {vehicle}",
+      "BoardingChoice": "Choose a crew station for {actor}.",
+      "NoAvailableSeat": "The construct has no suitable available crew station.",
+      "Exit": "Exit",
+      "Transfer": "Change seat",
+      "Aim": "Aim part",
+      "Move": "Move construct",
+      "RotateLeft": "Rotate hull left",
+      "RotateRight": "Rotate hull right",
+      "Unassigned": "Unassigned seat",
+      "NoOperator": "No available operator occupies the required seat.",
+      "NoFreeSeat": "There is no free seat to move to.",
+      "ContextSelector": "Seat / character",
+      "FreeSeat": "Empty",
+      "EmptySeatIcon": "Empty seat icon",
+      "ShowAimLimits": "Available aiming sector boundaries",
+      "MovementAutoRotate": "Rotate while moving",
+      "MovementAutoRotateInherit": "Foundry global setting",
+      "MovementAutoRotateEnabled": "Enabled",
+      "MovementAutoRotateDisabled": "Disabled",
+      "ActorState": "Crew",
+      "Roles": {
+        "passenger": "Passenger",
+        "driver": "Driver",
+        "gunner": "Gunner",
+        "loader": "Loader",
+        "custom": "Custom station"
+      },
+      "Engine": "Engine start",
+      "Refuel": "Refuel"
+    },
     "PersonalGeneratorPresets": {
       "Search": "Search presets",
       "SearchPlaceholder": "Search…",
@@ -2465,6 +2499,7 @@
       },
       "HUD": {
         "Title": "HUD Settings",
+        "CrewActionsSection": "Crew and Construct Controls",
         "Scale": "Scale",
         "ActionsActive": "Active",
         "ActionsService": "Service",

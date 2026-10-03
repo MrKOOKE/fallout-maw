@@ -1,5 +1,6 @@
 import { toInteger } from "../utils/numbers.mjs";
 import { STUN_IMMUNITY_EFFECT_KEY } from "../utils/active-effect-keys.mjs";
+import { getConstructSystems, getConstructResourceSupplyLimit, getConstructMovementEnergyState } from "../utils/construct-systems.mjs";
 
 export { STUN_IMMUNITY_EFFECT_KEY };
 
@@ -28,6 +29,16 @@ export function getResourceLimitState(actor = null) {
   const resources = {};
   collectDamageResourceLimits(actor, resources);
   collectStunResourceLimits(actor, resources);
+  for (const key of new Set(getConstructSystems(actor).map(row => row.resourceKey))) {
+    const amount = getConstructResourceSupplyLimit(actor, key);
+    if (amount > (resources[key]?.amount ?? 0)) resources[key] = { amount, color: "#6e7479" };
+  }
+  const drive = getConstructMovementEnergyState(actor, { resourceLimits: resources });
+  if (drive) {
+    const movement = actor.system?.resources?.movementPoints;
+    const amount = Math.max(0, (Number(movement?.value) || 0) + (Number(movement?.once) || 0) - drive.budget);
+    if (amount > (resources.movementPoints?.amount ?? 0)) resources.movementPoints = { amount, color: "#6e7479" };
+  }
   return { resources, stun: getActorStunDegree(actor) };
 }
 

@@ -1,6 +1,7 @@
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
+import { isActorAtPhysicalToken, getActorTargetName } from "../utils/actor-target-context.mjs";
 import {
   applyDestroyedLimbConsequences,
   buildActorLimbHealthContext,
@@ -135,8 +136,7 @@ export function registerMedicineSocket() {
   game.socket.on(MEDICINE_SOCKET, handleMedicineSocketMessage);
 }
 
-export async function requestMedicineTarget(sourceToken) {
-  const sourceActor = sourceToken?.actor;
+export async function requestMedicineTarget(sourceToken, sourceActor = sourceToken?.actor) {
   if (!sourceActor) return undefined;
 
   const action = getSystemActionSettings().find(entry => entry.key === "medicine");
@@ -151,7 +151,7 @@ export async function requestMedicineTarget(sourceToken) {
   const targetToken = selected?.token ?? null;
   if (!selected?.actor || !targetToken) return undefined;
 
-  const targetContext = await getMedicineTargetContext(targetToken, sourceActor);
+  const targetContext = await getMedicineTargetContext(targetToken, sourceActor, selected.actor);
   if (!targetContext) return undefined;
 
   return new MedicineTreatmentDialog({
@@ -376,16 +376,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   }
 
   #isSelfTreatment() {
-    if (!this.#sourceActor || !this.#targetContext) return false;
-    if (this.#targetContext.actorUuid === this.#sourceActor.uuid) return true;
-    const sourceDocument = this.#sourceToken?.document;
-    const targetDocument = this.#targetToken?.document;
-    return Boolean(
-      sourceDocument
-      && targetDocument
-      && sourceDocument.id === targetDocument.id
-      && sourceDocument.parent?.id === targetDocument.parent?.id
-    );
+    return Boolean(this.#sourceActor?.uuid && this.#targetContext?.actorUuid === this.#sourceActor.uuid);
   }
 
   #syncWindowTitle() {
@@ -604,8 +595,8 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   }
 }
 
-async function getMedicineTargetContext(targetToken, sourceActor = null) {
-  const actor = targetToken?.actor;
+async function getMedicineTargetContext(targetToken, sourceActor = null, targetActor = targetToken?.actor) {
+  const actor = targetActor;
   if (!actor) return null;
   if (canUseActorLocally(actor)) return buildTargetContext(actor, targetToken);
 
@@ -1378,7 +1369,7 @@ async function applyMassTreatmentToTarget(targetContext, {
   }
   if (isCurrentResponsibleGM(gm)) {
     try {
-      const actor = targetToken?.actor ?? await fromUuid(actorUuid);
+      const actor = await fromUuid(actorUuid);
       if (!actor || String(actor.uuid ?? "") !== actorUuid) {
         throw new Error(auditLocalize("FALLOUTMAW.AuditApps.BulkTreatmentTargetNotFound", "цель массового лечения не найдена"));
       }
@@ -1618,7 +1609,7 @@ async function requestImplantInstallation({
   implantSource = "",
   itemId = ""
 } = {}) {
-  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
+  const targetActor = await fromUuid(targetActorUuid);
   if (
     targetActor
     && String(targetActor.uuid ?? "") === String(targetActorUuid)
@@ -1773,7 +1764,7 @@ async function resolveImplantInstallationOnAuthorityLocked({
 
 async function applyImplantRemoval({ sourceActor, targetContext, targetToken = null, limbKey = "", itemId = "" } = {}) {
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
-  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
+  const targetActor = await fromUuid(targetActorUuid);
   const sourceActorUuid = sourceActor?.uuid ?? "";
   const sourceActorDocument = sourceActorUuid ? await fromUuid(sourceActorUuid) : sourceActor;
   if (
@@ -2099,7 +2090,7 @@ async function requestProsthesisInstallation({
   prosthesisSource = "",
   itemId = ""
 } = {}) {
-  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
+  const targetActor = await fromUuid(targetActorUuid);
   if (
     targetActor
     && String(targetActor.uuid ?? "") === String(targetActorUuid)
@@ -2253,7 +2244,7 @@ async function resolveProsthesisInstallationOnAuthorityLocked({
 
 async function applyProsthesisRemoval({ sourceActor, targetContext, targetToken = null, limbKey = "", itemId = "" } = {}) {
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
-  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
+  const targetActor = await fromUuid(targetActorUuid);
   const sourceActorUuid = sourceActor?.uuid ?? "";
   const sourceActorDocument = sourceActorUuid ? await fromUuid(sourceActorUuid) : sourceActor;
   if (
@@ -2596,9 +2587,9 @@ async function runTreatmentChecks({
   let spentCharges = 0;
   const entries = [];
   let attemptedChecks = 0;
-  const targetActor = targetToken?.actor ?? (String(targetContext?.actorUuid ?? "")
+  const targetActor = (String(targetContext?.actorUuid ?? "")
     ? await fromUuid(String(targetContext.actorUuid))
-    : null);
+    : targetToken?.actor);
   const toolSupplyCostPercent = noTool ? 0 : getActorToolSupplyCostPercent(
     sourceActor,
     tool.toolKey,
@@ -2876,7 +2867,7 @@ async function applyTreatmentToTarget(targetContext, {
   }
   if (isCurrentResponsibleGM(gm)) {
     try {
-      const actor = targetToken?.actor ?? await fromUuid(actorUuid);
+      const actor = await fromUuid(actorUuid);
       if (!actor || String(actor.uuid ?? "") !== actorUuid) {
         throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TreatmentTargetNotFound", "цель лечения не найдена"));
       }
@@ -3878,7 +3869,7 @@ function buildTargetContext(actor, token = null) {
   return {
     actorUuid: actor.uuid,
     actorType: actor.type,
-    name: token?.name ?? actor.name,
+    name: getActorTargetName(actor, token),
     actorName: actor.name,
     tokenName: token?.name ?? "",
     incomingHealingPercent: getActorHealingModifierPercent(actor, "incoming"),
@@ -4378,7 +4369,7 @@ async function resolveMedicineTokenForActor(tokenUuid = "", actor = null, { requ
   if (
     token?.documentName !== "Token"
     || !token.actor
-    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+    || !isActorAtPhysicalToken(actor, token)
   ) {
     throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheMedicalParticipant", "токен не соответствует участнику медицины"));
   }
@@ -4594,7 +4585,7 @@ function assertMedicineTokenMatchesActor(token = null, actor = null) {
   if (
     token.documentName !== "Token"
     || !token.actor
-    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+    || !isActorAtPhysicalToken(actor, token)
   ) {
     throw new Error(auditLocalize("FALLOUTMAW.AuditApps.TheTokenDoesNotMatchTheMedicalParticipant", "токен не соответствует участнику медицины"));
   }
