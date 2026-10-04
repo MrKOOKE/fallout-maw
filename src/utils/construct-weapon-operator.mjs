@@ -7,7 +7,8 @@ import {
   canUserManageConstructPassenger,
   getConstructCrewSeats,
   getConstructCrewSeatState,
-  getConstructWeaponPartSlotId
+  getConstructWeaponPartSlotId,
+  isConstructCrewSeatAssignedToPart
 } from "./construct-crew.mjs";
 
 const WEAPON_CREW_ACTIONS = new Set(["aim", "fire", "reload"]);
@@ -93,7 +94,7 @@ export function getConstructWeaponExecutor(actor, weapon, user, action = "fire",
   const seatId = String(options.seatId || "");
   for (const seat of getConstructCrewSeats(actor)) {
     if (seatId && seat.id !== seatId) continue;
-    if (seat.partSlotId !== targetPart || !seat.functions.includes(action)) continue;
+    if (!isConstructCrewSeatAssignedToPart(seat, targetPart, action) || !seat.functions.includes(action)) continue;
     const state = getConstructCrewSeatState(actor, seat);
     if (!state.available || !state.occupant) continue;
     if (passengerId && state.occupant.id !== passengerId) continue;

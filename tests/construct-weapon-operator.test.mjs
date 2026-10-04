@@ -70,6 +70,31 @@ test("loader can reload only; gunner reload permission can be removed independen
   assert.equal(canUserUseConstructWeapon(actor, weapon, users.gunner, "fire"), true);
 });
 
+test("one occupied loader can reload two independent mounts without aiming or firing either", () => {
+  const { actor, weapon } = fixture();
+  const loader = actor.flags["fallout-maw"].constructVisual.seats.find(seat => seat.id === "loader-seat");
+  loader.partSlotId = "";
+  loader.reloadPartSlotIds = ["turret", "remote-mg"];
+  const mg = { ...weapon, id: "mg", name: "MG", system: structuredClone(weapon.system) };
+  mg.system.placement.limbKey = "remote-mg";
+  actor.items.contents.push(mg);
+  for (const mounted of [weapon, mg]) {
+    assert.equal(canUserUseConstructWeapon(actor, mounted, users.loader, "reload"), true);
+    assert.equal(canUserUseConstructWeapon(actor, mounted, users.loader, "aim"), false);
+    assert.equal(canUserUseConstructWeapon(actor, mounted, users.loader, "fire"), false);
+    assert.equal(getConstructWeaponExecutor(actor, mounted, users.loader, "reload")?.actor.id, "loader");
+    assert.equal(canUserUseConstructWeapon(actor, mounted, users.driver, "reload"), false);
+  }
+  weapon.system.placement.mode = "inventory";
+  assert.equal(canUserUseConstructWeapon(actor, weapon, users.loader, "reload"), false);
+  assert.equal(canUserUseConstructWeapon(actor, mg, users.loader, "reload"), true);
+  mg.system.functions.condition.value = 0;
+  assert.equal(canUserUseConstructWeapon(actor, mg, users.loader, "reload"), false);
+  mg.system.functions.condition.value = 100;
+  loader.functions = [];
+  assert.equal(canUserUseConstructWeapon(actor, mg, users.loader, "reload"), false);
+});
+
 test("removed or destroyed weapon parts and physical seats invalidate authorization immediately", () => {
   const { actor, weapon, cabin } = fixture();
   weapon.system.functions.condition.value = 0;

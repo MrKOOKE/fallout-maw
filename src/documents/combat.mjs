@@ -1,3 +1,4 @@
+﻿import { aggregateCrewInitiatives, getCombatInitiativeParticipants, combatantIncludesActor, completeCrewTurnMember, CREW_INITIATIVES_FLAG } from "../combat/crew-turns.mjs";
 import { rerollUnexpectedInitiative } from "../abilities/unexpected-impulse.mjs";
 import {
   TURN_CONVERSION_MODES,
@@ -72,7 +73,8 @@ export class FalloutMaWCombat extends Combat {
   async resetAll({ updateTurn = true } = {}) {
     const updates = Array.from(this.combatants ?? [], combatant => ({
       _id: combatant.id,
-      initiative: null
+      initiative: null,
+      [`flags.${SYSTEM_ID}.-=${CREW_INITIATIVES_FLAG}`]: null
     }));
     if (!updates.length) return this;
     const updateOptions = { turnEvents: false };
@@ -339,6 +341,12 @@ export class FalloutMaWCombat extends Combat {
       return this.#requestRemoteTurnNavigation("nextTurn", { options });
     }
     return this.#enqueueTurnNavigation("nextTurn", options, async () => {
+      const crewTarget = isBlockTurnOrderEnabled(this) ? getBlockTurnTargetCombatant(this, options) : this.combatant;
+      const crewResult = await completeCrewTurnMember(crewTarget, this, {
+        actorUuid: String(options[BLOCK_TURN_ACTOR_OPTION] ?? ""),
+        endMember: actor => prepareActorTurnEnd(actor, { combat: this, conversionMode: this.#getTurnEndConversionMode(crewTarget, options) })
+      });
+      if (crewResult.handled && !crewResult.advance) return this;
       if (isBlockTurnOrderEnabled(this)) return this.#nextBlockTurn(options);
       const actorUuid = this.#stageCurrentTurnEnd(options);
       try {
@@ -606,7 +614,7 @@ export class FalloutMaWCombat extends Combat {
     const requestedActorUuid = String(options?.[BLOCK_TURN_ACTOR_OPTION] ?? "");
     const explicitTargetValid = (
       (!requestedCombatantId || target?.id === requestedCombatantId)
-      && (!requestedActorUuid || target?.actor?.uuid === requestedActorUuid)
+      && (!requestedActorUuid || combatantIncludesActor(target, requestedActorUuid))
     );
     return {
       round: Number(this.round) || 0,
@@ -1087,11 +1095,14 @@ export class FalloutMaWCombat extends Combat {
     const messages = [];
     const initiativeBatchId = foundry.utils.randomID();
     const initiativeRolls = new Map();
-    for (const [i, id] of ids.entries()) {
-      const combatant = this.combatants.get(id);
+    const allParticipants = getCombatInitiativeParticipants(this);
+    const selectedIds = new Set(ids);
+    const participants = allParticipants.filter(row => selectedIds.has(row.carrierId ?? row.id));
+    for (const [i, combatant] of participants.entries()) {
+      const id = combatant.id;
       if (!combatant?.isOwner) continue;
 
-      const surprised = surprisedIds.has(id);
+      const surprised = surprisedIds.has(id) || surprisedIds.has(combatant.carrierId);
       const initiativeFormula = formula || combatant._getInitiativeFormula?.()
         || CONFIG.Combat.initiative.formula
         || game.system.initiative
@@ -1101,7 +1112,7 @@ export class FalloutMaWCombat extends Combat {
       const eventData = {
         combatUuid: String(this.uuid ?? ""),
         combatantUuid: String(combatant.uuid ?? ""),
-        combatantId: String(combatant.id ?? id ?? ""),
+        combatantId: String(combatant.carrierId ?? combatant.id ?? id ?? ""),
         actorUuid: String(combatant.actor?.uuid ?? ""),
         tokenUuid: String(combatant.token?.uuid ?? ""),
         requestedFormula,
@@ -1160,7 +1171,8 @@ export class FalloutMaWCombat extends Combat {
       initiativeRolls.set(id, { roll, messageData, messageMode: messageMode ?? (combatant.hidden ? "gm" : undefined), index: i });
     }
     if (!updates.length) return this;
-    await rerollUnexpectedInitiative(this, updates, initiativeRolls);
+    await rerollUnexpectedInitiative(this, updates, initiativeRolls, allParticipants);
+    const combatantUpdates = aggregateCrewInitiatives(this, updates, participants);
     for (const record of initiativeRolls.values()) {
       if (record.rerolls) record.messageData.flavor += ` (Неожиданный порыв: перебросов ${record.rerolls})`;
       const chatData = await record.roll.toMessage(record.messageData, { messageMode: record.messageMode, create: false });
@@ -1170,7 +1182,7 @@ export class FalloutMaWCombat extends Combat {
 
     const updateOptions = { turnEvents: false };
     if (!updateTurn) updateOptions.combatTurn = this.turn;
-    await this.updateEmbeddedDocuments("Combatant", updates, updateOptions);
+    if (combatantUpdates.length) await this.updateEmbeddedDocuments("Combatant", combatantUpdates, updateOptions);
     await foundry.documents.ChatMessage.implementation.create(messages);
     return this;
   }

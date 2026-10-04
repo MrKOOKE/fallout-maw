@@ -125,6 +125,7 @@ export function normalizeConstructVisual(raw = {}) {
       functions: [...new Set(suppliedFunctions)].filter(key => CONSTRUCT_CREW_FUNCTIONS.includes(key)),
       slotId: text(entry?.slotId), slotIndex: Math.trunc(number(entry?.slotIndex, 0, 0, 10000)),
       partSlotId: text(entry?.partSlotId), systemIds: [...new Set(entries(entry?.systemIds).map(text).filter(Boolean))],
+      reloadPartSlotIds: [...new Set(entries(entry?.reloadPartSlotIds).slice(0, 256).map(text).filter(Boolean))],
       personalWeapons: normalizeConstructPersonalWeapons(entry?.personalWeapons)
     };
   }).filter(seat => {

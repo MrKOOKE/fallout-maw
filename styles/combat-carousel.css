@@ -3,3 +3,24 @@
 .combat-dock .combatant-block-frame{display:none}.combat-dock #combatants.block-turn-order .combatant-portrait.active{width:var(--combatant-portrait-size);height:calc(var(--combatant-portrait-size)*var(--combatant-portrait-aspect));animation:none}.combat-dock #combatants.block-turn-order .combatant-portrait.turn-block-frame-member::before{content:"";position:absolute;pointer-events:none;z-index:80;top:-8px;bottom:-8px;left:-8px;right:-8px;border-top:2px solid rgba(190,190,176,.72);border-bottom:2px solid rgba(190,190,176,.72)}.combat-dock #combatants.block-turn-order .combatant-portrait.turn-block-frame-member:not(.turn-block-frame-start)::before{left:calc(var(--combatant-portrait-size)*-.1 - 2px)}.combat-dock #combatants.block-turn-order .combatant-portrait.turn-block-frame-member:not(.turn-block-frame-end)::before{right:calc(var(--combatant-portrait-size)*-.1 - 2px)}.combat-dock #combatants.block-turn-order .combatant-portrait.turn-block-frame-start::before{border-left:2px solid rgba(190,190,176,.72);border-top-left-radius:4px;border-bottom-left-radius:4px}.combat-dock #combatants.block-turn-order .combatant-portrait.turn-block-frame-end::before{border-right:2px solid rgba(190,190,176,.72);border-top-right-radius:4px;border-bottom-right-radius:4px}.combat-dock #combatants.block-turn-order .combatant-portrait.turn-block-frame-active::before{border-color:rgba(246,215,90,.9);filter:drop-shadow(0 0 5px rgba(246,215,90,.65))}.combat-dock .combatant-portrait.block-completed{border-color:#58d16f;box-shadow:0 0 0 2px rgba(88,209,111,.9),0 0 12px rgba(88,209,111,.45)}.combat-dock .combatant-portrait.active.block-completed{animation:none}.combat-dock .combatant-portrait.block-active:not(.active) .portrait-pass{display:flex}.combat-dock .combatant-portrait:not(.active):not(.block-active) .portrait-pass{display:none}
 
 /*# sourceMappingURL=module.css.map*/
+
+/* Shared vehicle turn and individual crew readiness. */
+.combatant-wrapper .crew-turn-fill { position:absolute; inset:0 0 auto; background:rgba(49,187,76,.48); pointer-events:none; z-index:1; transition:height .25s ease; box-shadow:inset 0 -2px 0 #75df87; }
+.combatant-wrapper .crew-turn-count { position:absolute; bottom:2px; left:2px; z-index:3; padding:2px 4px; border-radius:3px; background:rgba(10,15,10,.87); color:#d3f7d7; font-size:11px; line-height:1.2; pointer-events:none; }
+.combatant-wrapper .overlay-ui-container, .combatant-wrapper .portrait-pass { z-index:2; }
+.combat-dock-tooltip:has(.combat-crew-card) { max-width:min(560px,calc(100vw - 30px)); width:520px; }
+.combat-crew-card { border-top:1px solid #747346; margin-top:10px; padding-top:8px; }
+.crew-card-heading { display:flex; justify-content:space-between; margin-bottom:7px; gap:12px; }
+.crew-card-members { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+#tooltip.combat-dock-tooltip .crew-card-member { display:grid; grid-template-columns:64px minmax(0,1fr); gap:6px 9px; padding:8px; border:1px solid #626153; border-radius:3px; background:#1b1c1b; min-width:0; }
+#tooltip.combat-dock-tooltip .crew-card-member.acting { border-color:#c9b45f; }
+#tooltip.combat-dock-tooltip .crew-card-member.completed { border-color:#59bd70; }
+#tooltip.combat-dock-tooltip .crew-card-member.unable { border:1px dashed #aa6969; opacity:.65; }
+#tooltip.combat-dock-tooltip .crew-card-portrait { width:64px; height:86px; overflow:hidden; border:1px solid #4b4c3b; border-radius:2px; background:radial-gradient(ellipse at center,#35382d,#111411); }
+#tooltip.combat-dock-tooltip .crew-card-portrait img { display:block; width:100%; height:100%; max-width:none; max-height:none; object-fit:contain; margin:0; padding:0; border:0; }
+#tooltip.combat-dock-tooltip .crew-card-details { display:flex; flex-direction:column; justify-content:center; min-width:0; gap:5px; font-size:13px; }
+#tooltip.combat-dock-tooltip .crew-card-details > strong { font-size:14px; }
+#tooltip.combat-dock-tooltip .crew-card-details > strong, #tooltip.combat-dock-tooltip .crew-card-role { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#tooltip.combat-dock-tooltip .crew-card-faction { color:#bfb58e; font-size:12px; }
+#tooltip.combat-dock-tooltip .crew-card-resources { grid-column:1 / -1; display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 8px; padding-top:5px; border-top:1px solid #414334; font-size:12px; }
+@media(max-width:550px) { .crew-card-members { grid-template-columns:minmax(0,1fr); } }

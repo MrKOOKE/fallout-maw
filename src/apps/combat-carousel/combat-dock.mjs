@@ -1,3 +1,4 @@
+﻿import { combatantIncludesActor } from "../../combat/crew-turns.mjs";
 import { MODULE_ID } from "./main.mjs";
 import { AddEvent } from "./add-event.mjs";
 import {
@@ -122,6 +123,10 @@ export class CombatDock extends HandlebarsApplication {
                 hook: "updateActor",
                 fn: this._onUpdateActor.bind(this),
             },
+            ...["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"].map(hook => ({
+                hook,
+                fn: effect => this._onUpdateActor(effect?.parent?.actor ?? effect?.parent)
+            })),
             {
                 hook: "deleteCombat",
                 fn: this._onDeleteCombat.bind(this),
@@ -635,8 +640,11 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     _onUpdateActor(actor, updates = {}) {
-        if (!actor || !this.sortedCombatants.some(combatant => combatant.actor?.uuid === actor.uuid)) return;
-        if (!isActorFactionUpdate(updates)) return;
+        if (!actor || !this.sortedCombatants.some(combatant => combatantIncludesActor(combatant, actor.uuid))) return;
+        if (!isActorFactionUpdate(updates)) {
+            for (const portrait of this.portraits.filter(row => combatantIncludesActor(row.combatant, actor.uuid))) portrait.renderInner();
+            return;
+        }
         this.setupCombatants();
         this.combat?._updateTurnMarkers?.();
     }

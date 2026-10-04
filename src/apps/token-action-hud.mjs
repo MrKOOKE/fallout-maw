@@ -1,3 +1,5 @@
+﻿import { isCrewActorPending } from "../combat/crew-turns.mjs";
+import { getActorCombatSubject } from "../combat/combat-membership.mjs";
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { getConstructSystems, decorateConstructResourceAvailability } from "../utils/construct-systems.mjs";
 import { getConstructHudSystemControls, requestConstructSystemAction } from "../constructs/system-actions.mjs";
@@ -98,7 +100,8 @@ import {
   getConstructCrewSeatState,
   getConstructWeaponPartSlotId,
   getUserConstructCrewSeats,
-  hasConstructCrew
+  hasConstructCrew,
+  isConstructCrewSeatAssignedToPart
 } from "../utils/construct-crew.mjs";
 import {
   canUserUseConstructWeapon,
@@ -220,6 +223,7 @@ import {
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 import { createTokenActionHudRequestIndex } from "./token-action-hud-request-index.mjs";
+import { collectHudGmTargets, selectHudGmActors } from "../utils/hud-gm-targets.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -552,8 +556,23 @@ function getSelectedHudActors() {
   return actors;
 }
 
-function prepareEndTurnAction(token) {
-  if (!isTokenCombatTurn(token, game.combat) || !canUserAdvanceCombatTurn(game.combat)) return null;
+function renderHudGmTargets(targets) {
+  const rows = targets.map(({ actor, detail, field }) => `<label class="fallout-maw-gm-target-row">
+    <input type="checkbox" name="${field}" value="true" checked>
+    <span><strong>${escapeHTML(actor.name)}</strong>${detail ? `<small>${escapeHTML(detail)}</small>` : ""}</span>
+  </label>`).join("");
+  return `<fieldset class="fallout-maw-gm-targets"><legend>${escapeHTML(auditLocalize("FALLOUTMAW.GmTargets.Targets", "Цели"))}</legend>
+    <div class="fallout-maw-gm-target-list">${rows}</div></fieldset>`;
+}
+
+function getChosenHudGmActors(targets, formData) {
+  const actors = selectHudGmActors(targets, formData);
+  if (!actors.length) ui.notifications.warn(auditLocalize("FALLOUTMAW.GmTargets.NoneSelected", "Выберите хотя бы одного актёра."));
+  return actors;
+}
+
+function prepareEndTurnAction(token, actor = token?.actor) {
+  if (!isTokenCombatTurn(token, game.combat) || !isActorTurnTarget(actor, game.combat) || (!canUserAdvanceCombatTurn(game.combat) && !actor?.isOwner)) return null;
   return {
     label: auditLocalize("FALLOUTMAW.Effects.ExpiryEvents.TurnEnd", "Конец хода"),
     title: auditLocalize("FALLOUTMAW.AuditApps.EndTurn", "Завершить ход"),
@@ -713,8 +732,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #getCrewWeaponSets(crew) {
     const mounted = (this.actor?.items?.contents ?? []).filter(weapon => getConstructWeaponPartSlotId(this.actor, weapon) && getEnabledWeaponFunctions(weapon, { ignoreBroken: true })
-      .some(fn => (getConstructWeaponOperatorConfig(weapon, fn.id).partSlotId || getConstructWeaponPartSlotId(this.actor, weapon)) === crew.partSlotId
-        && (crew.seat.functions.includes("fire") || crew.seat.functions.includes("reload"))));
+      .some(fn => {
+        const slotId = getConstructWeaponOperatorConfig(weapon, fn.id).partSlotId || getConstructWeaponPartSlotId(this.actor, weapon);
+        return ["fire", "reload"].some(action => crew.seat.functions.includes(action)
+          && isConstructCrewSeatAssignedToPart(crew.seat, slotId, action));
+      }));
     return [
       ...(mounted.length ? [{ key: `crew-mounted:${crew.seat.id}`, label: crew.seat.name, crewMounted: true,
         slots: mounted.map((item, index) => ({ key: `gun-${index}`, label: item.name, item,
@@ -948,7 +970,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       showWeaponSetSelector: !crew || weaponSets.length > 1,
       selectedWeapon,
       actions,
-      endTurnAction: prepareEndTurnAction(this.#token),
+      endTurnAction: prepareEndTurnAction(this.#token, this.interactionActor),
       meterSections,
       tray,
       constructSystems: getConstructHudSystemControls(this.actor, crew).map(row => ({ id: row.id,
@@ -1131,8 +1153,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const combat = game.combat;
-    const actor = this.actor;
-    if (!isTokenCombatTurn(this.token, combat) || !canUserAdvanceCombatTurn(combat)) return undefined;
+    const actor = this.interactionActor;
+    if (!isTokenCombatTurn(this.token, combat) || !isActorTurnTarget(actor, combat) || (!canUserAdvanceCombatTurn(combat) && !actor?.isOwner)) return undefined;
     this.#activeTray = "";
     const conversionMode = await promptEndTurnConversion(actor);
     if (!conversionMode) return this.render({ force: true });
@@ -1153,13 +1175,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (!game.user?.isGM) return undefined;
 
-    const actors = getSelectedHudActors();
-    if (!actors.length) return undefined;
+    const targets = collectHudGmTargets(canvas?.tokens?.controlled ?? [], { fallbackActor: this.actor });
+    if (!targets.length) return undefined;
     const formData = await DialogV2.input({
       window: {
         title: auditLocalize("FALLOUTMAW.AuditApps.FullRecovery", "Полное восстановление")
       },
-      content: auditFormat("FALLOUTMAW.AuditApps.FullyHealTheSelectedActorsRepairItemsFill", { v0: (actors.length) }, "\n        <p>Полностью вылечить выбранных актеров: {v0}?</p>\n        <label class=\"fallout-maw-gm-heal-repair-option\">\n          <input type=\"checkbox\" name=\"repairItems\" value=\"true\">\n          <span>Починить предметы, заполнить магазины и зарядить источники энергии</span>\n        </label>\n      "),
+      content: renderHudGmTargets(targets) + `<label class="fallout-maw-gm-heal-repair-option">
+        <input type="checkbox" name="repairItems" value="true">
+        <span>${escapeHTML(auditLocalize("FALLOUTMAW.GmTargets.RepairItems", "Починить предметы, заполнить магазины и зарядить источники энергии"))}</span>
+      </label>`,
       ok: {
         label: auditLocalize("FALLOUTMAW.AuditApps.Heal", "Вылечить"),
         icon: "fa-solid fa-kit-medical",
@@ -1171,7 +1196,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       }],
       rejectClose: false
     });
-    if (!formData || formData === "cancel") return undefined;
+    if (!formData || formData === "cancel" || !game.user?.isGM) return undefined;
+    const actors = getChosenHudGmActors(targets, formData);
+    if (!actors.length) return undefined;
 
     const repairItems = Boolean(formData.repairItems);
     for (const actor of actors) await fullyRestoreActor(actor, { repairItems });
@@ -1182,13 +1209,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (!game.user?.isGM) return undefined;
 
-    const actors = getSelectedHudActors();
-    if (!actors.length) return undefined;
+    const targets = collectHudGmTargets(canvas?.tokens?.controlled ?? [], { fallbackActor: this.actor });
+    if (!targets.length) return undefined;
     const formData = await DialogV2.input({
       window: {
         title: auditLocalize("FALLOUTMAW.AuditApps.AwardExperience", "Выдать опыт")
       },
-      content: auditFormat("FALLOUTMAW.AuditApps.AwardExperienceToTheSelectedActorsExperience", { v0: (actors.length) }, "\n        <p>Выдать опыт выбранным актерам: {v0}.</p>\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Опыт</span>\n          <input type=\"number\" name=\"experience\" value=\"0\" min=\"0\" step=\"1\" autofocus>\n        </label>\n      "),
+      content: renderHudGmTargets(targets) + `<label class="fallout-maw-stacked-field">
+        <span>${escapeHTML(auditLocalize("FALLOUTMAW.Advancement.Experience", "Опыт"))}</span>
+        <input type="number" name="experience" value="0" min="0" step="1" autofocus>
+      </label>`,
       ok: {
         label: auditLocalize("FALLOUTMAW.AuditApps.Award", "Выдать"),
         icon: "fa-solid fa-star",
@@ -1199,7 +1229,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       },
       rejectClose: false
     });
-    if (!formData) return undefined;
+    if (!formData || !game.user?.isGM) return undefined;
+    const actors = getChosenHudGmActors(targets, formData);
+    if (!actors.length) return undefined;
 
     const amount = Math.max(0, toInteger(formData.experience));
     if (!amount) return undefined;
@@ -1216,24 +1248,28 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onGmManageRecipeKnowledge(event) {
     event.preventDefault();
     if (!game.user?.isGM) return undefined;
-    await openRecipeKnowledgeManager(getSelectedHudActors());
+    const targets = collectHudGmTargets(canvas?.tokens?.controlled ?? [], { fallbackActor: this.actor });
+    if (!targets.length) return undefined;
+    await openRecipeKnowledgeManager(targets.map(target => target.actor));
     return this.render({ force: true });
   }
 
   static async #onGmAwardCurrency(event) {
     event.preventDefault();
     if (!game.user?.isGM) return;
-    const actors = getSelectedHudActors();
+    const targets = collectHudGmTargets(canvas?.tokens?.controlled ?? [], { fallbackActor: this.actor });
     const currencies = getCurrencySettings();
-    if (!actors.length || !currencies.length) return;
+    if (!targets.length || !currencies.length) return;
     const formData = await DialogV2.input({
       window: { title: auditLocalize("FALLOUTMAW.AuditApps.AwardCurrency", "Выдать валюту") },
-      content: auditFormat("FALLOUTMAW.AuditApps.CurrencyAmountForEach", { v0: (currencies.map(currency => `<option value="${escapeAttribute(currency.key)}">${escapeHTML(currency.label)}</option>`).join("")) }, "\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Валюта</span>\n          <select name=\"currency\">{v0}</select>\n        </label>\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Сумма каждому</span>\n          <input type=\"number\" name=\"amount\" value=\"0\" min=\"0\" step=\"1\" autofocus>\n        </label>\n      "),
+      content: renderHudGmTargets(targets) + auditFormat("FALLOUTMAW.AuditApps.CurrencyAmountForEach", { v0: (currencies.map(currency => `<option value="${escapeAttribute(currency.key)}">${escapeHTML(currency.label)}</option>`).join("")) }, "\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Валюта</span>\n          <select name=\"currency\">{v0}</select>\n        </label>\n        <label class=\"fallout-maw-stacked-field\">\n          <span>Сумма каждому</span>\n          <input type=\"number\" name=\"amount\" value=\"0\" min=\"0\" step=\"1\" autofocus>\n        </label>\n      "),
       ok: { label: auditLocalize("FALLOUTMAW.AuditApps.Award", "Выдать"), icon: "fa-solid fa-coins", callback: (_event, button) => new FormDataExtended(button.form).object },
       position: { width: 360 },
       rejectClose: false
     });
     if (!formData || !game.user?.isGM) return;
+    const actors = getChosenHudGmActors(targets, formData);
+    if (!actors.length) return;
     const currency = getCurrencySettings().find(entry => entry.key === formData.currency);
     const amount = Number(formData.amount);
     if (!currency || !Number.isSafeInteger(amount) || amount <= 0) return;
@@ -2899,7 +2935,7 @@ class TokenActionHudScaleSettings extends FalloutMaWFormApplicationV2 {
 
 function prepareLimbLayerContext(activeLayer = "state", crew = null) {
   const choices = [...HUD_LIMB_LAYER_CHOICES.filter(layer => HUD_LIMB_LAYER_KEYS.includes(layer.key)),
-    ...(crew ? [{ key: "crew", label: `${auditLocalize("FALLOUTMAW.ConstructCrew.ActorState", "Экипаж")} — ${crew.actor.name}` }] : [])];
+    ...(crew ? [{ key: "crew", label: auditLocalize("FALLOUTMAW.ConstructCrew.ActorState", "Экипаж") }] : [])];
   const active = choices.some(row => row.key === activeLayer) ? activeLayer : "state";
   return {
     key: active,
@@ -5411,9 +5447,9 @@ function getResponsibleGM() {
 
 function isActorTurnTarget(actor, combat) {
   if (!actor?.uuid || !combat?.started) return false;
-  if (combat.round < 1 || combat.turn === null) return false;
+  if (combat.round < 1 || combat.turn === null || !isCrewActorPending(actor, combat)) return false;
   if (isBlockTurnOrderEnabled(combat)) return isActorPendingInActiveBlock(actor, combat);
-  return combat.combatant?.actor?.uuid === actor.uuid;
+  return combat.combatant?.actor?.uuid === getActorCombatSubject(actor, combat)?.uuid;
 }
 
 function normalizeTurnConversionMode(value) {

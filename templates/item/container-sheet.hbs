@@ -2,7 +2,7 @@
   <header class="sheet-header fallout-maw-sheet-header">
     <img class="profile-img" src="{{item.img}}" data-action="editImage" data-edit="img" title="{{item.name}}" height="80">
     <div class="fallout-maw-header-fields">
-      <h1 class="fallout-maw-title-display">{{item.name}}</h1>
+      <h1 class="fallout-maw-title-display"><span class="fallout-maw-inventory-name" title="{{item.name}}">{{item.name}}</span></h1>
       <div class="fallout-maw-summary-grid">
         <div class="fallout-maw-inline-stat">
           <span>{{localize "FALLOUTMAW.Item.ContainerCurrentLoad"}}:</span>
@@ -13,7 +13,7 @@
   </header>
 
   <section class="fallout-maw-panel fallout-maw-container-panel" data-contents-transfer-zone data-inventory-parent-id="{{item.id}}" data-container-drop-surface data-container-id="{{item.id}}" data-drop-zone>
-    <h2 data-contents-transfer-title>{{localize "FALLOUTMAW.Item.FunctionContainer"}}</h2>
+    <h2 data-contents-transfer-title><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.Item.FunctionContainer'}}">{{localize "FALLOUTMAW.Item.FunctionContainer"}}</span></h2>
     <div class="fallout-maw-contents-transfer-grid-scroll" data-scroll-key="container:{{item.id}}">
       <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid style="{{grid.style}}">
         {{#each grid.zones}}

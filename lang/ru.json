@@ -20,6 +20,11 @@
     }
   },
   "FALLOUTMAW": {
+    "GmTargets": {
+      "Targets": "Цели",
+      "NoneSelected": "Выберите хотя бы одного актёра.",
+      "RepairItems": "Починить предметы, заполнить магазины и зарядить источники энергии"
+    },
     "AimActivationPrompt": "Наведите курсор на зеленую область для разблокировки прицеливания",
     "ConstructCrew": {
       "Board": "Сесть",
@@ -2732,7 +2737,13 @@
       "NoInitiativeCombatants": "Нет участников без инициативы.",
       "RollInitiativeTitle": "Проверка инициативы",
       "SurpriseHint": "Отметьте фракции или отдельных участников, застигнутых врасплох. Их инициатива кидается с помехой и -10.",
-      "Surprised": "В расплох"
+      "Surprised": "В расплох",
+      "Crew": "Экипаж",
+      "CrewActionPoints": "ОД",
+      "CrewUnable": "Не может действовать",
+      "CrewCompleted": "Ход завершён",
+      "CrewActing": "Ход участника",
+      "CrewWaiting": "Ожидает хода"
     },
     "Formula": {
       "ClosingParenthesisExpected": "Ожидалась закрывающая скобка",

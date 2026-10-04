@@ -16,6 +16,19 @@ const gunnerUser = { id: "gunner-user", active: true };
 const passengerUser = { id: "passenger-user", active: true };
 const outsider = { id: "outsider", active: true };
 
+test("reload assignments grant native crew reload access to two mounts only", () => {
+  const { actor } = fixture();
+  const seat = actor.flags["fallout-maw"].constructVisual.seats.find(row => row.id === "passenger-seat");
+  Object.assign(seat, { role: "loader", functions: ["reload"], partSlotId: "", reloadPartSlotIds: ["turret", "remote-mg"] });
+  for (const partSlotId of ["turret", "remote-mg"]) {
+    assert.equal(canUserControlConstruct(actor, passengerUser, "reload", { partSlotId }), true);
+    assert.equal(canUserControlConstruct(actor, passengerUser, "aim", { partSlotId }), false);
+    assert.equal(canUserControlConstruct(actor, passengerUser, "fire", { partSlotId }), false);
+  }
+  assert.equal(canUserControlConstruct(actor, passengerUser, "reload", { partSlotId: "hull" }), false);
+  assert.equal(canUserControlConstruct(actor, outsider, "reload", { partSlotId: "remote-mg" }), false);
+});
+
 function fixture() {
   let nextId = 0;
   globalThis.foundry = { utils: { deepClone: structuredClone, randomID: () => `id-${++nextId}` } };

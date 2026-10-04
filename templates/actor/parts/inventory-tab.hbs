@@ -1,19 +1,19 @@
 <section class="tab fallout-maw-inventory-tab {{tabs.inventory.cssClass}}" data-group="{{tabs.inventory.group}}" data-tab="{{tabs.inventory.id}}">
   {{#if travelGroup.visible}}
   <section class="fallout-maw-panel fallout-maw-travel-group-sheet">
-    <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text967b777a7674'}}</h2>
+    <h2><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.AuditTemplates.Text967b777a7674'}}">{{localize 'FALLOUTMAW.AuditTemplates.Text967b777a7674'}}</span></h2>
     {{#if travelGroup.empty}}
     <p class="fallout-maw-empty-list">{{localize 'FALLOUTMAW.AuditTemplates.Textaa0c6489bcc7'}}</p>
     {{else}}
     <div class="fallout-maw-travel-group-sheet-layout">
       {{#if travelGroup.hasWalkers}}
       <section class="fallout-maw-travel-group-walkers">
-        <h3>{{localize 'FALLOUTMAW.AuditTemplates.Text8e5aa48454f6'}}</h3>
+        <h3><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.AuditTemplates.Text8e5aa48454f6'}}">{{localize 'FALLOUTMAW.AuditTemplates.Text8e5aa48454f6'}}</span></h3>
         <div class="fallout-maw-travel-group-walker-list">
           {{#each travelGroup.walkers}}
           <article class="fallout-maw-travel-group-walker {{#if missing}}missing{{/if}}" title="{{name}}">
             <img src="{{img}}" alt="{{name}}">
-            <strong>{{name}}</strong>
+            <strong class="fallout-maw-inventory-name" title="{{name}}">{{name}}</strong>
           </article>
           {{/each}}
         </div>
@@ -26,13 +26,13 @@
         <article class="fallout-maw-travel-group-vehicle {{#if missing}}missing{{/if}}">
           <header class="fallout-maw-travel-group-vehicle-header">
             <img src="{{img}}" alt="{{name}}">
-            <strong>{{name}}</strong>
+            <strong class="fallout-maw-inventory-name" title="{{name}}">{{name}}</strong>
           </header>
           <div class="fallout-maw-travel-group-vehicle-body">
             {{#if hasSeats}}
             {{#each seatGroups}}
             <div class="fallout-maw-actor-container-group fallout-maw-travel-group-seat-group">
-              <h3>{{name}}</h3>
+              <h3><span class="fallout-maw-inventory-name" title="{{name}}">{{name}}</span></h3>
               {{#each rows}}
               <div class="fallout-maw-actor-container-row fallout-maw-travel-group-seat-row">
                 {{#each instances}}
@@ -89,13 +89,15 @@
     </section>
   </section>
   <div class="fallout-maw-inventory-layout" data-inventory-drop-surface data-inventory-parent-id="">
+    {{#if inventory.hasEquipmentPanels}}
     <div class="fallout-maw-equipment-flow" data-inventory-pack>
-      <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
-        <h2>{{inventory.equipmentHeading}}</h2>
+      {{#if inventory.equipmentSlots.length}}
+      <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-slot-pane data-equipment-drop-surface>
+        <h2><span class="fallout-maw-inventory-name" title="{{inventory.equipmentHeading}}">{{inventory.equipmentHeading}}</span></h2>
         <div class="fallout-maw-equipment-slot-list">
           {{#each inventory.equipmentSlots}}
           <div class="fallout-maw-slot-card">
-            <div class="fallout-maw-slot-card-label" {{#if fullLabel}}title="{{fullLabel}}"{{/if}}>{{label}}</div>
+            <div class="fallout-maw-slot-card-label" title="{{#if fullLabel}}{{fullLabel}}{{else}}{{label}}{{/if}}">{{label}}</div>
             <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large {{#if locked}}locked{{/if}} {{#if phantom}}phantom construct-part-phantom{{/if}} {{#if (eq item.occupiedSlotMode "oneOf")}}one-of{{/if}}" data-equipment-slot="{{key}}" {{#if constructPartSlotId}}data-construct-part-slot="{{constructPartSlotId}}"{{/if}} {{#unless locked}}data-drop-zone{{/unless}}>
               {{#if item}}
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
@@ -111,19 +113,18 @@
               {{/if}}
             </div>
           </div>
-          {{else}}
-          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
           {{/each}}
         </div>
       </section>
+      {{/if}}
 
       {{#if inventory.prosthesisSlots.length}}
       <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
-        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}</h2>
+        <h2><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}">{{localize 'FALLOUTMAW.AuditTemplates.Text32e14f8b4d16'}}</span></h2>
         <div class="fallout-maw-equipment-slot-list fallout-maw-prosthesis-slot-list">
           {{#each inventory.prosthesisSlots}}
           <div class="fallout-maw-slot-card">
-            <div class="fallout-maw-slot-card-label">{{label}}</div>
+            <div class="fallout-maw-slot-card-label" title="{{label}}">{{label}}</div>
             <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-prosthesis-slot" data-prosthesis-limb="{{key}}">
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
@@ -139,11 +140,11 @@
 
       {{#if inventory.implantSlots.length}}
       <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
-        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Text93f75dab61e9'}}</h2>
+        <h2><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.AuditTemplates.Text93f75dab61e9'}}">{{localize 'FALLOUTMAW.AuditTemplates.Text93f75dab61e9'}}</span></h2>
         <div class="fallout-maw-equipment-slot-list fallout-maw-implant-slot-list">
           {{#each inventory.implantSlots}}
           <div class="fallout-maw-slot-card">
-            <div class="fallout-maw-slot-card-label">{{label}}</div>
+            <div class="fallout-maw-slot-card-label" title="{{label}}">{{label}}</div>
             <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-implant-slot" data-implant-limb="{{limbKey}}">
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
@@ -157,15 +158,16 @@
       </section>
       {{/if}}
 
+      {{#if inventory.hasWeaponPanels}}
       <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
-        <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
+        <h2><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.Common.Weapon'}}">{{localize "FALLOUTMAW.Common.Weapon"}}</span></h2>
         <div class="fallout-maw-weapon-set-list" data-inventory-pack>
           {{#if inventory.naturalWeaponSet}}
           <section class="fallout-maw-weapon-set fallout-maw-natural-weapon-set {{#if inventory.naturalWeaponSet.active}}active{{/if}}" data-action="selectHudWeaponSet" data-weapon-set="{{inventory.naturalWeaponSet.key}}" role="button" tabindex="0" aria-pressed="{{inventory.naturalWeaponSet.active}}" aria-label="{{inventory.naturalWeaponSet.label}}" title="{{inventory.naturalWeaponSet.label}}">
             <div class="fallout-maw-weapon-slot-list">
               {{#each inventory.naturalWeaponSet.slots}}
               <div class="fallout-maw-slot-card">
-                <div class="fallout-maw-slot-card-label">{{label}}</div>
+                <div class="fallout-maw-slot-card-label" title="{{label}}">{{label}}</div>
                 <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot fallout-maw-natural-weapon-slot" data-natural-weapon-slot="{{key}}">
                   {{#if item}}
                   <article class="fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if integratedBodyWeapon}}data-integrated-body-weapon-projection{{/if}}>
@@ -183,7 +185,7 @@
             <div class="fallout-maw-weapon-slot-list">
               {{#each displaySlots}}
               <div class="fallout-maw-slot-card {{#if shared}}fallout-maw-slot-card--shared{{/if}}">
-                <div class="fallout-maw-slot-card-label" title="{{label}}">{{#if shared}}{{#each sharedSlots}}<span>{{label}}</span>{{/each}}{{else}}{{label}}{{/if}}</div>
+                <div class="fallout-maw-slot-card-label" title="{{label}}">{{#if shared}}{{#each sharedSlots}}<span title="{{label}}">{{label}}</span>{{/each}}{{else}}{{label}}{{/if}}</div>
                 <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot {{#if shared}}fallout-maw-weapon-slot--shared{{/if}}" {{#unless shared}}data-weapon-set="{{../key}}" data-weapon-slot="{{key}}" data-drop-zone{{/unless}}>
                   {{#if item}}
                   {{#if phantom}}
@@ -212,18 +214,17 @@
               {{/each}}
             </div>
           </section>
-          {{else}}
-          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoWeaponSets"}}</p>
           {{/each}}
         </div>
       </section>
+      {{/if}}
       {{#if inventory.actorContainers.visible}}
       <section class="fallout-maw-panel fallout-maw-actor-container-section">
-        <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textd24d43c042ef'}}</h2>
+        <h2><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.AuditTemplates.Textd24d43c042ef'}}">{{localize 'FALLOUTMAW.AuditTemplates.Textd24d43c042ef'}}</span></h2>
         <div data-inventory-pack>
         {{#each inventory.actorContainers.groups}}
         <div class="fallout-maw-actor-container-group">
-          <h3>{{name}}</h3>
+          <h3><span class="fallout-maw-inventory-name" title="{{name}}">{{name}}</span></h3>
           <div data-inventory-pack>
           {{#each rows}}
             {{#each instances}}
@@ -248,7 +249,7 @@
       {{#with inventory.butcheringStorage}}
       {{#if grid.items.length}}
       <section class="fallout-maw-panel fallout-maw-butchering-storage-section">
-        <h2>{{localize 'FALLOUTMAW.Events.Groups.butchering.Label'}}</h2>
+        <h2><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.Events.Groups.butchering.Label'}}">{{localize 'FALLOUTMAW.Events.Groups.butchering.Label'}}</span></h2>
         <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
           {{#each grid.zones}}
           <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
@@ -266,6 +267,7 @@
       {{/with}}
 
     </div>
+    {{/if}}
 
     {{#if inventory.showInventoryPane}}
     <section class="fallout-maw-panel fallout-maw-inventory-pane">
@@ -273,7 +275,7 @@
         {{#if inventory.showRootInventory}}
         <section class="fallout-maw-root-inventory-block" data-contents-transfer-zone data-inventory-parent-id="">
           <div class="fallout-maw-panel-header fallout-maw-container-header fallout-maw-root-inventory-header" data-inventory-block-header>
-            <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
+            <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.Common.Inventory'}}">{{localize "FALLOUTMAW.Common.Inventory"}}</span></h2>
             {{#if freeEdit}}
             <button type="button" class="fallout-maw-inventory-clear-button" data-action="clearInventory" title="{{localize 'FALLOUTMAW.Actor.ClearInventoryTitle'}}" aria-label="{{localize 'FALLOUTMAW.Actor.ClearInventoryTitle'}}">
               <i class="fa-solid fa-trash"></i>
@@ -301,7 +303,7 @@
         <section class="fallout-maw-container-section" data-contents-transfer-zone data-container-drop-surface data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
           <div class="fallout-maw-panel-header fallout-maw-container-header" data-inventory-block-header>
             <div class="fallout-maw-container-overview draggable fallout-maw-draggable-item{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}">
-              <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title>{{name}}</h2>
+              <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title><span class="fallout-maw-inventory-name" title="{{name}}">{{name}}</span></h2>
               <div class="fallout-maw-load-meter fallout-maw-load-meter--{{load.trend}} fallout-maw-load-meter--{{load.state}}" aria-label="{{localize 'FALLOUTMAW.Item.ContainerCurrentLoad'}}">
                 <div class="fallout-maw-load-meter-track">
                   <div class="fallout-maw-load-meter-fill" style="width: {{load.percent}}%;"></div>
@@ -330,7 +332,7 @@
         {{#if inventory.recovery.grid.items.length}}
         <section class="fallout-maw-container-section fallout-maw-inventory-recovery-section" data-inventory-recovery-section>
           <div class="fallout-maw-panel-header fallout-maw-container-header" data-inventory-block-header>
-            <h2 class="fallout-maw-container-overview-name">{{localize "FALLOUTMAW.Common.InventoryRecovery"}}</h2>
+            <h2 class="fallout-maw-container-overview-name"><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.Common.InventoryRecovery'}}">{{localize "FALLOUTMAW.Common.InventoryRecovery"}}</span></h2>
           </div>
           <div class="fallout-maw-contents-transfer-grid-scroll" data-scroll-key="inventory-recovery">
             <div class="fallout-maw-inventory-grid has-phantom-items" data-inventory-recovery-grid style="{{inventory.recovery.grid.style}}">
@@ -351,7 +353,7 @@
         <section class="fallout-maw-container-section fallout-maw-locked-storage-section" data-contents-transfer-zone data-inventory-parent-id="{{id}}">
           <div class="fallout-maw-panel-header fallout-maw-container-header" data-inventory-block-header>
             <div class="fallout-maw-container-overview">
-              <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title>{{localize "FALLOUTMAW.Common.Locked"}}</h2>
+              <h2 class="fallout-maw-container-overview-name" data-contents-transfer-title><span class="fallout-maw-inventory-name" title="{{localize 'FALLOUTMAW.Common.Locked'}}">{{localize "FALLOUTMAW.Common.Locked"}}</span></h2>
             </div>
           </div>
           <div class="fallout-maw-contents-transfer-grid-scroll" data-scroll-key="container:{{id}}">

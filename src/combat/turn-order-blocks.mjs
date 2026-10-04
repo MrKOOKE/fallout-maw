@@ -1,3 +1,4 @@
+﻿import { combatantIncludesActor, findCrewCombatant, getCombatCrew, isCrewActorPending, isCrewControlledActor } from "./crew-turns.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCombatSettings } from "../settings/accessors.mjs";
 import {
@@ -100,13 +101,14 @@ export function isCombatantInActiveBlock(combatant, combat = game.combat) {
 export function isActorInActiveBlock(actor, combat = game.combat) {
   if (!actor?.uuid || !isBlockTurnOrderEnabled(combat)) return false;
   const block = getActiveCombatTurnBlock(combat);
-  return Boolean(block?.combatants.some(combatant => combatant.actor?.uuid === actor.uuid));
+  return Boolean(block?.combatants.some(combatant => combatantIncludesActor(combatant, actor.uuid)));
 }
 
 export function isActorCompletedInActiveBlock(actor, combat = game.combat) {
   if (!actor?.uuid || !isBlockTurnOrderEnabled(combat)) return false;
   const progress = getActiveBlockProgress(combat);
-  return Boolean(progress?.completedActorUuids.has(actor.uuid));
+  const combatant = findCrewCombatant(actor, combat);
+  return Boolean(progress?.completedActorUuids.has(combatant?.actor?.uuid ?? actor.uuid) || !isCrewActorPending(actor, combat));
 }
 
 export function isActorPendingInActiveBlock(actor, combat = game.combat) {
@@ -156,7 +158,7 @@ export function getBlockTurnTargetCombatant(combat = game.combat, options = {}) 
 
   const byActorUuid = normalizeId(options?.[BLOCK_TURN_ACTOR_OPTION]);
   if (byActorUuid) {
-    const combatant = block.combatants.find(candidate => candidate.actor?.uuid === byActorUuid);
+    const combatant = block.combatants.find(candidate => combatantIncludesActor(candidate, byActorUuid));
     return combatant ?? firstIncomplete;
   }
 
@@ -202,7 +204,8 @@ export function blockHasManualTurn(block) {
 
 export function isCombatantAutoCompleted(combatant) {
   if (!combatant) return true;
-  return Boolean(combatant.isDefeated || (combatant.actor && isActorUnableToAct(combatant.actor)));
+  return Boolean(combatant.isDefeated || (combatant.actor && isActorUnableToAct(combatant.actor))
+    || (isCrewControlledActor(combatant.actor) && getCombatCrew(combatant.actor).every(row => isActorUnableToAct(row.actor))));
 }
 
 function getProgressForState(combat, state) {
@@ -260,15 +263,15 @@ function createTurnBlock(combat, index, combatants, turns) {
 
 function canJoinCombatants(left, right) {
   if (!isFactionBlockEligible(left) || !isFactionBlockEligible(right)) return false;
-  const leftFaction = getActorPrimaryFaction(left.actor);
-  const rightFaction = getActorPrimaryFaction(right.actor);
+  const leftFaction = getActorPrimaryFaction(getCombatantFactionActor(left));
+  const rightFaction = getActorPrimaryFaction(getCombatantFactionActor(right));
   if (leftFaction === rightFaction) return true;
-  return getRelationTo(left.actor, rightFaction) === "ally";
+  return getRelationTo(getCombatantFactionActor(left), rightFaction) === "ally";
 }
 
 function isFactionBlockEligible(combatant) {
   if (!combatant?.actor || combatant.getFlag?.(SYSTEM_ID, "event")) return false;
-  const primary = getActorPrimaryFaction(combatant.actor);
+  const primary = getActorPrimaryFaction(getCombatantFactionActor(combatant));
   return Boolean(primary && primary !== DEFAULT_FACTION_NAME);
 }
 
@@ -309,4 +312,11 @@ function addUnique(values, value) {
   const normalized = normalizeId(value);
   if (!normalized || values.includes(normalized)) return values;
   return [...values, normalized];
+}
+
+function getCombatantFactionActor(combatant) {
+  if (!isCrewControlledActor(combatant?.actor)) return combatant?.actor;
+  const crew = getCombatCrew(combatant.actor);
+  const faction = getActorPrimaryFaction(crew[0]?.actor);
+  return crew.length && crew.every(row => getActorPrimaryFaction(row.actor) === faction) ? crew[0].actor : null;
 }

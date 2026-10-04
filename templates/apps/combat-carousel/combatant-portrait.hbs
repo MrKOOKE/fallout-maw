@@ -1,4 +1,8 @@
 <div class="combatant-wrapper" style="background-image: url('{{img}}');{{#if defeated}}filter: grayscale(1);{{/if}}">
+    {{#if crew}}
+    {{#if crew.showProgress}}<div class="crew-turn-fill" style="height: {{crew.percentage}}%;"></div>{{/if}}
+    <div class="crew-turn-count" title="{{crew.label}}"><i class="fa-solid fa-users"></i> {{crew.completedCount}}/{{crew.total}}</div>
+    {{/if}}
 
     {{#if hasPortraitResource}}
     <div class="portrait-bar" style="height: calc( 100% - {{portraitResource.percentage}}% );"></div>

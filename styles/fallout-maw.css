@@ -17340,7 +17340,6 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-slot-card-label {
   max-width: calc(var(--fallout-maw-actor-large-slot-size) + 2rem);
-  overflow-wrap: anywhere;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-slot-card.fallout-maw-slot-card--shared {
@@ -17444,9 +17443,7 @@ label.checkbox.fallout-maw-ability-change-choice {
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-container-overview-name {
   flex: none;
   min-width: 0;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-tab h2.fallout-maw-container-overview-name {
@@ -23265,6 +23262,86 @@ label.checkbox.fallout-maw-ability-change-choice {
 .application.fallout-maw-medicine-dialog .fallout-maw-medicine-subtitle {
   color: var(--fallout-maw-actor-text-soft);
   margin: 0;
+}
+
+/* Names shrink independently from neighboring inventory controls. */
+.application .fallout-maw-inventory-name,
+.application.fallout-maw-actor-sheet :is(.fallout-maw-inventory-tab, .fallout-maw-search-tab) .fallout-maw-slot-card-label,
+.application.fallout-maw-actor-sheet :is(.fallout-maw-inventory-tab, .fallout-maw-search-tab) .fallout-maw-slot-card-label > span {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application .fallout-maw-inventory-name {
+  flex: 0 1 auto;
+}
+
+.application .fallout-maw-contents-transfer-heading > .fallout-maw-inventory-name {
+  flex: 1 1 auto;
+}
+
+.application.fallout-maw-search-inventory :is(.fallout-maw-trade-catalog-filter, .fallout-maw-trade-catalog-subcategory) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.application.fallout-maw-search-inventory :is(.fallout-maw-trade-catalog-filter, .fallout-maw-trade-catalog-divider) > strong {
+  flex: 0 0 auto;
+}
+
+.application.fallout-maw-actor-sheet :is(.fallout-maw-inventory-tab, .fallout-maw-search-tab) .fallout-maw-slot-card-label {
+  max-width: calc(var(--fallout-maw-actor-large-slot-size) + 2rem);
+}
+
+.application.fallout-maw-actor-sheet :is(.fallout-maw-inventory-tab, .fallout-maw-search-tab) .fallout-maw-slot-card--shared > .fallout-maw-slot-card-label {
+  display: flex;
+  max-width: 100%;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab :is(.fallout-maw-equipment-pane, .fallout-maw-actor-container-section) > h2,
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-tab .fallout-maw-actor-container-group > h3 {
+  min-width: 100%;
+  width: 0;
+}
+
+.fallout-maw-gm-targets {
+  margin: 0 0 0.75rem;
+  min-width: 0;
+}
+
+.fallout-maw-gm-target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.fallout-maw-gm-target-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.fallout-maw-gm-target-row input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.fallout-maw-gm-target-row > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-gm-target-row small {
+  opacity: 0.75;
 }
 
 .application.fallout-maw-medicine-dialog .fallout-maw-medicine-subtitle {

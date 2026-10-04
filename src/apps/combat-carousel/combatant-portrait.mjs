@@ -1,4 +1,7 @@
-import { MODULE_ID } from "./main.mjs";
+﻿import { MODULE_ID } from "./main.mjs";
+import { CREW_INITIATIVES_FLAG, getCombatCrew, getCrewTurnProgress } from "../../combat/crew-turns.mjs";
+import { getActorPrimaryFaction, getFactionDisplayLabel } from "../../settings/factions.mjs";
+import { localize } from "../../utils/i18n.mjs";
 import {
     isBlockTurnOrderEnabled,
     isCombatantCompletedInActiveBlock,
@@ -125,9 +128,10 @@ export class CombatantPortrait {
         event.preventDefault();
 
         if (event.target.dataset.action === "player-pass") {
+            const actor = getCrewTurnProgress(this.combatant, this.combat)?.pending.find(row => row.actor.isOwner)?.actor ?? this.actor;
             return requestEndCombatTurnOperation({
                 combat: this.combat,
-                actor: this.actor,
+                actor,
                 conversionMode: TURN_CONVERSION_MODES.dodge
             });
         }
@@ -277,7 +281,7 @@ export class CombatantPortrait {
     get hasPermission() {
         const combatant = this.combatant;
         const playerPlayerPermission = combatant.actor?.hasPlayerOwner && game.settings.get(MODULE_ID, "playerPlayerPermission");
-        const hasPermission = (combatant.actor?.permission ?? -10) >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER || combatant.isOwner || playerPlayerPermission;
+        const hasPermission = (combatant.actor?.permission ?? -10) >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER || combatant.isOwner || playerPlayerPermission || getCombatCrew(combatant.actor).some(row => row.actor.testUserPermission(game.user, "OBSERVER"));
         return hasPermission;
     }
 
@@ -329,15 +333,16 @@ export class CombatantPortrait {
         initiativeData.isIconImg = initiativeData.icon.includes(".");
         initiativeData.isRollIconImg = initiativeData.rollIcon.includes(".");
         const turn = {
+            crew: prepareCrewCard(combatant, this.combat, isActive || isBlockActive),
             id: combatant.id,
             name: this.name,
             img: this.img,
             active: this.combat.turns.indexOf(combatant) === this.combat.turn,
             blockActive: isBlockActive,
             blockCompleted: isBlockCompleted,
-            owner: combatant.isOwner,
+            owner: combatant.isOwner || getCombatCrew(combatant.actor).some(row => row.actor.isOwner),
             isGM: game.user.isGM,
-            showPass: combatant.isOwner && !game.user.isGM && (isActive || isBlockActive) && !isBlockCompleted,
+            showPass: !game.user.isGM && (isActive || isBlockActive) && !isBlockCompleted && (getCrewTurnProgress(combatant, this.combat)?.pending.some(row => row.actor.isOwner) ?? combatant.isOwner),
             defeated: combatant.isDefeated,
             hidden: combatant.hidden,
             initiative: combatant.initiative,
@@ -415,6 +420,11 @@ export class CombatantPortrait {
         turn.barsOrder = this.getBarsOrder(turn.hasEffects, resource, resource2);
         // Format initiative numeric precision
         const precision = CONFIG.Combat.initiative.decimals;
+        if (turn.crew) {
+            if (typeof turn.initiative === "number") turn.initiative = Math.floor(turn.initiative);
+            if (typeof turn.initiativeData.value === "number") turn.initiativeData.value = Math.floor(turn.initiativeData.value);
+            hasDecimals = false;
+        }
         if (turn.hasRolled && typeof turn.initiative == "number") turn.initiative = turn.initiative.toFixed(hasDecimals ? precision : 0);
         if (turn.hasRolled && typeof turn.initiativeData.value == "number") turn.initiativeData.value = turn.initiativeData.value.toFixed(hasDecimals ? precision : 0);
         if (!game.user.isGM && !combatant.actor?.isOwner && game.settings.get(MODULE_ID, "hideEnemyInitiative")) {
@@ -488,3 +498,30 @@ export class CombatantPortrait {
 }
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+function prepareCrewCard(combatant, combat, active) {
+    const progress = getCrewTurnProgress(combatant, combat);
+    if (!progress) return null;
+    const permitted = game.user.isGM || combatant.isOwner || progress.members.some(row => row.actor.testUserPermission(game.user, "OBSERVER"));
+    if (!permitted) return null;
+    const initiatives = combatant.getFlag(MODULE_ID, CREW_INITIATIVES_FLAG) ?? [];
+    const started = Boolean(combat.started);
+    const value = resource => resource ? `${resource.value ?? 0}/${resource.max ?? 0}` : "—";
+    return {
+        ...progress, showProgress: started, label: localize("FALLOUTMAW.CombatCarousel.Crew"),
+        completedCount: started ? progress.completedCount : 0,
+        percentage: started ? progress.percentage : 0,
+        members: progress.members.map(row => ({
+            ...row, name: row.actor.name, img: row.actor.img,
+            canObserve: game.user.isGM || row.actor.testUserPermission(game.user, "OBSERVER"),
+            faction: getFactionDisplayLabel(getActorPrimaryFaction(row.actor)),
+            health: value(row.actor.system?.resources?.health),
+            action: value(row.actor.system?.resources?.actionPoints),
+            actionLabel: localize("FALLOUTMAW.CombatCarousel.CrewActionPoints"),
+            initiative: initiatives.find(item => item.actorUuid === row.actor.uuid)?.total ?? "—",
+            completed: started && row.completed,
+            active: started && active && !row.completed,
+            status: localize(`FALLOUTMAW.CombatCarousel.${row.unable ? "CrewUnable" : !started ? "CrewWaiting" : row.completed ? "CrewCompleted" : active ? "CrewActing" : "CrewWaiting"}`)
+        }))
+    };
+}

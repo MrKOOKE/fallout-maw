@@ -12,6 +12,24 @@
     <p>{{ description}}</p>
     {{/if}}
     {{/if}}
+    {{#if crew}}
+    <section class="combat-crew-card">
+        <div class="crew-card-heading"><strong>{{crew.label}}</strong><span>{{crew.completedCount}} / {{crew.total}}</span></div>
+        <div class="crew-card-members">
+        {{#each crew.members}}
+            <article class="crew-card-member {{#if completed}}completed{{else}}pending{{/if}} {{#if active}}acting{{/if}} {{#if unable}}unable{{/if}}" aria-label="{{name}}: {{status}}">
+                <div class="crew-card-portrait"><img src="{{img}}" alt="{{name}}"></div>
+                <div class="crew-card-details">
+                    <strong title="{{name}}">{{name}}</strong>
+                    <span class="crew-card-role" title="{{role}}">{{role}}</span>
+                    <span class="crew-card-faction">{{faction}}</span>
+                </div>
+                <div class="crew-card-resources">{{#if canObserve}}<span><i class="fa-solid fa-heart"></i> {{health}}</span><span>{{actionLabel}} {{action}}</span>{{/if}}<span><i class="fa-solid fa-dice-d20"></i> {{initiative}}</span></div>
+            </article>
+        {{/each}}
+        </div>
+    </section>
+    {{/if}}
     {{#if hasPermission}}
     <ul {{#unless hasAttributes}}style="display:none;" {{/unless}}>
         {{#each attributes as |attribute|}}

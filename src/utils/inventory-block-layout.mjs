@@ -15,6 +15,14 @@ export function packInventoryBlockRows(widths, availableWidth, gap = 0) {
   });
 }
 
+/** Summary panels keep their own minimum widths when a lower row gets smaller. */
+export function getInventorySummaryColumnWidths(referenceWidth, availableWidth, gap, minimumWidth) {
+  const width = Number(referenceWidth), available = Number(availableWidth) - Math.max(0, Number(gap) || 0);
+  const minimum = Math.max(1, Number(minimumWidth) || 1);
+  if (!Number.isFinite(width) || !Number.isFinite(available) || width < minimum || available - width < minimum) return null;
+  return [width, available - width];
+}
+
 /** Display-only packing. Inventory cell coordinates and document order never change. */
 export class InventoryBlockLayout {
   #root = null;
@@ -101,7 +109,7 @@ export class InventoryBlockLayout {
     summary.style.removeProperty("--fallout-maw-inventory-summary-columns");
     const [currencies, load] = summary.children;
     const flow = this.#root.querySelector(".fallout-maw-equipment-flow");
-    const equipment = flow?.firstElementChild;
+    const equipment = flow?.querySelector(":scope > [data-equipment-slot-pane]");
     if (!currencies || !load || !equipment || currencies.offsetTop !== load.offsetTop) return;
     const neighbor = [...flow.children].find(block => block !== equipment && block.offsetTop === equipment.offsetTop);
     if (!neighbor) return;
@@ -112,6 +120,10 @@ export class InventoryBlockLayout {
     const inset = pixels(style.paddingLeft) + pixels(style.paddingRight)
       + pixels(style.borderLeftWidth) + pixels(style.borderRightWidth);
     const width = pixels(style.width) + (style.boxSizing === "border-box" ? 0 : inset);
+    const summaryStyle = this.#view.getComputedStyle(summary);
+    const rootFontSize = pixels(this.#view.getComputedStyle(this.#root.ownerDocument.documentElement).fontSize) || 16;
+    const columns = getInventorySummaryColumnWidths(width, summary.clientWidth, pixels(summaryStyle.columnGap), rootFontSize * 24);
+    if (!columns) return;
     summary.style.setProperty("--fallout-maw-inventory-summary-columns", `${width}px minmax(0, 1fr)`);
   }
 

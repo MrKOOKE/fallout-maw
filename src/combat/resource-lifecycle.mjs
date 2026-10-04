@@ -1,3 +1,4 @@
+﻿import { combatantIncludesActor, getCombatantTurnActors } from "./crew-turns.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   cleanupActorDodgeResource,
@@ -32,7 +33,7 @@ export async function initializeCreatedCombatantResources(combatants = [], comba
         return;
       }
       const alreadyParticipating = Array.from(combat.combatants ?? []).some(combatant => (
-        combatant?.actor?.uuid === actor.uuid
+        combatantIncludesActor(combatant, actor.uuid)
         && !createdCombatantIds.has(combatant.id)
       ));
       if (alreadyParticipating) {
@@ -40,7 +41,7 @@ export async function initializeCreatedCombatantResources(combatants = [], comba
         return;
       }
 
-      const isCurrentActor = combat.combatant?.actor?.uuid === actor.uuid;
+      const isCurrentActor = combatantIncludesActor(combat.combatant, actor.uuid);
       for (const [stage, operation] of [
         ["dodge", () => initializeActorDodgeResource(actor)],
         ["movement", () => restoreActorMovementResources(actor)],
@@ -182,7 +183,7 @@ function recordLifecycleError(result, actor, stage, error) {
 }
 
 function collectCombatantActors(combatants = []) {
-  return Array.from(combatants ?? [], combatant => combatant?.actor).filter(Boolean);
+  return Array.from(combatants ?? []).flatMap(getCombatantTurnActors);
 }
 
 function collectActors(actors = []) {
@@ -204,7 +205,7 @@ function isActorInAnyStartedCombat(actor) {
 
 function isActorInCombat(actor, combat) {
   return Array.from(combat?.combatants ?? [])
-    .some(combatant => combatant?.actor?.uuid === actor?.uuid);
+    .some(combatant => combatantIncludesActor(combatant, actor?.uuid));
 }
 
 function getWorldCombats() {

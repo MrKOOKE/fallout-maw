@@ -1,3 +1,4 @@
+﻿import { CREW_INITIATIVES_FLAG, CREW_TURN_STATE_FLAG, getCombatCrew, isCrewControlledActor } from "../combat/crew-turns.mjs";
 import { withSystemEventRoot } from "./dispatcher.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
@@ -268,13 +269,15 @@ export function classifyCombatUpdate(combat, changes = {}, { before = null, afte
   const newCombatant = snapshotCurrentCombatant(current) ?? participantForCombatant(combat.combatant);
 
   if (!wasStarted && started) events.push(createEventDescriptor("combat.started", context, paths));
-  if (wasStarted && (!started || turnTouched) && oldCombatant) {
+  if (wasStarted && (!started || turnTouched) && oldCombatant && !isCrewControlledParticipant(oldCombatant)) {
     events.push(createEventDescriptor("combat.turn.ended", { ...context, target: oldCombatant }, paths));
   }
   if (paths.some(pathMatchesRoot("round"))) events.push(createEventDescriptor("combat.round.changed", context, paths.filter(pathMatchesRoot("round"))));
   if (wasStarted && !started) events.push(createEventDescriptor("combat.ended", context, paths));
   if (started && turnTouched && newCombatant) {
-    events.push(createEventDescriptor("combat.turn.started", { ...context, target: newCombatant }, paths));
+    const actor = globalThis.fromUuidSync?.(newCombatant.actorUuid);
+    const participants = isCrewControlledActor(actor) ? getCombatCrew(actor).filter(row => !row.actor.statuses?.has("dead") && !row.actor.statuses?.has("unconscious")).map(row => participantForActor(row.actor)) : [newCombatant];
+    for (const target of participants) events.push((isCrewControlledActor(actor) ? createCrewEventDescriptor : createEventDescriptor)("combat.turn.started", { ...context, target }, paths));
   }
   return events;
 }
@@ -311,7 +314,22 @@ export function classifyCombatantUpdate(combatant, changes = {}, { before = null
   const context = combatantContext(combatant, previous, current, flat);
   const events = [];
   if (paths.some(pathMatchesRoot("initiative")) && Number.isFinite(Number(readSnapshotPath(current, "initiative")))) {
-    events.push(createEventDescriptor("combat.initiative.rolled", context, paths.filter(pathMatchesRoot("initiative"))));
+    if (isCrewControlledActor(combatant.actor)) {
+      for (const row of readSnapshotPath(current, `flags.fallout-maw.${CREW_INITIATIVES_FLAG}`) ?? []) {
+        events.push(createCrewEventDescriptor("combat.initiative.rolled", { ...context, target: { actorUuid: row.actorUuid, tokenUuid: "", itemUuid: "" } }, paths.filter(pathMatchesRoot("initiative")), { data: { total: row.total } }));
+      }
+    } else events.push(createEventDescriptor("combat.initiative.rolled", context, paths.filter(pathMatchesRoot("initiative"))));
+  }
+  const crewPath = `flags.fallout-maw.${CREW_TURN_STATE_FLAG}`;
+  if (isCrewControlledActor(combatant.actor) && paths.some(pathMatchesRoot(crewPath))) {
+    const oldState = readSnapshotPath(previous, crewPath) ?? {};
+    const state = readSnapshotPath(current, crewPath) ?? {};
+    const already = new Set(oldState.round === state.round ? oldState.completedActorUuids ?? [] : []);
+    const crewUuids = new Set(getCombatCrew(combatant.actor).map(row => row.actor.uuid));
+    for (const uuid of state.completedActorUuids ?? []) {
+      if (already.has(uuid) || !crewUuids.has(uuid)) continue;
+      events.push(createCrewEventDescriptor("combat.turn.ended", { ...context, target: { actorUuid: uuid, tokenUuid: "", itemUuid: "" } }, paths.filter(pathMatchesRoot(crewPath)), { data: { round: state.round } }));
+    }
   }
   if (paths.some(pathMatchesRoot("defeated"))) {
     events.push(createEventDescriptor(
@@ -930,4 +948,14 @@ function isPlainObject(value) {
   if (!value || typeof value !== "object") return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function isCrewControlledParticipant(participant) {
+  return isCrewControlledActor(globalThis.fromUuidSync?.(participant?.actorUuid));
+}
+
+function createCrewEventDescriptor(path, context, paths, extra = {}) {
+  const event = createEventDescriptor(path, context, paths, extra);
+  event.suffix += `:${context.target.actorUuid}`;
+  return event;
 }

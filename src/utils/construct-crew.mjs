@@ -42,12 +42,21 @@ export function getConstructCrewSeats(actor = null) {
     return { id, name: String(row?.name ?? "").trim() || `Место ${index + 1}`, role,
       functions: [...new Set(functions)], slotId, slotIndex, partSlotId: String(row?.partSlotId ?? "").trim(),
       systemIds: Array.from(new Set(Array.isArray(row?.systemIds) ? row.systemIds.map(String) : [])),
+      reloadPartSlotIds: Array.from(new Set((Array.isArray(row?.reloadPartSlotIds) ? row.reloadPartSlotIds.slice(0, 256) : [])
+        .map(value => String(value ?? "").trim()).filter(Boolean))),
       personalWeapons: normalizeConstructCrewPersonalWeapons(row?.personalWeapons) };
   }).filter(Boolean);
 }
 
 export function normalizeConstructCrewPersonalWeapons(raw = {}) {
   return normalizeConstructPersonalWeapons(raw);
+}
+
+/** Extra detail assignments grant reload only; aiming and firing keep their primary binding. */
+export function isConstructCrewSeatAssignedToPart(seat, partSlotId, action) {
+  const id = String(partSlotId ?? "").trim();
+  return Boolean(id && (seat?.partSlotId === id
+    || action === "reload" && seat?.reloadPartSlotIds?.includes(id)));
 }
 
 export function hasConstructCrew(actor = null) {
@@ -185,7 +194,7 @@ export function canUserControlConstruct(actor, user, action, { partSlotId = "", 
   if (["aim", "fire", "reload"].includes(action) && !targetPart) return false;
   return getUserConstructCrewSeats(actor, user).some(seat => (!seatId || seat.id === seatId)
     && (!passengerId || getConstructCrewSeatState(actor, seat).occupant?.id === passengerId) && seat.functions.includes(action)
-    && (!["aim", "fire", "reload"].includes(action) || seat.partSlotId === targetPart));
+    && (!["aim", "fire", "reload"].includes(action) || isConstructCrewSeatAssignedToPart(seat, targetPart, action)));
 }
 
 export function getConstructWeaponPartSlotId(actor, weapon = null) {

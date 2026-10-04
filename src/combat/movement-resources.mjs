@@ -1,3 +1,4 @@
+﻿import { getCombatantTurnActors } from "./crew-turns.mjs";
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import {
   COMBAT_MOVEMENT_RESOURCE_UPDATE_OPTION,
@@ -725,9 +726,7 @@ export async function restoreCombatMovementResources(combat, {
 function getCombatMovementRestoreActors(combat, { includeSceneTokenActors = true } = {}) {
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
-    const actor = combatant.actor;
-    if (!actor) continue;
-    actors.set(actor.uuid, actor);
+    for (const actor of getCombatantTurnActors(combatant)) actors.set(actor.uuid, actor);
   }
 
   if (includeSceneTokenActors) {

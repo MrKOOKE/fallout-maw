@@ -1,8 +1,9 @@
-import {
+﻿import {
   DEFAULT_FACTION_NAME,
   getActorPrimaryFaction,
   getFactionDisplayLabel
 } from "../../settings/factions.mjs";
+import { getCombatInitiativeParticipants } from "../../combat/crew-turns.mjs";
 import { localize } from "../../utils/i18n.mjs";
 import { MODULE_ID } from "./main.mjs";
 import { HandlebarsApplication, mergeClone } from "./utils.mjs";
@@ -132,7 +133,8 @@ class CombatInitiativeSurpriseDialog extends HandlebarsApplication {
 function buildCombatInitiativeGroups(combat) {
   const groups = new Map();
 
-  for (const combatant of getRollAllInitiativeCombatants(combat)) {
+  const ids = new Set(getRollAllInitiativeCombatantIds(combat));
+  for (const combatant of getCombatInitiativeParticipants(combat).filter(row => ids.has(row.carrierId ?? row.id))) {
     const factionName = getActorPrimaryFaction(combatant.actor) || DEFAULT_FACTION_NAME;
     if (!groups.has(factionName)) {
       groups.set(factionName, {

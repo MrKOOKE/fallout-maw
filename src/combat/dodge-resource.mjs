@@ -1,3 +1,4 @@
+﻿import { getCombatantTurnActors } from "./crew-turns.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { evaluateActorEffectChangeBaseNumber } from "../utils/active-effect-changes.mjs";
@@ -520,9 +521,7 @@ function calculateDodgeAmount(max = 0, percent = 0) {
 function getCombatDodgeActors(combat) {
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
-    const actor = combatant.actor;
-    if (!actor) continue;
-    actors.set(actor.uuid, actor);
+    for (const actor of getCombatantTurnActors(combatant)) actors.set(actor.uuid, actor);
   }
   return actors;
 }

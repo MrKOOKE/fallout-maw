@@ -1,4 +1,4 @@
-import { getConstructVisualRuntimeConfig, getConstructVisualRuntimeRevision, resolveConstructVisualLayers } from "../utils/construct-visual-model.mjs";
+﻿import { getConstructVisualRuntimeConfig, getConstructVisualRuntimeRevision, resolveConstructVisualLayers } from "../utils/construct-visual-model.mjs";
 import { getConstructMovementEnergyState, getConstructSystemState } from "../utils/construct-systems.mjs";
 import { planRotationSector, rotationDelta, rotationSectorBounds } from "../utils/construct-rotation-cost.mjs";
 import { usesFootprintRouteRotation } from "../utils/token-footprint-route.mjs";
@@ -210,7 +210,10 @@ export function registerConstructRotationTurns({ ownTurn, partRotations } = {}) 
   registered = true;
   for (const hook of ["updateCombat", "createCombat", "deleteCombat", "updateCombatant", "createCombatant", "deleteCombatant"])
     globalThis.Hooks?.on?.(hook, () => { combatRevision++; });
-  registerActorTurnStartPreparedHandler(async ({ actor, combat }) => {
+  registerActorTurnStartPreparedHandler(({ actor, combat }) => prepareConstructRotationTurn(actor, combat));
+}
+
+export async function prepareConstructRotationTurn(actor, combat) {
     if (!globalThis.game?.user?.isGM || actor?.type !== "construct") return;
     const turnId = `${combat.id}:${combat.round}:${combat.turn}`;
     const tokens = {};
@@ -223,5 +226,4 @@ export function registerConstructRotationTurns({ ownTurn, partRotations } = {}) 
     }
     await actor.update({ [`flags.${SYSTEM}.${FLAG}`]: { combatId: combat.id, turnId, tokens } });
     for (const doc of actor.getActiveTokens?.(false, true) ?? []) progress.delete(doc);
-  });
 }

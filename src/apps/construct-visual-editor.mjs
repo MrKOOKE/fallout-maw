@@ -105,6 +105,8 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
         roles: ROLES.map(role => ({ ...role, selected: role.value === seat.role })),
         physicalSeats: physicalSeats.map(option => ({ ...option, selected: option.slotId === seat.slotId && option.slotIndex === seat.slotIndex })),
         parts: partOptions.map(option => ({ ...option, selected: option.value === seat.partSlotId })),
+        canReload: seat.functions.includes("reload"),
+        reloadParts: partOptions.map(option => ({ ...option, checked: seat.reloadPartSlotIds.includes(option.value) })),
         functions: FUNCTIONS.map(entry => ({ ...entry, checked: seat.functions.includes(entry.value) })),
         systems: getConstructSystems(this.actor).map(system => ({ id: system.id, name: system.name, checked: seat.systemIds.includes(system.id) })),
         personalAnchors: this.#config.anchors.map(anchor => ({ value: anchor.id, label: anchor.name,
@@ -272,6 +274,10 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       const option = getConstructCrewSeatOptions(this.actor).find(seat => seat.value === field.value);
       target.slotId = option?.slotId ?? "";
       target.slotIndex = option?.slotIndex ?? 0;
+    } else if (key === "reloadPartSlotIds") {
+      const ids = new Set(target.reloadPartSlotIds ?? []);
+      field.checked ? ids.add(field.dataset.partSlotId) : ids.delete(field.dataset.partSlotId);
+      target.reloadPartSlotIds = [...ids];
     } else if (["systemIds", "rotationSystemIds"].includes(key)) {
       const ids = new Set(target[key] ?? []);
       field.checked ? ids.add(field.dataset.systemId) : ids.delete(field.dataset.systemId);
@@ -289,7 +295,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       if (key === "parentId" && field.value) target.parentSlotId = "";
       if (key === "parentSlotId" && field.value) target.parentId = "";
     }
-    if (["role", "parentId", "parentSlotId", "name", "rotates", "slotId", "physicalSeat"].includes(key)) return this.render();
+    if (["role", "functions", "parentId", "parentSlotId", "name", "rotates", "slotId", "physicalSeat"].includes(key)) return this.render();
     this.#refreshPreview();
   }
 

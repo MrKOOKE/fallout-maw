@@ -4694,6 +4694,11 @@ async function prepareActorSheetInventoryRenderContext(actor, race, sourceSystem
   const inventory = prepareDisplayInventoryContext(actor, race);
   markActiveHudWeaponSet(actor, inventory);
   inventory.weaponSets = (inventory.weaponSets ?? []).map(prepareWeaponSetDisplay);
+  inventory.hasWeaponPanels = Boolean(inventory.naturalWeaponSet?.slots?.length
+    || inventory.weaponSets.some(set => set.displaySlots?.length));
+  inventory.hasEquipmentPanels = Boolean(inventory.equipmentSlots?.length || inventory.prosthesisSlots?.length
+    || inventory.implantSlots?.length || inventory.hasWeaponPanels || inventory.actorContainers?.visible
+    || inventory.butcheringStorage?.grid?.items?.length);
 
   const loadValue = Math.max(0, Number(actor?.system?.load?.value) || 0);
   const loadMax = Math.max(0, Number(actor?.system?.load?.max) || 0);

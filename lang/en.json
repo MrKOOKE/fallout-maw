@@ -20,6 +20,11 @@
     }
   },
   "FALLOUTMAW": {
+    "GmTargets": {
+      "Targets": "Targets",
+      "NoneSelected": "Select at least one actor.",
+      "RepairItems": "Repair items, fill magazines, and recharge power sources"
+    },
     "AimActivationPrompt": "Move the cursor into the green area to unlock aiming",
     "ConstructCrew": {
       "Board": "Board",
@@ -2732,7 +2737,13 @@
       "NoInitiativeCombatants": "No combatants without initiative.",
       "RollInitiativeTitle": "Initiative Check",
       "SurpriseHint": "Mark factions or individual combatants caught by surprise. They roll initiative with disadvantage and -10.",
-      "Surprised": "Surprised"
+      "Surprised": "Surprised",
+      "Crew": "Crew",
+      "CrewActionPoints": "AP",
+      "CrewUnable": "Unable to act",
+      "CrewCompleted": "Turn completed",
+      "CrewActing": "Acting",
+      "CrewWaiting": "Waiting"
     },
     "Formula": {
       "ClosingParenthesisExpected": "Expected a closing parenthesis",

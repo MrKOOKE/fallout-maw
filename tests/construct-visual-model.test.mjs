@@ -7,6 +7,14 @@ import {
 
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} ≠ ${expected}`);
 
+test("multiple reload assignments survive visual editor normalization and preserve removed references", () => {
+  const raw = { enabled: true, seats: [{ id: "loader", role: "loader", slotId: "cabin:crew",
+    reloadPartSlotIds: ["turret", "remote-mg", "remote-mg", "", "removed-mount"] }] };
+  const model = normalizeConstructVisual(raw);
+  assert.deepEqual(model.seats[0].reloadPartSlotIds, ["turret", "remote-mg", "removed-mount"]);
+  assert.deepEqual(normalizeConstructVisual(model), model);
+});
+
 function tank() {
   return {
     enabled: true,
