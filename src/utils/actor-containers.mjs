@@ -13,7 +13,13 @@ export function getActorContainerFlag(actor = null) {
   };
 }
 
-export function normalizeActorContainerPassengers(passengers = []) {
+/** Combat and permissions need seat metadata, not the parked Token restore payload. */
+export function getActorContainerPassengerMetadata(actor = null) {
+  const flag = actor?.getFlag?.(SYSTEM_ID, ACTOR_CONTAINER_FLAG) ?? {};
+  return normalizeActorContainerPassengers(flag.passengers, { includeTokenData: false });
+}
+
+export function normalizeActorContainerPassengers(passengers = [], { includeTokenData = true } = {}) {
   return (Array.isArray(passengers) ? passengers : [])
     .map(passenger => ({
       id: String(passenger?.id ?? passenger?.actorUuid ?? foundry.utils.randomID()),
@@ -23,7 +29,7 @@ export function normalizeActorContainerPassengers(passengers = []) {
       actorName: String(passenger?.actorName ?? ""),
       actorImg: String(passenger?.actorImg ?? ""),
       sceneId: String(passenger?.sceneId ?? ""),
-      tokenData: passenger?.tokenData && typeof passenger.tokenData === "object"
+      tokenData: includeTokenData && passenger?.tokenData && typeof passenger.tokenData === "object"
         ? foundry.utils.deepClone(passenger.tokenData)
         : null,
       slotId: String(passenger?.slotId ?? ""),

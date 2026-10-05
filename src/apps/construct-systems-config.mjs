@@ -12,6 +12,21 @@ export class ConstructSystemsConfig extends FalloutMaWFormApplicationV2 {
   #events;
   #preview;
   #previewGeneration = 0;
+  #hub;
+  attachHub(hub) { this.#hub = hub; return this; }
+  get element() { return this.#hub?.element ?? super.element; }
+  render(options = {}) { return this.#hub ? this.#hub.render(options) : super.render(options); }
+  get draft() { return this.#systems; }
+  get selectedId() { return this.#selected; }
+  selectSystemId(id) { if (this.#systems.some(row => row.id === id)) this.#selected = id; }
+  async dispatchHubAction(event, button) {
+    const action = this.constructor.DEFAULT_OPTIONS.actions[button.dataset.action];
+    if (!action) return false;
+    await action.call(this, event, button); return true;
+  }
+  disposeHub() {
+    ++this.#previewGeneration; this.#events?.abort(); void this.#preview?.stop(); this.#hub = null;
+  }
   constructor(actor, options = {}) {
     super(options); this.actor = actor; this.#systems = foundry.utils.deepClone(getConstructSystems(actor)); this.#selected = this.#systems[0]?.id ?? "";
   }
@@ -24,7 +39,7 @@ export class ConstructSystemsConfig extends FalloutMaWFormApplicationV2 {
   get title() { return `Системы: ${this.actor.name}`; }
   async _prepareContext(options) {
     const selected = this.#current();
-    const state = selected && getConstructSystemState(this.actor, selected);
+    const state = selected && getConstructSystemState(this.#hub?.draftActor ?? this.actor, selected);
     return { ...await super._prepareContext(options), systems: this.#systems.map(row => ({ ...row, selected: row.id === this.#selected })),
       selected: selected && { ...selected, capacity: state.capacity, movementPoints: state.movementPoints,
         soundEdgePercent: Math.round((selected.soundEdgeVolume ?? 0.25) * 100),
@@ -47,8 +62,14 @@ export class ConstructSystemsConfig extends FalloutMaWFormApplicationV2 {
       foundry.utils.setProperty(this.#current(), input.dataset.systemField, input.dataset.paths !== undefined ? input.value.split(/\r?\n/).map(row => row.trim()).filter(Boolean)
         : input.type === "checkbox" ? input.checked : input.dataset.percent !== undefined ? Number(input.value) / 100
           : input.type === "number" || input.type === "range" ? Number(input.value) : input.value);
+      if (this.#hub && input.dataset.systemField === "name") this.#hub.syncDraftLabels?.();
     }, optionsEvents);
     this.element.addEventListener("input", event => {
+      const field = event.target.closest("[data-system-field]");
+      if (field && this.#current() && field.type !== "checkbox") foundry.utils.setProperty(this.#current(), field.dataset.systemField,
+        field.dataset.paths !== undefined ? field.value.split(/\r?\n/).map(row => row.trim()).filter(Boolean)
+          : field.dataset.percent !== undefined ? Number(field.value) / 100
+          : field.type === "number" || field.type === "range" ? Number(field.value) : field.value);
       const input = event.target.closest("[data-sound-volume]");
       if (input) input.parentElement.querySelector("output").textContent = `${Math.round(Number(input.value) * 100)}%`;
     }, optionsEvents);
@@ -65,14 +86,19 @@ export class ConstructSystemsConfig extends FalloutMaWFormApplicationV2 {
   }
   #current() { return this.#systems.find(row => row.id === this.#selected); }
   async _processFormData() {
+    const update = this.getActorUpdate();
+    if (!update) return;
+    await this.actor.update(update);
+    ui.notifications.info("Настройки систем сохранены.");
+  }
+  getActorUpdate() {
     if (!this.actor.isOwner) return;
     const ids = this.#systems.map(row => row.id);
     if (ids.some(id => !/^[\w-]+$/.test(id)) || new Set(ids).size !== ids.length) {
       ui.notifications.warn("Ключи систем должны быть уникальны и содержать буквы, цифры, дефис или подчёркивание."); return;
     }
     const systems = this.#systems.map(row => ({ ...row, active: getConstructSystems(this.actor).find(current => current.id === row.id)?.active ?? false }));
-    await this.actor.update({ "system.constructSystems": systems });
-    ui.notifications.info("Настройки систем сохранены.");
+    return { "system.constructSystems": systems };
   }
   static #addSystem(event) {
     event.preventDefault(); const id = this.#systems.some(row => row.id === "drive") ? foundry.utils.randomID() : "drive";

@@ -1,18 +1,10 @@
-import { SYSTEM_ID } from "../constants.mjs";
 import { ENERGY_RESOURCE_KEY } from "../combat/energy-resource.mjs";
 import { deleteHealedTraumas, requestDamageApplication } from "../combat/damage-hub.mjs";
-import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
 import { createDiseaseImmunityEffect } from "./need-thresholds.mjs";
-import {
-  getCharacteristicSettings,
-  getCreatureOptions,
-  getSkillSettings,
-  getTimeMechanicsIgnored
-} from "../settings/accessors.mjs";
-import {
-  DEFAULT_ENERGY_REGENERATION_FORMULA,
-  DEFAULT_REGENERATION_FORMULA
-} from "../settings/creature-options.mjs";
+import { getTimeMechanicsIgnored } from "../settings/accessors.mjs";
+import { getActorRegenerationRate } from "./regeneration-rates.mjs";
+import { buildConstructRegenerationUpdates, distributeRegeneration } from "./regeneration-allocation.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
   getActorTimeSegments,
   isTimeMechanicsForced
@@ -69,13 +61,10 @@ function countWholeHourTicks(seconds) {
 
 async function applyActorRegeneration(actor, tickCount) {
   const ticks = Math.max(0, toInteger(tickCount));
-  const healthAmount = Math.max(0, evaluateActorRegeneration(actor) * ticks);
-  const energyAmount = actor.system?.resources?.[ENERGY_RESOURCE_KEY]
-    ? Math.max(0, evaluateActorRegeneration(actor, {
-      formulaKey: "energyFormula",
-      fallbackFormula: DEFAULT_ENERGY_REGENERATION_FORMULA,
-      label: "energy"
-    }) * ticks)
+  const healthAmount = actorNeedsHealthRegeneration(actor)
+    ? Math.max(0, getActorRegenerationRate(actor) * ticks) : 0;
+  const energyAmount = resourceIsBelowMaximum(actor.system?.resources?.[ENERGY_RESOURCE_KEY])
+    ? Math.max(0, getActorRegenerationRate(actor, { resource: "energy" }) * ticks)
     : 0;
   if (healthAmount <= 0 && energyAmount <= 0) return;
 
@@ -89,29 +78,6 @@ async function applyActorRegeneration(actor, tickCount) {
     if (remaining > 0) await applyLimbRegeneration(actor, remaining);
   }
   if (energyAmount > 0) await applyEnergyRegeneration(actor, energyAmount);
-}
-
-function evaluateActorRegeneration(actor, {
-  formulaKey = "formula",
-  fallbackFormula = DEFAULT_REGENERATION_FORMULA,
-  label = "health"
-} = {}) {
-  const characteristicSettings = getCharacteristicSettings();
-  const skillSettings = getSkillSettings();
-  const race = getCreatureOptions(characteristicSettings).races.find(entry => entry.id === actor.system?.creature?.raceId);
-  const formula = String(race?.regeneration?.[formulaKey] ?? fallbackFormula).trim() || fallbackFormula;
-
-  try {
-    return Math.max(0, evaluateFormula(formula, {
-      characteristicSettings,
-      skillSettings,
-      characteristics: actor.system?.characteristics ?? {},
-      skills: getSkillValues(actor.system?.skills ?? {})
-    }));
-  } catch (error) {
-    console.warn(`${SYSTEM_ID} | ${label} regeneration formula failed for ${actor.name}: ${error.message}`);
-    return 0;
-  }
 }
 
 function getTreatmentTargets(actor) {
@@ -164,6 +130,12 @@ async function applyLimbRegeneration(actor, amount) {
   const healing = Math.max(0, toInteger(amount));
   if (healing <= 0) return;
 
+  if (actor.type === "construct") {
+    const updates = buildConstructRegenerationUpdates(actor, healing);
+    if (updates.length) await executeInventoryMutation({ actor, updates }, { reason: "construct-regeneration" });
+    return;
+  }
+
   await requestDamageApplication({
     actor,
     amount: healing,
@@ -194,39 +166,13 @@ async function applyEnergyRegeneration(actor, amount) {
   await actor.update(update);
 }
 
-function distributeRegeneration(entries, amount) {
-  const allocations = new Map(entries.map(entry => [entry.id, 0]));
-  let remaining = Math.max(0, toInteger(amount));
-  let active = entries
-    .map(entry => ({ ...entry, missing: Math.max(0, toInteger(entry.missing)) }))
-    .filter(entry => entry.missing > 0);
-
-  while (remaining > 0 && active.length) {
-    const share = Math.floor(remaining / active.length);
-    const extra = remaining % active.length;
-    let spent = 0;
-    const nextActive = [];
-
-    for (const [index, entry] of active.entries()) {
-      const portion = share + (index < extra ? 1 : 0);
-      const applied = Math.min(entry.missing, portion);
-      if (applied > 0) {
-        allocations.set(entry.id, toInteger(allocations.get(entry.id)) + applied);
-        entry.missing -= applied;
-        spent += applied;
-      }
-      if (entry.missing > 0) nextActive.push(entry);
-    }
-
-    if (spent <= 0) break;
-    remaining -= spent;
-    active = nextActive;
-  }
-
-  return { allocations, remaining };
+export function actorMayNeedRegeneration(actor) {
+  return (actorNeedsHealthRegeneration(actor) && getActorRegenerationRate(actor) > 0)
+    || (resourceIsBelowMaximum(actor?.system?.resources?.[ENERGY_RESOURCE_KEY])
+      && getActorRegenerationRate(actor, { resource: "energy" }) > 0);
 }
 
-function actorMayNeedRegeneration(actor) {
+function actorNeedsHealthRegeneration(actor) {
   if (!actor) return false;
   if (actor.items?.some(item => {
     if (item?.type !== "trauma" && item?.type !== "disease") return false;
@@ -237,7 +183,7 @@ function actorMayNeedRegeneration(actor) {
   const health = actor.system?.resources?.health;
   if (resourceIsBelowMaximum(health)) return true;
   if (Object.values(actor.system?.limbs ?? {}).some(resourceIsBelowMaximum)) return true;
-  return resourceIsBelowMaximum(actor.system?.resources?.[ENERGY_RESOURCE_KEY]);
+  return false;
 }
 
 function resourceIsBelowMaximum(resource) {

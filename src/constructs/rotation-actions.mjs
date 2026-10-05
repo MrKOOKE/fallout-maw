@@ -1,16 +1,19 @@
 ﻿import { getConstructVisualRuntimeConfig, getConstructVisualRuntimeRevision, resolveConstructVisualLayers } from "../utils/construct-visual-model.mjs";
 import { getConstructMovementEnergyState, getConstructSystemState } from "../utils/construct-systems.mjs";
+import { resolveConstructVisualAnchors } from "../utils/construct-visual-model.mjs";
+import { resolveConstructJointRotations, getConstructJointRotationAnchors } from "../utils/construct-joint-rotations.mjs";
 import { planRotationSector, rotationDelta, rotationSectorBounds } from "../utils/construct-rotation-cost.mjs";
 import { usesFootprintRouteRotation } from "../utils/token-footprint-route.mjs";
 import { getActorActiveCombat } from "../combat/combat-membership.mjs";
 import { getResourceLimitState } from "../combat/resource-limits.mjs";
 import { prepareActorResourceSpend, runOneTimeResourceMutation } from "../combat/one-time-resources.mjs";
 import { registerActorTurnStartPreparedHandler } from "../combat/turn-events.mjs";
+import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
 
 const SYSTEM = "fallout-maw", FLAG = "constructRotationBudget";
 const EMPTY_FLAG = Object.freeze({});
 let isOwnTurn = (actor, combat) => combat?.combatant?.actor?.uuid === actor?.uuid;
-let getPartRotations = doc => doc.getFlag?.(SYSTEM, "constructVisualState")?.rotations ?? {};
+let getPartRotations = doc => resolveConstructJointRotations(doc.actor, doc.getFlag?.(SYSTEM, "constructVisualState") ?? {});
 const contexts = new WeakMap(), progress = new WeakMap(), initialPoses = new WeakMap();
 let combatRevision = 0;
 const tokenKey = doc => `${doc?.parent?.id ?? "prototype"}_${doc?.id ?? "prototype"}`;
@@ -22,10 +25,18 @@ export function getConstructRotationAngle(doc, slotId = "hull") {
     .find(part => part.slotId === slotId)?.rotation ?? 0;
 }
 
+function getRotationMountAngle(doc, slotId) {
+  if (slotId === "hull") return 0;
+  const part = getConstructVisualRuntimeConfig(doc.actor).parts.find(row => row.slotId === slotId);
+  return resolveConstructVisualAnchors(doc.actor, { rotations: getPartRotations(doc) })
+    .find(anchor => anchor.id === part?.anchorId)?.rotation ?? 0;
+}
+
 export function getConstructRotationState(doc, slotId = "hull") {
   const revision = getConstructVisualRuntimeRevision(), flag = readFlag(doc?.actor);
+  const anchorRotation = getRotationMountAngle(doc, slotId);
   const signature = [revision, combatRevision, flag, doc?._source?.rotation,
-    doc?.getFlag?.(SYSTEM, "constructVisualState")];
+    doc?.getFlag?.(SYSTEM, "constructVisualState"), anchorRotation];
   const cached = contexts.get(doc)?.get(slotId);
   if (revision !== null && cached && signature.every((value, i) => value === cached.signature[i])) return withProgress(doc, slotId, cached.context);
   const combat = getActorActiveCombat(doc?.actor);
@@ -49,19 +60,29 @@ export function getConstructRotationState(doc, slotId = "hull") {
     ? flag.turnId : `${combat?.id}:${combat?.round}:${combat?.turn}`;
   let initial = initialPoses.get(doc)?.get(slotId);
   if (!initial || initial.turnId !== turnId) {
-    initial = { angle, turnId };
+    initial = { angle, turnId, anchorRotation };
     let map = initialPoses.get(doc); if (!map) initialPoses.set(doc, map = new Map());
     map.set(slotId, initial);
   }
   const state = saved && saved.turnId === flag.turnId ? { ...saved }
     : { origin: combat ? initial.angle : angle, last: angle, min: null, max: null };
+  if (slotId !== "hull") {
+    const storedReference = getConstructJointRotationAnchors(actor, doc.getFlag?.(SYSTEM, "constructVisualState") ?? {})[slotId];
+    const reference = state.anchorRotation ?? (saved ? storedReference ?? initial.anchorRotation : initial.anchorRotation);
+    const carried = rotationDelta(reference, anchorRotation);
+    state.origin += carried;
+    state.last += carried;
+    state.anchorRotation = anchorRotation;
+  }
   // The centered cone shown at turn start is free. Only its extensions are paid.
   // Existing ledgers retain their angle reference until the next turn.
   state.offset ??= state.min === null || state.min === undefined
     ? slotId === "hull" ? 0 : -(Number(profile?.degrees) || 30) / 2 : 0;
   if (slotId !== "hull" && (state.min === null || state.min === undefined)) state.min = state.max = 0;
   const pose = progress.get(doc)?.get(slotId);
-  state.last = pose && pose.turnId === turnId ? pose.last : state.last + rotationDelta(state.last, angle);
+  state.last = pose && pose.turnId === turnId
+    ? pose.last + (slotId === "hull" ? 0 : rotationDelta(pose.anchorRotation ?? anchorRotation, anchorRotation))
+    : state.last + rotationDelta(state.last, angle);
   const mp = actor?.system?.resources?.movementPoints ?? {};
   let budget = !combat ? Infinity : isOwnTurn(actor, combat)
     ? Math.max(0, (Number(mp.value) || 0) - (Number(mp.min) || 0) + (Number(mp.once) || 0) - (limits.movementPoints?.amount ?? 0)) : 0;
@@ -71,7 +92,7 @@ export function getConstructRotationState(doc, slotId = "hull") {
       + (Number(resource?.once) || 0) - (limits[key]?.amount ?? 0)) / rate));
   }
   const context = { profile: profile ?? { points: 0, degrees: 15 }, part, powered, combat, state, costs,
-    budget: powered ? budget : 0, flag, turnId };
+    budget: powered ? budget : 0, flag, turnId, anchorRotation };
   let map = contexts.get(doc); if (!map) contexts.set(doc, map = new Map());
   map.set(slotId, { signature, context });
   return withProgress(doc, slotId, context);
@@ -79,7 +100,8 @@ export function getConstructRotationState(doc, slotId = "hull") {
 
 function withProgress(doc, slotId, context) {
   const pose = progress.get(doc)?.get(slotId);
-  return pose && pose.turnId === context.turnId ? { ...context, state: { ...context.state, last: pose.last } } : context;
+  const carried = slotId === "hull" ? 0 : rotationDelta(pose?.anchorRotation ?? context.anchorRotation, context.anchorRotation);
+  return pose && pose.turnId === context.turnId ? { ...context, state: { ...context.state, last: pose.last + carried } } : context;
 }
 
 export function getConstructRotationPrice(doc, slotId, target) {
@@ -90,7 +112,8 @@ export function getConstructRotationPrice(doc, slotId, target) {
 export function recordConstructRotationProgress(doc, slotId, angle) {
   const context = getConstructRotationState(doc, slotId);
   let map = progress.get(doc); if (!map) progress.set(doc, map = new Map());
-  map.set(slotId, { last: context.state.last + rotationDelta(context.state.last, angle), turnId: context.turnId });
+  map.set(slotId, { last: context.state.last + rotationDelta(context.state.last, angle), turnId: context.turnId,
+    anchorRotation: context.anchorRotation });
 }
 
 /** Pure preview of the same ledger used by the authority. Hull yaw never enters a part's ledger. */
@@ -99,7 +122,9 @@ export function planConstructRotation(doc, slotId, target, { budget, state } = {
   const current = state ?? context.state;
   if (!context.powered) return { ...context, state: current, rotation: current.last, cost: 0, reached: false };
   if (!context.combat || !context.profile.points) return { ...context, state: { ...current, last: target }, rotation: target, cost: 0, reached: true };
-  return { ...context, ...planRotationSector(current, target, context.profile, budget ?? context.budget) };
+  const plan = planRotationSector(current, target, context.profile, budget ?? context.budget);
+  if (slotId !== "hull") plan.state.anchorRotation = context.anchorRotation;
+  return { ...context, ...plan };
 }
 
 export function isConstructRotationPaid(doc, slotId, target) {
@@ -136,8 +161,13 @@ export async function purchaseConstructRotation(doc, slotId, target, { path = nu
     const flag = plan.flag, key = tokenKey(doc), turnId = flag.combatId === plan.combat.id ? flag.turnId : `${plan.combat.id}:initial`;
     const ledger = { ...flag, combatId: plan.combat.id, turnId, tokens: { ...flag.tokens,
       [key]: { ...flag.tokens?.[key], [slotId]: { ...plan.state, turnId } } } };
-    const plans = [mp, ...energy], updates = Object.assign({}, ...plans.map(row => row.updates), { [`flags.${SYSTEM}.${FLAG}`]: ledger });
-    const updated = await doc.actor.update(updates, { falloutMawReactionResourceUpdate: true });
+    const plans = [mp, ...energy], updates = Object.assign({}, ...plans.map(row => row.updates), {
+      [`flags.${SYSTEM}.${FLAG}.combatId`]: plan.combat.id,
+      [`flags.${SYSTEM}.${FLAG}.turnId`]: turnId,
+      [`flags.${SYSTEM}.${FLAG}.tokens.${key}.${slotId}`]: ledger.tokens[key][slotId]
+    });
+    const updated = await doc.actor.update(updates, { falloutMawReactionResourceUpdate: true,
+      [INVENTORY_RENDER_PARTS_OPTION]: ["indicators"] });
     if (!updated || plans.some(row => Number(doc.actor.system.resources[row.resourceKey].value) !== row.next
       || Number(doc.actor.system.resources[row.resourceKey].once || 0) !== row.onceBefore - row.onceSpent))
       throw new Error("Оплата поворота отменена.");
@@ -168,12 +198,23 @@ export async function refundConstructRotation(receipt) {
       updates[`system.resources.${key}.spent`] = Math.max(0, Number(resource.max) - value);
       updates[`system.resources.${key}.once`] = (Number(resource.once) || 0) + once;
     }
-    const flag = readFlag(actor), key = tokenKey(await globalThis.fromUuid?.(receipt.tokenUuid));
-    if (JSON.stringify(flag.tokens?.[key]?.[receipt.slotId]) === JSON.stringify(receipt.after.tokens?.[key]?.[receipt.slotId]))
+    const doc = await globalThis.fromUuid?.(receipt.tokenUuid);
+    const flag = readFlag(actor), key = tokenKey(doc);
+    const restoreSector = sameRotationSector(flag.tokens?.[key]?.[receipt.slotId], receipt.after.tokens?.[key]?.[receipt.slotId]);
+    if (restoreSector)
       updates[`flags.${SYSTEM}.${FLAG}.tokens.${key}.${receipt.slotId}`] = receipt.before.tokens?.[key]?.[receipt.slotId]
         ?? { origin: receipt.after.tokens[key][receipt.slotId].origin, last: receipt.after.tokens[key][receipt.slotId].origin, min: null, max: null, turnId: flag.turnId };
-    await actor.update(updates, { falloutMawReactionResourceUpdate: true });
+    const updated = await actor.update(updates, { falloutMawReactionResourceUpdate: true,
+      [INVENTORY_RENDER_PARTS_OPTION]: ["indicators"] });
+    if (updated && restoreSector && doc) progress.get(doc)?.delete(receipt.slotId);
   });
+}
+
+function sameRotationSector(left, right) {
+  if (!left || !right) return left === right;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length
+    && keys.every(key => Object.hasOwn(right, key) && left[key] === right[key]);
 }
 
 export function getConstructRouteRotationCost(doc, path = [], { unlimited = true, autoRotate = usesFootprintRouteRotation(doc) } = {}) {
@@ -221,9 +262,12 @@ export async function prepareConstructRotationTurn(actor, combat) {
       const slots = ["hull", ...getConstructVisualRuntimeConfig(actor).parts.filter(row => row.rotates).map(row => row.slotId)];
       tokens[tokenKey(doc)] = Object.fromEntries(slots.map(slot => {
         const angle = getConstructRotationAngle(doc, slot);
-        return [slot, { origin: angle, last: angle, min: null, max: null, turnId }];
+        return [slot, { origin: angle, last: angle, min: null, max: null, turnId,
+          ...(slot === "hull" ? {} : { anchorRotation: getRotationMountAngle(doc, slot) }) }];
       }));
     }
-    await actor.update({ [`flags.${SYSTEM}.${FLAG}`]: { combatId: combat.id, turnId, tokens } });
+    const ledger = { combatId: combat.id, turnId, tokens };
+    const replacement = globalThis.foundry?.data?.operators?.ForcedReplacement?.create?.(ledger) ?? ledger;
+    await actor.update({ [`flags.${SYSTEM}.${FLAG}`]: replacement }, { [INVENTORY_RENDER_PARTS_OPTION]: ["indicators"] });
     for (const doc of actor.getActiveTokens?.(false, true) ?? []) progress.delete(doc);
 }

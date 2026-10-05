@@ -4,6 +4,8 @@ import { planRotationSector, rotationSectorBounds } from "../src/utils/construct
 import { planConstructRotation, purchaseConstructRotation, refundConstructRotation, getConstructRouteRotationCost,
   registerConstructRotationTurns, recordConstructRotationProgress } from "../src/constructs/rotation-actions.mjs";
 import { callActorTurnStartPreparedHandlers } from "../src/combat/turn-events.mjs";
+import { hasPaidConstructHullRotation, prepareConstructHullTurnButtons } from "../src/apps/construct-hud-rotation.mjs";
+import { prepareConstructJointRotationState, resolveConstructJointRotations } from "../src/utils/construct-joint-rotations.mjs";
 
 const empty = origin => ({ origin, last: origin, min: null, max: null });
 const hull = { points: 2, degrees: 15 }, turret = { points: 5, degrees: 30 };
@@ -58,6 +60,57 @@ function fixture() {
   return { actor, doc, drive, engine, combat };
 }
 
+test("the HUD has no hull rotation controls for unconfigured constructs, zero costs or only paid modules", () => {
+  const f = fixture();
+  const original = structuredClone(f.actor.flags);
+  delete f.actor.flags["fallout-maw"].constructVisual;
+  assert.equal(hasPaidConstructHullRotation(f.actor), false);
+  assert.deepEqual(prepareConstructHullTurnButtons(f.doc), []);
+  f.actor.flags = original;
+  f.actor.flags["fallout-maw"].constructVisual.hullRotationCost = { points: 0, degrees: 15 };
+  assert.deepEqual(prepareConstructHullTurnButtons(f.doc), [], "paid turret rotation cannot enable hull buttons");
+  f.actor.flags["fallout-maw"].constructVisual.hullRotationCost = { points: -2, degrees: 45 };
+  assert.deepEqual(prepareConstructHullTurnButtons(f.doc), []);
+  f.actor.flags["fallout-maw"].constructVisual.hullRotationCost = hull;
+  f.actor.type = "character";
+  assert.deepEqual(prepareConstructHullTurnButtons(f.doc), []);
+});
+
+test("paid hull rotation exposes four independent directions with real 15 and 45 degree prices", () => {
+  const f = fixture(), buttons = prepareConstructHullTurnButtons(f.doc);
+  assert.deepEqual(buttons.map(row => row.delta), [-45, -15, 15, 45]);
+  assert.deepEqual(buttons.map(row => row.label), ["Влево 45°", "Влево 15°", "Вправо 15°", "Вправо 45°"]);
+  assert.deepEqual(buttons.map(row => row.cost), [6, 2, 2, 6]);
+  assert.ok(buttons.every(row => !row.disabled));
+  assert.equal(f.actor.system.resources.movementPoints.value, 40, "preparing a popup cannot spend resources");
+});
+
+test("paid rotation remains in the HUD when returning through paid sectors or rotating outside combat costs zero", async () => {
+  const f = fixture();
+  await purchaseConstructRotation(f.doc, "hull", 15, { notify: false });
+  f.doc.rotation = f.doc._source.rotation = 15;
+  let buttons = prepareConstructHullTurnButtons(f.doc);
+  assert.equal(buttons.length, 4);
+  assert.equal(buttons.find(row => row.delta === -15).cost, 0);
+  globalThis.game.combats = [];
+  buttons = prepareConstructHullTurnButtons(f.doc);
+  assert.equal(buttons.length, 4);
+  assert.ok(buttons.every(row => row.cost === 0));
+  f.actor.flags["fallout-maw"].constructVisual.hullRotationCost = { points: 0 };
+  assert.deepEqual(prepareConstructHullTurnButtons(f.doc), [], "turning payment off removes controls immediately");
+});
+
+test("configured rotation buttons stay visible but disabled when energy or movement points run out", () => {
+  const f = fixture();
+  f.actor.system.resources.movementPoints.value = 0;
+  assert.ok(prepareConstructHullTurnButtons(f.doc).every(row => row.disabled));
+  f.actor.system.resources.movementPoints.value = 40;
+  f.actor.system.constructSystems[0].active = false;
+  const buttons = prepareConstructHullTurnButtons(f.doc);
+  assert.equal(buttons.length, 4);
+  assert.ok(buttons.every(row => row.disabled));
+});
+
 test("authoritative sectors debit strict MP and energy once; hull yaw is independent of turret yaw", async () => {
   const f = fixture();
   const first = await purchaseConstructRotation(f.doc, "turret", 10, { notify: false });
@@ -69,6 +122,31 @@ test("authoritative sectors debit strict MP and energy once; hull yaw is indepen
   assert.equal((await purchaseConstructRotation(f.doc, "hull", 105, { notify: false })).cost, 2);
   assert.equal((await purchaseConstructRotation(f.doc, "turret", 16, { notify: false })).cost, 5);
   assert.equal(f.actor.system.resources.power.value, 993);
+});
+
+test("a turret carries the machine-gun paid sector without spending its MP, while independent extensions still cost MP", async () => {
+  const f = fixture(), config = f.actor.flags["fallout-maw"].constructVisual;
+  config.anchors = [{ id: "turret-pivot", x: 0.5, y: 0.5 }, { id: "mg-pivot", parentSlotId: "turret", x: 0.1, y: 0 }];
+  config.parts[0].anchorId = "turret-pivot";
+  config.parts.push({ id: "mg", slotId: "mg", anchorId: "mg-pivot", rotates: true, rotationCost: { points: 2, degrees: 30 } });
+  f.doc.flags["fallout-maw"].constructVisualState = { rotations: { turret: 0, mg: 10 } };
+  registerConstructRotationTurns({ partRotations: doc => resolveConstructJointRotations(doc.actor, doc.getFlag("fallout-maw", "constructVisualState") ?? {}) });
+  const paid = await purchaseConstructRotation(f.doc, "mg", 30, { notify: false });
+  assert.equal(paid.cost, 2);
+  recordConstructRotationProgress(f.doc, "mg", 30);
+  let state = f.doc.flags["fallout-maw"].constructVisualState;
+  state = prepareConstructJointRotationState(f.actor, state, "mg", 30, { turret: 0, mg: 30 });
+  state = prepareConstructJointRotationState(f.actor, state, "turret", 90, { turret: 90, mg: 120 });
+  f.doc.flags["fallout-maw"].constructVisualState = state;
+  const carried = planConstructRotation(f.doc, "mg", 120, { budget: 0 });
+  assert.equal(carried.rotation, 120);
+  assert.equal(carried.reached, true);
+  assert.equal(carried.cost, 0);
+  assert.equal(carried.state.origin, 100);
+  assert.equal(f.actor.system.resources.movementPoints.value, 38);
+  assert.equal(planConstructRotation(f.doc, "mg", 145, { budget: 0 }).reached, true);
+  assert.equal((await purchaseConstructRotation(f.doc, "mg", 146, { notify: false })).cost, 2);
+  assert.equal(f.actor.system.resources.movementPoints.value, 36);
 });
 
 test("engine dependence applies out of combat, broken engine blocks rotation, shutdown retains the bank", async () => {
@@ -91,6 +169,32 @@ test("multi-leg native route pays every entered hull sector; cancellation refund
   await refundConstructRotation(paid.receipt);
   assert.equal(f.actor.system.resources.movementPoints.value, 40); assert.equal(f.actor.system.resources.power.value, 1000);
   assert.equal(planConstructRotation(f.doc, "hull", 15).cost, 2);
+});
+
+test("native flag property order cannot retain a refunded sector or refund over a newer allocation", async () => {
+  const f = fixture();
+  const paid = await purchaseConstructRotation(f.doc, "turret", 16, { notify: false });
+  recordConstructRotationProgress(f.doc, "turret", 16);
+  const key = "scene_tank";
+  const sector = f.actor.flags["fallout-maw"].constructRotationBudget.tokens[key].turret;
+  f.actor.flags["fallout-maw"].constructRotationBudget.tokens[key].turret = Object.fromEntries(Object.entries(sector).reverse());
+  await refundConstructRotation(paid.receipt);
+  assert.equal(planConstructRotation(f.doc, "turret", 16).cost, 5);
+  assert.equal(f.actor.system.resources.movementPoints.value, 40);
+  const first = await purchaseConstructRotation(f.doc, "turret", 16, { notify: false });
+  await purchaseConstructRotation(f.doc, "turret", 46, { notify: false });
+  await refundConstructRotation(first.receipt);
+  assert.equal(planConstructRotation(f.doc, "turret", 46).cost, 0);
+});
+
+test("sector payment writes only its changed token and mount", async () => {
+  const f = fixture();
+  const update = f.actor.update;
+  let writes;
+  f.actor.update = function(data, options) { writes = data; return update.call(this, data, options); };
+  await purchaseConstructRotation(f.doc, "turret", 16, { notify: false });
+  assert.ok(writes["flags.fallout-maw.constructRotationBudget.tokens.scene_tank.turret"]);
+  assert.ok(!Object.hasOwn(writes, "flags.fallout-maw.constructRotationBudget"));
 });
 
 test("turn start captures the real initial pose and resets all purchased sectors", async () => {

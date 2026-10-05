@@ -1,0 +1,9 @@
+{{#with selectedInterior}}
+          <section class="construct-visual-inspector construct-visual-interior-inspector" aria-label="Физическое размещение детали">
+            <label>Где находится деталь<select data-visual-kind="interior" data-visual-slot-id="{{slotId}}" data-visual-key="parentSlotId"><option value="">Снаружи конструкта</option>{{#each parents}}<option value="{{value}}" {{#if selected}}selected{{/if}}>Внутри: {{label}}</option>{{/each}}</select></label>
+            <p class="hint">Наружные детали доступны для прямого попадания. Внутренние защищает выбранный отсек.</p>
+            <div class="construct-visual-location-path"><i class="fa-solid fa-boxes-stacked"></i><span>{{pathLabel}}</span></div>
+            <dl class="construct-visual-compartment-contents"><dt>Детали внутри</dt><dd>{{#if childrenLabel}}{{childrenLabel}}{{else}}Нет{{/if}}</dd></dl>
+            <p class="hint">Здесь доступны все физические детали, включая двигатель и отсеки. </p>
+          </section>
+          {{/with}}

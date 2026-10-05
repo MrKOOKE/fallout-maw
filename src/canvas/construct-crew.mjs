@@ -4,11 +4,17 @@ import { getConstructCrewContext } from "../utils/construct-crew-context.mjs";
 import { canUserUseConstructWeapon } from "../utils/construct-weapon-operator.mjs";
 import { queueActorContainerOperation } from "./actor-containers.mjs";
 import { registerNativeConstructCrewControls } from "./construct-crew-native-controls.mjs";
+import { createKeyedOperationQueue } from "../utils/keyed-operation-queue.mjs";
+const queueConstructControl = createKeyedOperationQueue();
+function queueConstructCrewControl(payload, requester) {
+  return queueConstructControl(String(payload.tokenUuid ?? ""), () => performConstructCrewControl(payload, requester));
+}
 
 const CHANNEL = `system.${SYSTEM_ID}`;
 const SCOPE = `${SYSTEM_ID}.constructCrew`;
 const TIMEOUT_MS = 15000;
 const pendingRequests = new Map();
+const handledRequests = new Map();
 let actionHandlers = {};
 let hooksRegistered = false;
 let socketRegistered = false;
@@ -71,7 +77,7 @@ export function registerConstructCrewHooks() {
 export async function requestConstructCrewControl(payload = {}) {
   const gm = getResponsibleGM();
   if (!gm) throw new Error("Для управления конструктом нужен активный GM.");
-  if (game.user?.id === gm.id) return queueActorContainerOperation(() => performConstructCrewControl(payload, game.user));
+  if (game.user?.id === gm.id) return queueConstructCrewControl(payload, game.user);
   const requestId = foundry.utils.randomID();
   const promise = new Promise((resolve, reject) => {
     const timeout = globalThis.setTimeout(() => {
@@ -101,14 +107,18 @@ async function handleConstructCrewSocketMessage(message = {}, senderUserId = "")
   }
   if (message.type !== "request" || message.requesterUserId !== sender.id
     || !game.user?.isGM || message.gmUserId !== game.user.id || getResponsibleGM()?.id !== game.user.id) return;
-  try {
-    const result = await queueActorContainerOperation(() => performConstructCrewControl(message.payload ?? {}, sender));
-    game.socket.emit(CHANNEL, { scope: SCOPE, type: "response", requestId: message.requestId,
-      recipientUserId: sender.id, ok: true, result });
-  } catch (error) {
-    game.socket.emit(CHANNEL, { scope: SCOPE, type: "response", requestId: message.requestId,
-      recipientUserId: sender.id, ok: false, error: error.message });
+  if (typeof message.requestId !== "string" || !message.requestId || message.requestId.length > 128) return;
+  const key = `${sender.id}:${message.requestId}`;
+  let response = handledRequests.get(key);
+  if (!response) {
+    response = queueConstructCrewControl(message.payload ?? {}, sender).then(
+      result => ({ ok: true, result }), error => ({ ok: false, error: error.message })
+    );
+    handledRequests.set(key, response);
+    if (handledRequests.size > 128) handledRequests.delete(handledRequests.keys().next().value);
   }
+  game.socket.emit(CHANNEL, { scope: SCOPE, type: "response", requestId: message.requestId,
+    recipientUserId: sender.id, ...await response });
 }
 
 async function performConstructCrewControl(payload, requester) {
@@ -140,6 +150,8 @@ async function performConstructCrewControl(payload, requester) {
     const snap = Number(payload.snap ?? 0);
     if (![angle, delta, snap].every(Number.isFinite) || Math.abs(delta) > 180 || snap < 0 || snap > 360) throw new Error("Недопустимый угол поворота корпуса.");
     const rotation = ((snap > 0 ? Math.round(angle / snap) * snap : angle) % 360 + 360) % 360;
+    if (Math.abs(((rotation - Number(document._source?.rotation ?? document.rotation) + 540) % 360) - 180) < 1e-6)
+      return { ok: true, rotation, changed: false };
     const updated = await document.update({ rotation }, { falloutMawConstructCrewMovement: true });
     if (!updated) throw new Error("Поворот корпуса не выполнен: проверьте двигатель и доступную энергию.");
     return { ok: true, rotation };

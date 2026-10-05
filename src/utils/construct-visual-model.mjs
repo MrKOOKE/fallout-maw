@@ -6,7 +6,8 @@ export { normalizeConstructPersonalWeapons } from "./construct-firing-port-model
  * Serializable modular token model. Positions and image sizes use token extents;
  * image rotation is clockwise, with artwork facing up at zero degrees.
  * Child anchors use offsets from parentId or the pivot of parentSlotId.
- * Token-state rotations override a rotating part's final body-relative angle.
+ * Runtime angles are body-relative. A saved mount reference preserves joint yaw
+ * when its parent turns; active aiming overrides use their current body angle.
  * This module deliberately has no Foundry or PIXI dependencies.
  */
 export const CONSTRUCT_VISUAL_FLAG = "constructVisual";
@@ -83,6 +84,8 @@ export function normalizeConstructVisual(raw = {}) {
     rotates: Boolean(entry?.rotates), rotationSpeed: number(entry?.rotationSpeed, 90, 0.1, 720),
     rotationCost: normalizeRotationCost(entry?.rotationCost),
     rotationSystemIds: [...new Set(entries(entry?.rotationSystemIds).map(text).filter(Boolean))],
+    rotationSoundPath: imagePath(entry?.rotationSoundPath),
+    rotationSoundVolume: number(entry?.rotationSoundVolume, 0.4, 0, 1),
     minRotation: number(entry?.minRotation, -180, -360, 360),
     maxRotation: number(entry?.maxRotation, 180, -360, 360)
   })).filter(part => part.slotId);
@@ -198,15 +201,23 @@ function resolveModel(actorOrConfig, options) {
     ?? options.token?.flags?.["fallout-maw"]?.[CONSTRUCT_VISUAL_STATE_FLAG]?.rotations ?? {};
   const cacheable = runtime && options.installedSlots === undefined && options.brokenSlots === undefined && options.missingSlots === undefined;
   const rotationEntries = rotations instanceof Map ? [...rotations] : Object.entries(rotations);
+  const rotationAnchors = options.rotationAnchors ?? {};
+  const rotationOverrides = options.rotationOverrides ?? {};
   const signature = cacheable ? JSON.stringify([options.width ?? 1, options.height ?? 1, Boolean(options.includeUninstalled),
-    rotationEntries.sort(([a], [b]) => String(a).localeCompare(String(b)))]) : "";
+    rotationEntries.sort(([a], [b]) => String(a).localeCompare(String(b))), rotationAnchors, rotationOverrides]) : "";
   if (cacheable && runtime.resolved.has(signature)) return runtime.resolved.get(signature);
   const anchorById = new Map(config.anchors.map(anchor => [anchor.id, anchor]));
   const partBySlot = new Map(config.parts.map(part => [part.slotId, part]));
   const resolved = new Map();
   const resolving = new Set();
   const partAngle = (part, anchor) => {
-    const runtime = rotations instanceof Map ? rotations.get(part.slotId) : rotations?.[part.slotId];
+    const override = rotationOverrides[part.slotId];
+    const saved = rotations instanceof Map ? rotations.get(part.slotId) : rotations?.[part.slotId];
+    const reference = rotationAnchors[part.slotId];
+    const runtime = Number.isFinite(Number(override)) && override !== null && override !== undefined ? override
+      : Number.isFinite(Number(saved)) && saved !== null && saved !== undefined
+        ? Number(saved) + (reference !== null && reference !== undefined && Number.isFinite(Number(reference))
+          ? anchor.rotation - Number(reference) : 0) : saved;
     const angle = part.rotates && Number.isFinite(Number(runtime)) && runtime !== null && runtime !== undefined
       ? Number(runtime) : anchor.rotation + part.rotation;
     return normalizeConstructVisualRotation(part.rotates

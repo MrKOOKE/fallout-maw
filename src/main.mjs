@@ -20,8 +20,7 @@ import { registerConstructCrewHooks, registerConstructCrewSocket, configureConst
 import { registerConstructVisualHooks, performConstructPartRotation, getConstructPartRotations, getConstructWeaponRotationActivationSector } from "./canvas/construct-visuals.mjs";
 import { registerConstructVisualModelCache } from "./utils/construct-visual-model.mjs";
 import { configureConstructFiringPortTransforms } from "./canvas/construct-firing-ports.mjs";
-import { ConstructVisualEditor } from "./apps/construct-visual-editor.mjs";
-import { ConstructSystemsConfig } from "./apps/construct-systems-config.mjs";
+import { openConstructStructure } from "./apps/construct-structure.mjs";
 import { registerConstructSystemSocket, requestConstructSystemAction } from "./constructs/system-actions.mjs";
 import { registerConstructSystemSoundHooks } from "./constructs/system-sounds.mjs";
 import { registerConstructCrewCombatHooks } from "./combat/construct-crew-combat.mjs";
@@ -280,8 +279,8 @@ Hooks.once("ready", () => {
   registerNotificationDeduplication();
   initializeEffectTooltips();
   game.system.api = foundry.utils.mergeObject(game.system.api ?? {}, { constructs: {
-    openVisualEditor: actor => new ConstructVisualEditor(actor).render(true),
-    openSystems: actor => new ConstructSystemsConfig(actor).render(true),
+    openVisualEditor: actor => openConstructStructure(actor),
+    openSystems: actor => openConstructStructure(actor),
     systemAction: requestConstructSystemAction,
     createTankDemo: async options => (await import("./apps/modular-tank-demo.mjs")).createModularTankDemo(options),
     upgradeTankDemo: async options => (await import("./apps/modular-tank-demo.mjs")).upgradeTankDemo(options)

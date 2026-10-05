@@ -177,6 +177,27 @@ test("overlapping parts are opaque inside one raster, with native drag opacity a
   assert.equal(state.mesh.voidCalls, 1, "the actual composite supplies the grid silhouette once");
 });
 
+test("a saved machine-gun yaw follows its turret in the actual composite and returns to its local pose on preview cancel", async t => {
+  const f = await fixture(t), config = f.actor.flags["fallout-maw"].constructVisual;
+  config.anchors.push({ id: "mg-pivot", parentSlotId: "gun", x: 0.1, y: -0.1 });
+  config.parts.push({ id: "mg", slotId: "mg", img: "mg.webp", anchorId: "mg-pivot", rotates: true, width: 0.1, height: 0.2, zIndex: 2 });
+  f.actor.items.contents.push({ id: "mg", type: "gear", parent: f.actor, actor: f.actor, system: {
+    placement: { mode: "constructPart", limbKey: "mg" }, functions: { constructPart: { enabled: true } }
+  } });
+  f.token.document.flags["fallout-maw"].constructVisualState.rotations = { gun: 35, mg: 10 };
+  await f.visual.syncConstructVisual(f.token); await f.settle();
+  const sprite = f.state().composite.sprites.get("mg");
+  assert.equal(sprite.angle, 10);
+  f.visual.CONSTRUCT_VISUAL_TESTING.previews.set(f.token, { gun: 65 });
+  f.visual.syncConstructVisual(f.token, { rotationsDirty: true });
+  assert.equal(sprite.angle, 40, "parent movement carries the saved local yaw rather than counter-rotating the sprite");
+  assert.equal(f.visual.getConstructPartRotations(f.token).mg, 40);
+  f.visual.CONSTRUCT_VISUAL_TESTING.previews.delete(f.token);
+  f.visual.syncConstructVisual(f.token, { rotationsDirty: true });
+  assert.equal(sprite.angle, 10);
+  assert.deepEqual(f.token.document.getFlag("fallout-maw", "constructVisualState").rotations, { gun: 35, mg: 10 });
+});
+
 test("warm native movement and rotation do not resolve parts, fetch images, allocate or rasterize", async t => {
   const f = await fixture(t);
   await f.visual.syncConstructVisual(f.token); await f.settle();

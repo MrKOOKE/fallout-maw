@@ -10,6 +10,7 @@ import { isConstructPersonalWeapon, getConstructPersonalWeaponAimOrigin, getCons
   getConstructFiringPortWorldTransform, validateConstructPersonalWeaponAim } from "./construct-firing-ports.mjs";
 import { constrainConstructFiringPortAimPoint } from "../utils/construct-firing-port-model.mjs";
 import { setConstructMotionSound } from "../constructs/system-sounds.mjs";
+import { resolveConstructJointRotations, prepareConstructJointRotationState } from "../utils/construct-joint-rotations.mjs";
 import { planConstructRotation, purchaseConstructRotation, isConstructRotationPaid, recordConstructRotationProgress, registerConstructRotationTurns,
   getConstructRotationBoundaries, getConstructRotationAngle } from "../constructs/rotation-actions.mjs";
 import { refreshConstructRotationLimits, registerConstructRotationLimits, getConstructRotationGuideBounds } from "./construct-rotation-limits.mjs";
@@ -92,9 +93,12 @@ export function registerConstructVisualHooks({ getSelectedContext } = {}) {
 }
 
 export function getConstructPartRotations(token) {
-  return { ...(token?.document?.getFlag?.(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG)?.rotations ?? {}),
-    ...(token?.isPreview ? states.get(token)?.snapshotRotations ?? previews.get(token._original) ?? {} : {}),
-    ...(previews.get(token) ?? {}) };
+  if (token?.isPreview && states.get(token)?.snapshotRotations)
+    return { ...states.get(token).snapshotRotations, ...(previews.get(token) ?? {}) };
+  const stored = token?.document?.getFlag?.(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG) ?? {};
+  return resolveConstructJointRotations(token?.actor ?? token?.document?.actor, stored, {
+    ...(token?.isPreview ? previews.get(token._original) ?? {} : {}), ...(previews.get(token) ?? {})
+  });
 }
 
 function hasVisualChange(changes, prefix) {
@@ -598,6 +602,7 @@ function tickConstructRotations() {
       rotatingPreviews.delete(token); setConstructMotionSound(token, "rotate", false); continue;
     }
     let changed = false;
+    const rotatingSlotIds = [];
     for (const [slotId, motion] of motions) {
       if (finishStoppedConstructRotation(token, slotId, motion)) continue;
       const requested = advanceConstructRotation(motion.current, motion.target, motion.speed, dt, motion.sector);
@@ -618,6 +623,7 @@ function tickConstructRotations() {
       }
       if (Math.abs(normalizeConstructVisualRotation(current - motion.current)) > 0.0001) {
         changed = true; motion.current = current;
+        rotatingSlotIds.push(slotId);
         recordConstructRotationProgress(token.document, slotId, current);
         previews.set(token, { ...(previews.get(token) ?? {}), [slotId]: current });
         motion.controller?.previewFrameScheduler?.request?.();
@@ -625,7 +631,7 @@ function tickConstructRotations() {
       publishConstructVisualPreview({ token, slotId, rotation: motion.current,
         ...motion.authorization });
     }
-    setConstructMotionSound(token, "rotate", changed);
+    setConstructMotionSound(token, "rotate", changed, { slotIds: rotatingSlotIds });
     if (changed) void syncConstructVisual(token, { rotationsDirty: true });
     refreshConstructRotationLimits(token);
   }
@@ -680,7 +686,7 @@ export function clearConstructPartPreview(token, slotId = "") {
 }
 
 function savedConstructPartRotation(token, slotId) {
-  const rotations = token.document.getFlag(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG)?.rotations ?? {};
+  const rotations = resolveConstructJointRotations(token.actor, token.document.getFlag(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG) ?? {});
   return resolveConstructVisualLayers(token.actor, visualOptions(token, rotations)).find(layer => layer.slotId === slotId)?.rotation;
 }
 
@@ -764,8 +770,8 @@ export async function performConstructPartRotation(tokenDocument, { partSlotId, 
   const reached = validateConstructVisualRotationCommit(tokenDocument, slotId, rotation, user);
   if (!reached.ok) throw new Error("Башня ещё не достигла этого направления. Дождитесь её поворота при прицеливании.");
   const stored = tokenDocument.getFlag(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG) ?? {};
-  await tokenDocument.setFlag(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG, { ...stored,
-    rotations: { ...(stored.rotations ?? {}), [slotId]: reached.rotation } });
+  await tokenDocument.setFlag(SYSTEM, CONSTRUCT_VISUAL_STATE_FLAG,
+    prepareConstructJointRotationState(token.actor, stored, slotId, reached.rotation, getConstructPartRotations(token)));
   return { ok: true, rotation: reached.rotation };
 }
 

@@ -1,6 +1,7 @@
 import { getConstructSystems, getConstructSystemState } from "../utils/construct-systems.mjs";
 import { ConstructSpatialSound } from "./spatial-system-sound.mjs";
 import { isTokenMovementTravel } from "../utils/token-movement-kind.mjs";
+import { getConstructRotationSoundProfiles } from "../utils/construct-rotation-sounds.mjs";
 
 const loops = new Map(), oneShots = new Map(), starts = new Map();
 const motions = new WeakMap(), previousStates = new WeakMap(), tokenSources = new WeakMap();
@@ -50,7 +51,7 @@ function setLoop(token, system, action, level, { retain = false } = {}) {
   const config = selectSound(system, action); if (!config) return;
   const spatial = new ConstructSpatialSound(token, config, { sourceId: `fallout-maw:${key}` });
   spatial.setLevel(level);
-  const next = { token, spatial, sound: spatial.sound, actorUuid: token.actor.uuid, systemId: system.id };
+  const next = { token, spatial, sound: spatial.sound, actorUuid: token.actor.uuid, systemId: system.id, action };
   loops.set(key, next); trackSource(token, next);
 }
 function cancelStart(key) {
@@ -84,7 +85,7 @@ function syncActorSounds(actor, { transitions = false } = {}) {
   const previous = previousStates.get(actor) ?? new Map(), next = new Map();
   const tokens = (canvas.tokens?.placeables ?? []).filter(token => token.actor === actor && !token.isPreview && !token.document.hidden);
   const systems = getConstructSystems(actor);
-  for (const [key, entry] of loops) if (entry.actorUuid === actor.uuid
+  for (const [key, entry] of loops) if (entry.actorUuid === actor.uuid && entry.action !== "rotate"
     && !systems.some(system => system.id === entry.systemId && system.enabled)) stopLoop(key);
   for (const [key, entry] of starts) if (entry.actorUuid === actor.uuid
     && !systems.some(system => system.id === entry.systemId && system.enabled)) cancelStart(key);
@@ -100,6 +101,7 @@ function syncActorSounds(actor, { transitions = false } = {}) {
       syncTokenSystemLoops(token, system, active, running);
     }
   }
+  for (const token of tokens) syncTokenRotationLoops(token);
   previousStates.set(actor, next);
 }
 function syncTokenSystemLoops(token, system, active, running = active && !starts.has(tokenSystemKey(token, system))) {
@@ -107,12 +109,22 @@ function syncTokenSystemLoops(token, system, active, running = active && !starts
   // Keep a quiet engine bed under travel, so a changing track layer never creates a silence hole.
   setLoop(token, system, "idle", running ? (moving ? 0.25 : 1) : 0, { retain: active });
   setLoop(token, system, "move", running && moving ? 1 : 0, { retain: active });
-  setLoop(token, system, "rotate", system.enabled && motion.rotate ? 1 : 0, { retain: system.enabled });
 }
-export function setConstructMotionSound(token, action, active) {
+function syncTokenRotationLoops(token) {
+  const motion = motions.get(token) ?? {};
+  const profiles = getConstructRotationSoundProfiles(token.actor, motion.rotationSlots ?? null);
+  for (const [key, entry] of loops) if (entry.token === token && entry.action === "rotate"
+    && !profiles.some(profile => profile.id === entry.systemId && profile.enabled)) stopLoop(key);
+  for (const profile of profiles) setLoop(token, profile, "rotate",
+    !token.document.hidden && profile.enabled && motion.rotate ? 1 : 0, { retain: profile.enabled });
+}
+export function setConstructMotionSound(token, action, active, { slotIds = null } = {}) {
   if (!token?.document || token.destroyed || token.actor?.type !== "construct" || token.isPreview) return;
   const state = motions.get(token) ?? {};
-  if (Boolean(state[action]) === Boolean(active)) return;
+  const sameSlots = slotIds === null ? state.rotationSlots == null
+    : state.rotationSlots?.length === slotIds.length && slotIds.every(id => state.rotationSlots.includes(id));
+  if (Boolean(state[action]) === Boolean(active) && (action !== "rotate" || !active || sameSlots)) return;
+  if (action === "rotate" && active) state.rotationSlots = slotIds === null ? null : [...new Set(slotIds)];
   const wasMoving = Boolean(state.move || state.hullRotate);
   state[action] = Boolean(active); motions.set(token, state);
   const moving = Boolean(state.move || state.hullRotate);
@@ -122,6 +134,7 @@ export function setConstructMotionSound(token, action, active) {
       const running = !token.document.hidden && systemState.operational && systemState.stored > 0;
       syncTokenSystemLoops(token, system, running);
     }
+    syncTokenRotationLoops(token);
   };
   if (action !== "rotate") {
     if (moving) { clearTimeout(state.releaseTimer); state.releaseTimer = null; }
@@ -154,7 +167,8 @@ export function registerConstructSystemSoundHooks() {
   });
   Hooks.on("updateActor", (actor, changes) => {
     if (actor.type === "construct" && Object.keys(foundry.utils.flattenObject(changes))
-      .some(key => key.startsWith("system.constructSystems") || key.startsWith("system.resources"))) syncActorSounds(actor, { transitions: true });
+      .some(key => key.startsWith("system.constructSystems") || key.startsWith("system.resources")
+        || key.startsWith("flags.fallout-maw.constructVisual"))) syncActorSounds(actor, { transitions: true });
   });
   for (const event of ["updateItem", "createItem", "deleteItem"]) Hooks.on(event, item => {
     if (item.actor?.type === "construct") syncActorSounds(item.actor, { transitions: true });

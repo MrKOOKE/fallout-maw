@@ -26,6 +26,7 @@ import {
   getLevelSettings,
   getNeedSettings,
   getProficiencySettings,
+  getPreparedRuntimeSettings,
   getResourceSettings,
   getSkillAdvancementSettings,
   getSkillSettings,
@@ -608,14 +609,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const context = await super._prepareContext(options);
     const actor = this.actor;
     const isConstruct = actor.type === "construct";
-    const creatureOptions = getCreatureOptions();
+    const runtimeSettings = getPreparedRuntimeSettings();
+    const creatureOptions = runtimeSettings.creatureOptions;
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
     const subtypeId = actor.system?.creature?.subtypeId;
     const race = creatureOptions.races.find(entry => entry.id === raceId);
     const subtype = (race?.naturalItemSets ?? []).find(entry => entry.id === subtypeId) ?? null;
     const sourceSystem = actor.system?._source ?? actor.system;
-    const inventoryContext = await prepareActorSheetInventoryRenderContext(actor, race, sourceSystem);
+    const indicatorsOnly = options.parts?.length === 1 && options.parts[0] === "indicators";
+    const inventoryContext = indicatorsOnly ? {} : await prepareActorSheetInventoryRenderContext(actor, race, sourceSystem);
     if (options.parts?.length === 1 && options.parts[0] === "inventory") {
       return foundry.utils.mergeObject(context, {
         actor,
@@ -631,15 +634,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       }, { inplace: false });
     }
 
-    const characteristicSettings = getCharacteristicSettings();
-    const damageTypeSettings = getDamageTypeSettings();
+    const characteristicSettings = runtimeSettings.characteristicSettings;
+    const damageTypeSettings = runtimeSettings.damageTypeSettings;
     const diseaseSettings = getDiseaseSettings();
-    const resourceSettings = getResourceSettings();
-    const proficiencySettings = getProficiencySettings();
-    const skillSettings = getSkillSettings();
-    const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const resourceSettings = runtimeSettings.resourceSettings;
+    const proficiencySettings = runtimeSettings.proficiencySettings;
+    const skillSettings = runtimeSettings.skillSettings;
+    const skillAdvancementSettings = runtimeSettings.skillAdvancementSettings;
     const levelSettings = getLevelSettings();
-    const needSettings = getActorNeedSettings(actor);
+    const needSettings = getActorNeedSettings(actor, creatureOptions);
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
       ? this.#activeLimbKey
@@ -664,6 +667,25 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       defenseLabel: game.i18n.localize("FALLOUTMAW.Common.DamageDefenses"),
       resistanceLabel: game.i18n.localize("FALLOUTMAW.Common.DamageResistances")
     });
+
+    if (indicatorsOnly) return foundry.utils.mergeObject(context, {
+      actor, system: actor.system, sourceSystem, config: FALLOUT_MAW,
+      owner: actor.isOwner, isConstruct, editable: this.isEditable,
+      freeEdit: this.#freeEdit, editLockAttribute: this.#freeEdit ? "" : "disabled",
+      resources: resourceSettings.map(resource => prepareDisplayIndicatorEntry({
+        ...resource, data: actor.system.resources?.[resource.key], inputName: `system.resources.${resource.key}.value`
+      })).map(entry => decorateConstructResourceAvailability(actor, decorateOneTimeResourceDisplay(actor, decorateActionPointHudEntry(actor, entry)))),
+      needs: needSettings.map(need => prepareDisplayIndicatorEntry({
+        ...need, data: actor.system.needs?.[need.key], inputName: `system.needs.${need.key}.value`
+      })),
+      limbs, activeLimb: limbs.find(limb => limb.active) ?? null,
+      damageResistances: damageMitigationDisplay.resistances, damageDefenses: damageMitigationDisplay.defenses,
+      limbSilhouette,
+      traumas: prepareTraumaEntries(actor, { characteristicSettings, resourceSettings, needSettings,
+        proficiencySettings, skillSettings, damageTypeSettings, limbs }),
+      diseases: prepareDiseaseEntries(actor, diseaseSettings, { characteristicSettings, resourceSettings,
+        needSettings, proficiencySettings, skillSettings, damageTypeSettings, limbs })
+    }, { inplace: false });
 
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
@@ -799,6 +821,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    if (options.parts?.length === 1 && options.parts[0] === "indicators") {
+      this.#activateLimbControlClicks();
+      this.#limbPopover.bind(this.element?.querySelector("[data-limb-popover-root]"), this.element);
+      this.#activateTabScrollPersistence();
+      this.#restoreActiveTabScroll();
+      return;
+    }
     this.#descriptionTooltips.bind(this.element, { actor: this.actor });
     this.element?.classList.toggle("fallout-maw-travel-carrier-sheet", isTravelGroupCarrierActor(this.actor));
     this.#hoverPreviewKey = "";
@@ -9737,10 +9766,12 @@ function prepareAbilityEffectSummaries(functions = [], characteristicLabels = ne
 }
 
 function prepareTraumaEntries(actor, settings = {}) {
+  const traumas = getActorTraumas(actor);
+  if (!traumas.length) return [];
   const pathLabels = buildEffectPathLabelMap(settings);
   const skillLabels = new Map((settings.skillSettings ?? []).map(skill => [skill.key, skill.label]));
   const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor).trauma;
-  return getActorTraumas(actor).map(item => ({
+  return traumas.map(item => ({
     id: item.id,
     uuid: item.uuid,
     name: item.name,
@@ -9761,11 +9792,13 @@ function prepareTraumaEntries(actor, settings = {}) {
 }
 
 function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
+  const actorDiseases = actor.items.filter(item => item.type === "disease");
+  if (!actorDiseases.length) return [];
   const pathLabels = buildEffectPathLabelMap(settings);
   const skillLabels = new Map((settings.skillSettings ?? []).map(skill => [skill.key, skill.label]));
   const diseases = Array.isArray(diseaseSettings?.diseases) ? diseaseSettings.diseases : [];
   const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor).disease;
-  return actor.items.filter(item => item.type === "disease").map(item => {
+  return actorDiseases.map(item => {
     const diseaseProfile = diseases.find(entry => entry.id === item.system?.diseaseId);
     const stageProfile = diseaseProfile?.stages?.find(stage => stage.id === item.system?.stageId);
     const level = toInteger(item.system?.level);

@@ -8,7 +8,9 @@ import {
 } from "../src/utils/construct-crew.mjs";
 import { getConstructCrewContexts, getConstructCrewContext, canUserUseConstructCrewPersonalWeapon, resolveConstructCrewWeaponSetItem } from "../src/utils/construct-crew-context.mjs";
 import { ACTOR_CONTAINER_CREW_TESTING, queueActorContainerOperation, openActorContainerPassengerSheet } from "../src/canvas/actor-containers.mjs";
-import { CONSTRUCT_CREW_TESTING, configureConstructCrewActions } from "../src/canvas/construct-crew.mjs";
+import { CONSTRUCT_CREW_TESTING, configureConstructCrewActions, requestConstructCrewControl } from "../src/canvas/construct-crew.mjs";
+import { getCombatCrew } from "../src/combat/crew-turns.mjs";
+import { getActorContainerFlag } from "../src/utils/actor-containers.mjs";
 
 const gm = { id: "gm", isGM: true, active: true };
 const driverUser = { id: "driver-user", active: true };
@@ -104,6 +106,62 @@ test("crew movement belongs to the seated driver; passenger and vehicle owner ha
   assert.equal(canUserControlConstruct(actor, gunnerUser, "aim", { partSlotId: "hull" }), false);
   assert.equal(canUserControlConstruct(actor, gm, "move"), true);
   assert.equal(getConstructCrewSeatOptions(actor).length, 4);
+});
+
+test("combat and crew permissions never clone parked token restore data, while editable reads remain isolated", () => {
+  const { actor } = fixture();
+  const payload = { delta: { system: { inventory: { preserved: true } } } };
+  actor.flags["fallout-maw"].actorContainer.passengers[0].tokenData = payload;
+  const clone = foundry.utils.deepClone;
+  foundry.utils.deepClone = value => {
+    assert.notEqual(value, payload, "read-only crew checks must not copy a parked actor");
+    return clone(value);
+  };
+  assert.equal(getCombatCrew(actor).length, 3);
+  assert.equal(canUserControlConstruct(actor, driverUser, "move"), true);
+  assert.equal(canUserControlConstruct(actor, gunnerUser, "aim", { partSlotId: "turret" }), true);
+  foundry.utils.deepClone = clone;
+  const draft = getActorContainerFlag(actor);
+  draft.passengers[0].tokenData.delta.system.inventory.preserved = false;
+  assert.equal(payload.delta.system.inventory.preserved, true);
+});
+
+test("native no-op rotation acknowledges the existing angle without a document write", async () => {
+  const { token } = fixture();
+  token.update = () => { assert.fail("equivalent yaw must not write"); };
+  const result = await requestConstructCrewControl({ tokenUuid: token.uuid, action: "rotate", rotation: 360 });
+  assert.deepEqual(result, { ok: true, rotation: 0, changed: false });
+});
+
+test("independent vehicles do not block each other; consecutive commands for one token retain order", async () => {
+  const { token, documents, actor } = fixture();
+  const other = { ...token, uuid: "Scene.scene.Token.other", actor: { ...actor, uuid: "Actor.other-tank" } };
+  documents.set(other.uuid, other);
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  const writes = [];
+  token.update = async data => {
+    writes.push(data.rotation);
+    if (writes.length === 1) { entered(); await gate; }
+    token.rotation = data.rotation;
+    return token;
+  };
+  const first = requestConstructCrewControl({ tokenUuid: token.uuid, action: "rotate", rotation: 15 });
+  await started;
+  const next = requestConstructCrewControl({ tokenUuid: token.uuid, action: "rotate", rotation: 30 });
+  let independentDone = false;
+  const independent = requestConstructCrewControl({ tokenUuid: other.uuid, action: "rotate", rotation: 15 })
+    .then(result => { independentDone = true; return result; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(independentDone, true);
+    assert.deepEqual(writes, [15]);
+  } finally {
+    release();
+    await Promise.all([first, next, independent]);
+  }
+  assert.deepEqual(writes, [15, 30]);
 });
 
 test("same user may own several occupied roles and permissions change immediately on transfer", () => {
@@ -311,6 +369,21 @@ test("socket sender cannot impersonate a driver or another GM", async () => {
     payload: { tokenUuid: token.uuid, action: "move", dx: 1, dy: 0 } }, driverUser.id);
   assert.equal(token.x, 200);
   assert.equal(emissions.at(-1)[1].ok, true);
+});
+
+test("duplicate socket deliveries share one native movement commit and preserve the original response", async () => {
+  const { token, emissions } = fixture();
+  const message = { scope: "fallout-maw.constructCrew", type: "request", requestId: "duplicate-movement",
+    requesterUserId: driverUser.id, gmUserId: gm.id,
+    payload: { tokenUuid: token.uuid, action: "move", dx: 1, dy: 0 } };
+  await Promise.all([1, 2].map(() => CONSTRUCT_CREW_TESTING.handleSocketMessage(message, driverUser.id)));
+  assert.equal(token.x, 200);
+  assert.equal(emissions.length, 2);
+  assert.deepEqual(emissions[0], emissions[1]);
+  await CONSTRUCT_CREW_TESTING.handleSocketMessage(message, driverUser.id);
+  assert.equal(token.x, 200);
+  await CONSTRUCT_CREW_TESTING.handleSocketMessage({ ...message, requestId: "next-movement" }, driverUser.id);
+  assert.equal(token.x, 300);
 });
 
 test("selected crew context exposes only owned real occupants and never substitutes an invalid selection", () => {

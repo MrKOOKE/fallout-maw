@@ -3,6 +3,7 @@ import { canUserControlConstruct, getUserConstructCrewSeats, getConstructCrewSea
 import { canUserUseConstructWeapon, getConstructWeaponOperatorConfig } from "../utils/construct-weapon-operator.mjs";
 import { getConstructVisualRuntimeConfig as getConstructVisualConfig, normalizeConstructVisualRotation, resolveConstructVisualAnchors, resolveConstructVisualLayers } from "../utils/construct-visual-model.mjs";
 import { isConstructAimWithinSector } from "../utils/construct-aim-geometry.mjs";
+import { resolveConstructJointRotations } from "../utils/construct-joint-rotations.mjs";
 import { isConstructRotationPaid, recordConstructRotationProgress } from "../constructs/rotation-actions.mjs";
 import { getInstalledConstructPartForSlot } from "../utils/construct-parts.mjs";
 import { advanceConstructRotationRate, createConstructRotationRateState, getConstructRotationTravelDegrees,
@@ -232,8 +233,8 @@ function getRotationContext(document, slotId) {
   const options = {
     width: Math.max(1, Number(token?.w) || Number(document.width) || 1) * Math.abs(Number(document.texture?.scaleX) || 1),
     height: Math.max(1, Number(token?.h) || Number(document.height) || 1) * Math.abs(Number(document.texture?.scaleY) || 1),
-    rotations: document.getFlag?.(SYSTEM_ID, "constructVisualState")?.rotations
-      ?? document.flags?.[SYSTEM_ID]?.constructVisualState?.rotations ?? {}
+    rotations: resolveConstructJointRotations(document.actor, document.getFlag?.(SYSTEM_ID, "constructVisualState")
+      ?? document.flags?.[SYSTEM_ID]?.constructVisualState ?? {})
   };
   const layer = resolveConstructVisualLayers(document.actor, options).find(row => row.slotId === slotId);
   if (!layer?.visible || layer.broken) return null;
@@ -256,7 +257,7 @@ function validatePreview(document, payload, user) {
   const token = document.object;
   const options = { width: Math.max(1, Number(token?.w) || Number(document.width) || 1) * Math.abs(Number(document.texture?.scaleX) || 1),
     height: Math.max(1, Number(token?.h) || Number(document.height) || 1) * Math.abs(Number(document.texture?.scaleY) || 1),
-    rotations: { ...(document.getFlag?.(SYSTEM_ID, "constructVisualState")?.rotations ?? {}),
+    rotations: { ...resolveConstructJointRotations(actor, document.getFlag?.(SYSTEM_ID, "constructVisualState") ?? {}),
       ...(callbacks.getRotations?.(token) ?? {}) } };
   const layer = resolveConstructVisualLayers(actor, options).find(row => row.slotId === payload.slotId);
   if (!layer?.visible || layer.broken) return false;

@@ -25,6 +25,7 @@
     "styles/construct-crew-hud.css",
     "styles/construct-interior-aim.css",
     "styles/construct-systems.css",
+    "styles/construct-hub.css",
     "styles/combat-carousel.css",
     "simple-quest/styles/module.css"
   ],

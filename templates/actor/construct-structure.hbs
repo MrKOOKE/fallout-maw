@@ -1,46 +1,61 @@
-<section class="fallout-maw-construct-structure-body">
-  <button type="button" data-construct-open-visual><i class="fa-solid fa-layer-group"></i> Модульный токен и места экипажа</button>
-  <button type="button" data-construct-open-systems><i class="fa-solid fa-bolt"></i> Системы конструкта</button>
-  <section class="fallout-maw-panel fallout-maw-construct-part-list-panel">
-    <div class="fallout-maw-panel-header">
-      <h2>{{localize 'FALLOUTMAW.AuditTemplates.Textdd0944ea61f3'}}</h2>
-      <button type="submit"><i class="fa-solid fa-check"></i> {{localize 'FALLOUTMAW.AuditTemplates.Text4864057d626a'}}</button>
-    </div>
-    <div class="fallout-maw-construct-part-list fallout-maw-construct-drop-zone" data-construct-part-list data-construct-part-drop-zone>
-      {{#each entries}}
-      <article class="fallout-maw-construct-part-card{{#if phantom}} phantom{{/if}}" draggable="true" data-construct-part-entry-id="{{id}}" data-construct-part-slot="{{slotId}}">
-        <div class="fallout-maw-construct-part-image">
-          <img src="{{img}}" alt="{{name}}">
-          {{#if phantom}}<i class="fa-solid fa-plus" aria-hidden="true"></i>{{/if}}
+<section class="construct-hub-body">
+  <header class="construct-hub-heading">
+    <div><h2 title="{{actor.name}}">{{actor.name}}</h2><span class="hint">Строение конструкта</span></div>
+    <div class="construct-hub-counts"><span><i class="fa-solid fa-cubes"></i> {{entries.length}}</span><span><i class="fa-solid fa-bolt"></i> {{systems.systems.length}}</span><span><i class="fa-solid fa-users"></i> {{visual.seatCount}}</span></div>
+  </header>
+  <div class="construct-hub-layout">
+    <aside class="construct-hub-overview">
+      {{{previewHtml}}}
+      <section class="construct-hub-assembly">
+        <header class="construct-hub-section-heading"><h3>Детали</h3><span class="hint">Перетащите для добавления</span></header>
+        <div class="fallout-maw-construct-part-list" data-construct-part-list data-construct-part-drop-zone>
+          {{#each entries}}
+          <article class="construct-hub-part {{#if selected}}selected{{/if}} {{#if phantom}}phantom{{/if}}" draggable="true" data-construct-part-entry-id="{{id}}" data-construct-part-slot="{{slotId}}">
+            <span class="construct-hub-drag" title="Перетащить деталь"><i class="fa-solid fa-grip-vertical"></i></span><button type="button" class="construct-hub-part-select" data-hub-select-part="{{slotId}}" aria-pressed="{{selected}}" title="{{name}}">
+              <img src="{{img}}" alt=""><span class="construct-hub-part-info"><strong>{{order}}. {{typeLabel}}</strong><span class="construct-hub-part-meta"><span title="{{valueLabel}}{{#if maxLabel}} / {{maxLabel}}{{/if}}">{{valueLabel}}{{#if maxLabel}} / {{maxLabel}}{{/if}}</span>{{#if rotates}}<i class="fa-solid fa-arrows-rotate" title="Вращаемая деталь"></i>{{/if}}{{#if systemNames}}<i class="fa-solid fa-bolt" title="{{systemNames}}"></i>{{/if}}</span><span class="construct-hub-condition" style="{{meterStyle}}"><span style="{{fillStyle}}"></span></span></span>
+            </button>
+            <button type="button" class="construct-hub-remove" data-construct-part-remove="{{id}}" title="Удалить слот детали"><i class="fa-solid fa-xmark"></i></button>
+          </article>
+          {{else}}<p class="hint construct-hub-empty">Перетащите предмет с функцией «Деталь конструкта».</p>{{/each}}
         </div>
-        <div class="fallout-maw-construct-part-main">
-          <div class="fallout-maw-resource-card-header">
-            <span class="fallout-maw-resource-name" title="{{name}}">{{order}}. {{typeLabel}}</span>
-            <span class="fallout-maw-resource-value" title="{{stateTitle}}">
-              <strong>{{valueLabel}}</strong>
-              {{#if maxLabel}}<span class="fallout-maw-resource-max">/ {{maxLabel}}</span>{{/if}}
-            </span>
-          </div>
-          <div class="fallout-maw-resource-meter fallout-maw-construct-part-meter" style="{{meterStyle}}" role="meter" aria-valuemin="0" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
-            <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
-          </div>
-          {{#if phantom}}
-          <div class="fallout-maw-construct-part-phantom-label">
-            <i class="fa-solid fa-terminal" aria-hidden="true"></i>
-            {{localize 'FALLOUTMAW.AuditTemplates.Text6769eeb280f8'}} {{partType}}
-          </div>
-          {{/if}}
-        </div>
-        <button class="fallout-maw-construct-part-remove" type="button" title="{{localize 'FALLOUTMAW.Item.ModuleSlotDelete'}}" data-construct-part-remove="{{id}}">
-          <i class="fa-solid fa-trash"></i>
-        </button>
-      </article>
-      {{else}}
-      <div class="fallout-maw-construct-drop-placeholder">
-        <i class="fa-solid fa-plus"></i>
-        <strong>{{localize 'FALLOUTMAW.AuditTemplates.Text6e9fdcab0317'}}</strong>
-      </div>
-      {{/each}}
+      </section>
+    </aside>
+    <div class="construct-hub-workspace">
+    <div class="construct-hub-inspector">
+      {{#with selectedEntry}}
+      <header class="construct-hub-detail-heading"><div><h3 title="{{name}}">{{typeLabel}}</h3><span class="hint">{{stateTitle}}</span></div>{{#if item.id}}<button type="button" data-hub-open-item="{{item.id}}" title="Открыть свойства предмета"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>{{/if}}</header>
+      {{/with}}
+      {{#if visual.selectedPart}}{{{partHtml}}}{{else if selectedEntry}}<div class="construct-hub-empty"><p class="hint">У этой детали нет изображения в сборке.</p><button type="button" data-action="addVisualPart"><i class="fa-solid fa-plus"></i> Добавить изображение</button></div>{{/if}}
+      {{#if selectedEntry}}
+      <details class="construct-hub-section" data-hub-details="placement" open><summary><i class="fa-solid fa-boxes-stacked"></i> Размещение</summary><div class="construct-hub-section-body">{{{interiorHtml}}}</div></details>
+      {{#if selectedEntry.item}}
+      <details class="construct-hub-section" data-hub-details="connections" open><summary><i class="fa-solid fa-plug"></i> Подключение к системам</summary><div class="construct-hub-section-body">
+        {{#each selectedEntry.contributions}}<div class="construct-hub-contribution"><label>Система<select data-hub-item-field="system.functions.constructPart.systems.{{index}}.systemId"><option value="">Выберите систему</option>{{#each choices}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></label><div class="construct-system-two"><label>Запас энергии<input type="number" min="0" value="{{capacity}}" data-hub-item-field="system.functions.constructPart.systems.{{index}}.capacity"></label><label>Передвижение, ОП<input type="number" min="0" value="{{movementPoints}}" data-hub-item-field="system.functions.constructPart.systems.{{index}}.movementPoints"></label></div><div class="construct-hub-inline"><label class="construct-system-check"><input type="checkbox" {{checked activationProvider}} data-hub-item-field="system.functions.constructPart.systems.{{index}}.activationProvider"> Обеспечивает запуск</label><button type="button" data-hub-action="removeConnection" data-index="{{index}}" title="Удалить подключение"><i class="fa-solid fa-xmark"></i></button></div></div>{{/each}}
+        <button type="button" data-hub-action="addConnection" {{#unless systems.systems.length}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Подключить систему</button>
+      </div></details>
+      <details class="construct-hub-section" data-hub-details="weapons"><summary><i class="fa-solid fa-gun"></i> Оружие <span>{{weapons.length}}</span></summary><div class="construct-hub-section-body">
+        {{#each weapons}}<button type="button" class="construct-hub-weapon" data-hub-open-item="{{id}}" title="{{name}}"><img src="{{img}}" alt=""><span>{{name}}</span><i class="fa-solid fa-arrow-up-right-from-square"></i></button>{{/each}}
+        {{#each weaponSets}}<div class="construct-hub-weapon-set"><label>Набор<input value="{{label}}" data-hub-item-field="system.functions.constructPart.weaponSets.{{index}}.label"></label><label>Мест<input type="number" min="0" value="{{quantity}}" data-hub-item-field="system.functions.constructPart.weaponSets.{{index}}.quantity"></label><button type="button" data-hub-action="removeWeaponSet" data-index="{{index}}" title="Удалить оружейный набор"><i class="fa-solid fa-xmark"></i></button></div>{{/each}}
+        <button type="button" data-hub-action="addWeaponSet"><i class="fa-solid fa-plus"></i> Добавить оружейный набор</button>
+      </div></details>
+      {{/if}}{{else}}<p class="hint construct-hub-empty">Добавьте первую деталь, чтобы начать сборку.</p>{{/if}}
+      <details class="construct-hub-section" data-hub-details="anchors"><summary><i class="fa-solid fa-crosshairs"></i> Крепления <span>{{visual.anchorCount}}</span></summary><div class="construct-hub-section-body">
+        <div class="construct-hub-records">{{#each visual.anchors}}<button type="button" class="{{#if selected}}selected{{/if}}" data-action="selectVisualRecord" data-kind="anchors" data-index="{{index}}" title="{{name}}">{{name}}</button>{{/each}}<button type="button" data-action="addVisualAnchor" title="Добавить крепление"><i class="fa-solid fa-plus"></i></button></div>
+        {{{anchorHtml}}}
+      </div></details>
     </div>
-  </section>
+    <aside class="construct-hub-operations">
+      <details class="construct-hub-section" data-hub-details="systems" open><summary><i class="fa-solid fa-bolt"></i> Системы <span>{{systems.systems.length}}</span></summary><div class="construct-hub-section-body">
+        <div class="construct-hub-records">{{#each systems.systems}}<button type="button" class="{{#if selected}}selected{{/if}}" data-action="selectSystem" data-system-id="{{id}}" title="{{name}}">{{name}}</button>{{/each}}<button type="button" data-action="addSystem" title="Добавить систему"><i class="fa-solid fa-plus"></i></button></div>
+        {{{systemHtml}}}
+      </div></details>
+      <details class="construct-hub-section" data-hub-details="crew" open><summary><i class="fa-solid fa-users"></i> Экипаж <span>{{visual.seatCount}}</span></summary><div class="construct-hub-section-body">
+        <div class="construct-hub-crew-list">{{#each visual.seats}}<button type="button" class="{{#if selected}}selected{{/if}}" data-action="selectVisualRecord" data-kind="seats" data-index="{{index}}" title="{{name}}{{#if occupant}} · {{occupant.actorName}}{{/if}}"><i class="fa-solid fa-user"></i><span><strong>{{name}}</strong><small>{{#if occupant}}{{occupant.actorName}}{{else}}Свободно{{/if}}</small></span></button>{{/each}}</div>
+        <button type="button" data-action="addCrewSeat" {{#unless visual.hasPhysicalSeats}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Назначить место</button>
+        {{{seatHtml}}}
+      </div></details>
+    </aside>
+    </div>
+  </div>
+  <footer class="construct-hub-footer"><span class="hint" data-hub-save-status>{{#if dirty}}Есть изменения{{else}}Изменения применяются после сохранения{{/if}}</span><button type="submit"><i class="fa-solid fa-check"></i> Сохранить всё</button></footer>
 </section>

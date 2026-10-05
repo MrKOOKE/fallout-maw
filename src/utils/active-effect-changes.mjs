@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { isMigratedOneTimeResourceChange } from "../migrations/one-time-resources.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
+import { isRegenerationEffectKey } from "../needs/regeneration-effect-keys.mjs";
 import { isDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
@@ -192,6 +193,7 @@ export function prepareActorEffectChangeForApplication(actor, change = {}, optio
   if (isMigratedOneTimeResourceChange(actor, change?.effect, change)) return null;
   if (isDamageBarrierEffectKey(change?.key)) return null;
   if (isPeriodicHealingEffectKey(change?.key)) return null;
+  if (isRegenerationEffectKey(change?.key)) return null;
   if (isToolSupplyCostEffectKey(change?.key)) return null;
   const prepared = prepareActorEffectChangeValue(actor, change, options);
   if (!prepared) return null;

@@ -6,9 +6,14 @@ import { planConstructStructureDepartures } from "./construct-structure-departur
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { ConstructVisualEditor } from "./construct-visual-editor.mjs";
 import { ConstructSystemsConfig } from "./construct-systems-config.mjs";
+import { createConstructHubDraftActor } from "./construct-hub-draft.mjs";
+import { captureConstructHubView, restoreConstructHubView, getConstructHubDetailKey } from "./construct-hub-view-state.mjs";
+import { getActorContainerFlag } from "../utils/actor-containers.mjs";
+import { getConstructSystemState } from "../utils/construct-systems.mjs";
 import {
   ITEM_FUNCTIONS,
   getConditionFunction,
+  getEnabledWeaponFunctions,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import {
@@ -48,20 +53,32 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   #draggedEntryId = "";
   #dropCommitted = false;
   #previewDirty = false;
+  #visual;
+  #systems;
+  #selectedSlotId = "";
+  #itemDrafts = new Map();
+  #itemChanges = new Map();
+  #events;
+  #dirty = false;
+  #saving = false;
+  #details = new Map();
 
   constructor(actor, options = {}) {
     super(options);
     this.actor = actor;
     this.#entries = getOwnedConstructPartEntries(actor);
+    this.#selectedSlotId = this.#entries[0]?.slot.id ?? "";
+    this.#systems = new ConstructSystemsConfig(actor).attachHub(this);
+    this.#visual = new ConstructVisualEditor(actor).attachHub(this);
   }
 
   static DEFAULT_OPTIONS = {
     ...FalloutMaWFormApplicationV2.DEFAULT_OPTIONS,
     id: "fallout-maw-construct-structure",
-    classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-construct-structure"],
+    classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-construct-structure", "construct-visual-editor", "construct-hub"],
     position: {
-      width: 760,
-      height: "auto"
+      width: 1240,
+      height: 880
     },
     window: {
       get title() { return auditLocalize("FALLOUTMAW.AuditApps.ConstructStructure", "Строение конструкта"); },
@@ -70,7 +87,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     form: {
       handler: FalloutMaWFormApplicationV2.handleFormSubmit,
       submitOnChange: false,
-      closeOnSubmit: true
+      closeOnSubmit: false
     }
   };
 
@@ -81,24 +98,76 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   };
 
   async _prepareContext(options) {
+    // Existing game servers may retain the old package manifest until restart.
+    // Load this panel's style when opened so a client refresh is sufficient.
+    const doc = globalThis.document;
+    if (doc) {
+      const href = new URL("systems/fallout-maw/styles/construct-hub.css", doc.baseURI).href;
+      if (!Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).some(link => link.href === href)) {
+        const link = doc.createElement("link"); link.rel = "stylesheet"; link.href = href;
+        doc.head.append(link);
+      }
+    }
     const context = await super._prepareContext(options);
+    if (!this.#entries.some(entry => entry.slot.id === this.#selectedSlotId)) this.#selectedSlotId = this.#entries[0]?.slot.id ?? "";
+    const visual = await this.#visual._prepareContext(options);
+    const systems = await this.#systems._prepareContext(options);
+    visual.selectedPart = visual.parts.find(part => part.slotId === this.#selectedSlotId);
+    visual.selectedInterior = visual.interior.find(part => part.slotId === this.#selectedSlotId);
+    const passengers = getActorContainerFlag(this.actor).passengers;
+    visual.seats = visual.seats.map(seat => ({ ...seat,
+      occupant: passengers.find(row => row.slotId === seat.slotId && row.slotIndex === seat.slotIndex),
+      controlledPart: visual.parts.find(part => part.slotId === seat.partSlotId)?.label }));
+    visual.selectedSeat = visual.seats.find(seat => seat.selected);
+    const selectedEntry = this.#entries.find(entry => entry.slot.id === this.#selectedSlotId);
+    const draftActor = this.draftActor;
+    const selectedItem = selectedEntry && draftActor.items.get(selectedEntry.itemId || selectedEntry.draftItemId);
+    const weapons = this.actor.items.contents.filter(item => String(item.system?.placement?.weaponSet ?? "").startsWith(
+      `container:constructPart:${this.#selectedSlotId}:`)).map(item => ({ id: item.id, name: item.name, img: item.img }));
+    if (selectedItem && getEnabledWeaponFunctions(selectedItem, { ignoreBroken: true }).length) {
+      weapons.unshift({ id: selectedItem.id, name: selectedItem.name, img: selectedItem.img });
+    }
+    const contributions = (selectedItem?.system?.functions?.constructPart?.systems ?? []).map((row, index) => ({ ...row, index,
+      choices: systems.systems.map(system => ({ ...system, selected: system.id === row.systemId })) }));
+    const partials = ["preview", "part", "anchor", "seat", "interior"];
+    const html = await Promise.all(partials.map(name => foundry.applications.handlebars.renderTemplate(
+      `systems/fallout-maw/templates/actor/construct-hub-${name}.hbs`, visual)));
+    const systemHtml = await foundry.applications.handlebars.renderTemplate(
+      "systems/fallout-maw/templates/actor/construct-hub-system.hbs", systems);
     return foundry.utils.mergeObject(context, {
       actor: this.actor,
-      entries: this.#entries.map((entry, index) => prepareConstructPartEntry(entry, index)),
-      hasEntries: this.#entries.length > 0
+      entries: this.#entries.map((entry, index) => ({ ...prepareConstructPartEntry({ ...entry,
+        item: draftActor.items.get(entry.itemId || entry.draftItemId) ?? entry.item }, index),
+        selected: entry.slot.id === this.#selectedSlotId,
+        rotates: visual.parts.some(part => part.slotId === entry.slot.id && part.rotates),
+        location: visual.interior.find(part => part.slotId === entry.slot.id)?.locationLabel,
+        systemNames: (draftActor.items.get(entry.itemId || entry.draftItemId)?.system?.functions?.constructPart?.systems ?? [])
+          .map(row => systems.systems.find(system => system.id === row.systemId)?.name).filter(Boolean).join(", ") })),
+      hasEntries: this.#entries.length > 0, visual, systems,
+      previewHtml: html[0], partHtml: html[1], anchorHtml: html[2], seatHtml: html[3], interiorHtml: html[4], systemHtml,
+      selectedEntry: selectedEntry && { ...prepareConstructPartEntry({ ...selectedEntry, item: selectedItem },
+        this.#entries.indexOf(selectedEntry)), item: selectedItem, contributions },
+      dirty: this.#dirty,
+      weapons,
+      weaponSets: (selectedItem?.system?.functions?.constructPart?.weaponSets ?? []).map((row, index) => ({ ...row, index }))
     }, { inplace: false });
   }
 
   async _onRender(context, options) {
     await super._onRender(context, options);
-    this.element?.querySelector("[data-construct-open-systems]")?.addEventListener("click", event => {
-      event.preventDefault();
-      if (this.actor.isOwner) new ConstructSystemsConfig(this.actor).render(true);
-    });
-    this.element?.querySelector("[data-construct-open-visual]")?.addEventListener("click", event => {
-      event.preventDefault();
-      if (this.actor.isOwner) new ConstructVisualEditor(this.actor).render(true);
-    });
+    this.#events?.abort(); this.#events = new AbortController();
+    const listenerOptions = { signal: this.#events.signal };
+    await this.#visual._onRender(context, options);
+    await this.#systems._onRender(context, options);
+    this.element.addEventListener("click", event => void this.#onHubClick(event), listenerOptions);
+    this.element.addEventListener("change", event => this.#onHubChange(event), listenerOptions);
+    this.element.addEventListener("input", event => this.#onHubChange(event), listenerOptions);
+    for (const detail of this.element.querySelectorAll("details")) {
+      const key = getConstructHubDetailKey(detail);
+      detail.dataset.hubDetails = key;
+      if (this.#details.has(key)) detail.open = this.#details.get(key);
+      detail.addEventListener("toggle", () => this.#details.set(key, detail.open), listenerOptions);
+    }
     const list = this.element?.querySelector("[data-construct-part-list]");
     list?.addEventListener("dragover", event => this.#onPartListDragOver(event));
     list?.addEventListener("drop", event => this.#onEntryListDrop(event));
@@ -113,8 +182,180 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     }
   }
 
+  _preSyncPartState(partId, newElement, priorElement, state) {
+    super._preSyncPartState(partId, newElement, priorElement, state);
+    state.constructHubView = captureConstructHubView(priorElement);
+    state.focus = undefined;
+    state.scrollPositions = [];
+  }
+
+  _syncPartState(partId, newElement, priorElement, state) {
+    super._syncPartState(partId, newElement, priorElement, state);
+    restoreConstructHubView(newElement, state.constructHubView, this.#details);
+  }
+
   async _processFormData(_event, _form, _formData) {
-    return this.#saveStructure();
+    if (this.#saving || !this.actor.isOwner) return;
+    const systems = this.#systems.getActorUpdate();
+    const visual = this.#visual.getActorUpdate();
+    if (!systems || !visual) return;
+    this.#saving = true;
+    const layout = this.element?.querySelector(".construct-hub-layout");
+    if (layout) layout.inert = true;
+    const save = this.element?.querySelector('[type="submit"]');
+    if (save) save.disabled = true;
+    try {
+      if (!await this.#saveStructure({ ...systems, ...visual })) return;
+      this.#entries = getOwnedConstructPartEntries(this.actor);
+      this.#itemDrafts.clear(); this.#itemChanges.clear(); this.#dirty = false;
+      ui.notifications?.info("Строение, модульная сборка, системы и экипаж сохранены.");
+      await this.render();
+    } finally {
+      this.#saving = false;
+      if (layout?.isConnected) layout.inert = false;
+      if (save?.isConnected) save.disabled = false;
+    }
+  }
+
+  get selectedSlotId() { return this.#selectedSlotId; }
+  get draftActor() { return createConstructHubDraftActor(this.actor, this.#entries, this.#systems.draft, this.#itemDrafts); }
+  // The shared base restores on the next animation frame, after intermediate layout changes.
+  // This hub instead restores synchronously at replacement time, including its responsive outer scroller.
+  static get scrollPreservationSelectors() { return []; }
+
+  markDraftDirty() { this.#markDirty(); }
+
+  syncDraftLabels() {
+    const root = this.element;
+    if (!root) return;
+    for (const button of root.querySelectorAll('[data-action="selectVisualRecord"]')) {
+      const row = this.#visual.draft[button.dataset.kind]?.[Number(button.dataset.index)];
+      if (!row?.name) continue;
+      const label = button.querySelector("strong");
+      if (label) label.textContent = row.name;
+      else button.textContent = row.name;
+      button.title = row.name;
+    }
+    for (const system of this.#systems.draft) {
+      for (const button of root.querySelectorAll('[data-action="selectSystem"]')) {
+        if (button.dataset.systemId === system.id) button.textContent = button.title = system.name;
+      }
+      for (const label of root.querySelectorAll('label:has([data-system-id])')) {
+        const input = label.querySelector('input[data-system-id]');
+        if (input?.dataset.systemId === system.id) label.querySelector("span").textContent = system.name;
+      }
+    }
+    const names = new Map([...this.#visual.draft.anchors, ...this.#systems.draft].map(row => [row.id, row.name]));
+    for (const option of root.querySelectorAll("select option")) {
+      if (names.has(option.value)) option.textContent = names.get(option.value);
+    }
+  }
+
+  #markDirty() {
+    this.#dirty = true;
+    const status = this.element?.querySelector("[data-hub-save-status]");
+    if (status) status.textContent = "Есть изменения";
+  }
+
+  #selectSlot(slotId) {
+    this.#selectedSlotId = slotId; this.#visual.selectPartSlot(slotId);
+    const entry = this.#entries.find(row => row.slot.id === slotId);
+    const source = this.#itemDrafts.get(entry?.itemId) ?? entry?.item ?? entry?.itemData;
+    const systemId = source?.system?.functions?.constructPart?.systems?.[0]?.systemId;
+    if (systemId) this.#systems.selectSystemId(systemId);
+  }
+
+  #editableItem(slotId = this.#selectedSlotId) {
+    const entry = this.#entries.find(row => row.slot.id === slotId);
+    if (!entry?.installed) return null;
+    if (!entry.itemId) return entry.itemData;
+    if (!this.#itemDrafts.has(entry.itemId)) this.#itemDrafts.set(entry.itemId, { ...entry.item.toObject(), id: entry.itemId });
+    return this.#itemDrafts.get(entry.itemId);
+  }
+
+  #setItemField(path, value, slotId = this.#selectedSlotId) {
+    const item = this.#editableItem(slotId);
+    if (!item) return;
+    foundry.utils.setProperty(item, path, value);
+    if (item.id && this.actor.items.has(item.id)) {
+      const changes = this.#itemChanges.get(item.id) ?? { _id: item.id };
+      const arrayPath = ["system.functions.constructPart.systems", "system.functions.constructPart.weaponSets"]
+        .find(prefix => path.startsWith(`${prefix}.`));
+      const updatePath = arrayPath ?? path;
+      changes[updatePath] = foundry.utils.deepClone(foundry.utils.getProperty(item, updatePath));
+      this.#itemChanges.set(item.id, changes);
+    }
+    this.#markDirty();
+  }
+
+  #onHubChange(event) {
+    if (this.#saving) return;
+    if (event.target.matches("[data-visual-key], [data-system-field]")) this.#markDirty();
+    const field = event.target.closest("[data-hub-item-field]");
+    if (!field) return;
+    this.#setItemField(field.dataset.hubItemField, field.type === "checkbox" ? field.checked
+      : field.type === "number" ? Number(field.value) : field.value);
+    const state = getConstructSystemState(this.draftActor, this.#systems.selectedId);
+    const values = this.element.querySelectorAll(".construct-system-summary strong");
+    if (state && values.length === 2) {
+      values[0].textContent = String(state.capacity); values[1].textContent = `${state.movementPoints} ОП`;
+    }
+    // Contribution values and weapon-set labels do not change form structure.
+    // Keep the existing controls alive, including focus and the next button being clicked.
+  }
+
+  async #onHubClick(event) {
+    const button = event.target.closest("button");
+    if (!button || this.#saving) return;
+    if (button.dataset.hubSelectPart) {
+      event.preventDefault(); this.#selectSlot(button.dataset.hubSelectPart); return this.render();
+    }
+    if (button.dataset.hubOpenItem) {
+      event.preventDefault(); return this.actor.items.get(button.dataset.hubOpenItem)?.sheet.render(true);
+    }
+    if (button.dataset.hubAction) {
+      event.preventDefault();
+      const item = this.#editableItem(); if (!item) return;
+      const path = button.dataset.hubAction.includes("WeaponSet") ? "system.functions.constructPart.weaponSets" : "system.functions.constructPart.systems";
+      const rows = foundry.utils.deepClone(foundry.utils.getProperty(item, path) ?? []);
+      if (button.dataset.hubAction.startsWith("remove")) {
+        if (path.endsWith("weaponSets") && this.actor.items.contents.some(weapon =>
+          String(weapon.system?.placement?.weaponSet ?? "") === `container:constructPart:${this.#selectedSlotId}:${rows[Number(button.dataset.index)]?.id}`)) {
+          ui.notifications.warn("Сначала снимите оружие с этого набора."); return;
+        }
+        rows.splice(Number(button.dataset.index), 1);
+      } else if (path.endsWith("weaponSets")) rows.push({ id: foundry.utils.randomID(), label: "Оружие", quantity: 1 });
+      else rows.push({ systemId: this.#systems.selectedId || this.#systems.draft[0]?.id || "", capacity: 0, movementPoints: 0, activationProvider: false });
+      this.#setItemField(path, rows); return this.render();
+    }
+    if (!button.dataset.action) return;
+    if (!ConstructVisualEditor.DEFAULT_OPTIONS.actions[button.dataset.action]
+      && !ConstructSystemsConfig.DEFAULT_OPTIONS.actions[button.dataset.action]) return;
+    if (button.dataset.action === "removeSystem") {
+      const id = this.#systems.selectedId;
+      for (const entry of this.#entries) {
+        const source = this.#itemDrafts.get(entry.itemId) ?? entry.item ?? entry.itemData;
+        const rows = source?.system?.functions?.constructPart?.systems ?? [];
+        if (rows.some(row => row.systemId === id)) this.#setItemField("system.functions.constructPart.systems",
+          rows.filter(row => row.systemId !== id), entry.slot.id);
+      }
+    }
+    if (["addVisualAnchor", "placeVisualAnchor"].includes(button.dataset.action)) this.#details.set("anchors", true);
+    if (!["selectVisualRecord", "selectSystem", "resetVisualAim", "resetPreviewCamera"].includes(button.dataset.action)) this.#markDirty();
+    if (button.dataset.action === "selectVisualRecord" && button.dataset.kind === "parts") {
+      const slotId = this.#visual.draft.parts[Number(button.dataset.index)]?.slotId;
+      if (slotId) this.#selectedSlotId = slotId;
+    }
+    if (button.dataset.action === "selectVisualRecord" && button.dataset.kind === "seats") {
+      const slotId = this.#visual.draft.seats[Number(button.dataset.index)]?.partSlotId;
+      if (slotId) this.#selectSlot(slotId);
+    }
+    await this.#visual.dispatchHubAction(event, button) || await this.#systems.dispatchHubAction(event, button);
+  }
+
+  async close(options = {}) {
+    this.#events?.abort(); this.#visual.disposeHub(); this.#systems.disposeHub();
+    return super.close(options);
   }
 
   #onPartListDragOver(event) {
@@ -127,6 +368,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   async #onDropConstructPart(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (this.#saving) return;
     const data = readDropData(event);
     if (data?.type !== "Item") return;
     const item = await Item.implementation.fromDropData(data).catch(() => null);
@@ -147,6 +389,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       itemData: item.parent === this.actor ? null : item.toObject(),
       installed: true
     }));
+    this.#selectSlot(slot.id); this.#markDirty();
     return this.render();
   }
 
@@ -212,6 +455,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   #onRemoveEntry(event) {
     event.preventDefault();
+    if (this.#saving) return;
     const entryId = event.currentTarget?.dataset?.constructPartRemove ?? "";
     if (!entryId) return;
     const entry = this.#entries.find(candidate => candidate.entryId === entryId);
@@ -221,6 +465,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       return;
     }
     this.#entries = this.#entries.filter(candidate => candidate !== entry);
+    this.#markDirty();
     return this.render();
   }
 
@@ -247,7 +492,8 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
     if (targetCard === draggedCard) return;
     const rect = targetCard.getBoundingClientRect();
-    const insertBefore = event.clientY < rect.top + (rect.height / 2);
+    const insertBefore = getComputedStyle(list).display === "grid"
+      ? event.clientX < rect.left + (rect.width / 2) : event.clientY < rect.top + (rect.height / 2);
     const reference = insertBefore ? targetCard : targetCard.nextElementSibling;
     if (reference === draggedCard) return;
     list.insertBefore(draggedCard, reference);
@@ -269,11 +515,12 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       if (!orderedIdSet.has(entry.entryId)) orderedEntries.push(entry);
     }
     this.#entries = orderedEntries;
+    this.#markDirty();
   }
 
-  async #saveStructure() {
+  async #saveStructure(extraActorUpdates = {}) {
     if (this.actor.type !== "construct") return;
-    const updates = [];
+    const updates = Array.from(this.#itemChanges.values()).filter(update => this.#entries.some(entry => entry.itemId === update._id));
     const createPlans = [];
     const droppedParts = [];
     const previousEntries = getOwnedConstructPartEntries(this.actor);
@@ -350,7 +597,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     }
 
     for (const [order, entry] of this.#entries.entries()) {
-      const source = entry.item ?? entry.itemData;
+      const source = this.#itemDrafts.get(entry.itemId) ?? entry.item ?? entry.itemData;
       const slot = entry.installed && source
         ? createConstructPartSlotFromItem(source, { id: entry.slot.id, order })
         : { ...foundry.utils.deepClone(entry.slot), order };
@@ -368,7 +615,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       }
 
       const createData = createConstructPartCreateData(entry.itemData, slot.id, order);
-      if (createData) createPlans.push({ entryId: entry.entryId, order, data: createData });
+      if (createData) createPlans.push({ entryId: entry.entryId, order, data: { ...createData, _id: entry.draftItemId } });
     }
 
     const actorUpdates = {
@@ -379,13 +626,15 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       ...buildConstructSilhouetteUpdate(this.actor, {
         previousEntries,
         finalEntries: this.#entries
-      })
+      }),
+      ...extraActorUpdates
     };
     const mutation = {
       actor: this.actor,
       updates: coalesceConstructPartItemUpdates(updates),
       deletes: deletedItemIds,
       creates: createPlans.map(plan => plan.data),
+      preserveCreateIds: true,
       actorUpdates
     };
     if (droppedParts.length) {
@@ -418,6 +667,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
         await clearLimbLossState(this.actor, limbKey);
       }
     }
+    return true;
   }
 }
 
@@ -589,6 +839,7 @@ function createConstructPartEntry(slot, { item = null, itemData = null, installe
     entryId: `slot.${slot.id}`,
     slot,
     itemId: item?.id ?? "",
+    draftItemId: item?.id ?? slot.id,
     item,
     itemData,
     installed: Boolean(installed)

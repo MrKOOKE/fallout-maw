@@ -93,6 +93,9 @@
   <section class="fallout-maw-token-hud-actions-wrap">
     {{#if tray.visible}}
     <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "actions")}}actions{{/if}} {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}} {{#if (eq activeTray "weaponEquip")}}weapon-equip{{/if}} {{#if (eq activeTray "passengers")}}passengers{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
+      {{#if (eq activeTray "rotation")}}
+      {{#each constructTurns}}<button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="turnConstructHull" data-delta="{{delta}}" title="{{label}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}><img src="{{img}}" alt=""><strong class="fallout-maw-token-hud-weapon-badge magazine">{{cost}} ОП</strong><span>{{label}}</span></button>{{/each}}
+      {{/if}}
       {{#if (eq activeTray "skills")}}
       {{#each tray.skills}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">
@@ -332,7 +335,7 @@
       {{#each constructSystems}}
       <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleConstructSystem" data-system-id="{{id}}" title="{{title}}" aria-label="{{label}}"><img src="{{img}}" alt=""><span>{{label}}</span></button>
       {{/each}}
-      {{#each constructTurns}}<button type="button" class="fallout-maw-token-hud-main-action {{#if disabled}}unusable{{/if}}" data-action="turnConstructHull" data-delta="{{delta}}" title="{{label}}" aria-label="{{label}}" {{#if disabled}}aria-disabled="true"{{/if}}><img src="{{img}}" alt=""><strong class="fallout-maw-token-hud-weapon-badge magazine">{{cost}} ОП</strong><span>{{label}}</span></button>{{/each}}
+      {{#if constructTurns.length}}<button type="button" class="fallout-maw-token-hud-main-action {{#if (eq activeTray "rotation")}}active{{/if}}" data-action="toggleTray" data-tray="rotation" title="Вращение" aria-label="Вращение" aria-expanded="{{#if (eq activeTray "rotation")}}true{{else}}false{{/if}}"><img src="{{constructRotationIcon}}" alt=""><span>Вращение</span></button>{{/if}}
       {{#if weaponSet}}
       {{#if showWeaponSetSelector}}
       <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-set-toggle {{#if weaponSet.active}}selected{{/if}} {{#if (eq activeTray "weaponSets")}}active{{/if}}" data-action="toggleTray" data-tray="weaponSets" title="{{weaponSet.label}}">

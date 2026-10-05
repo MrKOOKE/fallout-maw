@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { actorHasIncapacitatingStatus } from "../combat/incapacitation.mjs";
 import {
   getActorContainerFlag,
+  getActorContainerPassengerMetadata,
   getActorContainerPassengerSize,
   getActorContainerSeatDefinitions
 } from "./actor-containers.mjs";
@@ -138,7 +139,7 @@ export function getConstructCrewSeatOptions(actor = null) {
 
 export function getConstructCrewSeatState(actor = null, seat = null, { ignoreOccupantStatus = false } = {}) {
   if (!seat) return { available: false, reason: "Место не найдено", occupant: null };
-  const occupant = getActorContainerFlag(actor).passengers.find(passenger => passenger.slotId === seat.slotId
+  const occupant = getActorContainerPassengerMetadata(actor).find(passenger => passenger.slotId === seat.slotId
     && passenger.slotIndex === seat.slotIndex) ?? null;
   const physical = getActorContainerSeatDefinitions(actor).find(row => row.slotId === seat.slotId);
   if (!physical || seat.slotIndex >= physical.quantity) return { available: false, reason: "Место демонтировано", occupant };
@@ -176,7 +177,7 @@ export function getUserConstructCrewSeats(actor, user = globalThis.game?.user, {
 /** Rearranging occupants grants no ownership or access to their combat/inventory. */
 export function canUserRearrangeConstructCrew(actor, user = globalThis.game?.user) {
   return Boolean(hasConstructCrew(actor) && user && (user.isGM
-    || getActorContainerFlag(actor).passengers.some(passenger => canUserManageConstructPassenger(actor, passenger, user))));
+    || getActorContainerPassengerMetadata(actor).some(passenger => canUserManageConstructPassenger(actor, passenger, user))));
 }
 
 /** This is also called by the GM attack handler, after resolving the actual embedded weapon. */

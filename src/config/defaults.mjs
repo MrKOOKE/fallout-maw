@@ -181,15 +181,15 @@ export const DEFAULT_NEEDS = Object.freeze([
 ]);
 
 export const DEFAULT_DAMAGE_TYPES = Object.freeze([
-  { key: "piercing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text151", "Колющий"); }, color: "#d9d0bd", img: "icons/weapons/daggers/dagger-straight-thin-black.webp" },
-  { key: "slashing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text152", "Режущий"); }, color: "#d95c5c", img: "icons/skills/melee/strike-slashes-red.webp" },
-  { key: "bludgeoning", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text153", "Дробящий"); }, color: "#c49a6c", img: "icons/skills/melee/strike-hammer-destructive-orange.webp" },
-  { key: "firearm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text154", "Огнестрельный"); }, color: "#f0d48a", img: "icons/skills/ranged/bullets-triple-ball-orange.webp" },
-  { key: "energy", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text155", "Энергетический"); }, color: "#78f0ff", img: "icons/skills/ranged/energy-weapon-fire-blue.webp" },
-  { key: "fire", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text156", "Огненный"); }, color: "#ff6a2a", img: "icons/magic/fire/flame-burning-embers-orange.webp" },
-  { key: "cryo", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text157", "Криогенный"); }, color: "#6da8ff", img: "icons/magic/water/snowflake-ice-blue.webp" },
-  { key: "electric", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text158", "Электрический"); }, color: "#f6f05a", img: "icons/magic/lightning/bolt-strike-sparks-yellow.webp" },
-  { key: "acid", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text159", "Кислотный"); }, color: "#7be36d", img: "systems/fallout-maw/assets/System/DamageTypes/damage-acid.webp" },
-  { key: "poison", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text160", "Ядовитый"); }, color: "#b56dff", img: "systems/fallout-maw/assets/System/DamageTypes/damage-poison.webp" },
-  { key: "radiation", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text161", "Радиационный"); }, color: "#c6ff4d", img: "systems/fallout-maw/assets/System/DamageTypes/damage-radiation.webp" }
+  { key: "piercing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text151", "Колющий"); }, color: "#d9d0bd", img: "systems/fallout-maw/assets/System/DamageTypes/damage-piercing.svg" },
+  { key: "slashing", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text152", "Режущий"); }, color: "#d95c5c", img: "systems/fallout-maw/assets/System/DamageTypes/damage-slashing.svg" },
+  { key: "bludgeoning", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text153", "Дробящий"); }, color: "#c49a6c", img: "systems/fallout-maw/assets/System/DamageTypes/damage-bludgeoning.svg" },
+  { key: "firearm", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text154", "Огнестрельный"); }, color: "#f0d48a", img: "systems/fallout-maw/assets/System/DamageTypes/damage-firearm.svg" },
+  { key: "energy", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text155", "Энергетический"); }, color: "#78f0ff", img: "systems/fallout-maw/assets/System/DamageTypes/damage-energy.svg" },
+  { key: "fire", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text156", "Огненный"); }, color: "#ff6a2a", img: "systems/fallout-maw/assets/System/DamageTypes/damage-fire.svg" },
+  { key: "cryo", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text157", "Криогенный"); }, color: "#6da8ff", img: "systems/fallout-maw/assets/System/DamageTypes/damage-cryo.svg" },
+  { key: "electric", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text158", "Электрический"); }, color: "#f6f05a", img: "systems/fallout-maw/assets/System/DamageTypes/damage-electric.svg" },
+  { key: "acid", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text159", "Кислотный"); }, color: "#7be36d", img: "systems/fallout-maw/assets/System/DamageTypes/damage-acid.svg" },
+  { key: "poison", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text160", "Ядовитый"); }, color: "#b56dff", img: "systems/fallout-maw/assets/System/DamageTypes/damage-poison.svg" },
+  { key: "radiation", get label() { return auditLocalize("FALLOUTMAW.AuditSystem.Text161", "Радиационный"); }, color: "#c6ff4d", img: "systems/fallout-maw/assets/System/DamageTypes/damage-radiation.svg" }
 ]);

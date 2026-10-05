@@ -34,6 +34,7 @@ const inventoryActorLock = createActorOperationLock();
  * @param {object[]} [input.updates]
  * @param {string[]} [input.deletes]
  * @param {object[]} [input.creates]
+ * @param {boolean} [input.preserveCreateIds] Preserve preallocated IDs for linked assembly records; collisions abort.
  * @param {object|object[]} [input.actorUpdates]
  * @param {object[]} [input.effectCreates] Actor-owned ActiveEffects granted with the inventory change.
  * @param {object[]} [input.effectUpdates] Actor-owned ActiveEffect updates committed with the inventory change.
@@ -95,7 +96,8 @@ export function normalizeInventoryMutationPlans(input, { resolveActors = true } 
       effectCreates: [],
       effectUpdates: [],
       actorUpdates: [],
-      expectedItems: null
+      expectedItems: null,
+      preserveCreateIds: false
     };
     if (plan.actor !== actor && plan.actor?.uuid !== actor?.uuid) {
       throw new TypeError(`Inventory mutation Actor key collision: ${actorKey}.`);
@@ -103,6 +105,7 @@ export function normalizeInventoryMutationPlans(input, { resolveActors = true } 
     plan.updates.push(...asArray(rawPlan.updates));
     plan.deletes.push(...asArray(rawPlan.deletes));
     plan.creates.push(...asArray(rawPlan.creates));
+    plan.preserveCreateIds ||= rawPlan.preserveCreateIds === true;
     plan.effectCreates.push(...asArray(rawPlan.effectCreates));
     plan.effectUpdates.push(...asArray(rawPlan.effectUpdates));
     plan.actorUpdates.push(...asArray(rawPlan.actorUpdates ?? rawPlan.actorUpdate));
@@ -342,7 +345,7 @@ function prepareActorMutationPlan(rawPlan) {
   const {
     creates,
     createIdMap
-  } = allocateInventoryCreateIds(actor, rawPlan.creates);
+  } = allocateInventoryCreateIds(actor, rawPlan.creates, { preserveIds: rawPlan.preserveCreateIds });
   let projectedItems = projectActorInventoryState(actor, {
     updates: survivingUpdates,
     deletes,
@@ -462,7 +465,7 @@ function prepareActorUpdatePlan(actor, rawUpdates = []) {
   return { update, recoveryUpdate, paths, snapshotByPath };
 }
 
-function allocateInventoryCreateIds(actor, rawCreates) {
+export function allocateInventoryCreateIds(actor, rawCreates, { preserveIds = false } = {}) {
   const creates = asArray(rawCreates).filter(Boolean).map(toPlainObject);
   const takenIds = new Set(getActorItems(actor).map(getItemId).filter(Boolean));
   const createIdMap = new Map();
@@ -474,7 +477,10 @@ function allocateInventoryCreateIds(actor, rawCreates) {
       throw new TypeError(`Inventory create data contains duplicate source Item ID "${sourceId}".`);
     }
     if (sourceId) sourceIds.add(sourceId);
-    const destinationId = allocateItemId(takenIds);
+    if (preserveIds && (!/^[a-zA-Z0-9]{16}$/.test(sourceId) || takenIds.has(sourceId))) {
+      throw createInventoryStaleError(`The preallocated Item ID "${sourceId}" is missing, invalid, or already in use.`);
+    }
+    const destinationId = preserveIds ? sourceId : allocateItemId(takenIds);
     takenIds.add(destinationId);
     if (sourceId) createIdMap.set(sourceId, destinationId);
     createData._id = destinationId;

@@ -2,10 +2,14 @@ import { getConstructCrewSeats, getConstructCrewSeatState } from "../utils/const
 import { getConstructCrewContexts, canUserUseConstructCrewPersonalWeapon } from "../utils/construct-crew-context.mjs";
 import { resolveConstructVisualAnchors, getConstructVisualRuntimeRevision } from "../utils/construct-visual-model.mjs";
 import { constructLocalToWorld } from "../utils/construct-aim-geometry.mjs";
+import { resolveConstructJointRotations } from "../utils/construct-joint-rotations.mjs";
 import { normalizeConstructPersonalWeapons, isConstructFiringPortPointInSector } from "../utils/construct-firing-port-model.mjs";
 
 const personalWeaponSeats = new WeakMap();
-let readPartRotations = token => (token?.document ?? token)?.getFlag?.("fallout-maw", "constructVisualState")?.rotations ?? {};
+let readPartRotations = token => {
+  const document = token?.document ?? token;
+  return resolveConstructJointRotations(document?.actor, document?.getFlag?.("fallout-maw", "constructVisualState") ?? {});
+};
 
 export function configureConstructFiringPortTransforms({ getRotations } = {}) {
   if (typeof getRotations === "function") readPartRotations = getRotations;

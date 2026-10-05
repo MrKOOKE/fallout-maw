@@ -69,6 +69,25 @@ test("start, travel, turn, idle, shutdown and immediate restart keep loop phase 
     const latestStart = sounds.filter(sound => sound.src === "start.ogg").at(-1);
     latestStart.end(); await settle(); tick(1000); await settle();
     assert.equal(idle.plays.length, 1, "a restart before release must not leave a stale stop timer");
+    actor.flags = { "fallout-maw": { constructVisual: { enabled: true, parts: [
+      { id: "turret", slotId: "turret", rotates: true, rotationSystemIds: ["drive"] },
+      { id: "mg", slotId: "remote-mg", rotates: true, rotationSystemIds: ["drive"], rotationSoundPath: "mg-servo.ogg", rotationSoundVolume: 0.25 }
+    ] } } };
+    setConstructMotionSound(token, "rotate", true, { slotIds: ["remote-mg"] }); await settle();
+    const mg = singletons.get("mg-servo.ogg");
+    assert.equal(mg.plays.length, 1);
+    assert.equal(servo.gain.value, 0, "the machine gun must silence the generic turret motor");
+    setConstructMotionSound(token, "rotate", true, { slotIds: ["turret", "remote-mg"] }); await settle();
+    assert.ok(servo.gain.value > 0 && mg.gain.value > 0, "concurrent mount motions have independent sounds");
+    setConstructMotionSound(token, "rotate", true, { slotIds: ["turret"] }); await settle();
+    assert.equal(mg.gain.value, 0);
+    assert.ok(servo.gain.value > 0);
+    setConstructMotionSound(token, "rotate", true, { slotIds: ["remote-mg"] }); await settle();
+    update(); await settle();
+    assert.equal(servo.gain.value, 0, "resource updates cannot restore the turret motor during MG motion");
+    assert.ok(mg.gain.value > 0);
+    setConstructMotionSound(token, "rotate", false); await settle();
+    assert.equal(mg.gain.value, 0, "a stopped mount must go silent");
     hooks.get("canvasTearDown")(); tick(10000); await settle();
     assert.equal(canvas.sounds.sources.size, 0);
   } finally {

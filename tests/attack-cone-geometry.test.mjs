@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as cone from "../src/utils/attack-cone-geometry.mjs";
 import { isPointForwardOfAttackOrigin } from "../src/utils/attack-origin-geometry.mjs";
-import { getConstructVisualConfig, resolveConstructVisualAnchors, resolveConstructVisualLayers } from "../src/utils/construct-visual-model.mjs";
+import { getConstructVisualConfig, normalizeConstructVisualRotation, resolveConstructVisualAnchors, resolveConstructVisualLayers } from "../src/utils/construct-visual-model.mjs";
 
 const radians = degrees => degrees * Math.PI / 180;
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} ≠ ${expected}`);
@@ -172,9 +172,9 @@ test("mounted sector follows the actual rotated parent anchor and live token bod
   ] };
   const token = { actor: config, w: 200, h: 400, center: { x: 100, y: 200 },
     mesh: { position: { x: 100, y: 200 }, angle: 25 }, document: { rotation: 20, texture: {} } };
-  const names = ["getConstructWeaponAimSector", "visualOptions", "tokenVisualScale", "tokenFrame"];
+  const names = ["getConstructWeaponAimSector", "visualOptions", "tokenVisualScale", "tokenFrame", "mirrorConstructRotation"];
   const getSector = vm.runInNewContext(`${names.map(name => functionSource(visualSource, name)).join("\n")}\ngetConstructWeaponAimSector`, {
-    getConstructVisualConfig, resolveConstructVisualAnchors, resolveConstructVisualLayers,
+    getConstructVisualConfig, normalizeConstructVisualRotation, resolveConstructVisualAnchors, resolveConstructVisualLayers,
     isConstructPersonalWeapon: () => false, getConstructWeaponControlSlot: () => "gun",
     getConstructPartRotations: () => ({ turret: 70, gun: 100 })
   });

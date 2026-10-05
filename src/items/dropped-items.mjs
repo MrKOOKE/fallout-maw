@@ -32,7 +32,10 @@ import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 export const DROPPED_ITEMS_FLAG = "droppedItems";
 export const DROPPED_ITEMS_ACTOR_FLAG = "droppedItemsActor";
 export const DROPPED_ITEMS_TESTING = Object.freeze({
-  buildDroppedContainerCreateData
+  buildDroppedContainerCreateData,
+  buildDroppedItemCreateData,
+  createDroppedItemsActor,
+  ensureDroppedItemsActorForTile
 });
 const DROPPED_ITEMS_SOCKET = `system.${SYSTEM_ID}`;
 const DROPPED_ITEMS_SOCKET_SCOPE = "fallout-maw.droppedItems";
@@ -43,6 +46,7 @@ const DROPPED_ITEMS_FALLBACK_ICON = "icons/svg/item-bag.svg";
 const pendingDroppedItemsSocketRequests = new Map();
 const droppedItemsCleanupInProgress = new Set();
 const droppedItemsTileLock = createActorOperationLock();
+const droppedItemsFolderLock = createActorOperationLock();
 let droppedItemsCanvasView = null;
 let droppedItemsCanvasDblClickHandler = null;
 let droppedItemsSearchOpener = null;
@@ -391,6 +395,7 @@ async function ensureDroppedItemsActorForTile(tile, requesterUserId = "") {
   }
   if (!actor) {
     actor = await createDroppedItemsActor(tile, requesterUserId);
+    await tile.update({ [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.actorUuid`]: actor.uuid });
     state = {
       ...state,
       actorUuid: actor.uuid
@@ -886,10 +891,12 @@ async function createDroppedItemsActor(tile, requesterUserId = "") {
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
   if (requester?.id) ownership[requester.id] = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
   const sceneId = String(tile.parent?.id ?? canvas?.scene?.id ?? "");
+  const folder = await ensureDroppedItemsActorFolder();
   const actor = await Actor.create({
     name: auditLocalize("FALLOUTMAW.AuditRuntime.R1134", "Выброшенные предметы"),
     type: "construct",
     img: String(tile.texture?.src || DROPPED_ITEMS_FALLBACK_ICON),
+    folder: folder.id,
     ownership,
     system: {
       trade: {
@@ -907,6 +914,18 @@ async function createDroppedItemsActor(tile, requesterUserId = "") {
     }
   }, { renderSheet: false });
   return actor;
+}
+
+function ensureDroppedItemsActorFolder() {
+  return droppedItemsFolderLock.run({ id: "droppedItemsFolders" }, null, async () => {
+    let parent = game.folders.find(folder => folder.type === "Actor"
+      && folder.name === "Предметы на земле" && !folder.folder);
+    parent ??= await Folder.create({ name: "Предметы на земле", type: "Actor", folder: null });
+    let logs = game.folders.find(folder => folder.type === "Actor" && folder.name === "логи"
+      && String(folder.folder?.id ?? folder.folder ?? "") === parent.id);
+    logs ??= await Folder.create({ name: "логи", type: "Actor", folder: parent.id });
+    return logs;
+  });
 }
 
 export function isDroppedItemsActor(actor) {

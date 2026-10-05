@@ -1,0 +1,11 @@
+{{#with selectedAnchor}}
+          <section class="construct-visual-inspector" aria-label="Выбранное крепление">
+            <header class="construct-visual-inspector-heading"><h3>Точка крепления</h3><button type="button" class="construct-visual-icon-button danger" data-action="removeVisualAnchor" data-index="{{index}}" title="Удалить крепление"><i class="fa-solid fa-trash"></i></button></header>
+            <label>Название<input type="text" value="{{name}}" data-visual-kind="anchors" data-visual-index="{{index}}" data-visual-key="name" placeholder="Например, погон башни"></label>
+            <button type="button" class="construct-visual-placement-button" data-action="placeVisualAnchor" data-index="{{index}}"><i class="fa-solid fa-crosshairs"></i> Поставить на токене</button>
+            <p class="hint">Нажмите слева на нужную точку. Для точной настройки перетащите маркер.</p>
+            <label>Следовать за деталью<select data-visual-kind="anchors" data-visual-index="{{index}}" data-visual-key="parentSlotId"><option value="">Оставаться на корпусе</option>{{#each parentParts}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label>Связать с другим креплением<select data-visual-kind="anchors" data-visual-index="{{index}}" data-visual-key="parentId"><option value="">Не связывать</option>{{#each parents}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <details class="construct-visual-advanced"><summary>Дополнительно</summary><div class="construct-visual-two-columns"><label>Положение по X<input type="number" value="{{x}}" step="any" data-visual-kind="anchors" data-visual-index="{{index}}" data-visual-key="x"></label><label>Положение по Y<input type="number" value="{{y}}" step="any" data-visual-kind="anchors" data-visual-index="{{index}}" data-visual-key="y"></label></div><label>Направление крепления, °<input type="number" value="{{rotation}}" step="any" data-visual-kind="anchors" data-visual-index="{{index}}" data-visual-key="rotation"></label><p class="hint">Положение задаётся в долях токена. Для связанного крепления это смещение от родителя.</p></details>
+          </section>
+          {{/with}}

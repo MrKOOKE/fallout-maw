@@ -14,12 +14,18 @@ export function getActorInventoryGridDimensions(actor, race) {
   const inventory = actor?.system?.inventory;
   const columns = toInteger(inventory?.columns);
   const rows = toInteger(inventory?.rows);
+  let dimensions;
   if (inventory?.columns != null && inventory?.rows != null
     && Number.isFinite(Number(inventory.columns)) && Number.isFinite(Number(inventory.rows))) {
-    return { columns: Math.max(0, columns), rows: Math.max(0, rows) };
+    dimensions = { columns: Math.max(0, columns), rows: Math.max(0, rows) };
+  } else {
+    dimensions = actor?.type === "construct" ? { columns: 0, rows: 0 } : getInventoryGridDimensions(race);
   }
-  if (actor?.type === "construct") return { columns: 0, rows: 0 };
-  return getInventoryGridDimensions(race);
+  if (actorHasInfiniteRootInventory(actor)) {
+    dimensions.columns = Math.max(10, dimensions.columns);
+    dimensions.rows = Math.max(1, dimensions.rows);
+  }
+  return dimensions;
 }
 
 export function actorHasInfiniteRootInventory(actor) {

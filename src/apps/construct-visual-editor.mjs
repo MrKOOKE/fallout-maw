@@ -3,6 +3,8 @@ import { getConstructPartSlots, getInstalledConstructPartForSlot } from "../util
 import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { getConstructCrewSeatOptions } from "../utils/construct-crew.mjs";
 import { getConstructSystems } from "../utils/construct-systems.mjs";
+import { reconcileConstructHubReferences } from "./construct-hub-draft.mjs";
+import { ConstructPreviewCamera } from "./construct-preview-camera.mjs";
 import { CONSTRUCT_INTERIOR_FLAG, getConstructInteriorConfig, normalizeConstructInterior,
   getConstructPartContainmentPath, getConstructCompartmentContents } from "../utils/construct-interior.mjs";
 import {
@@ -32,10 +34,38 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
   #selectedInteriorSlotId = "";
   #placingAnchor = false;
   #previewAim = false;
+  #showPreviewAnchors = true;
   #previewSlotId = "";
   #previewRotations = {};
+  #previewCamera = new ConstructPreviewCamera();
   #previewResizeObserver;
   #renderEvents;
+  #hub;
+
+  attachHub(hub) { this.#hub = hub; return this; }
+  get element() { return this.#hub?.element ?? super.element; }
+  render(options = {}) { return this.#hub ? this.#hub.render(options) : super.render(options); }
+  get draft() { return this.#config; }
+  get draftActor() { return this.#hub?.draftActor ?? this.actor; }
+  selectPartSlot(slotId) {
+    const part = this.#config.parts.find(row => row.slotId === slotId);
+    this.#selectedPartId = part?.id ?? "";
+    this.#selectedInteriorSlotId = slotId;
+    if (part?.anchorId) this.#selectedAnchorId = part.anchorId;
+    const seat = this.#config.seats.find(row => row.partSlotId === slotId);
+    if (seat) this.#selectedSeatId = seat.id;
+    this.#previewSlotId = part?.rotates ? slotId : this.#previewSlotId;
+    this.#activeTab = "parts";
+  }
+  async dispatchHubAction(event, button) {
+    const action = this.constructor.DEFAULT_OPTIONS.actions[button.dataset.action];
+    if (!action) return false;
+    await action.call(this, event, button);
+    return true;
+  }
+  disposeHub() {
+    this.#renderEvents?.abort(); this.#previewResizeObserver?.disconnect(); this.#previewCamera.dispose(); this.#hub = null;
+  }
 
   constructor(actor, options = {}) {
     super(options);
@@ -58,9 +88,10 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     actions: {
       addVisualAnchor: this.#addAnchor, removeVisualAnchor: this.#removeAnchor,
       placeVisualAnchor: this.#placeAnchor, addVisualPart: this.#addPart,
-      removeVisualPart: this.#removePart, pickVisualImage: this.#pickImage,
+      removeVisualPart: this.#removePart, pickVisualImage: this.#pickImage, pickVisualAudio: this.#pickImage,
       addCrewSeat: this.#addSeat, removeCrewSeat: this.#removeSeat,
       resetVisualAim: this.#resetAim,
+      resetPreviewCamera: this.#resetCamera,
       switchVisualTab: this.#switchTab, selectVisualRecord: this.#selectRecord
     }
   };
@@ -75,8 +106,8 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
 
   async _prepareContext(options) {
     const slots = this.#slots();
-    const physicalSeats = getConstructCrewSeatOptions(this.actor).map(option => ({ ...option,
-      label: `${this.actor.items?.get?.(option.itemId)?.name || "Отсек"} · место ${option.slotIndex + 1}`
+    const physicalSeats = getConstructCrewSeatOptions(this.draftActor).map(option => ({ ...option,
+      label: `${this.draftActor.items?.get?.(option.itemId)?.name || "Отсек"} · место ${option.slotIndex + 1}`
     }));
     if (!this.#config.parts.some(part => part.id === this.#selectedPartId)) this.#selectedPartId = this.#config.parts[0]?.id ?? "";
     if (!this.#config.anchors.some(anchor => anchor.id === this.#selectedAnchorId)) this.#selectedAnchorId = this.#config.anchors[0]?.id ?? "";
@@ -97,7 +128,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
         status: slots.find(slot => slot.id === part.slotId)?.broken ? "Повреждена" : slots.find(slot => slot.id === part.slotId)?.installed ? "Установлена" : "Снята",
         anchors: this.#config.anchors.map(anchor => ({ value: anchor.id, label: anchor.name, selected: anchor.id === part.anchorId })),
         muzzleAnchors: this.#config.anchors.map(anchor => ({ value: anchor.id, label: anchor.name, selected: anchor.id === part.muzzleAnchorId })),
-        rotationSystems: getConstructSystems(this.actor).map(system => ({ id: system.id, name: system.name, checked: (part.rotationSystemIds ?? []).includes(system.id) }))
+        rotationSystems: getConstructSystems(this.draftActor).map(system => ({ id: system.id, name: system.name, checked: (part.rotationSystemIds ?? []).includes(system.id) }))
       }));
     const seats = this.#config.seats.map((seat, index) => ({
         ...seat, index, selected: seat.id === this.#selectedSeatId,
@@ -108,7 +139,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
         canReload: seat.functions.includes("reload"),
         reloadParts: partOptions.map(option => ({ ...option, checked: seat.reloadPartSlotIds.includes(option.value) })),
         functions: FUNCTIONS.map(entry => ({ ...entry, checked: seat.functions.includes(entry.value) })),
-        systems: getConstructSystems(this.actor).map(system => ({ id: system.id, name: system.name, checked: seat.systemIds.includes(system.id) })),
+        systems: getConstructSystems(this.draftActor).map(system => ({ id: system.id, name: system.name, checked: seat.systemIds.includes(system.id) })),
         personalAnchors: this.#config.anchors.map(anchor => ({ value: anchor.id, label: anchor.name,
           selected: anchor.id === seat.personalWeapons.anchorId }))
       }));
@@ -117,7 +148,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       const parent = slots.find(entry => entry.id === part.parentSlotId);
       const children = this.#interior.parts.filter(child => child.parentSlotId === part.slotId)
         .map(child => slots.find(entry => entry.id === child.slotId)?.label || child.slotId);
-      const occupants = getConstructCompartmentContents(this.actor, part.slotId).passengers
+      const occupants = getConstructCompartmentContents(this.draftActor, part.slotId).passengers
         .map(passenger => passenger.actorName || "Персонаж");
       return { ...part, label: slot?.label || "Безымянная деталь", selected: part.slotId === this.#selectedInteriorSlotId,
         locationLabel: parent ? `Внутри: ${parent.profile?.name || parent.label}` : "Снаружи",
@@ -137,6 +168,8 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       selectedInterior: interior.find(part => part.selected),
       partCount: parts.length, anchorCount: anchors.length, seatCount: seats.length, interiorCount: interior.length,
       previewAim: this.#previewAim,
+      showPreviewAnchors: this.#showPreviewAnchors,
+      previewScale: this.#previewCamera.scaleLabel,
       previewParts: this.#config.parts.filter(part => part.rotates).map(part => ({
         value: part.slotId, label: slots.find(slot => slot.id === part.slotId)?.label ?? "Вращаемая деталь",
         selected: part.slotId === this.#previewSlotId
@@ -152,21 +185,30 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     const eventOptions = { signal: this.#renderEvents.signal };
     this.element.addEventListener("change", event => this.#onFieldChange(event), eventOptions);
     this.element.addEventListener("input", event => {
-      if (event.target.type === "number" || event.target.matches('[data-visual-key="img"], [data-visual-key="damagedImg"], [data-visual-key="baseImage"]')) this.#onFieldChange(event);
+      if (event.target.matches('[data-visual-key]') && ["number", "text"].includes(event.target.type)) this.#onFieldChange(event, { render: false });
     }, eventOptions);
     const preview = this.element.querySelector("[data-visual-preview]");
     let dragging = false;
+    let anchorPointerOffset = { x: 0, y: 0 };
     preview?.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
       const marker = event.target.closest("[data-preview-anchor]");
       if (marker) { this.#selectedAnchorId = marker.dataset.previewAnchor; this.#activeTab = "anchors"; }
       if (!marker && !this.#placingAnchor) return;
       event.preventDefault();
       dragging = true;
+      const rect = marker?.getBoundingClientRect();
+      anchorPointerOffset = rect ? {
+        x: event.clientX - rect.left - rect.width / 2,
+        y: event.clientY - rect.top - rect.height / 2
+      } : { x: 0, y: 0 };
       preview.setPointerCapture(event.pointerId);
-      this.#updateAnchorFromPointer(event);
+      if (this.#placingAnchor) this.#updateAnchorFromPointer(event, anchorPointerOffset);
+      else this.#refreshPreview();
     }, eventOptions);
     preview?.addEventListener("pointermove", event => {
-      if (dragging) this.#updateAnchorFromPointer(event);
+      if (this.#previewCamera.panning || (event.buttons & 2)) return;
+      if (dragging) this.#updateAnchorFromPointer(event, anchorPointerOffset);
       else if (this.#previewAim) this.#updateAimFromPointer(event);
     }, eventOptions);
     const finish = () => {
@@ -181,6 +223,10 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     this.#previewResizeObserver?.disconnect();
     this.#previewResizeObserver = new ResizeObserver(() => this.#fitPreview());
     const frame = this.element.querySelector(".construct-visual-preview-frame");
+    if (frame && preview) this.#previewCamera.attach(frame, preview, {
+      signal: this.#renderEvents.signal,
+      output: this.element.querySelector("[data-preview-scale]"), canNavigate: () => !dragging
+    });
     if (frame) this.#previewResizeObserver.observe(frame);
     this.#fitPreview();
   }
@@ -188,10 +234,19 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
   async close(options = {}) {
     this.#renderEvents?.abort();
     this.#previewResizeObserver?.disconnect();
+    this.#previewCamera.dispose();
     return super.close(options);
   }
 
   async _processFormData() {
+    const update = this.getActorUpdate();
+    if (!update) return;
+    await this.actor.update(update);
+    ui.notifications?.info("Модульный токен, размещение деталей и места экипажа сохранены.");
+    return this.render();
+  }
+
+  getActorUpdate() {
     if (!this.actor.isOwner && !game.user?.isGM) {
       ui.notifications?.warn("Для изменения модульного токена нужны права владельца.");
       return;
@@ -202,7 +257,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       return;
     }
     const normalized = normalizeConstructVisual(this.#config);
-    const physical = getConstructCrewSeatOptions(this.actor);
+    const physical = getConstructCrewSeatOptions(this.draftActor);
     const invalidSeat = normalized.seats.find(seat => !physical.some(option => option.slotId === seat.slotId && option.slotIndex === seat.slotIndex));
     if (invalidSeat) {
       ui.notifications?.warn(`Для места «${invalidSeat.name}» выберите существующее физическое место конструкта.`);
@@ -210,22 +265,21 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     }
     const invalidPersonalSeat = normalized.seats.find(seat => seat.personalWeapons.enabled && !seat.personalWeapons.anchorId);
     if (invalidPersonalSeat) {
-      ui.notifications?.warn(`Для личного оружия на месте «${invalidPersonalSeat.name}» выберите точку стрельбы во вкладке «Крепления».`);
+      ui.notifications?.warn(`Для личного оружия на месте «${invalidPersonalSeat.name}» выберите точку стрельбы в креплениях.`);
       return;
     }
-    this.#config = normalized;
+    this.#config = this.#hub ? reconcileConstructHubReferences(normalized, this.#slots().map(slot => slot.id),
+      getConstructSystems(this.draftActor).map(system => system.id)) : normalized;
     this.#interior = normalizeConstructInterior(this.#interior, { slotIds: this.#slots().map(slot => slot.id) });
-    await this.actor.update({
+    return {
       [`flags.fallout-maw.${CONSTRUCT_VISUAL_FLAG}`]: this.#config,
       [`flags.fallout-maw.${CONSTRUCT_INTERIOR_FLAG}`]: this.#interior
-    });
-    ui.notifications?.info("Модульный токен, размещение деталей и места экипажа сохранены.");
-    return this.render();
+    };
   }
 
   #slots() {
-    return getConstructPartSlots(this.actor).map(slot => {
-      const item = getInstalledConstructPartForSlot(this.actor, slot.id);
+    return getConstructPartSlots(this.draftActor).map(slot => {
+      const item = getInstalledConstructPartForSlot(this.draftActor, slot.id);
       const broken = item && isItemBrokenByCondition(item);
       return { ...slot, installed: Boolean(item), broken,
         label: `${item?.name || slot.profile?.name || "Безымянная деталь"}${!item ? " — снята" : broken ? " — сломана" : ""}` };
@@ -243,8 +297,9 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       brokenSlots: slots.filter(slot => slot.broken).map(slot => slot.id) };
   }
 
-  #onFieldChange(event) {
+  #onFieldChange(event, { render = true } = {}) {
     const field = event.target;
+    if (field.matches("[data-preview-anchors]")) { this.#showPreviewAnchors = field.checked; this.#refreshPreview(); return; }
     if (field.matches("[data-preview-aim]")) { this.#previewAim = field.checked; this.#fitPreview(); this.#refreshPreview(); return; }
     if (field.matches("[data-preview-slot]")) { this.#previewSlotId = field.value; return; }
     const { visualKind: kind, visualIndex: index, visualKey: key } = field.dataset;
@@ -271,7 +326,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       return this.#refreshPreview();
     }
     if (key === "physicalSeat") {
-      const option = getConstructCrewSeatOptions(this.actor).find(seat => seat.value === field.value);
+      const option = getConstructCrewSeatOptions(this.draftActor).find(seat => seat.value === field.value);
       target.slotId = option?.slotId ?? "";
       target.slotIndex = option?.slotIndex ?? 0;
     } else if (key === "reloadPartSlotIds") {
@@ -295,7 +350,8 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       if (key === "parentId" && field.value) target.parentSlotId = "";
       if (key === "parentSlotId" && field.value) target.parentId = "";
     }
-    if (["role", "functions", "parentId", "parentSlotId", "name", "rotates", "slotId", "physicalSeat"].includes(key)) return this.render();
+    if (key === "name" && this.#hub) this.#hub.syncDraftLabels?.();
+    else if (render && ["role", "functions", "parentId", "parentSlotId", "name", "rotates", "slotId", "physicalSeat"].includes(key)) return this.render();
     this.#refreshPreview();
   }
 
@@ -322,7 +378,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
       const anchor = resolveConstructVisualAnchors(this.#config, this.#resolveOptions()).find(entry => entry.id === personal.anchorId && entry.parentVisible);
       if (anchor) this.#appendPersonalWeaponPreview(fragment, doc, anchor, personal);
     }
-    for (const anchor of (this.#activeTab === "anchors" || this.#placingAnchor
+    for (const anchor of (this.#showPreviewAnchors || this.#placingAnchor
       ? resolveConstructVisualAnchors(this.#config, this.#resolveOptions()) : [])) {
       const marker = doc.createElement("button");
       marker.type = "button"; marker.dataset.previewAnchor = anchor.id;
@@ -367,27 +423,30 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     const preview = this.element?.querySelector("[data-visual-preview]");
     if (!frame || !preview) return;
     const { width, height } = this.#dimensions();
-    const availableWidth = Math.max(80, frame.clientWidth - 48);
-    const availableHeight = Math.max(80, frame.clientHeight - 48);
+    const padding = this.#hub ? 24 : 48;
+    const availableWidth = Math.max(80, frame.clientWidth - padding);
+    const availableHeight = Math.max(80, frame.clientHeight - padding);
     const tokenHeight = Math.min(availableHeight, availableWidth * height / width,
       this.#previewAim ? availableWidth * .84 : Infinity);
-    preview.style.width = `${tokenHeight * width / height}px`;
-    preview.style.height = `${tokenHeight}px`;
+    this.#previewCamera.fit(tokenHeight * width / height, tokenHeight);
   }
 
-  #updateAnchorFromPointer(event) {
+  #updateAnchorFromPointer(event, offset = { x: 0, y: 0 }) {
     const preview = event.currentTarget;
     const anchor = this.#config.anchors.find(entry => entry.id === this.#selectedAnchorId);
     if (!anchor) return;
     const rect = preview.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
+    const x = (event.clientX - offset.x - rect.left) / rect.width;
+    const y = (event.clientY - offset.y - rect.top) / rect.height;
     const options = this.#resolveOptions();
     const parentPart = this.#config.parts.find(part => part.slotId === anchor.parentSlotId);
     const parent = parentPart
       ? resolveConstructVisualLayers(this.#config, options).find(layer => layer.id === parentPart.id)
       : resolveConstructVisualAnchors(this.#config, options).find(entry => entry.id === anchor.parentId);
     const point = parent ? rotateConstructVisualOffset(x - parent.x, y - parent.y, -parent.rotation, options) : { x, y };
-    anchor.x = Number(point.x.toFixed(4)); anchor.y = Number(point.y.toFixed(4));
+    const nextX = Number(point.x.toFixed(4)), nextY = Number(point.y.toFixed(4));
+    if (anchor.x !== nextX || anchor.y !== nextY) this.#hub?.markDraftDirty();
+    anchor.x = nextX; anchor.y = nextY;
     this.#refreshPreview();
   }
 
@@ -435,7 +494,8 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
 
   static #addPart(event) {
     event.preventDefault();
-    const slot = this.#slots().find(entry => !this.#config.parts.some(part => part.slotId === entry.id)) ?? this.#slots()[0];
+    const slot = this.#slots().find(entry => entry.id === this.#hub?.selectedSlotId)
+      ?? this.#slots().find(entry => !this.#config.parts.some(part => part.slotId === entry.id)) ?? this.#slots()[0];
     if (!slot) { ui.notifications?.warn("Сначала добавьте деталь в строение конструкта."); return; }
     const id = foundry.utils.randomID();
     this.#config.parts.push({ id, slotId: slot.id, anchorId: this.#selectedAnchorId, muzzleAnchorId: "",
@@ -454,7 +514,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
 
   static #addSeat(event) {
     event.preventDefault();
-    const option = getConstructCrewSeatOptions(this.actor).find(entry => !this.#config.seats.some(seat => seat.slotId === entry.slotId && seat.slotIndex === entry.slotIndex));
+    const option = getConstructCrewSeatOptions(this.draftActor).find(entry => !this.#config.seats.some(seat => seat.slotId === entry.slotId && seat.slotIndex === entry.slotIndex));
     if (!option) { ui.notifications?.warn("Нет свободных физических мест. Добавьте место функцией «Контейнер актёров» у детали конструкта."); return; }
     const id = foundry.utils.randomID();
     this.#config.seats.push({ id, name: `Место ${this.#config.seats.length + 1}`,
@@ -476,7 +536,7 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     const key = button.dataset.key;
     if (!target) return;
     new foundry.applications.apps.FilePicker.implementation({
-      type: "image", current: target[key] || "", callback: path => { target[key] = path; void this.render(); }
+      type: button.dataset.action === "pickVisualAudio" ? "audio" : "image", current: target[key] || "", callback: path => { target[key] = path; void this.render(); }
     }).render(true);
   }
 
@@ -484,6 +544,11 @@ export class ConstructVisualEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#previewRotations = {}; this.#previewAim = false;
     return this.render();
+  }
+
+  static #resetCamera(event) {
+    event.preventDefault();
+    this.#previewCamera.reset();
   }
 
   static #switchTab(event, button) {

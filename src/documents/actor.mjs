@@ -239,7 +239,15 @@ export class FalloutMaWActor extends Actor {
   }
 
   _onUpdate(changes, options, userId) {
-    super._onUpdate(changes, options, userId);
+    const renderParts = normalizeInventoryRenderParts(options?.[INVENTORY_RENDER_PARTS_OPTION]);
+    // ClientDocument._onUpdate rebuilds its render options, so explicitly carry
+    // the requested parts across that boundary as for descendant updates.
+    super._onUpdate(changes, renderParts.length ? { ...options, render: false } : options, userId);
+    if (renderParts.length && options?.render !== false) this.render(false, {
+      renderContext: `update${this.documentName}`,
+      renderData: changes,
+      [INVENTORY_RENDER_PARTS_OPTION]: renderParts
+    });
     if (!["character", "construct"].includes(this.type)) return;
     if (this.type === "construct") void syncConstructPartConditionDamage(this, changes);
     handleActorDamageUpdate(this, changes, options);

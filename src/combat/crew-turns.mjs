@@ -1,5 +1,5 @@
 ﻿import { SYSTEM_ID } from "../constants.mjs";
-import { getActorContainerFlag } from "../utils/actor-containers.mjs";
+import { getActorContainerPassengerMetadata } from "../utils/actor-containers.mjs";
 import { getConstructCrewSeats, resolvePassengerActorSync } from "../utils/construct-crew.mjs";
 import { actorHasIncapacitatingStatus } from "./incapacitation.mjs";
 
@@ -15,7 +15,7 @@ export function getCombatCrew(actor) {
   if (!isCrewControlledActor(actor)) return [];
   const seats = getConstructCrewSeats(actor);
   const seen = new Set();
-  return getActorContainerFlag(actor).passengers.flatMap(passenger => {
+  return getActorContainerPassengerMetadata(actor).flatMap(passenger => {
     const member = resolvePassengerActorSync(passenger);
     if (!member?.uuid || member.uuid === actor.uuid || seen.has(member.uuid)) return [];
     seen.add(member.uuid);
@@ -118,4 +118,9 @@ export function aggregateCrewInitiatives(combat, updates, participants) {
 
 export function getCombatantTurnActors(combatant) {
   return isCrewControlledActor(combatant?.actor) ? getCombatCrew(combatant.actor).map(row => row.actor) : [combatant?.actor].filter(Boolean);
+}
+
+/** The carrier spends movement resources even when only its crew has personal turns. */
+export function getCombatantResourceActors(combatant) {
+  return [...new Set([combatant?.actor, ...getCombatantTurnActors(combatant)].filter(Boolean))];
 }

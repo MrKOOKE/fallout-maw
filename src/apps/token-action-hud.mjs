@@ -89,7 +89,7 @@ import {
   startActorContainerPassengerExitPlacement
 } from "../canvas/actor-containers.mjs";
 import { configureConstructCrewActions, requestConstructCrewControl } from "../canvas/construct-crew.mjs";
-import { planConstructRotation, getConstructRotationAngle, getConstructRotationPrice } from "../constructs/rotation-actions.mjs";
+import { hasPaidConstructHullRotation, prepareConstructHullTurnButtons } from "./construct-hud-rotation.mjs";
 import { getActorContainerFlag } from "../utils/actor-containers.mjs";
 import { getConstructCrewContext, getConstructCrewContexts, canUserUseConstructCrewPersonalWeapon, resolveConstructCrewWeaponSetItem } from "../utils/construct-crew-context.mjs";
 import {
@@ -940,6 +940,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const systemActions = prepareSystemActionButtons(hudIcons).filter(action => !crew || action.key !== "boardTransport");
     const activeActions = crew ? [] : prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const actionGroups = prepareActionGroups(activeActions, systemActions);
+    const constructTurns = (!crew || crew.seat.functions.includes("rotate"))
+      && canUserControlConstruct(this.actor, game.user, "rotate", { passengerId: crew?.passenger.id ?? "" })
+      ? prepareConstructHullTurnButtons(this.#token.document, hudIcons.crewActions) : [];
+    if (this.#activeTray === "rotation" && !constructTurns.length) this.#activeTray = "";
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, passengers, hudIcons);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers, {
       expandedAbilityCategoryKeys: this.#expandedAbilityCategoryKeys
@@ -977,14 +981,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         label: `${row.active ? "Выключить" : "Включить"}: ${row.name}`, active: row.active,
         title: `${row.name}: ${row.active ? "работает" : "выключен"}`,
         img: hudIcons.crewActions?.engine || "systems/fallout-maw/assets/System/TokenActionHud/construct-engine.svg" })),
-      constructTurns: this.actor.type === "construct" && (!crew || crew.seat.functions.includes("rotate"))
-        && canUserControlConstruct(this.actor, game.user, "rotate", { passengerId: crew?.passenger.id ?? "" })
-        ? [-15, 15].map(delta => {
-          const key = delta < 0 ? "rotateLeft" : "rotateRight", label = delta < 0 ? "Влево 15°" : "Вправо 15°";
-          const plan = planConstructRotation(this.#token.document, "hull", getConstructRotationAngle(this.#token.document) + delta);
-          return { delta, label, cost: getConstructRotationPrice(this.#token.document, "hull", getConstructRotationAngle(this.#token.document) + delta),
-            disabled: !plan.powered || !plan.reached, img: hudIcons.crewActions?.[key] || `systems/fallout-maw/assets/System/TokenActionHud/construct-turn-${delta < 0 ? "left" : "right"}.svg` };
-        }) : [],
+      constructTurns,
+      constructRotationIcon: "systems/fallout-maw/assets/System/TokenActionHud/construct-rotation.svg",
       fallbackIcon: FALLBACK_ICON
     };
   }
@@ -1779,8 +1777,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onTurnConstructHull(event, target) {
     event.preventDefault();
-    if (isHudActionBlockedByReactionLock()) return;
-    try { await requestConstructCrewControl({ tokenUuid: this.#token.document.uuid, action: "rotate", delta: Number(target.dataset.delta), passengerId: this.crewContext?.passenger.id ?? "" }); }
+    const delta = Number(target.dataset.delta);
+    if (isHudActionBlockedByReactionLock() || !hasPaidConstructHullRotation(this.actor)
+      || ![-15, 15, -45, 45].includes(delta) || target.disabled) return;
+    try { await requestConstructCrewControl({ tokenUuid: this.#token.document.uuid, action: "rotate", delta, passengerId: this.crewContext?.passenger.id ?? "" }); }
     catch (error) { ui.notifications.warn(error.message); }
   }
 

@@ -122700,7 +122700,7 @@
       "value": [
         {
           "color": "#d9d0bd",
-          "img": "systems/fallout-maw/assets/System/TokenActionHud/hud-damage-reduction-and-piercing.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-piercing.svg",
           "key": "piercing",
           "label": "Thrusting",
           "settings": {
@@ -122742,7 +122742,7 @@
         },
         {
           "color": "#d95c5c",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-slashing.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-slashing.svg",
           "key": "slashing",
           "label": "Slashing",
           "settings": {
@@ -122784,7 +122784,7 @@
         },
         {
           "color": "#c49a6c",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-bludgeoning.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-bludgeoning.svg",
           "key": "bludgeoning",
           "label": "Bludgeoning",
           "settings": {
@@ -122826,7 +122826,7 @@
         },
         {
           "color": "#f0d48a",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-firearm.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-firearm.svg",
           "key": "firearm",
           "label": "Firearm",
           "settings": {
@@ -122868,7 +122868,7 @@
         },
         {
           "color": "#78f0ff",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-energy.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-energy.svg",
           "key": "energy",
           "label": "Energy",
           "settings": {
@@ -122910,7 +122910,7 @@
         },
         {
           "color": "#ff6a2a",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-fire.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-fire.svg",
           "key": "fire",
           "label": "Fire",
           "settings": {
@@ -122952,7 +122952,7 @@
         },
         {
           "color": "#6da8ff",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-cryo.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-cryo.svg",
           "key": "cryo",
           "label": "Cryogenic",
           "settings": {
@@ -123003,7 +123003,7 @@
         },
         {
           "color": "#f6f05a",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-electric.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-electric.svg",
           "key": "electric",
           "label": "Electric",
           "settings": {
@@ -123045,7 +123045,7 @@
         },
         {
           "color": "#7be36d",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-acid.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-acid.svg",
           "key": "acid",
           "label": "Acid",
           "settings": {
@@ -123087,7 +123087,7 @@
         },
         {
           "color": "#97ff6b",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-poison.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-poison.svg",
           "key": "poison",
           "label": "Poison",
           "settings": {
@@ -123129,7 +123129,7 @@
         },
         {
           "color": "#cf4dff",
-          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-radiation.webp",
+          "img": "systems/fallout-maw/assets/System/DamageTypes/damage-radiation.svg",
           "key": "radiation",
           "label": "Radiation",
           "settings": {

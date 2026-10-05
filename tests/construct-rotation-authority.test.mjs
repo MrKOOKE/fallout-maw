@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { performConstructPartRotation, CONSTRUCT_VISUAL_TESTING } from "../src/canvas/construct-visuals.mjs";
+import { resolveConstructJointRotations } from "../src/utils/construct-joint-rotations.mjs";
 import { registerConstructVisualPreviewSocket, publishConstructVisualPreview, clearConstructVisualPreview,
   CONSTRUCT_VISUAL_PREVIEW_TESTING as preview } from "../src/canvas/construct-visual-preview-socket.mjs";
 
@@ -141,4 +142,30 @@ test("breaking or replacing the controlled hardware discards its old aiming hist
   f.turret.id = "replacement-turret";
   await assert.rejects(f.commit(9), /ещё не достигла/);
   assert.equal(f.saved(), 0);
+});
+
+test("authority commits a turret without freezing its saved machine gun and accepts subsequent independent MG aiming from the carried pose", async t => {
+  const f = fixture(t), config = f.actor.flags["fallout-maw"].constructVisual;
+  config.anchors.push({ id: "mg-pivot", parentSlotId: "turret", x: 0.1, y: 0 });
+  config.parts.push({ id: "mg-art", slotId: "mg", anchorId: "mg-pivot", rotates: true, img: "mg.webp", rotationSpeed: 90 });
+  const mg = { ...f.turret, id: "mg-item", system: structuredClone(f.turret.system) };
+  mg.system.placement.limbKey = "mg";
+  f.actor.items.contents.push(mg);
+  f.document.flags["fallout-maw"].constructVisualState.rotations.mg = 15;
+  publishConstructVisualPreview({ token: f.token, slotId: "turret", rotation: 9 });
+  assert.equal((await f.commit(9, f.gm)).ok, true);
+  let state = f.document.getFlag("fallout-maw", "constructVisualState");
+  assert.equal(resolveConstructJointRotations(f.actor, state).mg, 24);
+  assert.equal(state.rotationAnchors.mg, 0);
+  assert.equal((await performConstructPartRotation(f.document, { slotId: "mg", rotation: 24 }, { user: f.gm })).ok, true);
+  state = f.document.getFlag("fallout-maw", "constructVisualState");
+  assert.equal(state.rotationAnchors.mg, 9);
+  publishConstructVisualPreview({ token: f.token, slotId: "mg", rotation: 33 });
+  assert.equal((await performConstructPartRotation(f.document, { slotId: "mg", rotation: 33 }, { user: f.gm })).ok, true);
+  f.setTime(1100);
+  publishConstructVisualPreview({ token: f.token, slotId: "turret", rotation: 18 });
+  assert.equal((await f.commit(18, f.gm)).ok, true);
+  state = f.document.getFlag("fallout-maw", "constructVisualState");
+  assert.equal(resolveConstructJointRotations(f.actor, state).mg, 42);
+  assert.equal(state.rotationAnchors.mg, 9);
 });

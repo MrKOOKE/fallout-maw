@@ -10,6 +10,7 @@ import {
   getDamageBarrierEffectKey
 } from "../combat/damage-barriers.mjs";
 import { PERIODIC_HEALING_EFFECT_KEY } from "../combat/periodic-healing.mjs";
+import { ENERGY_REGENERATION_EFFECT_KEY, HEALTH_REGENERATION_EFFECT_KEY } from "../needs/regeneration-effect-keys.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import { STUN_EFFECT_KEY } from "../combat/resource-limits.mjs";
 import {
@@ -224,6 +225,7 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
     ...buildAbilityRuntimeEffectKeyTokens(),
     ...buildCoverBonusPercentEffectKeyTokens(),
     ...buildDodgeResourceEffectKeyTokens(),
+    ...buildRegenerationEffectKeyTokens(),
     ...buildSuppressionEffectKeyTokens(),
     ...buildCombatEffectKeyTokens(),
     ...buildDetectionModeRangeEffectKeyTokens(),
@@ -244,6 +246,16 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildRegenerationEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.RegenerationGroup");
+  return [
+    createEffectKeyToken({ code: "healthRegen", key: "healthRegeneration",
+      label: game.i18n.localize("FALLOUTMAW.Effects.RegenerationHealthPerHour"), path: HEALTH_REGENERATION_EFFECT_KEY, group }),
+    createEffectKeyToken({ code: "energyRegen", key: "energyRegeneration",
+      label: game.i18n.localize("FALLOUTMAW.Effects.RegenerationEnergyPerHour"), path: ENERGY_REGENERATION_EFFECT_KEY, group })
+  ];
 }
 
 export function buildRequirementModifierEffectKeyTokens() {

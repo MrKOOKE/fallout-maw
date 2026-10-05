@@ -1,7 +1,7 @@
-﻿import { prepareConstructRotationTurn } from "../constructs/rotation-actions.mjs";
 import { localize as auditLocalize, format as auditFormat } from "../utils/i18n.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
-import { getCombatantTurnActors, isCrewControlledActor, findCrewCombatant, getCrewTurnProgress, resetCrewTurn, markCrewMemberCompleted, isCrewActorPending } from "./crew-turns.mjs";
+import { INVENTORY_RENDER_PARTS_OPTION } from "../inventory/constants.mjs";
+import { getCombatantTurnActors, getCombatantResourceActors, isCrewControlledActor, findCrewCombatant, getCrewTurnProgress, resetCrewTurn, markCrewMemberCompleted, isCrewActorPending } from "./crew-turns.mjs";
 import { getActorCombatSubject } from "./combat-membership.mjs";
 import { COMBAT_LIFECYCLE_CONTEXT_OPTION } from "./combat-lifecycle-lease.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -140,14 +140,12 @@ async function prepareActiveBlockTurnStart(combat, { lifecycleContextId = "" } =
 
 export async function prepareActorTurnStart(actor, { combat = game.combat } = {}) {
   if (!actor?.isOwner) return;
-  if (isCrewControlledActor(actor) && findCrewCombatant(actor, combat)?.actor?.uuid === actor.uuid) {
-    const combatant = findCrewCombatant(actor, combat);
-    await resetCrewTurn(combatant, combat);
-    await prepareConstructRotationTurn(actor, combat);
-    for (const member of getCrewTurnProgress(combatant, combat)?.pending ?? []) await prepareActorTurnStart(member.actor, { combat });
-    return;
-  }
-  await clearOneTimeResourcePoints(actor, { [REACTION_UPDATE_OPTION]: true });
+  const combatant = isCrewControlledActor(actor) ? findCrewCombatant(actor, combat) : null;
+  const preparesCrew = combatant?.actor?.uuid === actor.uuid;
+  if (preparesCrew) await resetCrewTurn(combatant, combat);
+  const options = { [REACTION_UPDATE_OPTION]: true,
+    ...(preparesCrew ? { [INVENTORY_RENDER_PARTS_OPTION]: ["indicators"] } : {}) };
+  await clearOneTimeResourcePoints(actor, options);
 
   const updates = buildActorMovementResourceRestoreUpdate(actor);
   const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
@@ -160,10 +158,15 @@ export async function prepareActorTurnStart(actor, { combat = game.combat } = {}
       updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = max;
     }
   }
-  if (Object.keys(updates).length) await actor.update(updates, { [REACTION_UPDATE_OPTION]: true });
+  if (Object.keys(updates).length) await actor.update(updates, options);
 
   await restoreActorDodgeResource(actor, { mode: "round" });
   await callActorTurnStartPreparedHandlers({ actor, combat });
+  if (preparesCrew) {
+    for (const member of getCrewTurnProgress(combatant, combat)?.pending ?? []) {
+      await prepareActorTurnStart(member.actor, { combat });
+    }
+  }
 }
 
 async function syncCombatDefeatedCombatants(combat, {
@@ -335,7 +338,6 @@ export async function prepareActorTurnEnd(actor, {
       await prepareActorTurnEnd(member.actor, { conversionMode, combat, turnContext });
       await markCrewMemberCompleted(combatant, member.actor, combat, { round });
     }
-    return;
   }
   await callActorTurnEndHandlers({ actor, combat, conversionMode, turnContext });
   const remainingActionPoints = getAvailableNormalActionPointValue(actor);
@@ -355,7 +357,6 @@ export async function restoreActorReactionResource(actor) {
   if (!actor?.isOwner) return;
   if (isCrewControlledActor(actor)) {
     for (const member of getCombatantTurnActors({ actor })) await restoreActorReactionResource(member);
-    return;
   }
   const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
   if (!reaction) return;
@@ -720,7 +721,7 @@ export async function resetCombatReactionResources(combat) {
   if (!game.user?.isActiveGM) return;
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
-    for (const actor of getCombatantTurnActors(combatant)) actors.set(actor.uuid, actor);
+    for (const actor of getCombatantResourceActors(combatant)) actors.set(actor.uuid, actor);
   }
   for (const actor of actors.values()) await resetActorReactionResources(actor);
 }
@@ -760,7 +761,7 @@ async function initializeCombatReactionResources(combat, updateData = {}, {
   });
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
-    for (const actor of getCombatantTurnActors(combatant)) actors.set(actor.uuid, actor);
+    for (const actor of getCombatantResourceActors(combatant)) actors.set(actor.uuid, actor);
   }
   for (const actor of actors.values()) {
     if (initiallyPreparedActorUuids.has(actor.uuid)) continue;
@@ -783,7 +784,7 @@ function createCombatLifecycleOptions(options = {}, lifecycleContextId = "") {
 function getInitiallyPreparedActorUuids(combat, initialTurn) {
   const currentCombatant = combat?.turns?.[initialTurn] ?? combat?.combatant ?? null;
   const actorUuids = new Set();
-  for (const actor of getCombatantTurnActors(currentCombatant)) actorUuids.add(actor.uuid);
+  for (const actor of getCombatantResourceActors(currentCombatant)) actorUuids.add(actor.uuid);
   if (getCombatTurnOrderScheme() !== TURN_ORDER_SCHEMES.block || !Number.isInteger(initialTurn)) {
     return actorUuids;
   }
@@ -792,7 +793,7 @@ function getInitiallyPreparedActorUuids(combat, initialTurn) {
     .find(candidate => candidate.start <= initialTurn && initialTurn <= candidate.end);
   for (const combatant of block?.combatants ?? []) {
     if (!isCombatantAutoCompleted(combatant) && combatant.actor?.uuid) {
-      for (const actor of getCombatantTurnActors(combatant)) actorUuids.add(actor.uuid);
+      for (const actor of getCombatantResourceActors(combatant)) actorUuids.add(actor.uuid);
     }
   }
   return actorUuids;

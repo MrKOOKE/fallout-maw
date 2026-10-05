@@ -19,15 +19,19 @@
 .construct-visual-editor .construct-visual-check input[type=checkbox] { flex:0 0 17px; width:17px; height:17px; min-height:17px; margin:0; padding:0; accent-color:var(--construct-accent); }
 .construct-visual-editor .construct-visual-check > span { display:block; flex:1; min-width:0; font-size:13px; line-height:1.4; visibility:visible; opacity:1; }
 .construct-visual-editor .construct-visual-enabled { flex:0 0 auto; border:1px solid var(--construct-border); border-radius:20px; padding:6px 10px; background:#302920; }
-.construct-visual-editor .construct-visual-preview-frame { flex:1; min-height:220px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid #665943; border-radius:10px; background:radial-gradient(ellipse at center,#373a33 0%,#252a26 70%); position:relative; }
+.construct-visual-editor .construct-visual-preview-frame { flex:1; min-height:220px; display:flex; align-items:center; justify-content:center; overflow:clip; border:1px solid #665943; border-radius:10px; background:radial-gradient(ellipse at center,#373a33 0%,#252a26 70%); position:relative; touch-action:none; user-select:none; }
 .construct-visual-editor [data-visual-preview] { position:relative; flex:0 0 auto; background-image:linear-gradient(#fff1 1px,transparent 1px),linear-gradient(90deg,#fff1 1px,transparent 1px); background-size:10% 10%; overflow:visible; touch-action:none; }
 .construct-visual-editor .construct-visual-preview-base { width:100%; height:100%; object-fit:fill; position:absolute; inset:0; pointer-events:none; border:0; }
 .construct-visual-editor .construct-visual-preview-part { position:absolute; object-fit:fill; pointer-events:none; border:0; max-width:none; }
-.construct-visual-editor button.construct-visual-anchor { position:absolute; z-index:30000; width:19px; height:19px; min-height:19px; padding:0; line-height:16px; transform:translate(-50%,-50%); border-radius:50%; border:1px solid #181b13; background:#a8b787; color:#192111; font-weight:bold; cursor:grab; }
-.construct-visual-editor button.construct-visual-anchor.selected { background:#e7bb5e; color:#211703; outline:2px solid #f9e4b6aa; }
+.construct-visual-editor .construct-visual-preview-frame button.construct-visual-anchor { position:absolute; z-index:30000; width:19px; height:19px; min-height:19px; padding:0; line-height:16px; transform:translate(-50%,-50%); border-radius:50%; border:1px solid #a8b787; background:transparent; color:#c5d5a6; text-shadow:0 1px 2px #10140c; font-weight:bold; cursor:grab; }
+.construct-visual-editor .construct-visual-preview-frame button.construct-visual-anchor.selected { background:transparent; border-color:#e7bb5e; color:#e7bb5e; outline:2px solid #f9e4b6aa; }
 .construct-visual-editor [data-visual-preview].placing-anchor,.construct-visual-editor [data-visual-preview].aiming { cursor:crosshair; }
 .construct-visual-editor .construct-visual-place-hint { margin:0; color:var(--construct-accent); font-size:13px; line-height:1.35; }
 .construct-visual-editor .construct-visual-aim-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.construct-visual-editor .construct-visual-camera-tools { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+.construct-visual-editor .construct-visual-camera-hint { font-size:10px; color:var(--construct-muted); white-space:nowrap; }
+.construct-visual-editor .construct-visual-fit-button { display:flex; align-items:center; justify-content:center; gap:6px; width:auto; min-width:70px; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.construct-visual-editor .construct-visual-preview-frame.panning,.construct-visual-editor .construct-visual-preview-frame.panning * { cursor:grabbing !important; }
 .construct-visual-editor .construct-visual-icon-button { flex:0 0 34px; width:34px; min-height:34px; padding:6px; }
 .construct-visual-editor .construct-visual-icon-button.danger { color:#bfa693; border-color:#66554a; }
 .construct-visual-editor .construct-visual-settings-panel { display:flex; flex-direction:column; min-width:0; min-height:0; border:1px solid var(--construct-border); border-radius:10px; overflow:hidden; background:#211e23; }

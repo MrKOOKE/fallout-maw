@@ -475,7 +475,7 @@ export function getActorNeedSettings(actor, creatureOptions = null) {
   if (actor?.type === "construct") return getConstructPartNeedSettings(actor?.items);
   const raceId = actor?.system?.creature?.raceId ?? actor?.creature?.raceId ?? "";
   if (!raceId) return [];
-  const race = (creatureOptions ?? getCreatureOptions()).races.find(entry => entry.id === raceId);
+  const race = (creatureOptions ?? getPreparedRuntimeSettings().creatureOptions).races.find(entry => entry.id === raceId);
   return normalizeNeedSettings(race?.needSettings ?? []);
 }
 

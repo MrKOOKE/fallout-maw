@@ -1,4 +1,4 @@
-﻿import { combatantIncludesActor, getCombatantTurnActors } from "./crew-turns.mjs";
+﻿import { combatantIncludesActor, getCombatantResourceActors } from "./crew-turns.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   cleanupActorDodgeResource,
@@ -183,7 +183,7 @@ function recordLifecycleError(result, actor, stage, error) {
 }
 
 function collectCombatantActors(combatants = []) {
-  return Array.from(combatants ?? []).flatMap(getCombatantTurnActors);
+  return Array.from(combatants ?? []).flatMap(getCombatantResourceActors);
 }
 
 function collectActors(actors = []) {
